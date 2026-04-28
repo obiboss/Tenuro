@@ -220,19 +220,23 @@ export async function getVacantUnitsForLandlord(
     throw error;
   }
 
-  return data.map((unit) => ({
-    id: unit.id as string,
-    propertyId: unit.property_id as string,
-    buildingName: unit.building_name as string | null,
-    unitIdentifier: unit.unit_identifier as string,
-    unitType: unit.unit_type as UnitType,
-    annualRent: unit.annual_rent as number | null,
-    monthlyRent: unit.monthly_rent as number | null,
-    currencyCode: unit.currency_code as string,
-    propertyName: Array.isArray(unit.properties)
-      ? unit.properties[0]?.property_name
-      : unit.properties.property_name,
-  }));
+  return data.map((unit) => {
+    const property = Array.isArray(unit.properties)
+      ? unit.properties[0]
+      : unit.properties;
+
+    return {
+      id: unit.id as string,
+      propertyId: unit.property_id as string,
+      buildingName: unit.building_name as string | null,
+      unitIdentifier: unit.unit_identifier as string,
+      unitType: unit.unit_type as UnitType,
+      annualRent: unit.annual_rent as number | null,
+      monthlyRent: unit.monthly_rent as number | null,
+      currencyCode: unit.currency_code as string,
+      propertyName: property?.property_name ?? "Property",
+    };
+  });
 }
 
 export async function markUnitOccupied(
