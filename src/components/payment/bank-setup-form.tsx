@@ -2,6 +2,7 @@
 
 import { useActionState, useMemo, useState } from "react";
 import { setupLandlordBankAccountAction } from "@/actions/payments.actions";
+import { initialPaymentActionState } from "@/actions/payment.state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -17,16 +18,12 @@ type BankSetupFormProps = {
   banks: BankOption[];
 };
 
-const initialState = {
-  ok: false,
-  message: "",
-};
-
 export function BankSetupForm({ banks }: BankSetupFormProps) {
   const [selectedBankCode, setSelectedBankCode] = useState("");
+
   const [state, formAction, isPending] = useActionState(
     setupLandlordBankAccountAction,
-    initialState,
+    initialPaymentActionState,
   );
 
   const selectedBankName = useMemo(() => {
