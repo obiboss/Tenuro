@@ -1,18 +1,19 @@
 import Link from "next/link";
 import { ArrowLeft, FileCheck2, Phone, UserRound } from "lucide-react";
+import { RentPaymentModal } from "@/components/payment/rent-payment-modal";
 import { OnboardingInviteCard } from "@/components/tenant/onboarding-invite-card";
 import { TenancyForm } from "@/components/tenancy/tenancy-form";
 import { TenancySummaryCard } from "@/components/tenancy/tenancy-summary-card";
+import { TenantBalanceCard } from "@/components/tenancy/tenant-balance-card";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { TrustNotice } from "@/components/ui/trust-notice";
 import { TENANT_ONBOARDING_STATUS_COPY } from "@/lib/status-copy";
+import { getCurrentTenantLedgerSummary } from "@/server/services/ledger.service";
 import { getCurrentLandlordTenant } from "@/server/services/tenants.service";
 import { getCurrentTenantActiveTenancy } from "@/server/services/tenancies.service";
-import { TenantBalanceCard } from "@/components/tenancy/tenant-balance-card";
-import { getCurrentTenantLedgerSummary } from "@/server/services/ledger.service";
 
 type TenantDetailPageProps = {
   params: Promise<{
@@ -34,6 +35,11 @@ export default async function TenantDetailPage({
   const status =
     TENANT_ONBOARDING_STATUS_COPY[tenant.onboarding_status] ??
     TENANT_ONBOARDING_STATUS_COPY.invited;
+
+  const outstandingBalance = ledgerSummary.balance?.outstanding_balance ?? 0;
+  const canCollectOnline = Boolean(
+    activeTenancy && ledgerSummary.balance && outstandingBalance > 0,
+  );
 
   return (
     <div>
@@ -131,6 +137,18 @@ export default async function TenantDetailPage({
               />
             </SectionCard>
           )}
+
+          {canCollectOnline && activeTenancy ? (
+            <SectionCard
+              title="Collect Rent Online"
+              description="Create a secure Paystack payment link for this tenant."
+            >
+              <RentPaymentModal
+                tenancyId={activeTenancy.id}
+                defaultAmount={outstandingBalance}
+              />
+            </SectionCard>
+          ) : null}
         </div>
 
         <div className="space-y-6 xl:sticky xl:top-28 xl:self-start">

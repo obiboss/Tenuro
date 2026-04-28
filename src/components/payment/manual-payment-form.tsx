@@ -3,6 +3,7 @@
 import { useActionState, useMemo } from "react";
 import { recordManualPaymentAction } from "@/actions/payments.actions";
 import { initialPaymentActionState } from "@/actions/payment.state";
+import { ActionResultToast } from "@/components/ui/action-result-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { CurrencyInput } from "@/components/ui/currency-input";
@@ -50,6 +51,13 @@ export function ManualPaymentForm({ tenancies }: ManualPaymentFormProps) {
 
   return (
     <form action={formAction}>
+      <ActionResultToast
+        ok={state.ok}
+        message={state.message}
+        successTitle="Payment recorded"
+        errorTitle="Payment failed"
+      />
+
       <Card>
         <CardContent>
           <TrustNotice

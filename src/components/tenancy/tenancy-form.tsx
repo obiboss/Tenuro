@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { createTenancyAction } from "@/actions/tenancies.actions";
 import { initialTenancyActionState } from "@/actions/tenancy.state";
+import { ActionResultToast } from "@/components/ui/action-result-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { CurrencyInput } from "@/components/ui/currency-input";
@@ -36,6 +37,13 @@ export function TenancyForm({
 
   return (
     <form action={formAction}>
+      <ActionResultToast
+        ok={state.ok}
+        message={state.message}
+        successTitle="Rental agreement created"
+        errorTitle="Rental agreement failed"
+      />
+
       <Card>
         <CardContent>
           <TrustNotice

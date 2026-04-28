@@ -3,6 +3,7 @@
 import { useActionState, useMemo, useState } from "react";
 import { setupLandlordBankAccountAction } from "@/actions/payments.actions";
 import { initialPaymentActionState } from "@/actions/payment.state";
+import { ActionResultToast } from "@/components/ui/action-result-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -32,6 +33,13 @@ export function BankSetupForm({ banks }: BankSetupFormProps) {
 
   return (
     <form action={formAction}>
+      <ActionResultToast
+        ok={state.ok}
+        message={state.message}
+        successTitle="Bank account connected"
+        errorTitle="Bank setup failed"
+      />
+
       <Card>
         <CardContent>
           <TrustNotice
