@@ -9,10 +9,15 @@ type UnitCardProps = {
 
 function unitTypeLabel(type: UnitRow["unit_type"]) {
   const labels: Record<UnitRow["unit_type"], string> = {
-    room: "Room",
-    flat: "Flat",
+    single_room: "Single Room",
+    self_contain: "Self Contain",
+    room_and_parlour: "Room and Parlour",
+    mini_flat: "Mini Flat",
+    two_bedroom_flat: "2 Bedroom Flat",
+    three_bedroom_flat: "3 Bedroom Flat",
     duplex: "Duplex",
     shop: "Shop",
+    office_space: "Office Space",
     other: "Other",
   };
 
