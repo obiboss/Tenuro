@@ -1,0 +1,231 @@
+import "server-only";
+
+import crypto from "node:crypto";
+import { AppError } from "@/server/errors/app-error";
+import {
+  createGatewayPaymentIntent,
+  getGatewayPaymentIntentByIdempotencyKey,
+} from "@/server/repositories/gateway-payment.repository";
+import { getActiveLandlordPaystackAccount } from "@/server/repositories/landlord-paystack.repository";
+import { getTenancyPaymentContext } from "@/server/repositories/payment-context.repository";
+import { createSupabaseServerClient } from "@/server/supabase/server";
+import type { InitializeRentPaymentInput } from "@/server/validators/payment.schema";
+import { requireLandlord } from "./auth.service";
+import {
+  convertNairaToKobo,
+  initializePaystackTransaction,
+} from "./paystack.service";
+
+function getAppBaseUrl() {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+
+  if (!appUrl) {
+    throw new AppError("APP_URL_MISSING", "App URL is not configured.", 500);
+  }
+
+  return appUrl.replace(/\/$/, "");
+}
+
+function getTenuroGatewayAdminFee() {
+  const value = process.env.TENURO_GATEWAY_ADMIN_FEE_NAIRA;
+
+  if (!value) {
+    throw new AppError(
+      "TENURO_GATEWAY_FEE_MISSING",
+      "Gateway fee is not configured.",
+      500,
+    );
+  }
+
+  const fee = Number(value);
+
+  if (!Number.isFinite(fee) || fee < 0) {
+    throw new AppError(
+      "TENURO_GATEWAY_FEE_INVALID",
+      "Gateway fee is not configured correctly.",
+      500,
+    );
+  }
+
+  return fee;
+}
+
+function createPaymentReference() {
+  return `tenuro_${crypto.randomUUID().replaceAll("-", "")}`;
+}
+
+function getTenantPaymentEmail(params: {
+  tenantEmail: string | null;
+  tenantPhoneNumber: string;
+}) {
+  if (params.tenantEmail?.trim()) {
+    return params.tenantEmail.trim();
+  }
+
+  const sanitizedPhone = params.tenantPhoneNumber.replace(/\D/g, "");
+
+  return `${sanitizedPhone}@payments.tenuro.local`;
+}
+
+function assertGatewayAmountStructure(params: {
+  rentAmount: number;
+  tenuroFeeAmount: number;
+  totalAmount: number;
+}) {
+  if (params.rentAmount <= 0) {
+    throw new AppError(
+      "RENT_AMOUNT_INVALID",
+      "Rent amount must be greater than zero.",
+      400,
+    );
+  }
+
+  if (params.tenuroFeeAmount < 0) {
+    throw new AppError(
+      "GATEWAY_FEE_INVALID",
+      "Gateway fee cannot be negative.",
+      500,
+    );
+  }
+
+  if (params.totalAmount !== params.rentAmount + params.tenuroFeeAmount) {
+    throw new AppError(
+      "GATEWAY_TOTAL_MISMATCH",
+      "Payment total does not match rent plus gateway fee.",
+      500,
+    );
+  }
+}
+
+export async function initializeRentPayment(input: InitializeRentPaymentInput) {
+  const landlord = await requireLandlord();
+  const supabase = await createSupabaseServerClient();
+
+  const existingIntent = await getGatewayPaymentIntentByIdempotencyKey(
+    supabase,
+    {
+      landlordId: landlord.id,
+      idempotencyKey: input.idempotencyKey,
+    },
+  );
+
+  if (existingIntent) {
+    return {
+      authorizationUrl: existingIntent.authorization_url,
+      accessCode: existingIntent.paystack_access_code,
+      reference: existingIntent.paystack_reference,
+    };
+  }
+
+  const tenancy = await getTenancyPaymentContext(supabase, input.tenancyId);
+
+  if (tenancy.landlord_id !== landlord.id) {
+    throw new AppError(
+      "FORBIDDEN",
+      "You do not have permission to receive payment for this rental agreement.",
+      403,
+    );
+  }
+
+  if (tenancy.status !== "active") {
+    throw new AppError(
+      "TENANCY_NOT_ACTIVE",
+      "Payment can only be made for an active rental agreement.",
+      400,
+    );
+  }
+
+  if (!tenancy.tenants) {
+    throw new AppError(
+      "TENANT_NOT_FOUND",
+      "We could not find the tenant for this payment.",
+      404,
+    );
+  }
+
+  const paystackAccount = await getActiveLandlordPaystackAccount(
+    supabase,
+    landlord.id,
+  );
+
+  if (!paystackAccount) {
+    throw new AppError(
+      "BANK_ACCOUNT_REQUIRED",
+      "Set up your payout bank account before accepting gateway payments.",
+      400,
+    );
+  }
+
+  const rentAmount = input.amount;
+  const tenuroFeeAmount = getTenuroGatewayAdminFee();
+  const totalAmount = rentAmount + tenuroFeeAmount;
+
+  assertGatewayAmountStructure({
+    rentAmount,
+    tenuroFeeAmount,
+    totalAmount,
+  });
+
+  const tenuroFeeKobo = convertNairaToKobo(tenuroFeeAmount);
+  const totalAmountKobo = convertNairaToKobo(totalAmount);
+
+  const reference = createPaymentReference();
+
+  const metadata = {
+    tenancy_id: tenancy.id,
+    tenant_id: tenancy.tenant_id,
+    landlord_id: tenancy.landlord_id,
+    expected_amount_naira: rentAmount,
+    tenuro_fee_naira: tenuroFeeAmount,
+    total_amount_naira: totalAmount,
+    currency_code: tenancy.currency_code,
+    period_start: input.periodStart,
+    period_end: input.periodEnd,
+    idempotency_key: input.idempotencyKey,
+    property_name: tenancy.units?.properties?.property_name ?? null,
+    unit_identifier: tenancy.units?.unit_identifier ?? null,
+    paystack_split: {
+      mode: "subaccount_flat_fee",
+      subaccount: paystackAccount.paystack_subaccount_code,
+      transaction_charge_kobo: tenuroFeeKobo,
+      bearer: "subaccount",
+    },
+  };
+
+  const initializedTransaction = await initializePaystackTransaction({
+    email: getTenantPaymentEmail({
+      tenantEmail: tenancy.tenants.email,
+      tenantPhoneNumber: tenancy.tenants.phone_number,
+    }),
+    amountKobo: totalAmountKobo,
+    reference,
+    callbackUrl: `${getAppBaseUrl()}/payments/verify?reference=${reference}`,
+    subaccountCode: paystackAccount.paystack_subaccount_code,
+    transactionChargeKobo: tenuroFeeKobo,
+    currencyCode: tenancy.currency_code,
+    metadata,
+  });
+
+  const intent = await createGatewayPaymentIntent(supabase, {
+    landlordId: landlord.id,
+    tenantId: tenancy.tenant_id,
+    tenancyId: tenancy.id,
+    paystackReference: initializedTransaction.reference,
+    paystackAccessCode: initializedTransaction.access_code,
+    authorizationUrl: initializedTransaction.authorization_url,
+    rentAmount,
+    tenuroFeeAmount,
+    totalAmount,
+    currencyCode: tenancy.currency_code,
+    periodStart: input.periodStart ?? null,
+    periodEnd: input.periodEnd ?? null,
+    idempotencyKey: input.idempotencyKey,
+    metadata,
+  });
+
+  return {
+    authorizationUrl: intent.authorization_url,
+    accessCode: intent.paystack_access_code,
+    reference: intent.paystack_reference,
+  };
+}
