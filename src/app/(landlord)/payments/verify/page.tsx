@@ -16,7 +16,8 @@ import { formatNaira } from "@/server/utils/money";
 
 type PaymentVerifyPageProps = {
   searchParams: Promise<{
-    reference?: string;
+    reference?: string | string[];
+    trxref?: string | string[];
   }>;
 };
 
@@ -68,7 +69,10 @@ export default async function PaymentVerifyPage({
   searchParams,
 }: PaymentVerifyPageProps) {
   const resolvedSearchParams = await searchParams;
-  const reference = resolvedSearchParams.reference?.trim();
+  const rawReference = resolvedSearchParams.reference;
+  const reference = Array.isArray(rawReference)
+    ? rawReference[0]?.trim()
+    : rawReference?.trim();
 
   if (!reference) {
     return (
