@@ -3,19 +3,19 @@ import type { CreateTenancyInput } from "@/server/validators/tenancy.schema";
 
 export type TenancyRow = {
   id: string;
-  tenancy_reference: string;
+  tenancy_reference: string | null;
   landlord_id: string;
   tenant_id: string;
   unit_id: string;
   rent_amount: number;
   payment_frequency: "monthly" | "quarterly" | "biannual" | "annual";
   currency_code: string;
-  start_date: string;
-  end_date: string;
+  start_date: string | null;
+  end_date: string | null;
   renewal_notice_date: string | null;
   opening_balance: number;
   opening_balance_note: string | null;
-  status: "draft" | "active" | "expired" | "terminated" | "archived";
+  status: "draft" | "active" | "expired" | "terminated" | "archived" | null;
   agreement_notes: string | null;
   created_at: string;
 };
@@ -95,6 +95,30 @@ const TENANCY_DETAIL_SELECT = `
   )
 `;
 
+function createTenancyReference() {
+  const datePart = new Date()
+    .toISOString()
+    .slice(0, 10)
+    .replaceAll("-", "");
+
+  const randomPart =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID().replaceAll("-", "").slice(0, 8).toUpperCase()
+      : Math.random().toString(36).slice(2, 10).toUpperCase();
+
+  return `TEN-${datePart}-${randomPart}`;
+}
+
+function getRentDueDay(startDate: string) {
+  const day = new Date(startDate).getUTCDate();
+
+  if (!Number.isFinite(day) || day < 1 || day > 31) {
+    return 1;
+  }
+
+  return day;
+}
+
 export async function getActiveTenancyForTenant(
   supabase: SupabaseClient,
   tenantId: string,
@@ -142,18 +166,34 @@ export async function createTenancy(
     input: CreateTenancyInput;
   },
 ) {
+  const rentDueDay = getRentDueDay(params.input.startDate);
+
   const { data, error } = await supabase
     .from("tenancies")
     .insert({
       landlord_id: params.landlordId,
       tenant_id: params.input.tenantId,
       unit_id: params.input.unitId,
+      tenancy_reference: createTenancyReference(),
+
       rent_amount: params.input.rentAmount,
       payment_frequency: params.input.paymentFrequency,
       currency_code: params.input.currencyCode,
+
       start_date: params.input.startDate,
       end_date: params.input.endDate,
       renewal_notice_date: params.input.renewalNoticeDate || null,
+
+      /*
+       * Legacy/current DB-required columns.
+       * Keep these mapped until the database is fully consolidated.
+       */
+      move_in_date: params.input.startDate,
+      move_out_date: params.input.endDate,
+      next_renewal_date: params.input.endDate,
+      rent_due_day: rentDueDay,
+      tenancy_status: "active",
+
       opening_balance: params.input.openingBalance,
       opening_balance_note: params.input.openingBalanceNote || null,
       agreement_notes: params.input.agreementNotes || null,
@@ -180,6 +220,7 @@ export async function terminateTenancy(
     .from("tenancies")
     .update({
       status: "terminated",
+      tenancy_status: "terminated",
       agreement_notes: params.reason,
       archived_at: new Date().toISOString(),
     })
