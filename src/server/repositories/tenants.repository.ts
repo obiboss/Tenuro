@@ -26,6 +26,12 @@ export type TenantListRow = TenantRow & {
   units: {
     id: string;
     unit_identifier: string;
+    building_name: string | null;
+    unit_type: string;
+    bedrooms: number;
+    bathrooms: number;
+    monthly_rent: number | null;
+    annual_rent: number | null;
     status: string;
     properties: {
       id: string;
@@ -33,6 +39,37 @@ export type TenantListRow = TenantRow & {
     } | null;
   } | null;
 };
+
+const TENANT_SELECT = `
+  id,
+  profile_id,
+  landlord_id,
+  unit_id,
+  full_name,
+  phone_number,
+  email,
+  onboarding_status,
+  landlord_notes,
+  created_at,
+  units (
+    id,
+    unit_identifier,
+    building_name,
+    unit_type,
+    bedrooms,
+    bathrooms,
+    monthly_rent,
+    annual_rent,
+    status,
+    properties (
+      id,
+      property_name
+    )
+  )
+`;
+
+const TENANT_BASE_SELECT =
+  "id, profile_id, landlord_id, unit_id, full_name, phone_number, email, onboarding_status, landlord_notes, created_at";
 
 export async function createTenantShell(
   supabase: SupabaseClient,
@@ -50,9 +87,7 @@ export async function createTenantShell(
       landlord_notes: input.landlordNotes || null,
       onboarding_status: "invited",
     })
-    .select(
-      "id, profile_id, landlord_id, unit_id, full_name, phone_number, email, onboarding_status, landlord_notes, created_at",
-    )
+    .select(TENANT_BASE_SELECT)
     .single<TenantRow>();
 
   if (error) {
@@ -82,19 +117,19 @@ export async function updateTenant(
   }
 
   if (input.homeAddress !== undefined) {
-    updatePayload.home_address = input.homeAddress;
+    updatePayload.home_address = input.homeAddress || null;
   }
 
   if (input.occupation !== undefined) {
-    updatePayload.occupation = input.occupation;
+    updatePayload.occupation = input.occupation || null;
   }
 
   if (input.employer !== undefined) {
-    updatePayload.employer = input.employer;
+    updatePayload.employer = input.employer || null;
   }
 
   if (input.landlordNotes !== undefined) {
-    updatePayload.landlord_notes = input.landlordNotes;
+    updatePayload.landlord_notes = input.landlordNotes || null;
   }
 
   const { data, error } = await supabase
@@ -102,9 +137,7 @@ export async function updateTenant(
     .update(updatePayload)
     .eq("id", tenantId)
     .is("deleted_at", null)
-    .select(
-      "id, profile_id, landlord_id, unit_id, full_name, phone_number, email, onboarding_status, landlord_notes, created_at",
-    )
+    .select(TENANT_BASE_SELECT)
     .single<TenantRow>();
 
   if (error) {
@@ -120,29 +153,7 @@ export async function getTenantsForLandlord(
 ) {
   const { data, error } = await supabase
     .from("tenants")
-    .select(
-      `
-      id,
-      profile_id,
-      landlord_id,
-      unit_id,
-      full_name,
-      phone_number,
-      email,
-      onboarding_status,
-      landlord_notes,
-      created_at,
-      units (
-        id,
-        unit_identifier,
-        status,
-        properties (
-          id,
-          property_name
-        )
-      )
-    `,
-    )
+    .select(TENANT_SELECT)
     .eq("landlord_id", landlordId)
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
@@ -161,29 +172,7 @@ export async function getTenantById(
 ) {
   const { data, error } = await supabase
     .from("tenants")
-    .select(
-      `
-      id,
-      profile_id,
-      landlord_id,
-      unit_id,
-      full_name,
-      phone_number,
-      email,
-      onboarding_status,
-      landlord_notes,
-      created_at,
-      units (
-        id,
-        unit_identifier,
-        status,
-        properties (
-          id,
-          property_name
-        )
-      )
-    `,
-    )
+    .select(TENANT_SELECT)
     .eq("id", tenantId)
     .is("deleted_at", null)
     .single<TenantListRow>();

@@ -29,8 +29,8 @@ async function ensureProfileForUser(params: {
   userId: string;
   role: "landlord" | "tenant" | "caretaker";
   fullName: string;
-  phoneNumber: string;
-  email?: string | null;
+  phoneNumber: string | null;
+  email: string | null;
 }) {
   const supabase = createSupabaseAdminClient();
 
@@ -442,12 +442,10 @@ export async function emailPasswordRegisterAction(
   try {
     const parsed = emailPasswordRegisterSchema.parse({
       fullName: formData.get("fullName"),
-      phoneNumber: formData.get("phoneNumber"),
       email: formData.get("email"),
       password: formData.get("password"),
     });
 
-    const normalizedPhone = normalisePhoneNumber(parsed.phoneNumber);
     const supabase = await createSupabaseServerClient();
 
     const { data, error } = await supabase.auth.signUp({
@@ -456,7 +454,6 @@ export async function emailPasswordRegisterAction(
       options: {
         data: {
           full_name: parsed.fullName,
-          phone_number: normalizedPhone.e164,
           role: "landlord",
         },
       },
@@ -473,7 +470,7 @@ export async function emailPasswordRegisterAction(
       userId: data.user.id,
       role: "landlord",
       fullName: parsed.fullName,
-      phoneNumber: normalizedPhone.e164,
+      phoneNumber: null,
       email: parsed.email,
     });
 

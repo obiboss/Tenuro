@@ -2,10 +2,8 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import {
-  initialAuthActionState,
-  registerLandlordAction,
-} from "@/actions/auth.actions";
+import { registerLandlordAction } from "@/actions/auth.actions";
+import { initialAuthActionState } from "@/actions/auth.state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
