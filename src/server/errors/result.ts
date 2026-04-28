@@ -55,7 +55,11 @@ function isDatabaseLikeError(error: unknown): error is DatabaseLikeError {
 }
 
 function getFirstZodFieldMessage(error: ZodError) {
-  const fieldErrors = error.flatten().fieldErrors;
+  const flattened = error.flatten();
+  const fieldErrors = flattened.fieldErrors as Record<
+    string,
+    string[] | undefined
+  >;
 
   for (const messages of Object.values(fieldErrors)) {
     const firstMessage = messages?.[0];
@@ -63,6 +67,12 @@ function getFirstZodFieldMessage(error: ZodError) {
     if (hasText(firstMessage)) {
       return firstMessage;
     }
+  }
+
+  const formError = flattened.formErrors[0];
+
+  if (hasText(formError)) {
+    return formError;
   }
 
   return VALIDATION_ERROR_MESSAGE;
