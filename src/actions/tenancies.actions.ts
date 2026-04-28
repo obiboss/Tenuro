@@ -51,11 +51,7 @@ export async function createTenancyAction(
     return {
       ok: false,
       message:
-        result.message === "Something went wrong. Please try again."
-          ? error instanceof Error
-            ? error.message
-            : result.message
-          : result.message,
+        result.message,
       fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
     };
   }
