@@ -4,26 +4,44 @@ import type {
   UpdateUnitInput,
 } from "@/server/validators/unit.schema";
 
+export type UnitType =
+  | "single_room"
+  | "self_contain"
+  | "room_and_parlour"
+  | "mini_flat"
+  | "two_bedroom_flat"
+  | "three_bedroom_flat"
+  | "duplex"
+  | "shop"
+  | "office_space"
+  | "other";
+
+export type UnitStatus =
+  | "vacant"
+  | "occupied"
+  | "under_renovation"
+  | "hold"
+  | "pending_vacancy"
+  | "archived";
+
 export type UnitRow = {
   id: string;
   property_id: string;
   block_id: string | null;
+  building_name: string | null;
   unit_identifier: string;
-  unit_type: "room" | "flat" | "duplex" | "shop" | "other";
+  unit_type: UnitType;
   bedrooms: number;
   bathrooms: number;
   monthly_rent: number | null;
   annual_rent: number | null;
   currency_code: string;
-  status:
-    | "vacant"
-    | "occupied"
-    | "under_renovation"
-    | "hold"
-    | "pending_vacancy"
-    | "archived";
+  status: UnitStatus;
   created_at: string;
 };
+
+const UNIT_SELECT =
+  "id, property_id, block_id, building_name, unit_identifier, unit_type, bedrooms, bathrooms, monthly_rent, annual_rent, currency_code, status, created_at";
 
 export async function createUnit(
   supabase: SupabaseClient,
@@ -33,7 +51,7 @@ export async function createUnit(
     .from("units")
     .insert({
       property_id: input.propertyId,
-      block_id: input.blockId ?? null,
+      building_name: input.buildingName || null,
       unit_identifier: input.unitIdentifier,
       unit_type: input.unitType,
       bedrooms: input.bedrooms,
@@ -43,9 +61,7 @@ export async function createUnit(
       currency_code: input.currencyCode,
       status: "vacant",
     })
-    .select(
-      "id, property_id, block_id, unit_identifier, unit_type, bedrooms, bathrooms, monthly_rent, annual_rent, currency_code, status, created_at",
-    )
+    .select(UNIT_SELECT)
     .single<UnitRow>();
 
   if (error) {
@@ -60,10 +76,19 @@ export async function updateUnit(
   unitId: string,
   input: UpdateUnitInput,
 ) {
-  const updatePayload: Record<string, string | number | null> = {};
+  const updatePayload: Partial<{
+    building_name: string | null;
+    unit_identifier: string;
+    unit_type: UnitType;
+    bedrooms: number;
+    bathrooms: number;
+    monthly_rent: number | null;
+    annual_rent: number | null;
+    currency_code: string;
+  }> = {};
 
-  if (input.blockId !== undefined) {
-    updatePayload.block_id = input.blockId;
+  if (input.buildingName !== undefined) {
+    updatePayload.building_name = input.buildingName || null;
   }
 
   if (input.unitIdentifier !== undefined) {
@@ -99,9 +124,7 @@ export async function updateUnit(
     .update(updatePayload)
     .eq("id", unitId)
     .is("deleted_at", null)
-    .select(
-      "id, property_id, block_id, unit_identifier, unit_type, bedrooms, bathrooms, monthly_rent, annual_rent, currency_code, status, created_at",
-    )
+    .select(UNIT_SELECT)
     .single<UnitRow>();
 
   if (error) {
@@ -117,9 +140,7 @@ export async function getUnitsForProperty(
 ) {
   const { data, error } = await supabase
     .from("units")
-    .select(
-      "id, property_id, block_id, unit_identifier, unit_type, bedrooms, bathrooms, monthly_rent, annual_rent, currency_code, status, created_at",
-    )
+    .select(UNIT_SELECT)
     .eq("property_id", propertyId)
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
@@ -150,9 +171,7 @@ export async function archiveUnit(supabase: SupabaseClient, unitId: string) {
 export async function getUnitById(supabase: SupabaseClient, unitId: string) {
   const { data, error } = await supabase
     .from("units")
-    .select(
-      "id, property_id, block_id, unit_identifier, unit_type, bedrooms, bathrooms, monthly_rent, annual_rent, currency_code, status, created_at",
-    )
+    .select(UNIT_SELECT)
     .eq("id", unitId)
     .is("deleted_at", null)
     .single<UnitRow>();
@@ -175,6 +194,7 @@ export async function getVacantUnitsForLandlord(
       id,
       property_id,
       block_id,
+      building_name,
       unit_identifier,
       unit_type,
       bedrooms,
@@ -203,8 +223,9 @@ export async function getVacantUnitsForLandlord(
   return data.map((unit) => ({
     id: unit.id as string,
     propertyId: unit.property_id as string,
+    buildingName: unit.building_name as string | null,
     unitIdentifier: unit.unit_identifier as string,
-    unitType: unit.unit_type as string,
+    unitType: unit.unit_type as UnitType,
     annualRent: unit.annual_rent as number | null,
     monthlyRent: unit.monthly_rent as number | null,
     currencyCode: unit.currency_code as string,
@@ -241,6 +262,7 @@ export async function getUnitWithPropertyById(
       `
       id,
       unit_identifier,
+      building_name,
       property_id,
       properties (
         id,
@@ -254,6 +276,7 @@ export async function getUnitWithPropertyById(
     .single<{
       id: string;
       unit_identifier: string;
+      building_name: string | null;
       property_id: string;
       properties: {
         id: string;
