@@ -111,14 +111,14 @@ export default function HomePage() {
               <div className="grid gap-4">
                 <StatCard
                   title="Total Units"
-                  value="—"
-                  description="Across your properties"
+                  value="24"
+                  description="Across 4 properties"
                   icon={<Building2 size={22} strokeWidth={2.6} />}
                 />
 
                 <StatCard
                   title="Tenants"
-                  value="—"
+                  value="21"
                   description="Active rental records"
                   tone="success"
                   icon={<Users size={22} strokeWidth={2.6} />}
@@ -126,7 +126,7 @@ export default function HomePage() {
 
                 <StatCard
                   title="Rent Collected"
-                  value="—"
+                  value="₦18.6M"
                   description="Track annual rent payments"
                   tone="gold"
                   icon={<ReceiptText size={22} strokeWidth={2.6} />}
