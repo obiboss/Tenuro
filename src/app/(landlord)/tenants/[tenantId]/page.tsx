@@ -1,5 +1,11 @@
 import Link from "next/link";
-import { ArrowLeft, FileCheck2, Phone, UserRound } from "lucide-react";
+import {
+  ArrowLeft,
+  FileCheck2,
+  FileText,
+  Phone,
+  UserRound,
+} from "lucide-react";
 import { RentPaymentModal } from "@/components/payment/rent-payment-modal";
 import { OnboardingInviteCard } from "@/components/tenant/onboarding-invite-card";
 import { TenancyForm } from "@/components/tenancy/tenancy-form";
@@ -37,7 +43,7 @@ export default async function TenantDetailPage({
     TENANT_ONBOARDING_STATUS_COPY.invited;
 
   const outstandingBalance = ledgerSummary.balance?.outstanding_balance ?? 0;
-  const canCollectOnline = Boolean(
+  const canSendPaymentLink = Boolean(
     activeTenancy && ledgerSummary.balance && outstandingBalance > 0,
   );
 
@@ -53,7 +59,7 @@ export default async function TenantDetailPage({
 
       <PageHeader
         title={tenant.full_name}
-        description="Tenant record, assigned unit, documents, rental agreement, and payment history."
+        description="Tenant record, assigned unit, documents, tenancy record, and payment history."
         action={<Badge tone={status.tone}>{status.label}</Badge>}
       />
 
@@ -104,10 +110,25 @@ export default async function TenantDetailPage({
           </Card>
 
           {activeTenancy ? (
-            <TenancySummaryCard tenancy={activeTenancy} />
+            <>
+              <TenancySummaryCard tenancy={activeTenancy} />
+
+              <SectionCard
+                title="Tenancy Agreement Document"
+                description="Generate the full agreement document the tenant will review, accept online, and download as a PDF."
+              >
+                <TrustNotice
+                  title="Agreement generator coming next"
+                  description="This will create a complete tenancy agreement with landlord, tenant, property, rent, term, deposit, obligations, signatures, and witness sections."
+                  icon={
+                    <FileText aria-hidden="true" size={22} strokeWidth={2.6} />
+                  }
+                />
+              </SectionCard>
+            </>
           ) : (
             <SectionCard
-              title="Create Rental Agreement"
+              title="Create Tenancy Record"
               description="Set the rent amount, payment frequency, dates, and opening balance."
             >
               <TenancyForm
@@ -129,8 +150,8 @@ export default async function TenantDetailPage({
               description="Rent charges, payments, and outstanding balance will appear here."
             >
               <TrustNotice
-                title="No rental agreement yet"
-                description="Create a rental agreement first so Tenuro can start tracking rent balance."
+                title="No tenancy record yet"
+                description="Create a tenancy record first so Tenuro can start tracking rent balance."
                 icon={
                   <FileCheck2 aria-hidden="true" size={22} strokeWidth={2.6} />
                 }
@@ -138,10 +159,10 @@ export default async function TenantDetailPage({
             </SectionCard>
           )}
 
-          {canCollectOnline && activeTenancy ? (
+          {canSendPaymentLink && activeTenancy ? (
             <SectionCard
-              title="Collect Rent Online"
-              description="Create a secure Paystack payment link for this tenant."
+              title="Send Tenant Payment Link"
+              description="Prepare a Paystack rent payment checkout for this tenant. The tenant pays rent plus the Tenuro fee through the payment link."
             >
               <RentPaymentModal
                 tenancyId={activeTenancy.id}

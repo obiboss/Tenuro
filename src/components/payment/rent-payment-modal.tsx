@@ -37,15 +37,15 @@ export function RentPaymentModal({
       <ActionResultToast
         ok={state.ok}
         message={state.message}
-        successTitle="Payment link prepared"
-        errorTitle="Payment link failed"
+        successTitle="Tenant payment checkout prepared"
+        errorTitle="Payment checkout failed"
       />
 
       <Card>
         <CardContent>
           <TrustNotice
-            title="Gateway payment"
-            description="The tenant pays online. Tenuro collects only the configured gateway fee, and the rent is settled to the landlord payout account."
+            title="Tenant-paid online rent"
+            description="The tenant pays rent plus the Tenuro fee. Paystack splits the payment so rent goes to the landlord payout account and the Tenuro fee is collected automatically."
           />
 
           {state.message ? (
@@ -70,20 +70,20 @@ export function RentPaymentModal({
             defaultValue={defaultAmount}
             placeholder="0.00"
             error={state.fieldErrors?.amount?.[0]}
-            helperText="This is the rent amount before any gateway fee."
+            helperText="This is the rent amount only. The Tenuro fee is added separately at checkout."
             required
           />
 
           <div className="grid gap-4 md:grid-cols-2">
             <Input
-              label="Period start"
+              label="Payment period start"
               name="periodStart"
               type="date"
               error={state.fieldErrors?.periodStart?.[0]}
             />
 
             <Input
-              label="Period end"
+              label="Payment period end"
               name="periodEnd"
               type="date"
               error={state.fieldErrors?.periodEnd?.[0]}
@@ -93,7 +93,7 @@ export function RentPaymentModal({
 
         <CardFooter>
           <Button type="submit" isLoading={isPending} fullWidth>
-            Continue to Paystack
+            Prepare Tenant Payment Checkout
           </Button>
         </CardFooter>
       </Card>
