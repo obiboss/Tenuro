@@ -49,7 +49,7 @@ function getErrorMessage(error: unknown) {
     return error.message;
   }
 
-  return "Payment webhook could not be processed.";
+  return "Payment could not be processed.";
 }
 
 function assertAmountsMatch(params: {
@@ -95,6 +95,116 @@ async function queueReceiptGeneration(params: {
   } catch (error) {
     console.error("Receipt generation event could not be queued:", error);
   }
+}
+
+export async function processVerifiedGatewayPaymentReference(
+  reference: string,
+): Promise<GatewayPaymentWebhookResult> {
+  const supabase = createSupabaseAdminClient();
+
+  const intent = await getGatewayPaymentIntentByReference(supabase, reference);
+
+  if (!intent) {
+    throw new AppError(
+      "GATEWAY_INTENT_NOT_FOUND",
+      "Payment reference was not found in Tenuro.",
+      404,
+    );
+  }
+
+  if (intent.status === "paid" && intent.processed_payment_id) {
+    return {
+      status: "duplicate",
+      message: "Gateway payment already recorded.",
+      paymentId: intent.processed_payment_id,
+    };
+  }
+
+  const verifiedTransaction = await verifyPaystackTransaction(reference);
+  const verifiedPayload = toRecord(verifiedTransaction);
+
+  if (verifiedTransaction.reference !== intent.paystack_reference) {
+    throw new AppError(
+      "PAYSTACK_REFERENCE_MISMATCH",
+      "Payment reference does not match the initialized payment.",
+      400,
+    );
+  }
+
+  if (verifiedTransaction.currency !== intent.currency_code) {
+    throw new AppError(
+      "PAYSTACK_CURRENCY_MISMATCH",
+      "Payment currency does not match the initialized payment.",
+      400,
+    );
+  }
+
+  if (verifiedTransaction.status !== "success") {
+    const failedStatus = mapPaystackStatusToIntentStatus(
+      verifiedTransaction.status,
+    );
+
+    await markGatewayPaymentIntentFailed(supabase, {
+      intentId: intent.id,
+      status: failedStatus,
+      reason: `Paystack transaction status: ${verifiedTransaction.status}`,
+      verifiedPayload,
+    });
+
+    return {
+      status: "ignored",
+      message: "Payment was not successful.",
+    };
+  }
+
+  assertAmountsMatch({
+    verifiedAmountKobo: verifiedTransaction.amount,
+    expectedTotalNaira: intent.total_amount,
+  });
+
+  const idempotencyKey = `paystack:${intent.paystack_reference}`;
+
+  const existingPayment = await findPaymentByIdempotencyKey(supabase, {
+    landlordId: intent.landlord_id,
+    idempotencyKey,
+  });
+
+  const paymentId =
+    existingPayment?.id ??
+    (await recordGatewayRentPaymentViaRpc(supabase, {
+      tenancyId: intent.tenancy_id,
+      amountPaid: intent.rent_amount,
+      paymentReference: intent.paystack_reference,
+      paymentDate: verifiedTransaction.paid_at ?? new Date().toISOString(),
+      periodStart: intent.period_start,
+      periodEnd: intent.period_end,
+      idempotencyKey,
+    }));
+
+  await markGatewayPaymentIntentPaid(supabase, {
+    intentId: intent.id,
+    paymentId,
+    paidAt: verifiedTransaction.paid_at ?? new Date().toISOString(),
+    verifiedPayload,
+  });
+
+  await queueReceiptGeneration({
+    paymentId,
+    tenancyId: intent.tenancy_id,
+    tenantId: intent.tenant_id,
+    landlordId: intent.landlord_id,
+    paymentReference: intent.paystack_reference,
+  });
+
+  return {
+    status: existingPayment ? "duplicate" : "processed",
+    message: existingPayment
+      ? "Gateway payment already recorded."
+      : `Gateway payment of ₦${convertKoboToNaira(
+          verifiedTransaction.amount,
+        ).toLocaleString("en-NG")} confirmed.`,
+    paymentId,
+  };
 }
 
 export async function processGatewayPaystackWebhook(params: {
@@ -152,6 +262,10 @@ export async function processGatewayPaystackWebhook(params: {
       };
     }
 
+    const result = await processVerifiedGatewayPaymentReference(
+      webhook.data.reference,
+    );
+
     const intent = await getGatewayPaymentIntentByReference(
       supabase,
       webhook.data.reference,
@@ -165,123 +279,14 @@ export async function processGatewayPaystackWebhook(params: {
       );
     }
 
-    if (intent.status === "paid" && intent.processed_payment_id) {
-      await markGatewayPaymentEventProcessed(supabase, {
-        eventId: registeredEvent.event.id,
-        gatewayPaymentIntentId: intent.id,
-        processedPaymentId: intent.processed_payment_id,
-        verifiedPayload: intent.verified_payload ?? {},
-      });
-
-      return {
-        status: "duplicate",
-        message: "Gateway payment already recorded.",
-        paymentId: intent.processed_payment_id,
-      };
-    }
-
-    const verifiedTransaction = await verifyPaystackTransaction(
-      webhook.data.reference,
-    );
-
-    const verifiedPayload = toRecord(verifiedTransaction);
-
-    if (verifiedTransaction.reference !== intent.paystack_reference) {
-      throw new AppError(
-        "PAYSTACK_REFERENCE_MISMATCH",
-        "Payment reference does not match the initialized payment.",
-        400,
-      );
-    }
-
-    if (verifiedTransaction.currency !== intent.currency_code) {
-      throw new AppError(
-        "PAYSTACK_CURRENCY_MISMATCH",
-        "Payment currency does not match the initialized payment.",
-        400,
-      );
-    }
-
-    if (verifiedTransaction.status !== "success") {
-      const failedStatus = mapPaystackStatusToIntentStatus(
-        verifiedTransaction.status,
-      );
-
-      await markGatewayPaymentIntentFailed(supabase, {
-        intentId: intent.id,
-        status: failedStatus,
-        reason: `Paystack transaction status: ${verifiedTransaction.status}`,
-        verifiedPayload,
-      });
-
-      await markGatewayPaymentEventIgnored(supabase, {
-        eventId: registeredEvent.event.id,
-        gatewayPaymentIntentId: intent.id,
-        verifiedPayload,
-        reason: `Paystack transaction status: ${verifiedTransaction.status}`,
-      });
-
-      return {
-        status: "ignored",
-        message: "Payment was not successful.",
-      };
-    }
-
-    assertAmountsMatch({
-      verifiedAmountKobo: verifiedTransaction.amount,
-      expectedTotalNaira: intent.total_amount,
-    });
-
-    const idempotencyKey = `paystack:${intent.paystack_reference}`;
-
-    const existingPayment = await findPaymentByIdempotencyKey(supabase, {
-      landlordId: intent.landlord_id,
-      idempotencyKey,
-    });
-
-    const paymentId =
-      existingPayment?.id ??
-      (await recordGatewayRentPaymentViaRpc(supabase, {
-        tenancyId: intent.tenancy_id,
-        amountPaid: intent.rent_amount,
-        paymentReference: intent.paystack_reference,
-        paymentDate: verifiedTransaction.paid_at ?? new Date().toISOString(),
-        periodStart: intent.period_start,
-        periodEnd: intent.period_end,
-        idempotencyKey,
-      }));
-
-    await markGatewayPaymentIntentPaid(supabase, {
-      intentId: intent.id,
-      paymentId,
-      paidAt: verifiedTransaction.paid_at ?? new Date().toISOString(),
-      verifiedPayload,
-    });
-
     await markGatewayPaymentEventProcessed(supabase, {
       eventId: registeredEvent.event.id,
       gatewayPaymentIntentId: intent.id,
-      processedPaymentId: paymentId,
-      verifiedPayload,
+      processedPaymentId: result.paymentId ?? intent.processed_payment_id ?? "",
+      verifiedPayload: intent.verified_payload ?? {},
     });
 
-    await queueReceiptGeneration({
-      paymentId,
-      tenancyId: intent.tenancy_id,
-      tenantId: intent.tenant_id,
-      landlordId: intent.landlord_id,
-      paymentReference: intent.paystack_reference,
-    });
-
-    return {
-      status: existingPayment ? "duplicate" : "processed",
-      message: existingPayment
-        ? "Gateway payment already recorded."
-        : `Gateway payment of ₦${convertKoboToNaira(
-            verifiedTransaction.amount,
-          ).toLocaleString("en-NG")} confirmed.`,
-      paymentId,
-    };
+    return result;
   } catch (error) {
     const message = getErrorMessage(error);
 
