@@ -41,6 +41,9 @@ export default async function OverviewPage() {
     stats.totalUnits === 0 &&
     stats.totalTenants === 0;
 
+  const vacantUnitsDescription =
+    stats.vacantUnits === 0 ? "All units occupied" : "Ready for tenants";
+
   return (
     <div>
       <PageHeader
@@ -109,7 +112,7 @@ export default async function OverviewPage() {
         <StatCard
           title="Vacant Units"
           value={String(stats.vacantUnits)}
-          description="Ready for tenants"
+          description={vacantUnitsDescription}
           tone="warning"
           icon={<Home size={22} strokeWidth={2.6} />}
         />

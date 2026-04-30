@@ -7,6 +7,7 @@ import {
   Building2,
   CreditCard,
   Home,
+  LockKeyhole,
   RefreshCcw,
   Settings,
   ShieldCheck,
@@ -108,13 +109,19 @@ export function LandlordShell({ children, landlordName }: LandlordShellProps) {
     <ToastProvider>
       <div className="min-h-screen bg-background">
         <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-border-soft bg-white px-5 py-6 lg:block">
-          <Link href="/overview" className="block">
-            <p className="text-xl font-black tracking-tight text-primary">
-              Tenuro
-            </p>
-            <p className="mt-1 text-xs font-bold uppercase tracking-[0.2em] text-text-muted">
-              Property records made simple
-            </p>
+          <Link href="/overview" className="flex items-center gap-3">
+            <div className="flex size-11 items-center justify-center rounded-2xl bg-primary text-white shadow-soft">
+              <Building2 aria-hidden="true" size={23} strokeWidth={2.7} />
+            </div>
+
+            <div>
+              <p className="text-lg font-extrabold tracking-tight text-text-strong">
+                Tenuro
+              </p>
+              <p className="text-xs font-semibold text-text-muted">
+                Property records made simple
+              </p>
+            </div>
           </Link>
 
           <nav className="mt-8 space-y-2">
@@ -143,12 +150,15 @@ export function LandlordShell({ children, landlordName }: LandlordShellProps) {
                   {comingSoon ? (
                     <span
                       className={cn(
-                        "rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide",
-                        active
-                          ? "bg-white/20 text-white"
-                          : "bg-warning-soft text-warning",
+                        "inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide",
+                        active ? "text-white/75" : "text-text-muted/70",
                       )}
                     >
+                      <LockKeyhole
+                        aria-hidden="true"
+                        size={11}
+                        strokeWidth={2.6}
+                      />
                       Soon
                     </span>
                   ) : null}

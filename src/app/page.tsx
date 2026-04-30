@@ -106,8 +106,8 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="rounded-[2rem] bg-surface p-5 shadow-card md:p-6">
-            <div className="rounded-[1.5rem] bg-background p-5">
+          <div className="rounded-4xl bg-surface p-5 shadow-card md:p-6">
+            <div className="rounded-3xl bg-background p-5">
               <div className="grid gap-4">
                 <StatCard
                   title="Total Units"
@@ -127,7 +127,7 @@ export default function HomePage() {
                 <StatCard
                   title="Rent Collected"
                   value="—"
-                  description="Track payments monthly"
+                  description="Track annual rent payments"
                   tone="gold"
                   icon={<ReceiptText size={22} strokeWidth={2.6} />}
                 />
