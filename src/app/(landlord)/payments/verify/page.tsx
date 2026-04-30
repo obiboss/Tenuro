@@ -6,6 +6,7 @@ import {
   Clock3,
   ReceiptText,
 } from "lucide-react";
+import { PaymentVerificationAutoRefresh } from "@/components/payment/payment-verification-auto-refresh";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -21,6 +22,24 @@ type PaymentVerifyPageProps = {
   }>;
 };
 
+type PaymentStatusTone = "success" | "danger" | "warning";
+
+type PaymentStatusCopy = {
+  title: string;
+  description: string;
+  tone: PaymentStatusTone;
+  icon: React.ReactNode;
+  badge: string;
+};
+
+function getSearchParamValue(value?: string | string[]) {
+  if (Array.isArray(value)) {
+    return value[0]?.trim() || undefined;
+  }
+
+  return value?.trim() || undefined;
+}
+
 function formatDate(value: string | null | undefined) {
   if (!value) {
     return "Not available";
@@ -32,13 +51,13 @@ function formatDate(value: string | null | undefined) {
   }).format(new Date(value));
 }
 
-function getStatusCopy(status: string) {
+function getStatusCopy(status: string): PaymentStatusCopy {
   if (status === "paid") {
     return {
       title: "Payment successful",
       description:
-        "The rent payment has been confirmed. The tenant balance should update once the payment record is posted.",
-      tone: "success" as const,
+        "The rent payment has been confirmed and posted to the tenant balance.",
+      tone: "success",
       icon: <CheckCircle2 aria-hidden="true" size={24} strokeWidth={2.6} />,
       badge: "Paid",
     };
@@ -49,7 +68,7 @@ function getStatusCopy(status: string) {
       title: "Payment was not completed",
       description:
         "The tenant was not charged successfully. You can retry the payment from the tenant profile.",
-      tone: "danger" as const,
+      tone: "danger",
       icon: <AlertTriangle aria-hidden="true" size={24} strokeWidth={2.6} />,
       badge: "Failed",
     };
@@ -58,8 +77,8 @@ function getStatusCopy(status: string) {
   return {
     title: "Payment is processing",
     description:
-      "Paystack has redirected back to Tenuro. We are waiting for final confirmation from the payment notification.",
-    tone: "warning" as const,
+      "Paystack has redirected back to Tenuro. We are checking the payment status and will update this page automatically.",
+    tone: "warning",
     icon: <Clock3 aria-hidden="true" size={24} strokeWidth={2.6} />,
     badge: "Processing",
   };
@@ -69,10 +88,10 @@ export default async function PaymentVerifyPage({
   searchParams,
 }: PaymentVerifyPageProps) {
   const resolvedSearchParams = await searchParams;
-  const rawReference = resolvedSearchParams.reference;
-  const reference = Array.isArray(rawReference)
-    ? rawReference[0]?.trim()
-    : rawReference?.trim();
+
+  const reference =
+    getSearchParamValue(resolvedSearchParams.reference) ??
+    getSearchParamValue(resolvedSearchParams.trxref);
 
   if (!reference) {
     return (
@@ -141,9 +160,12 @@ export default async function PaymentVerifyPage({
   }
 
   const statusCopy = getStatusCopy(intent.status);
+  const shouldAutoRefresh = intent.status === "initialized";
 
   return (
     <div>
+      <PaymentVerificationAutoRefresh enabled={shouldAutoRefresh} />
+
       <Link
         href="/payments"
         className="mb-5 inline-flex items-center gap-2 text-sm font-bold text-primary hover:text-primary-hover"
@@ -166,13 +188,13 @@ export default async function PaymentVerifyPage({
           <Card>
             <CardHeader>
               <div className="flex items-start gap-3">
-                <div className="flex size-12 items-center justify-center rounded-full bg-primary-soft text-primary">
+                <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary-soft text-primary">
                   {statusCopy.icon}
                 </div>
 
-                <div>
+                <div className="min-w-0">
                   <CardTitle>{statusCopy.title}</CardTitle>
-                  <p className="mt-1 text-sm leading-6 text-text-muted">
+                  <p className="mt-1 break-all text-sm leading-6 text-text-muted">
                     Reference: {intent.paystack_reference}
                   </p>
                 </div>
@@ -218,6 +240,13 @@ export default async function PaymentVerifyPage({
                 </div>
               </div>
 
+              {shouldAutoRefresh ? (
+                <div className="mt-6 rounded-button bg-warning-soft p-4 text-sm font-semibold leading-6 text-warning">
+                  Tenuro is checking this payment automatically. You do not need
+                  to refresh the page.
+                </div>
+              ) : null}
+
               <div className="mt-6 flex flex-col gap-3 sm:flex-row">
                 <Link
                   href="/payments"
@@ -241,7 +270,7 @@ export default async function PaymentVerifyPage({
         <div className="xl:sticky xl:top-28 xl:self-start">
           <TrustNotice
             title="Payment posting"
-            description="Tenuro records successful Paystack payments from the secure webhook notification, not from this page."
+            description="Tenuro first listens for Paystack’s secure webhook. If it is delayed, this page safely re-checks the payment status and updates the record."
           />
         </div>
       </div>
