@@ -1,40 +1,46 @@
 import Link from "next/link";
-import { AlertTriangle, Building2 } from "lucide-react";
-import { TenantAgreementAcceptanceForm } from "@/components/tenancy/tenant-agreement-acceptance-form";
+import {
+  AlertTriangle,
+  Building2,
+  CalendarClock,
+  Home,
+  Phone,
+  UserRound,
+} from "lucide-react";
+import { TenantOnboardingForm } from "@/components/tenant/tenant-onboarding-form";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { ToastProvider } from "@/components/ui/toast-provider";
 import { TrustNotice } from "@/components/ui/trust-notice";
-import { resolveTenancyAgreementAcceptanceToken } from "@/server/services/tenancy-agreements.service";
+import { resolveTenantOnboardingToken } from "@/server/services/onboarding.service";
 
-type TenantAgreementPageProps = {
+type TenantOnboardingPageProps = {
   params: Promise<{
     token: string;
   }>;
 };
 
-type AgreementResolution =
+type OnboardingResolution =
   | {
       ok: true;
-      agreement: Awaited<
-        ReturnType<typeof resolveTenancyAgreementAcceptanceToken>
-      >;
+      tenant: Awaited<ReturnType<typeof resolveTenantOnboardingToken>>;
     }
   | {
       ok: false;
       message: string;
     };
 
-async function resolveAgreementSafely(
+async function resolveOnboardingSafely(
   token: string,
-): Promise<AgreementResolution> {
+): Promise<OnboardingResolution> {
   try {
-    const agreement = await resolveTenancyAgreementAcceptanceToken(token);
+    const tenant = await resolveTenantOnboardingToken(token);
 
     return {
       ok: true,
-      agreement,
+      tenant,
     };
   } catch (error) {
     return {
@@ -42,12 +48,35 @@ async function resolveAgreementSafely(
       message:
         error instanceof Error
           ? error.message
-          : "This agreement link could not be opened.",
+          : "This onboarding link could not be opened.",
     };
   }
 }
 
-function TenantAgreementLogo() {
+function formatDate(value: string | null) {
+  if (!value) {
+    return "Not available";
+  }
+
+  return new Intl.DateTimeFormat("en-NG", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function formatMoney(amount: number | null, currencyCode: string) {
+  if (amount === null) {
+    return "Not set";
+  }
+
+  return new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency: currencyCode,
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+function TenantOnboardingLogo() {
   return (
     <Link href="/" className="mb-8 flex w-fit items-center gap-3">
       <div className="flex size-11 items-center justify-center rounded-2xl bg-primary text-white shadow-soft">
@@ -59,23 +88,23 @@ function TenantAgreementLogo() {
           Tenuro
         </p>
         <p className="text-xs font-semibold text-text-muted">
-          Tenancy agreement
+          Tenant onboarding
         </p>
       </div>
     </Link>
   );
 }
 
-function AgreementUnavailable({ message }: { message: string }) {
+function OnboardingUnavailable({ message }: { message: string }) {
   return (
     <ToastProvider>
       <main className="min-h-screen bg-background">
         <section className="mx-auto max-w-3xl px-4 py-12 md:px-6">
-          <TenantAgreementLogo />
+          <TenantOnboardingLogo />
 
           <SectionCard
-            title="Agreement link unavailable"
-            description="We could not open this tenancy agreement link."
+            title="Onboarding link unavailable"
+            description="We could not open this tenant onboarding link."
           >
             <TrustNotice
               title="Please request a new link"
@@ -91,57 +120,179 @@ function AgreementUnavailable({ message }: { message: string }) {
   );
 }
 
-export default async function TenantAgreementPage({
+export default async function TenantOnboardingPage({
   params,
-}: TenantAgreementPageProps) {
+}: TenantOnboardingPageProps) {
   const { token } = await params;
-  const resolution = await resolveAgreementSafely(token);
+  const resolution = await resolveOnboardingSafely(token);
 
   if (!resolution.ok) {
-    return <AgreementUnavailable message={resolution.message} />;
+    return <OnboardingUnavailable message={resolution.message} />;
   }
 
-  const agreement = resolution.agreement;
-  const alreadyAccepted = agreement.document_status === "accepted";
+  const tenant = resolution.tenant;
+  const unit = tenant.units;
+  const property = unit?.properties;
+  const landlord = tenant.profiles;
+  const isSubmitted = tenant.onboarding_status === "profile_complete";
 
   return (
     <ToastProvider>
       <main className="min-h-screen bg-background">
         <section className="mx-auto max-w-5xl px-4 py-8 md:px-6 lg:py-10">
-          <TenantAgreementLogo />
+          <TenantOnboardingLogo />
 
           <PageHeader
-            title="Review your tenancy agreement"
-            description="Read the full agreement carefully before accepting."
+            title={
+              isSubmitted
+                ? "Tenant profile submitted"
+                : "Complete your tenant profile"
+            }
+            description={
+              isSubmitted
+                ? "Your profile has been submitted for landlord review."
+                : "Review the rental details and complete your KYC information for the landlord’s approval."
+            }
             action={
-              <Badge tone={alreadyAccepted ? "success" : "primary"}>
-                {alreadyAccepted ? "Accepted" : "Awaiting Acceptance"}
+              <Badge tone={isSubmitted ? "success" : "primary"}>
+                {isSubmitted ? "Submitted" : "Secure Link"}
               </Badge>
             }
           />
 
           <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
             <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Tenant Details</CardTitle>
+                </CardHeader>
+
+                <CardContent>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="rounded-button bg-background p-4">
+                      <div className="flex items-center gap-2 text-text-muted">
+                        <UserRound
+                          aria-hidden="true"
+                          size={18}
+                          strokeWidth={2.5}
+                        />
+                        <p className="text-sm font-bold">Name</p>
+                      </div>
+
+                      <p className="mt-2 font-extrabold text-text-strong">
+                        {tenant.full_name}
+                      </p>
+                    </div>
+
+                    <div className="rounded-button bg-background p-4">
+                      <div className="flex items-center gap-2 text-text-muted">
+                        <Phone aria-hidden="true" size={18} strokeWidth={2.5} />
+                        <p className="text-sm font-bold">Phone</p>
+                      </div>
+
+                      <p className="mt-2 font-extrabold text-text-strong">
+                        {tenant.phone_number}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Apartment Details</CardTitle>
+                </CardHeader>
+
+                <CardContent>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="rounded-button bg-background p-4">
+                      <div className="flex items-center gap-2 text-text-muted">
+                        <Home aria-hidden="true" size={18} strokeWidth={2.5} />
+                        <p className="text-sm font-bold">Property</p>
+                      </div>
+
+                      <p className="mt-2 font-extrabold text-text-strong">
+                        {property?.property_name ?? "Not available"}
+                      </p>
+
+                      <p className="mt-1 text-sm leading-6 text-text-muted">
+                        {property?.address ?? "Address not available"}
+                      </p>
+                    </div>
+
+                    <div className="rounded-button bg-background p-4">
+                      <p className="text-sm font-bold text-text-muted">Unit</p>
+
+                      <p className="mt-2 font-extrabold text-text-strong">
+                        {unit?.unit_identifier ?? "Not available"}
+                      </p>
+
+                      <p className="mt-1 text-sm leading-6 text-text-muted">
+                        Annual rent:{" "}
+                        {formatMoney(
+                          unit?.annual_rent ?? null,
+                          unit?.currency_code ?? "NGN",
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
               <SectionCard
-                title={agreement.title}
-                description="This is the final agreement prepared by the landlord."
+                title="Tenant KYC Form"
+                description="Complete your personal details, ID document, passport photo, and guarantor information for landlord review."
               >
-                <pre className="max-h-[720px] overflow-auto whitespace-pre-wrap rounded-button bg-white p-5 text-sm leading-7 text-text-normal shadow-soft ring-1 ring-border-soft">
-                  {agreement.finalized_body || agreement.agreement_body}
-                </pre>
+                <TenantOnboardingForm
+                  token={token}
+                  fullName={tenant.full_name}
+                  phoneNumber={tenant.phone_number}
+                  email={tenant.email}
+                  isSubmitted={isSubmitted}
+                />
               </SectionCard>
             </div>
 
             <div className="space-y-6 lg:sticky lg:top-8 lg:self-start">
               <TrustNotice
-                title="Read before accepting"
-                description="Your acceptance will be recorded digitally with a timestamp."
+                title="Secure onboarding"
+                description="This link was created by your landlord and expires automatically. Do not share it with anyone else."
               />
 
-              <TenantAgreementAcceptanceForm
-                token={token}
-                alreadyAccepted={alreadyAccepted}
-              />
+              <Card>
+                <CardHeader>
+                  <CardTitle>Invitation Details</CardTitle>
+                </CardHeader>
+
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="rounded-button bg-background p-4">
+                      <p className="text-sm font-bold text-text-muted">
+                        Landlord
+                      </p>
+
+                      <p className="mt-2 font-extrabold text-text-strong">
+                        {landlord?.full_name ?? "Landlord"}
+                      </p>
+                    </div>
+
+                    <div className="rounded-button bg-background p-4">
+                      <div className="flex items-center gap-2 text-text-muted">
+                        <CalendarClock
+                          aria-hidden="true"
+                          size={18}
+                          strokeWidth={2.5}
+                        />
+                        <p className="text-sm font-bold">Expires</p>
+                      </div>
+
+                      <p className="mt-2 font-extrabold text-text-strong">
+                        {formatDate(tenant.onboarding_token_expires_at)}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </div>
         </section>
