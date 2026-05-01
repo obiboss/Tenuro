@@ -22,7 +22,11 @@ export type TenancyAgreementDocumentRow = {
   finalized_body: string | null;
   finalized_at: string | null;
   finalized_by: string | null;
+  tenant_acceptance_token_hash: string | null;
+  tenant_acceptance_token_expires_at: string | null;
   tenant_accepted_at: string | null;
+  tenant_acceptance_ip: string | null;
+  tenant_acceptance_user_agent: string | null;
   pdf_path: string | null;
   created_at: string;
   updated_at: string;
@@ -43,7 +47,11 @@ const AGREEMENT_SELECT = `
   finalized_body,
   finalized_at,
   finalized_by,
+  tenant_acceptance_token_hash,
+  tenant_acceptance_token_expires_at,
   tenant_accepted_at,
+  tenant_acceptance_ip,
+  tenant_acceptance_user_agent,
   pdf_path,
   created_at,
   updated_at
@@ -77,6 +85,24 @@ export async function getTenancyAgreementById(
     .eq("id", agreementId)
     .is("deleted_at", null)
     .single<TenancyAgreementDocumentRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getTenancyAgreementByAcceptanceTokenHash(
+  supabase: SupabaseClient,
+  tokenHash: string,
+) {
+  const { data, error } = await supabase
+    .from("tenancy_agreement_documents")
+    .select(AGREEMENT_SELECT)
+    .eq("tenant_acceptance_token_hash", tokenHash)
+    .is("deleted_at", null)
+    .maybeSingle<TenancyAgreementDocumentRow>();
 
   if (error) {
     throw error;
@@ -137,6 +163,96 @@ export async function updateTenancyAgreementDraft(
     })
     .eq("id", params.agreementId)
     .eq("document_status", "draft")
+    .is("deleted_at", null)
+    .select(AGREEMENT_SELECT)
+    .single<TenancyAgreementDocumentRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function finalizeTenancyAgreementDraft(
+  supabase: SupabaseClient,
+  params: {
+    agreementId: string;
+    finalizedBy: string;
+  },
+) {
+  const existing = await getTenancyAgreementById(supabase, params.agreementId);
+
+  const { data, error } = await supabase
+    .from("tenancy_agreement_documents")
+    .update({
+      document_status: "finalized",
+      finalized_body: existing.agreement_body,
+      finalized_at: new Date().toISOString(),
+      finalized_by: params.finalizedBy,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", params.agreementId)
+    .eq("document_status", "draft")
+    .is("deleted_at", null)
+    .select(AGREEMENT_SELECT)
+    .single<TenancyAgreementDocumentRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function saveAgreementAcceptanceToken(
+  supabase: SupabaseClient,
+  params: {
+    agreementId: string;
+    tokenHash: string;
+    expiresAt: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("tenancy_agreement_documents")
+    .update({
+      document_status: "sent_to_tenant",
+      tenant_acceptance_token_hash: params.tokenHash,
+      tenant_acceptance_token_expires_at: params.expiresAt,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", params.agreementId)
+    .in("document_status", ["finalized", "sent_to_tenant"])
+    .is("deleted_at", null)
+    .select(AGREEMENT_SELECT)
+    .single<TenancyAgreementDocumentRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function acceptTenancyAgreement(
+  supabase: SupabaseClient,
+  params: {
+    agreementId: string;
+    ipAddress: string | null;
+    userAgent: string | null;
+  },
+) {
+  const { data, error } = await supabase
+    .from("tenancy_agreement_documents")
+    .update({
+      document_status: "accepted",
+      tenant_accepted_at: new Date().toISOString(),
+      tenant_acceptance_ip: params.ipAddress,
+      tenant_acceptance_user_agent: params.userAgent,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", params.agreementId)
+    .eq("document_status", "sent_to_tenant")
     .is("deleted_at", null)
     .select(AGREEMENT_SELECT)
     .single<TenancyAgreementDocumentRow>();

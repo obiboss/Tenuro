@@ -14,10 +14,34 @@ export const saveTenancyAgreementDraftSchema = z.object({
     .max(50000, "Agreement content is too long."),
 });
 
+export const finalizeTenancyAgreementSchema = z.object({
+  agreementId: uuidSchema,
+});
+
+export const generateAgreementAcceptanceLinkSchema = z.object({
+  agreementId: uuidSchema,
+});
+
+export const acceptTenancyAgreementSchema = z.object({
+  token: z.string().trim().min(32, "Invalid agreement link.").max(200),
+});
+
 export type GenerateTenancyAgreementInput = z.infer<
   typeof generateTenancyAgreementSchema
 >;
 
 export type SaveTenancyAgreementDraftInput = z.infer<
   typeof saveTenancyAgreementDraftSchema
+>;
+
+export type FinalizeTenancyAgreementInput = z.infer<
+  typeof finalizeTenancyAgreementSchema
+>;
+
+export type GenerateAgreementAcceptanceLinkInput = z.infer<
+  typeof generateAgreementAcceptanceLinkSchema
+>;
+
+export type AcceptTenancyAgreementInput = z.infer<
+  typeof acceptTenancyAgreementSchema
 >;
