@@ -267,3 +267,28 @@ export async function acceptTenancyAgreement(
 
   return data;
 }
+
+export async function updateTenancyAgreementPdfPath(
+  supabase: SupabaseClient,
+  params: {
+    agreementId: string;
+    pdfPath: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("tenancy_agreement_documents")
+    .update({
+      pdf_path: params.pdfPath,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", params.agreementId)
+    .is("deleted_at", null)
+    .select(AGREEMENT_SELECT)
+    .single<TenancyAgreementDocumentRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}

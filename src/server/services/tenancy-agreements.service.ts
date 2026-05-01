@@ -1,6 +1,7 @@
 import "server-only";
 
 import { AppError } from "@/server/errors/app-error";
+import { getAppBaseUrl } from "@/server/constants/routes";
 import {
   acceptTenancyAgreement,
   createTenancyAgreementDraft,
@@ -19,15 +20,17 @@ import {
   generateSecureToken,
   getExpiryDateFromNow,
 } from "@/server/utils/tokens";
+import { generateAndStoreTenancyAgreementPdf } from "@/server/services/tenancy-agreement-pdf.service";
+import { createSignedTenancyAgreementPdfUrl } from "@/server/services/storage.service";
 import type {
   AcceptTenancyAgreementInput,
   FinalizeTenancyAgreementInput,
   GenerateTenancyAgreementInput,
+  GenerateTenancyAgreementPdfInput,
   RefreshTenancyAgreementAcceptanceLinkInput,
   SaveTenancyAgreementDraftInput,
 } from "@/server/validators/tenancy-agreement.schema";
 import { requireLandlord } from "./auth.service";
-import { getAppBaseUrl } from "@/server/constants/routes";
 import { buildTenancyAgreementTemplate } from "./tenancy-agreement-template.service";
 
 function buildAgreementUrl(token: string) {
@@ -322,7 +325,14 @@ export async function acceptTenancyAgreementFromTenant(
   const agreement = await resolveTenancyAgreementAcceptanceToken(input.token);
 
   if (agreement.document_status === "accepted") {
-    return agreement;
+    const pdfDownloadUrl = await createSignedTenancyAgreementPdfUrl(
+      agreement.pdf_path,
+    );
+
+    return {
+      agreement,
+      pdfDownloadUrl,
+    };
   }
 
   if (agreement.document_status !== "sent_to_tenant") {
@@ -335,9 +345,83 @@ export async function acceptTenancyAgreementFromTenant(
 
   const supabase = createSupabaseAdminClient();
 
-  return acceptTenancyAgreement(supabase, {
+  const acceptedAgreement = await acceptTenancyAgreement(supabase, {
     agreementId: agreement.id,
     ipAddress: input.ipAddress,
     userAgent: input.userAgent,
   });
+
+  const agreementWithPdf = await generateAndStoreTenancyAgreementPdf(
+    supabase,
+    acceptedAgreement,
+  );
+
+  const pdfDownloadUrl = await createSignedTenancyAgreementPdfUrl(
+    agreementWithPdf.pdf_path,
+  );
+
+  return {
+    agreement: agreementWithPdf,
+    pdfDownloadUrl,
+  };
+}
+
+export async function generateTenancyAgreementPdfForCurrentLandlord(
+  input: GenerateTenancyAgreementPdfInput,
+) {
+  const landlord = await requireLandlord();
+  const supabase = await createSupabaseServerClient();
+
+  const agreement = await getTenancyAgreementById(supabase, input.agreementId);
+
+  if (agreement.landlord_id !== landlord.id) {
+    throw new AppError(
+      "FORBIDDEN",
+      "You do not have permission to generate this PDF.",
+      403,
+    );
+  }
+
+  const agreementWithPdf = await generateAndStoreTenancyAgreementPdf(
+    supabase,
+    agreement,
+  );
+
+  const pdfDownloadUrl = await createSignedTenancyAgreementPdfUrl(
+    agreementWithPdf.pdf_path,
+  );
+
+  return {
+    agreement: agreementWithPdf,
+    pdfDownloadUrl,
+  };
+}
+
+export async function getCurrentTenancyAgreementPdfDownloadUrl(
+  agreementId: string,
+) {
+  const landlord = await requireLandlord();
+  const supabase = await createSupabaseServerClient();
+
+  const agreement = await getTenancyAgreementById(supabase, agreementId);
+
+  if (agreement.landlord_id !== landlord.id) {
+    throw new AppError(
+      "FORBIDDEN",
+      "You do not have permission to download this agreement PDF.",
+      403,
+    );
+  }
+
+  return createSignedTenancyAgreementPdfUrl(agreement.pdf_path);
+}
+
+export async function getTenantAgreementPdfDownloadUrlFromToken(token: string) {
+  const agreement = await resolveTenancyAgreementAcceptanceToken(token);
+
+  if (agreement.document_status !== "accepted") {
+    return null;
+  }
+
+  return createSignedTenancyAgreementPdfUrl(agreement.pdf_path);
 }

@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import {
   finalizeTenancyAgreementAction,
   generateTenancyAgreementAction,
+  generateTenancyAgreementPdfAction,
   refreshTenancyAgreementAcceptanceLinkAction,
   saveTenancyAgreementDraftAction,
 } from "@/actions/tenancy-agreements.actions";
@@ -25,6 +26,7 @@ import type { TenancyAgreementDocumentRow } from "@/server/repositories/tenancy-
 type TenancyAgreementDocumentCardProps = {
   tenancyId: string;
   agreement: TenancyAgreementDocumentRow | null;
+  pdfDownloadUrl: string | null;
 };
 
 function getStatusLabel(
@@ -68,9 +70,11 @@ function AgreementLinkBox({ url }: { url?: string }) {
       <p className="text-sm font-extrabold text-success">
         Tenant acceptance link
       </p>
+
       <p className="mt-2 break-all text-sm font-semibold leading-6 text-text-strong">
         {url}
       </p>
+
       <p className="mt-2 text-sm leading-6 text-text-muted">
         Copy and send this link to the tenant on WhatsApp.
       </p>
@@ -78,9 +82,35 @@ function AgreementLinkBox({ url }: { url?: string }) {
   );
 }
 
+function PdfDownloadBox({ url }: { url?: string | null }) {
+  if (!url) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-button bg-primary-soft p-4">
+      <p className="text-sm font-extrabold text-primary">Agreement PDF</p>
+
+      <p className="mt-2 text-sm leading-6 text-text-muted">
+        Download the official saved PDF copy for printing or records.
+      </p>
+
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className="mt-3 inline-flex rounded-button bg-primary px-4 py-2 text-sm font-extrabold text-white shadow-soft hover:bg-primary-hover"
+      >
+        Download PDF
+      </a>
+    </div>
+  );
+}
+
 export function TenancyAgreementDocumentCard({
   tenancyId,
   agreement,
+  pdfDownloadUrl,
 }: TenancyAgreementDocumentCardProps) {
   const [generateState, generateFormAction, isGenerating] = useActionState(
     generateTenancyAgreementAction,
@@ -99,6 +129,11 @@ export function TenancyAgreementDocumentCard({
 
   const [linkState, linkFormAction, isPreparingLink] = useActionState(
     refreshTenancyAgreementAcceptanceLinkAction,
+    initialTenancyAgreementActionState,
+  );
+
+  const [pdfState, pdfFormAction, isGeneratingPdf] = useActionState(
+    generateTenancyAgreementPdfAction,
     initialTenancyAgreementActionState,
   );
 
@@ -154,6 +189,8 @@ export function TenancyAgreementDocumentCard({
     agreement.document_status === "finalized" ||
     agreement.document_status === "sent_to_tenant";
 
+  const currentPdfDownloadUrl = pdfState.pdfDownloadUrl || pdfDownloadUrl;
+
   return (
     <Card>
       <ActionResultToast
@@ -175,6 +212,13 @@ export function TenancyAgreementDocumentCard({
         message={linkState.message}
         successTitle="Acceptance link prepared"
         errorTitle="Link preparation failed"
+      />
+
+      <ActionResultToast
+        ok={pdfState.ok}
+        message={pdfState.message}
+        successTitle="PDF prepared"
+        errorTitle="PDF generation failed"
       />
 
       <CardHeader>
@@ -199,6 +243,8 @@ export function TenancyAgreementDocumentCard({
             url={finalizeState.acceptanceUrl || linkState.acceptanceUrl}
           />
 
+          <PdfDownloadBox url={currentPdfDownloadUrl} />
+
           {isDraft ? (
             <form action={saveFormAction} className="space-y-4">
               <input type="hidden" name="agreementId" value={agreement.id} />
@@ -222,7 +268,8 @@ export function TenancyAgreementDocumentCard({
               <p className="text-sm font-extrabold text-text-strong">
                 Final agreement content
               </p>
-              <pre className="mt-3 max-h-140 overflow-auto whitespace-pre-wrap rounded-button bg-white p-4 text-sm leading-7 text-text-normal ring-1 ring-border-soft">
+
+              <pre className="mt-3 max-h-[560px] overflow-auto whitespace-pre-wrap rounded-button bg-white p-4 text-sm leading-7 text-text-normal ring-1 ring-border-soft">
                 {agreement.finalized_body || agreement.agreement_body}
               </pre>
             </div>
@@ -258,10 +305,26 @@ export function TenancyAgreementDocumentCard({
             </form>
           ) : null}
 
+          {agreement.document_status === "accepted" &&
+          !currentPdfDownloadUrl ? (
+            <form action={pdfFormAction}>
+              <input type="hidden" name="agreementId" value={agreement.id} />
+
+              <Button
+                type="submit"
+                variant="secondary"
+                isLoading={isGeneratingPdf}
+                fullWidth
+              >
+                Generate Agreement PDF
+              </Button>
+            </form>
+          ) : null}
+
           {agreement.document_status === "accepted" ? (
             <TrustNotice
               title="Agreement accepted"
-              description="The tenant has accepted this agreement digitally. PDF generation and download will be added in the next batch."
+              description="The tenant has accepted this agreement digitally. The PDF copy can be downloaded once generated."
             />
           ) : (
             <TrustNotice

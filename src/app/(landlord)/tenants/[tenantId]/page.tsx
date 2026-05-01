@@ -14,7 +14,10 @@ import { SectionCard } from "@/components/ui/section-card";
 import { TrustNotice } from "@/components/ui/trust-notice";
 import { TENANT_ONBOARDING_STATUS_COPY } from "@/lib/status-copy";
 import { getCurrentTenantLedgerSummary } from "@/server/services/ledger.service";
-import { getCurrentTenancyAgreementByTenancyId } from "@/server/services/tenancy-agreements.service";
+import {
+  getCurrentTenancyAgreementByTenancyId,
+  getCurrentTenancyAgreementPdfDownloadUrl,
+} from "@/server/services/tenancy-agreements.service";
 import {
   getCurrentLandlordTenant,
   getCurrentLandlordTenantGuarantor,
@@ -44,6 +47,10 @@ export default async function TenantDetailPage({
 
   const agreementDocument = activeTenancy
     ? await getCurrentTenancyAgreementByTenancyId(activeTenancy.id)
+    : null;
+
+  const agreementPdfDownloadUrl = agreementDocument?.pdf_path
+    ? await getCurrentTenancyAgreementPdfDownloadUrl(agreementDocument.id)
     : null;
 
   const status =
@@ -138,6 +145,7 @@ export default async function TenantDetailPage({
               <TenancyAgreementDocumentCard
                 tenancyId={activeTenancy.id}
                 agreement={agreementDocument}
+                pdfDownloadUrl={agreementPdfDownloadUrl}
               />
             </>
           ) : null}

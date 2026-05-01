@@ -6,7 +6,10 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { ToastProvider } from "@/components/ui/toast-provider";
 import { TrustNotice } from "@/components/ui/trust-notice";
-import { resolveTenancyAgreementAcceptanceToken } from "@/server/services/tenancy-agreements.service";
+import {
+  getTenantAgreementPdfDownloadUrlFromToken,
+  resolveTenancyAgreementAcceptanceToken,
+} from "@/server/services/tenancy-agreements.service";
 
 type TenantAgreementPageProps = {
   params: Promise<{
@@ -104,6 +107,10 @@ export default async function TenantAgreementPage({
   const agreement = resolution.agreement;
   const alreadyAccepted = agreement.document_status === "accepted";
 
+  const pdfDownloadUrl = alreadyAccepted
+    ? await getTenantAgreementPdfDownloadUrlFromToken(token)
+    : null;
+
   return (
     <ToastProvider>
       <main className="min-h-screen bg-background">
@@ -126,7 +133,7 @@ export default async function TenantAgreementPage({
                 title={agreement.title}
                 description="This is the final agreement prepared by the landlord."
               >
-                <pre className="max-h-180 overflow-auto whitespace-pre-wrap rounded-button bg-white p-5 text-sm leading-7 text-text-normal shadow-soft ring-1 ring-border-soft">
+                <pre className="max-h-[720px] overflow-auto whitespace-pre-wrap rounded-button bg-white p-5 text-sm leading-7 text-text-normal shadow-soft ring-1 ring-border-soft">
                   {agreement.finalized_body || agreement.agreement_body}
                 </pre>
               </SectionCard>
@@ -141,6 +148,7 @@ export default async function TenantAgreementPage({
               <TenantAgreementAcceptanceForm
                 token={token}
                 alreadyAccepted={alreadyAccepted}
+                pdfDownloadUrl={pdfDownloadUrl}
               />
             </div>
           </div>

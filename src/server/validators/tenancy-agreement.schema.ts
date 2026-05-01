@@ -45,3 +45,11 @@ export type RefreshTenancyAgreementAcceptanceLinkInput = z.infer<
 export type AcceptTenancyAgreementInput = z.infer<
   typeof acceptTenancyAgreementSchema
 >;
+
+export const generateTenancyAgreementPdfSchema = z.object({
+  agreementId: uuidSchema,
+});
+
+export type GenerateTenancyAgreementPdfInput = z.infer<
+  typeof generateTenancyAgreementPdfSchema
+>;

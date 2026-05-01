@@ -7,12 +7,14 @@ import {
   acceptTenancyAgreementFromTenant,
   finalizeTenancyAgreementForCurrentLandlord,
   generateTenancyAgreementForCurrentLandlord,
+  generateTenancyAgreementPdfForCurrentLandlord,
   refreshTenancyAgreementAcceptanceLinkForCurrentLandlord,
   saveTenancyAgreementDraftForCurrentLandlord,
 } from "@/server/services/tenancy-agreements.service";
 import {
   acceptTenancyAgreementSchema,
   finalizeTenancyAgreementSchema,
+  generateTenancyAgreementPdfSchema,
   generateTenancyAgreementSchema,
   refreshTenancyAgreementAcceptanceLinkSchema,
   saveTenancyAgreementDraftSchema,
@@ -23,6 +25,7 @@ export type TenancyAgreementActionState = {
   message: string;
   agreementId?: string;
   acceptanceUrl?: string;
+  pdfDownloadUrl?: string | null;
   fieldErrors?: Record<string, string[]>;
 };
 
@@ -172,22 +175,56 @@ export async function acceptTenancyAgreementAction(
     const ipAddress = forwardedFor?.split(",")[0]?.trim() || null;
     const userAgent = requestHeaders.get("user-agent");
 
-    const agreement = await acceptTenancyAgreementFromTenant({
+    const result = await acceptTenancyAgreementFromTenant({
       token: parsed.token,
       ipAddress,
       userAgent,
     });
 
     revalidatePath("/tenants");
-    revalidatePath(`/tenants/${agreement.tenant_id}`);
+    revalidatePath(`/tenants/${result.agreement.tenant_id}`);
 
     return {
       ok: true,
       message: "Agreement accepted successfully.",
-      agreementId: agreement.id,
+      agreementId: result.agreement.id,
+      pdfDownloadUrl: result.pdfDownloadUrl,
     };
   } catch (error) {
     console.error("acceptTenancyAgreementAction failed:", error);
+
+    const result = errorResult(error);
+
+    return {
+      ok: false,
+      message: result.message,
+      fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
+    };
+  }
+}
+
+export async function generateTenancyAgreementPdfAction(
+  _previousState: TenancyAgreementActionState,
+  formData: FormData,
+): Promise<TenancyAgreementActionState> {
+  try {
+    const parsed = generateTenancyAgreementPdfSchema.parse({
+      agreementId: formData.get("agreementId"),
+    });
+
+    const result = await generateTenancyAgreementPdfForCurrentLandlord(parsed);
+
+    revalidatePath("/tenants");
+    revalidatePath(`/tenants/${result.agreement.tenant_id}`);
+
+    return {
+      ok: true,
+      message: "Agreement PDF prepared.",
+      agreementId: result.agreement.id,
+      pdfDownloadUrl: result.pdfDownloadUrl,
+    };
+  } catch (error) {
+    console.error("generateTenancyAgreementPdfAction failed:", error);
 
     const result = errorResult(error);
 

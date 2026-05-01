@@ -4,6 +4,7 @@ import { AppError } from "@/server/errors/app-error";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 
 const TENANT_KYC_BUCKET = "tenant-kyc-documents";
+const TENANCY_AGREEMENT_PDF_BUCKET = "tenancy-agreement-pdfs";
 const SIGNED_URL_EXPIRY_SECONDS = 60 * 10;
 
 export type SignedKycDocument = {
@@ -12,16 +13,19 @@ export type SignedKycDocument = {
   signedUrl: string | null;
 };
 
-async function createSignedTenantKycUrl(path: string | null) {
-  if (!path) {
+async function createSignedStorageUrl(params: {
+  bucket: string;
+  path: string | null;
+}) {
+  if (!params.path) {
     return null;
   }
 
   const supabase = createSupabaseAdminClient();
 
   const { data, error } = await supabase.storage
-    .from(TENANT_KYC_BUCKET)
-    .createSignedUrl(path, SIGNED_URL_EXPIRY_SECONDS);
+    .from(params.bucket)
+    .createSignedUrl(params.path, SIGNED_URL_EXPIRY_SECONDS);
 
   if (error) {
     throw new AppError(
@@ -41,9 +45,18 @@ export async function createTenantKycDocumentLinks(params: {
 }) {
   const [tenantIdDocumentUrl, tenantPassportPhotoUrl, guarantorIdDocumentUrl] =
     await Promise.all([
-      createSignedTenantKycUrl(params.tenantIdDocumentPath),
-      createSignedTenantKycUrl(params.tenantPassportPhotoPath),
-      createSignedTenantKycUrl(params.guarantorIdDocumentPath),
+      createSignedStorageUrl({
+        bucket: TENANT_KYC_BUCKET,
+        path: params.tenantIdDocumentPath,
+      }),
+      createSignedStorageUrl({
+        bucket: TENANT_KYC_BUCKET,
+        path: params.tenantPassportPhotoPath,
+      }),
+      createSignedStorageUrl({
+        bucket: TENANT_KYC_BUCKET,
+        path: params.guarantorIdDocumentPath,
+      }),
     ]);
 
   return {
@@ -63,4 +76,31 @@ export async function createTenantKycDocumentLinks(params: {
       signedUrl: guarantorIdDocumentUrl,
     },
   };
+}
+
+export async function uploadTenancyAgreementPdf(params: {
+  path: string;
+  pdfBuffer: Buffer;
+}) {
+  const supabase = createSupabaseAdminClient();
+
+  const { error } = await supabase.storage
+    .from(TENANCY_AGREEMENT_PDF_BUCKET)
+    .upload(params.path, params.pdfBuffer, {
+      contentType: "application/pdf",
+      upsert: true,
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  return params.path;
+}
+
+export async function createSignedTenancyAgreementPdfUrl(path: string | null) {
+  return createSignedStorageUrl({
+    bucket: TENANCY_AGREEMENT_PDF_BUCKET,
+    path,
+  });
 }

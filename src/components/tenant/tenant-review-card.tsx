@@ -74,7 +74,7 @@ function DetailItem({
   return (
     <div className="rounded-button bg-background p-4">
       <p className="text-sm font-bold text-text-muted">{label}</p>
-      <p className="mt-2 break-words font-extrabold text-text-strong">
+      <p className="mt-2 wrap-break-word font-extrabold text-text-strong">
         {value || "Not provided"}
       </p>
     </div>
