@@ -5,9 +5,12 @@ import { AppError } from "@/server/errors/app-error";
 import {
   createGatewayPaymentIntent,
   getGatewayPaymentIntentByIdempotencyKey,
+  getGatewayPaymentIntentByReference,
 } from "@/server/repositories/gateway-payment.repository";
 import { getActiveLandlordPaystackAccount } from "@/server/repositories/landlord-paystack.repository";
+import { getTenancyAgreementByTenancyId } from "@/server/repositories/tenancy-agreements.repository";
 import { getTenancyPaymentContext } from "@/server/repositories/payment-context.repository";
+import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import type { InitializeRentPaymentInput } from "@/server/validators/payment.schema";
 import { requireLandlord } from "./auth.service";
@@ -15,6 +18,7 @@ import {
   convertNairaToKobo,
   initializePaystackTransaction,
 } from "./paystack.service";
+import { processVerifiedGatewayPaymentReference } from "./gateway-payment-webhook.service";
 
 function getAppBaseUrl() {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
@@ -24,6 +28,14 @@ function getAppBaseUrl() {
   }
 
   return appUrl.replace(/\/$/, "");
+}
+
+function getTenantPaymentUrl(reference: string) {
+  return `${getAppBaseUrl()}/t/pay/${reference}`;
+}
+
+function getTenantPaymentVerifyUrl(reference: string) {
+  return `${getTenantPaymentUrl(reference)}?verify=1`;
 }
 
 function getTenuroGatewayAdminFee() {
@@ -97,6 +109,23 @@ function assertGatewayAmountStructure(params: {
   }
 }
 
+function toRecord(value: unknown): Record<string, unknown> {
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  return {};
+}
+
+function readMetadataText(
+  metadata: Record<string, unknown>,
+  key: string,
+): string | null {
+  const value = metadata[key];
+
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
 export async function initializeRentPayment(input: InitializeRentPaymentInput) {
   const landlord = await requireLandlord();
   const supabase = await createSupabaseServerClient();
@@ -114,6 +143,7 @@ export async function initializeRentPayment(input: InitializeRentPaymentInput) {
       authorizationUrl: existingIntent.authorization_url,
       accessCode: existingIntent.paystack_access_code,
       reference: existingIntent.paystack_reference,
+      tenantPaymentUrl: getTenantPaymentUrl(existingIntent.paystack_reference),
     };
   }
 
@@ -143,6 +173,16 @@ export async function initializeRentPayment(input: InitializeRentPaymentInput) {
     );
   }
 
+  const agreement = await getTenancyAgreementByTenancyId(supabase, tenancy.id);
+
+  if (agreement?.document_status !== "accepted") {
+    throw new AppError(
+      "AGREEMENT_NOT_ACCEPTED",
+      "The tenant must accept the tenancy agreement before a rent payment link can be sent.",
+      400,
+    );
+  }
+
   const paystackAccount = await getActiveLandlordPaystackAccount(
     supabase,
     landlord.id,
@@ -168,7 +208,6 @@ export async function initializeRentPayment(input: InitializeRentPaymentInput) {
 
   const tenuroFeeKobo = convertNairaToKobo(tenuroFeeAmount);
   const totalAmountKobo = convertNairaToKobo(totalAmount);
-
   const reference = createPaymentReference();
 
   const metadata = {
@@ -199,7 +238,7 @@ export async function initializeRentPayment(input: InitializeRentPaymentInput) {
     }),
     amountKobo: totalAmountKobo,
     reference,
-    callbackUrl: `${getAppBaseUrl()}/payments/verify?reference=${reference}`,
+    callbackUrl: getTenantPaymentVerifyUrl(reference),
     subaccountCode: paystackAccount.paystack_subaccount_code,
     transactionChargeKobo: tenuroFeeKobo,
     currencyCode: tenancy.currency_code,
@@ -227,5 +266,48 @@ export async function initializeRentPayment(input: InitializeRentPaymentInput) {
     authorizationUrl: intent.authorization_url,
     accessCode: intent.paystack_access_code,
     reference: intent.paystack_reference,
+    tenantPaymentUrl: getTenantPaymentUrl(intent.paystack_reference),
+  };
+}
+
+export async function getPublicTenantPaymentCheckout(params: {
+  reference: string;
+  verify?: boolean;
+}) {
+  const supabase = createSupabaseAdminClient();
+
+  if (params.verify) {
+    try {
+      await processVerifiedGatewayPaymentReference(params.reference);
+    } catch (error) {
+      console.error("Public tenant payment verification failed:", error);
+    }
+  }
+
+  const intent = await getGatewayPaymentIntentByReference(
+    supabase,
+    params.reference,
+  );
+
+  if (!intent) {
+    return null;
+  }
+
+  const metadata = toRecord(intent.metadata);
+
+  return {
+    id: intent.id,
+    reference: intent.paystack_reference,
+    authorizationUrl: intent.authorization_url,
+    rentAmount: Number(intent.rent_amount),
+    tenuroFeeAmount: Number(intent.tenuro_fee_amount),
+    totalAmount: Number(intent.total_amount),
+    currencyCode: intent.currency_code,
+    status: intent.status,
+    paidAt: intent.paid_at,
+    propertyName: readMetadataText(metadata, "property_name"),
+    unitIdentifier: readMetadataText(metadata, "unit_identifier"),
+    periodStart: intent.period_start,
+    periodEnd: intent.period_end,
   };
 }

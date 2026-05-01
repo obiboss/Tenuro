@@ -16,6 +16,7 @@ export type PaymentActionState = {
   message: string;
   paymentId?: string;
   authorizationUrl?: string;
+  tenantPaymentUrl?: string;
   reference?: string;
   fieldErrors?: Record<string, string[]>;
 };
@@ -68,8 +69,9 @@ export async function initializeRentPaymentAction(
 
     return {
       ok: true,
-      message: "Payment link prepared.",
+      message: "Tenant payment link prepared.",
       authorizationUrl: result.authorizationUrl,
+      tenantPaymentUrl: result.tenantPaymentUrl,
       reference: result.reference,
     };
   } catch (error) {

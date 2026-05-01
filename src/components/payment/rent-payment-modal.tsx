@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo } from "react";
+import { useActionState, useMemo } from "react";
 import { initializeRentPaymentAction } from "@/actions/payments.actions";
 import { initialPaymentActionState } from "@/actions/payment.state";
 import { ActionResultToast } from "@/components/ui/action-result-toast";
@@ -26,19 +26,13 @@ export function RentPaymentModal({
     initialPaymentActionState,
   );
 
-  useEffect(() => {
-    if (state.ok && state.authorizationUrl) {
-      window.location.href = state.authorizationUrl;
-    }
-  }, [state.ok, state.authorizationUrl]);
-
   return (
     <form action={formAction}>
       <ActionResultToast
         ok={state.ok}
         message={state.message}
-        successTitle="Tenant payment checkout prepared"
-        errorTitle="Payment checkout failed"
+        successTitle="Tenant payment link prepared"
+        errorTitle="Payment link failed"
       />
 
       <Card>
@@ -61,6 +55,23 @@ export function RentPaymentModal({
             </div>
           ) : null}
 
+          {state.tenantPaymentUrl ? (
+            <div className="rounded-button bg-primary-soft p-4">
+              <p className="text-sm font-extrabold text-primary">
+                Tenant payment link
+              </p>
+
+              <p className="mt-2 break-all text-sm font-semibold leading-6 text-text-strong">
+                {state.tenantPaymentUrl}
+              </p>
+
+              <p className="mt-2 text-sm leading-6 text-text-muted">
+                Copy and send this link to the tenant on WhatsApp. The tenant
+                will review the rent amount and continue to Paystack.
+              </p>
+            </div>
+          ) : null}
+
           <input type="hidden" name="tenancyId" value={tenancyId} />
           <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
 
@@ -70,7 +81,7 @@ export function RentPaymentModal({
             defaultValue={defaultAmount}
             placeholder="0.00"
             error={state.fieldErrors?.amount?.[0]}
-            helperText="This is the rent amount only. The Tenuro fee is added separately at checkout."
+            helperText="This is the rent amount only. The Tenuro fee is added separately before the tenant proceeds to Paystack."
             required
           />
 
@@ -93,7 +104,7 @@ export function RentPaymentModal({
 
         <CardFooter>
           <Button type="submit" isLoading={isPending} fullWidth>
-            Prepare Tenant Payment Checkout
+            Prepare Tenant Payment Link
           </Button>
         </CardFooter>
       </Card>
