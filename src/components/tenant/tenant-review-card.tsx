@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { ExternalLink, FileText } from "lucide-react";
 import {
   approveTenantAction,
   rejectTenantAction,
@@ -19,10 +20,18 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import type { GuarantorRow } from "@/server/repositories/guarantors.repository";
 import type { TenantListRow } from "@/server/repositories/tenants.repository";
+import type { SignedKycDocument } from "@/server/services/storage.service";
+
+type KycDocumentLinks = {
+  tenantIdDocument: SignedKycDocument;
+  tenantPassportPhoto: SignedKycDocument;
+  guarantorIdDocument: SignedKycDocument;
+};
 
 type TenantReviewCardProps = {
   tenant: TenantListRow;
   guarantor: GuarantorRow | null;
+  documents: KycDocumentLinks;
 };
 
 function formatDate(value: string | null) {
@@ -72,7 +81,50 @@ function DetailItem({
   );
 }
 
-export function TenantReviewCard({ tenant, guarantor }: TenantReviewCardProps) {
+function DocumentItem({ document }: { document: SignedKycDocument }) {
+  const hasDocument = Boolean(document.path && document.signedUrl);
+
+  return (
+    <div className="rounded-button bg-background p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+            <FileText aria-hidden="true" size={20} strokeWidth={2.6} />
+          </div>
+
+          <div>
+            <p className="text-sm font-extrabold text-text-strong">
+              {document.label}
+            </p>
+            <p className="mt-1 break-all text-xs font-semibold leading-5 text-text-muted">
+              {document.path || "Not uploaded"}
+            </p>
+          </div>
+        </div>
+
+        {hasDocument ? (
+          <a
+            href={document.signedUrl ?? "#"}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex shrink-0 items-center gap-1 rounded-button bg-white px-3 py-2 text-xs font-extrabold text-primary shadow-soft ring-1 ring-border-soft transition hover:bg-primary-soft"
+          >
+            View
+            <ExternalLink aria-hidden="true" size={14} strokeWidth={2.6} />
+          </a>
+        ) : (
+          <Badge tone="neutral">Missing</Badge>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function TenantReviewCard({
+  tenant,
+  guarantor,
+  documents,
+}: TenantReviewCardProps) {
   const [approveState, approveFormAction, isApproving] = useActionState(
     approveTenantAction,
     initialTenantActionState,
@@ -125,8 +177,8 @@ export function TenantReviewCard({ tenant, guarantor }: TenantReviewCardProps) {
           <div>
             <CardTitle>Tenant Review</CardTitle>
             <p className="mt-1 text-sm leading-6 text-text-muted">
-              Review submitted KYC and guarantor details before approving this
-              tenant.
+              Review submitted KYC, documents, and guarantor details before
+              approving this tenant.
             </p>
           </div>
 
@@ -167,6 +219,18 @@ export function TenantReviewCard({ tenant, guarantor }: TenantReviewCardProps) {
               <DetailItem label="Occupation" value={tenant.occupation} />
               <DetailItem label="Employer" value={tenant.employer} />
               <DetailItem label="ID type" value={idTypeLabel(tenant.id_type)} />
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-extrabold text-text-strong">
+              Submitted Documents
+            </h3>
+
+            <div className="mt-3 grid gap-4">
+              <DocumentItem document={documents.tenantIdDocument} />
+              <DocumentItem document={documents.tenantPassportPhoto} />
+              <DocumentItem document={documents.guarantorIdDocument} />
             </div>
           </div>
 

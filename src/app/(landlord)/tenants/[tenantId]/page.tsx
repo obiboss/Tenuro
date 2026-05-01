@@ -22,6 +22,7 @@ import { getCurrentTenantLedgerSummary } from "@/server/services/ledger.service"
 import {
   getCurrentLandlordTenant,
   getCurrentLandlordTenantGuarantor,
+  getCurrentLandlordTenantKycDocumentLinks,
 } from "@/server/services/tenants.service";
 import { getCurrentTenantActiveTenancy } from "@/server/services/tenancies.service";
 
@@ -36,12 +37,14 @@ export default async function TenantDetailPage({
 }: TenantDetailPageProps) {
   const { tenantId } = await params;
 
-  const [tenant, guarantor, activeTenancy, ledgerSummary] = await Promise.all([
-    getCurrentLandlordTenant(tenantId),
-    getCurrentLandlordTenantGuarantor(tenantId),
-    getCurrentTenantActiveTenancy(tenantId),
-    getCurrentTenantLedgerSummary(tenantId),
-  ]);
+  const [tenant, guarantor, kycDocuments, activeTenancy, ledgerSummary] =
+    await Promise.all([
+      getCurrentLandlordTenant(tenantId),
+      getCurrentLandlordTenantGuarantor(tenantId),
+      getCurrentLandlordTenantKycDocumentLinks(tenantId),
+      getCurrentTenantActiveTenancy(tenantId),
+      getCurrentTenantLedgerSummary(tenantId),
+    ]);
 
   const status =
     TENANT_ONBOARDING_STATUS_COPY[tenant.onboarding_status] ??
@@ -117,7 +120,11 @@ export default async function TenantDetailPage({
             </CardContent>
           </Card>
 
-          <TenantReviewCard tenant={tenant} guarantor={guarantor} />
+          <TenantReviewCard
+            tenant={tenant}
+            guarantor={guarantor}
+            documents={kycDocuments}
+          />
 
           {activeTenancy ? (
             <>

@@ -17,6 +17,7 @@ import {
   markUnitOccupied,
 } from "@/server/repositories/units.repository";
 import { getPropertyById } from "@/server/repositories/properties.repository";
+import { createTenantKycDocumentLinks } from "@/server/services/storage.service";
 import type {
   CreateTenantShellInput,
   RejectTenantInput,
@@ -62,6 +63,31 @@ export async function getCurrentLandlordTenantGuarantor(tenantId: string) {
   }
 
   return getActiveGuarantorForTenant(supabase, tenantId);
+}
+
+export async function getCurrentLandlordTenantKycDocumentLinks(
+  tenantId: string,
+) {
+  const landlord = await requireLandlord();
+  const supabase = await createSupabaseServerClient();
+
+  const tenant = await getTenantById(supabase, tenantId);
+
+  if (tenant.landlord_id !== landlord.id) {
+    throw new AppError(
+      "FORBIDDEN",
+      "You do not have permission to view this tenant.",
+      403,
+    );
+  }
+
+  const guarantor = await getActiveGuarantorForTenant(supabase, tenantId);
+
+  return createTenantKycDocumentLinks({
+    tenantIdDocumentPath: tenant.id_document_path,
+    tenantPassportPhotoPath: tenant.passport_photo_path,
+    guarantorIdDocumentPath: guarantor?.id_document_path ?? null,
+  });
 }
 
 export async function getCurrentLandlordVacantUnits() {
