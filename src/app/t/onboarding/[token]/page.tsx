@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
+import { ToastProvider } from "@/components/ui/toast-provider";
 import { TrustNotice } from "@/components/ui/trust-notice";
 import { resolveTenantOnboardingToken } from "@/server/services/onboarding.service";
 
@@ -96,24 +97,26 @@ function TenantOnboardingLogo() {
 
 function OnboardingUnavailable({ message }: { message: string }) {
   return (
-    <main className="min-h-screen bg-background">
-      <section className="mx-auto max-w-3xl px-4 py-12 md:px-6">
-        <TenantOnboardingLogo />
+    <ToastProvider>
+      <main className="min-h-screen bg-background">
+        <section className="mx-auto max-w-3xl px-4 py-12 md:px-6">
+          <TenantOnboardingLogo />
 
-        <SectionCard
-          title="Onboarding link unavailable"
-          description="We could not open this tenant onboarding link."
-        >
-          <TrustNotice
-            title="Please request a new link"
-            description={message}
-            icon={
-              <AlertTriangle aria-hidden="true" size={22} strokeWidth={2.6} />
-            }
-          />
-        </SectionCard>
-      </section>
-    </main>
+          <SectionCard
+            title="Onboarding link unavailable"
+            description="We could not open this tenant onboarding link."
+          >
+            <TrustNotice
+              title="Please request a new link"
+              description={message}
+              icon={
+                <AlertTriangle aria-hidden="true" size={22} strokeWidth={2.6} />
+              }
+            />
+          </SectionCard>
+        </section>
+      </main>
+    </ToastProvider>
   );
 }
 
@@ -134,156 +137,158 @@ export default async function TenantOnboardingPage({
   const isSubmitted = tenant.onboarding_status === "profile_complete";
 
   return (
-    <main className="min-h-screen bg-background">
-      <section className="mx-auto max-w-5xl px-4 py-8 md:px-6 lg:py-10">
-        <TenantOnboardingLogo />
+    <ToastProvider>
+      <main className="min-h-screen bg-background">
+        <section className="mx-auto max-w-5xl px-4 py-8 md:px-6 lg:py-10">
+          <TenantOnboardingLogo />
 
-        <PageHeader
-          title={
-            isSubmitted
-              ? "Tenant profile submitted"
-              : "Complete your tenant profile"
-          }
-          description={
-            isSubmitted
-              ? "Your profile has been submitted for landlord review."
-              : "Review the rental details and complete your KYC information for the landlord’s approval."
-          }
-          action={
-            <Badge tone={isSubmitted ? "success" : "primary"}>
-              {isSubmitted ? "Submitted" : "Secure Link"}
-            </Badge>
-          }
-        />
+          <PageHeader
+            title={
+              isSubmitted
+                ? "Tenant profile submitted"
+                : "Complete your tenant profile"
+            }
+            description={
+              isSubmitted
+                ? "Your profile has been submitted for landlord review."
+                : "Review the rental details and complete your KYC information for the landlord’s approval."
+            }
+            action={
+              <Badge tone={isSubmitted ? "success" : "primary"}>
+                {isSubmitted ? "Submitted" : "Secure Link"}
+              </Badge>
+            }
+          />
 
-        <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Tenant Details</CardTitle>
-              </CardHeader>
+          <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Tenant Details</CardTitle>
+                </CardHeader>
 
-              <CardContent>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="rounded-button bg-background p-4">
-                    <div className="flex items-center gap-2 text-text-muted">
-                      <UserRound
-                        aria-hidden="true"
-                        size={18}
-                        strokeWidth={2.5}
-                      />
-                      <p className="text-sm font-bold">Name</p>
+                <CardContent>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="rounded-button bg-background p-4">
+                      <div className="flex items-center gap-2 text-text-muted">
+                        <UserRound
+                          aria-hidden="true"
+                          size={18}
+                          strokeWidth={2.5}
+                        />
+                        <p className="text-sm font-bold">Name</p>
+                      </div>
+                      <p className="mt-2 font-extrabold text-text-strong">
+                        {tenant.full_name}
+                      </p>
                     </div>
-                    <p className="mt-2 font-extrabold text-text-strong">
-                      {tenant.full_name}
-                    </p>
-                  </div>
 
-                  <div className="rounded-button bg-background p-4">
-                    <div className="flex items-center gap-2 text-text-muted">
-                      <Phone aria-hidden="true" size={18} strokeWidth={2.5} />
-                      <p className="text-sm font-bold">Phone</p>
+                    <div className="rounded-button bg-background p-4">
+                      <div className="flex items-center gap-2 text-text-muted">
+                        <Phone aria-hidden="true" size={18} strokeWidth={2.5} />
+                        <p className="text-sm font-bold">Phone</p>
+                      </div>
+                      <p className="mt-2 font-extrabold text-text-strong">
+                        {tenant.phone_number}
+                      </p>
                     </div>
-                    <p className="mt-2 font-extrabold text-text-strong">
-                      {tenant.phone_number}
-                    </p>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Apartment Details</CardTitle>
-              </CardHeader>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Apartment Details</CardTitle>
+                </CardHeader>
 
-              <CardContent>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="rounded-button bg-background p-4">
-                    <div className="flex items-center gap-2 text-text-muted">
-                      <Home aria-hidden="true" size={18} strokeWidth={2.5} />
-                      <p className="text-sm font-bold">Property</p>
+                <CardContent>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="rounded-button bg-background p-4">
+                      <div className="flex items-center gap-2 text-text-muted">
+                        <Home aria-hidden="true" size={18} strokeWidth={2.5} />
+                        <p className="text-sm font-bold">Property</p>
+                      </div>
+                      <p className="mt-2 font-extrabold text-text-strong">
+                        {property?.property_name ?? "Not available"}
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-text-muted">
+                        {property?.address ?? "Address not available"}
+                      </p>
                     </div>
-                    <p className="mt-2 font-extrabold text-text-strong">
-                      {property?.property_name ?? "Not available"}
-                    </p>
-                    <p className="mt-1 text-sm leading-6 text-text-muted">
-                      {property?.address ?? "Address not available"}
-                    </p>
-                  </div>
 
-                  <div className="rounded-button bg-background p-4">
-                    <p className="text-sm font-bold text-text-muted">Unit</p>
-                    <p className="mt-2 font-extrabold text-text-strong">
-                      {unit?.unit_identifier ?? "Not available"}
-                    </p>
-                    <p className="mt-1 text-sm leading-6 text-text-muted">
-                      Annual rent:{" "}
-                      {formatMoney(
-                        unit?.annual_rent ?? null,
-                        unit?.currency_code ?? "NGN",
-                      )}
-                    </p>
+                    <div className="rounded-button bg-background p-4">
+                      <p className="text-sm font-bold text-text-muted">Unit</p>
+                      <p className="mt-2 font-extrabold text-text-strong">
+                        {unit?.unit_identifier ?? "Not available"}
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-text-muted">
+                        Annual rent:{" "}
+                        {formatMoney(
+                          unit?.annual_rent ?? null,
+                          unit?.currency_code ?? "NGN",
+                        )}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            <SectionCard
-              title="Tenant KYC Form"
-              description="Complete your personal details and guarantor information for landlord review."
-            >
-              <TenantOnboardingForm
-                token={token}
-                fullName={tenant.full_name}
-                phoneNumber={tenant.phone_number}
-                email={tenant.email}
-                isSubmitted={isSubmitted}
+              <SectionCard
+                title="Tenant KYC Form"
+                description="Complete your personal details and guarantor information for landlord review."
+              >
+                <TenantOnboardingForm
+                  token={token}
+                  fullName={tenant.full_name}
+                  phoneNumber={tenant.phone_number}
+                  email={tenant.email}
+                  isSubmitted={isSubmitted}
+                />
+              </SectionCard>
+            </div>
+
+            <div className="space-y-6 lg:sticky lg:top-8 lg:self-start">
+              <TrustNotice
+                title="Secure onboarding"
+                description="This link was created by your landlord and expires automatically. Do not share it with anyone else."
               />
-            </SectionCard>
-          </div>
 
-          <div className="space-y-6 lg:sticky lg:top-8 lg:self-start">
-            <TrustNotice
-              title="Secure onboarding"
-              description="This link was created by your landlord and expires automatically. Do not share it with anyone else."
-            />
+              <Card>
+                <CardHeader>
+                  <CardTitle>Invitation Details</CardTitle>
+                </CardHeader>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Invitation Details</CardTitle>
-              </CardHeader>
-
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="rounded-button bg-background p-4">
-                    <p className="text-sm font-bold text-text-muted">
-                      Landlord
-                    </p>
-                    <p className="mt-2 font-extrabold text-text-strong">
-                      {landlord?.full_name ?? "Landlord"}
-                    </p>
-                  </div>
-
-                  <div className="rounded-button bg-background p-4">
-                    <div className="flex items-center gap-2 text-text-muted">
-                      <CalendarClock
-                        aria-hidden="true"
-                        size={18}
-                        strokeWidth={2.5}
-                      />
-                      <p className="text-sm font-bold">Expires</p>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="rounded-button bg-background p-4">
+                      <p className="text-sm font-bold text-text-muted">
+                        Landlord
+                      </p>
+                      <p className="mt-2 font-extrabold text-text-strong">
+                        {landlord?.full_name ?? "Landlord"}
+                      </p>
                     </div>
-                    <p className="mt-2 font-extrabold text-text-strong">
-                      {formatDate(tenant.onboarding_token_expires_at)}
-                    </p>
+
+                    <div className="rounded-button bg-background p-4">
+                      <div className="flex items-center gap-2 text-text-muted">
+                        <CalendarClock
+                          aria-hidden="true"
+                          size={18}
+                          strokeWidth={2.5}
+                        />
+                        <p className="text-sm font-bold">Expires</p>
+                      </div>
+                      <p className="mt-2 font-extrabold text-text-strong">
+                        {formatDate(tenant.onboarding_token_expires_at)}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </div>
           </div>
-        </div>
-      </section>
-    </main>
+        </section>
+      </main>
+    </ToastProvider>
   );
 }
