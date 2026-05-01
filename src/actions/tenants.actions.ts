@@ -4,12 +4,16 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { errorResult, successResult } from "@/server/errors/result";
 import {
+  approveTenantSchema,
   createTenantShellSchema,
+  rejectTenantSchema,
   updateTenantSchema,
 } from "@/server/validators/tenant.schema";
 import {
+  approveTenantForCurrentLandlord,
   archiveTenantForCurrentLandlord,
   createTenantShellForCurrentLandlord,
+  rejectTenantForCurrentLandlord,
   updateTenantForCurrentLandlord,
 } from "@/server/services/tenants.service";
 
@@ -46,12 +50,7 @@ export async function createTenantShellAction(
 
     return {
       ok: false,
-      message:
-        result.message === "Something went wrong. Please try again."
-          ? error instanceof Error
-            ? error.message
-            : result.message
-          : result.message,
+      message: result.message,
       fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
     };
   }
@@ -95,12 +94,69 @@ export async function updateTenantAction(
 
     return {
       ok: false,
-      message:
-        result.message === "Something went wrong. Please try again."
-          ? error instanceof Error
-            ? error.message
-            : result.message
-          : result.message,
+      message: result.message,
+      fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
+    };
+  }
+}
+
+export async function approveTenantAction(
+  _previousState: TenantActionState,
+  formData: FormData,
+): Promise<TenantActionState> {
+  try {
+    const parsed = approveTenantSchema.parse({
+      tenantId: formData.get("tenantId"),
+    });
+
+    await approveTenantForCurrentLandlord(parsed.tenantId);
+
+    revalidatePath("/tenants");
+    revalidatePath(`/tenants/${parsed.tenantId}`);
+
+    return successResult(
+      "Tenant approved. You can now prepare the tenancy record and agreement.",
+    );
+  } catch (error) {
+    console.error("approveTenantAction failed:", error);
+
+    const result = errorResult(error);
+
+    return {
+      ok: false,
+      message: result.message,
+      fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
+    };
+  }
+}
+
+export async function rejectTenantAction(
+  _previousState: TenantActionState,
+  formData: FormData,
+): Promise<TenantActionState> {
+  try {
+    const parsed = rejectTenantSchema.parse({
+      tenantId: formData.get("tenantId"),
+      reason: formData.get("reason"),
+    });
+
+    await rejectTenantForCurrentLandlord(parsed.tenantId, {
+      tenantId: parsed.tenantId,
+      reason: parsed.reason,
+    });
+
+    revalidatePath("/tenants");
+    revalidatePath(`/tenants/${parsed.tenantId}`);
+
+    return successResult("Tenant rejected.");
+  } catch (error) {
+    console.error("rejectTenantAction failed:", error);
+
+    const result = errorResult(error);
+
+    return {
+      ok: false,
+      message: result.message,
       fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
     };
   }

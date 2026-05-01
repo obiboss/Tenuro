@@ -4,6 +4,13 @@ import type {
   UpdateTenantInput,
 } from "@/server/validators/tenant.schema";
 
+export type TenantOnboardingStatus =
+  | "invited"
+  | "profile_complete"
+  | "approved"
+  | "rejected"
+  | "token_expired";
+
 export type TenantRow = {
   id: string;
   profile_id: string | null;
@@ -12,13 +19,18 @@ export type TenantRow = {
   full_name: string;
   phone_number: string;
   email: string | null;
-  onboarding_status:
-    | "invited"
-    | "profile_complete"
-    | "approved"
-    | "rejected"
-    | "token_expired";
+  date_of_birth: string | null;
+  home_address: string | null;
+  occupation: string | null;
+  employer: string | null;
+  id_type: "nin" | "passport" | "drivers_license" | "voters_card" | null;
+  id_document_path: string | null;
+  passport_photo_path: string | null;
+  onboarding_status: TenantOnboardingStatus;
   landlord_notes: string | null;
+  rejected_reason: string | null;
+  approved_at: string | null;
+  approved_by: string | null;
   created_at: string;
 };
 
@@ -48,8 +60,18 @@ const TENANT_SELECT = `
   full_name,
   phone_number,
   email,
+  date_of_birth,
+  home_address,
+  occupation,
+  employer,
+  id_type,
+  id_document_path,
+  passport_photo_path,
   onboarding_status,
   landlord_notes,
+  rejected_reason,
+  approved_at,
+  approved_by,
   created_at,
   units (
     id,
@@ -68,8 +90,28 @@ const TENANT_SELECT = `
   )
 `;
 
-const TENANT_BASE_SELECT =
-  "id, profile_id, landlord_id, unit_id, full_name, phone_number, email, onboarding_status, landlord_notes, created_at";
+const TENANT_BASE_SELECT = `
+  id,
+  profile_id,
+  landlord_id,
+  unit_id,
+  full_name,
+  phone_number,
+  email,
+  date_of_birth,
+  home_address,
+  occupation,
+  employer,
+  id_type,
+  id_document_path,
+  passport_photo_path,
+  onboarding_status,
+  landlord_notes,
+  rejected_reason,
+  approved_at,
+  approved_by,
+  created_at
+`;
 
 export async function createTenantShell(
   supabase: SupabaseClient,
@@ -176,6 +218,62 @@ export async function getTenantById(
     .eq("id", tenantId)
     .is("deleted_at", null)
     .single<TenantListRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function approveTenant(
+  supabase: SupabaseClient,
+  params: {
+    tenantId: string;
+    approvedBy: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("tenants")
+    .update({
+      onboarding_status: "approved",
+      approved_at: new Date().toISOString(),
+      approved_by: params.approvedBy,
+      rejected_reason: null,
+    })
+    .eq("id", params.tenantId)
+    .eq("onboarding_status", "profile_complete")
+    .is("deleted_at", null)
+    .select(TENANT_BASE_SELECT)
+    .single<TenantRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function rejectTenant(
+  supabase: SupabaseClient,
+  params: {
+    tenantId: string;
+    reason: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("tenants")
+    .update({
+      onboarding_status: "rejected",
+      rejected_reason: params.reason,
+      approved_at: null,
+      approved_by: null,
+    })
+    .eq("id", params.tenantId)
+    .in("onboarding_status", ["invited", "profile_complete"])
+    .is("deleted_at", null)
+    .select(TENANT_BASE_SELECT)
+    .single<TenantRow>();
 
   if (error) {
     throw error;

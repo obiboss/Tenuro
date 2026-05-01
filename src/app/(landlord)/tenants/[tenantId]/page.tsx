@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { RentPaymentModal } from "@/components/payment/rent-payment-modal";
 import { OnboardingInviteCard } from "@/components/tenant/onboarding-invite-card";
+import { TenantReviewCard } from "@/components/tenant/tenant-review-card";
 import { TenancyForm } from "@/components/tenancy/tenancy-form";
 import { TenancySummaryCard } from "@/components/tenancy/tenancy-summary-card";
 import { TenantBalanceCard } from "@/components/tenancy/tenant-balance-card";
@@ -18,7 +19,10 @@ import { SectionCard } from "@/components/ui/section-card";
 import { TrustNotice } from "@/components/ui/trust-notice";
 import { TENANT_ONBOARDING_STATUS_COPY } from "@/lib/status-copy";
 import { getCurrentTenantLedgerSummary } from "@/server/services/ledger.service";
-import { getCurrentLandlordTenant } from "@/server/services/tenants.service";
+import {
+  getCurrentLandlordTenant,
+  getCurrentLandlordTenantGuarantor,
+} from "@/server/services/tenants.service";
 import { getCurrentTenantActiveTenancy } from "@/server/services/tenancies.service";
 
 type TenantDetailPageProps = {
@@ -32,8 +36,9 @@ export default async function TenantDetailPage({
 }: TenantDetailPageProps) {
   const { tenantId } = await params;
 
-  const [tenant, activeTenancy, ledgerSummary] = await Promise.all([
+  const [tenant, guarantor, activeTenancy, ledgerSummary] = await Promise.all([
     getCurrentLandlordTenant(tenantId),
+    getCurrentLandlordTenantGuarantor(tenantId),
     getCurrentTenantActiveTenancy(tenantId),
     getCurrentTenantLedgerSummary(tenantId),
   ]);
@@ -46,6 +51,9 @@ export default async function TenantDetailPage({
   const canSendPaymentLink = Boolean(
     activeTenancy && ledgerSummary.balance && outstandingBalance > 0,
   );
+
+  const canCreateTenancyRecord =
+    tenant.onboarding_status === "approved" && !activeTenancy;
 
   return (
     <div>
@@ -109,6 +117,8 @@ export default async function TenantDetailPage({
             </CardContent>
           </Card>
 
+          <TenantReviewCard tenant={tenant} guarantor={guarantor} />
+
           {activeTenancy ? (
             <>
               <TenancySummaryCard tenancy={activeTenancy} />
@@ -126,7 +136,9 @@ export default async function TenantDetailPage({
                 />
               </SectionCard>
             </>
-          ) : (
+          ) : null}
+
+          {canCreateTenancyRecord ? (
             <SectionCard
               title="Create Tenancy Record"
               description="Set the rent amount, payment frequency, dates, and opening balance."
@@ -137,7 +149,22 @@ export default async function TenantDetailPage({
                 defaultAnnualRent={tenant.units?.annual_rent ?? null}
               />
             </SectionCard>
-          )}
+          ) : null}
+
+          {!activeTenancy && tenant.onboarding_status !== "approved" ? (
+            <SectionCard
+              title="Tenancy Record Locked"
+              description="Approve the tenant before creating the tenancy record."
+            >
+              <TrustNotice
+                title="Tenant approval required"
+                description="The tenancy record and agreement steps should only start after the tenant KYC has been reviewed and approved."
+                icon={
+                  <FileCheck2 aria-hidden="true" size={22} strokeWidth={2.6} />
+                }
+              />
+            </SectionCard>
+          ) : null}
 
           {ledgerSummary.balance ? (
             <TenantBalanceCard
