@@ -1,5 +1,11 @@
 import Link from "next/link";
-import { ArrowLeft, FileCheck2, Phone, UserRound } from "lucide-react";
+import {
+  ArrowLeft,
+  FileCheck2,
+  FileSignature,
+  Phone,
+  UserRound,
+} from "lucide-react";
 import { RentPaymentModal } from "@/components/payment/rent-payment-modal";
 import { OnboardingInviteCard } from "@/components/tenant/onboarding-invite-card";
 import { TenantReviewCard } from "@/components/tenant/tenant-review-card";
@@ -58,9 +64,18 @@ export default async function TenantDetailPage({
     TENANT_ONBOARDING_STATUS_COPY.invited;
 
   const outstandingBalance = ledgerSummary.balance?.outstanding_balance ?? 0;
+  const hasOutstandingBalance = Boolean(
+    ledgerSummary.balance && outstandingBalance > 0,
+  );
+
+  const isAgreementAccepted = agreementDocument?.document_status === "accepted";
 
   const canSendPaymentLink = Boolean(
-    activeTenancy && ledgerSummary.balance && outstandingBalance > 0,
+    activeTenancy && hasOutstandingBalance && isAgreementAccepted,
+  );
+
+  const shouldShowPaymentLockedNotice = Boolean(
+    activeTenancy && hasOutstandingBalance && !isAgreementAccepted,
   );
 
   const canCreateTenancyRecord =
@@ -197,6 +212,25 @@ export default async function TenantDetailPage({
               />
             </SectionCard>
           )}
+
+          {shouldShowPaymentLockedNotice ? (
+            <SectionCard
+              title="Payment Link Locked"
+              description="The rent payment link becomes available after the tenant accepts the tenancy agreement."
+            >
+              <TrustNotice
+                title="Agreement acceptance required"
+                description="Send the agreement acceptance link to the tenant. Once the tenant accepts the agreement, you can send the rent payment link."
+                icon={
+                  <FileSignature
+                    aria-hidden="true"
+                    size={22}
+                    strokeWidth={2.6}
+                  />
+                }
+              />
+            </SectionCard>
+          ) : null}
 
           {canSendPaymentLink && activeTenancy ? (
             <SectionCard
