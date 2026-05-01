@@ -5,9 +5,14 @@ import {
 } from "@/server/constants/notification-types";
 import { APP_ROUTES, getAppBaseUrl } from "@/server/constants/routes";
 import { createNotification } from "@/server/repositories/notifications.repository";
-import { saveTenantOnboardingToken } from "@/server/repositories/onboarding.repository";
+import {
+  getTenantOnboardingContextByTokenHash,
+  markTenantOnboardingTokenExpired,
+  saveTenantOnboardingToken,
+} from "@/server/repositories/onboarding.repository";
 import { getTenantById } from "@/server/repositories/tenants.repository";
 import { getUnitWithPropertyById } from "@/server/repositories/units.repository";
+import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { sha256Hex } from "@/server/utils/crypto";
 import {
@@ -93,4 +98,60 @@ export async function generateTenantOnboardingLink(tenantId: string) {
     notificationId: notification.id,
     messageBody,
   };
+}
+
+export async function resolveTenantOnboardingToken(token: string) {
+  const tokenHash = sha256Hex(token);
+  const supabase = createSupabaseAdminClient();
+
+  const tenant = await getTenantOnboardingContextByTokenHash(
+    supabase,
+    tokenHash,
+  );
+
+  if (!tenant) {
+    throw new AppError(
+      "INVALID_ONBOARDING_LINK",
+      "This onboarding link is invalid. Please ask the landlord for a new link.",
+      404,
+    );
+  }
+
+  if (!tenant.onboarding_token_expires_at) {
+    throw new AppError(
+      "INVALID_ONBOARDING_LINK",
+      "This onboarding link is invalid. Please ask the landlord for a new link.",
+      404,
+    );
+  }
+
+  const expiresAt = new Date(tenant.onboarding_token_expires_at);
+
+  if (Number.isNaN(expiresAt.getTime()) || expiresAt < new Date()) {
+    await markTenantOnboardingTokenExpired(supabase, tenant.id);
+
+    throw new AppError(
+      "ONBOARDING_LINK_EXPIRED",
+      "This onboarding link has expired. Please ask the landlord for a new link.",
+      410,
+    );
+  }
+
+  if (tenant.onboarding_status === "approved") {
+    throw new AppError(
+      "TENANT_ALREADY_APPROVED",
+      "Your tenant profile has already been approved.",
+      400,
+    );
+  }
+
+  if (tenant.onboarding_status === "rejected") {
+    throw new AppError(
+      "TENANT_REJECTED",
+      "This tenant profile was not approved. Please contact the landlord.",
+      400,
+    );
+  }
+
+  return tenant;
 }

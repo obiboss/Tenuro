@@ -3,7 +3,7 @@ export const APP_ROUTES = {
     tenants: "/tenants",
   },
   onboarding: {
-    tenant: "/onboarding/tenant",
+    tenant: "/t/onboarding",
   },
 } as const;
 
