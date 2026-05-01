@@ -188,6 +188,8 @@ export async function submitTenantOnboardingProfile(
       employer: input.employer,
       idType: input.idType,
       idNumberCiphertext,
+      idDocumentPath: input.idDocumentPath,
+      passportPhotoPath: input.passportPhotoPath,
     },
   });
 
@@ -198,6 +200,7 @@ export async function submitTenantOnboardingProfile(
     email: input.guarantorEmail,
     address: input.guarantorAddress,
     relationshipToTenant: input.guarantorRelationshipToTenant,
+    idDocumentPath: input.guarantorIdDocumentPath || null,
   });
 
   await createNotification(supabase, {

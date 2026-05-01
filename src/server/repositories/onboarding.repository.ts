@@ -46,6 +46,8 @@ type TenantOnboardingUpdateInput = Pick<
   | "occupation"
   | "employer"
   | "idType"
+  | "idDocumentPath"
+  | "passportPhotoPath"
 > & {
   idNumberCiphertext: string | null;
 };
@@ -168,6 +170,8 @@ export async function completeTenantOnboardingProfile(
       employer: params.input.employer || null,
       id_type: params.input.idType,
       id_number_ciphertext: params.input.idNumberCiphertext,
+      id_document_path: params.input.idDocumentPath,
+      passport_photo_path: params.input.passportPhotoPath,
       onboarding_status: "profile_complete",
       onboarding_token_used_at: new Date().toISOString(),
     })

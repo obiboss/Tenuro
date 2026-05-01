@@ -68,6 +68,8 @@ export const tenantOnboardingSubmissionSchema = z.object({
     message: "Select your ID type.",
   }),
   idNumber: z.string().trim().min(3, "Enter your ID number.").max(80),
+  idDocumentPath: z.string().trim().min(5, "Upload your ID document."),
+  passportPhotoPath: z.string().trim().min(5, "Upload your passport photo."),
 
   guarantorFullName: z.string().trim().min(2, "Enter guarantor name.").max(120),
   guarantorPhoneNumber: phoneSchema,
@@ -82,6 +84,7 @@ export const tenantOnboardingSubmissionSchema = z.object({
     .trim()
     .min(2, "Enter the relationship.")
     .max(80),
+  guarantorIdDocumentPath: z.string().trim().optional().or(z.literal("")),
 });
 
 export const openingBalanceConfirmationSchema = z.object({

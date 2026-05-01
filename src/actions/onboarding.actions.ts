@@ -75,6 +75,8 @@ export async function submitTenantOnboardingAction(
       employer: formData.get("employer"),
       idType: formData.get("idType"),
       idNumber: formData.get("idNumber"),
+      idDocumentPath: formData.get("idDocumentPath"),
+      passportPhotoPath: formData.get("passportPhotoPath"),
       guarantorFullName: formData.get("guarantorFullName"),
       guarantorPhoneNumber: formData.get("guarantorPhoneNumber"),
       guarantorEmail: formData.get("guarantorEmail"),
@@ -82,6 +84,7 @@ export async function submitTenantOnboardingAction(
       guarantorRelationshipToTenant: formData.get(
         "guarantorRelationshipToTenant",
       ),
+      guarantorIdDocumentPath: formData.get("guarantorIdDocumentPath"),
     });
 
     const result = await submitTenantOnboardingProfile(parsed);

@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { submitTenantOnboardingAction } from "@/actions/onboarding.actions";
 import { initialTenantOnboardingActionState } from "@/actions/onboarding.state";
+import { TenantKycFileUpload } from "@/components/tenant/tenant-kyc-file-upload";
 import { ActionResultToast } from "@/components/ui/action-result-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -20,10 +21,22 @@ type TenantOnboardingFormProps = {
 };
 
 const idTypeOptions = [
-  { label: "NIN", value: "nin" },
-  { label: "International Passport", value: "passport" },
-  { label: "Driver's License", value: "drivers_license" },
-  { label: "Voter's Card", value: "voters_card" },
+  {
+    label: "NIN",
+    value: "nin",
+  },
+  {
+    label: "International Passport",
+    value: "passport",
+  },
+  {
+    label: "Driver's License",
+    value: "drivers_license",
+  },
+  {
+    label: "Voter's Card",
+    value: "voters_card",
+  },
 ];
 
 export function TenantOnboardingForm({
@@ -163,6 +176,27 @@ export function TenantOnboardingForm({
             />
           </div>
 
+          <div className="grid gap-4 md:grid-cols-2">
+            <TenantKycFileUpload
+              token={token}
+              documentType="tenant_id_document"
+              label="ID document"
+              name="idDocumentPath"
+              required
+              error={state.fieldErrors?.idDocumentPath?.[0]}
+            />
+
+            <TenantKycFileUpload
+              token={token}
+              documentType="tenant_passport_photo"
+              label="Passport photo"
+              name="passportPhotoPath"
+              required
+              helperText="Upload a clear passport photo or headshot."
+              error={state.fieldErrors?.passportPhotoPath?.[0]}
+            />
+          </div>
+
           <div className="rounded-button bg-background p-4">
             <p className="font-extrabold text-text-strong">
               Guarantor Information
@@ -212,9 +246,13 @@ export function TenantOnboardingForm({
             required
           />
 
-          <TrustNotice
-            title="Document upload comes next"
-            description="ID document and passport photo upload will be enabled in the next onboarding batch."
+          <TenantKycFileUpload
+            token={token}
+            documentType="guarantor_id_document"
+            label="Guarantor ID document"
+            name="guarantorIdDocumentPath"
+            helperText="Optional for now. Upload if available."
+            error={state.fieldErrors?.guarantorIdDocumentPath?.[0]}
           />
         </CardContent>
 
