@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { TenantOnboardingSubmissionInput } from "@/server/validators/onboarding.schema";
 
 export type TenantOnboardingContext = {
   id: string;
@@ -33,6 +34,20 @@ export type TenantOnboardingContext = {
     phone_number: string;
     email: string | null;
   } | null;
+};
+
+type TenantOnboardingUpdateInput = Pick<
+  TenantOnboardingSubmissionInput,
+  | "fullName"
+  | "phoneNumber"
+  | "email"
+  | "dateOfBirth"
+  | "homeAddress"
+  | "occupation"
+  | "employer"
+  | "idType"
+> & {
+  idNumberCiphertext: string | null;
 };
 
 const TENANT_ONBOARDING_CONTEXT_SELECT = `
@@ -132,4 +147,44 @@ export async function markTenantOnboardingTokenExpired(
   if (error) {
     throw error;
   }
+}
+
+export async function completeTenantOnboardingProfile(
+  supabase: SupabaseClient,
+  params: {
+    tenantId: string;
+    input: TenantOnboardingUpdateInput;
+  },
+) {
+  const { data, error } = await supabase
+    .from("tenants")
+    .update({
+      full_name: params.input.fullName,
+      phone_number: params.input.phoneNumber,
+      email: params.input.email || null,
+      date_of_birth: params.input.dateOfBirth.toISOString().slice(0, 10),
+      home_address: params.input.homeAddress,
+      occupation: params.input.occupation,
+      employer: params.input.employer || null,
+      id_type: params.input.idType,
+      id_number_ciphertext: params.input.idNumberCiphertext,
+      onboarding_status: "profile_complete",
+      onboarding_token_used_at: new Date().toISOString(),
+    })
+    .eq("id", params.tenantId)
+    .is("deleted_at", null)
+    .select("id, full_name, phone_number, email, onboarding_status")
+    .single<{
+      id: string;
+      full_name: string;
+      phone_number: string;
+      email: string | null;
+      onboarding_status: string;
+    }>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
 }

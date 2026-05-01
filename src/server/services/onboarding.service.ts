@@ -4,8 +4,10 @@ import {
   NOTIFICATION_TYPES,
 } from "@/server/constants/notification-types";
 import { APP_ROUTES, getAppBaseUrl } from "@/server/constants/routes";
+import { replaceTenantGuarantor } from "@/server/repositories/guarantors.repository";
 import { createNotification } from "@/server/repositories/notifications.repository";
 import {
+  completeTenantOnboardingProfile,
   getTenantOnboardingContextByTokenHash,
   markTenantOnboardingTokenExpired,
   saveTenantOnboardingToken,
@@ -15,10 +17,12 @@ import { getUnitWithPropertyById } from "@/server/repositories/units.repository"
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { sha256Hex } from "@/server/utils/crypto";
+import { encryptText } from "@/server/utils/encryption";
 import {
   generateSecureToken,
   getExpiryDateFromNow,
 } from "@/server/utils/tokens";
+import type { TenantOnboardingSubmissionInput } from "@/server/validators/onboarding.schema";
 import { requireLandlord } from "./auth.service";
 
 function buildTenantOnboardingMessage(params: {
@@ -154,4 +158,57 @@ export async function resolveTenantOnboardingToken(token: string) {
   }
 
   return tenant;
+}
+
+export async function submitTenantOnboardingProfile(
+  input: TenantOnboardingSubmissionInput,
+) {
+  const tenant = await resolveTenantOnboardingToken(input.token);
+  const supabase = createSupabaseAdminClient();
+
+  if (tenant.onboarding_status === "profile_complete") {
+    throw new AppError(
+      "ONBOARDING_ALREADY_SUBMITTED",
+      "Your tenant profile has already been submitted for review.",
+      400,
+    );
+  }
+
+  const idNumberCiphertext = encryptText(input.idNumber);
+
+  await completeTenantOnboardingProfile(supabase, {
+    tenantId: tenant.id,
+    input: {
+      fullName: input.fullName,
+      phoneNumber: input.phoneNumber,
+      email: input.email,
+      dateOfBirth: input.dateOfBirth,
+      homeAddress: input.homeAddress,
+      occupation: input.occupation,
+      employer: input.employer,
+      idType: input.idType,
+      idNumberCiphertext,
+    },
+  });
+
+  await replaceTenantGuarantor(supabase, {
+    tenantId: tenant.id,
+    fullName: input.guarantorFullName,
+    phoneNumber: input.guarantorPhoneNumber,
+    email: input.guarantorEmail,
+    address: input.guarantorAddress,
+    relationshipToTenant: input.guarantorRelationshipToTenant,
+  });
+
+  await createNotification(supabase, {
+    landlordId: tenant.landlord_id,
+    tenantId: tenant.id,
+    channel: NOTIFICATION_CHANNELS.whatsapp,
+    notificationType: NOTIFICATION_TYPES.onboardingInvite,
+    messageBody: `${input.fullName} has completed their tenant profile. Please review the submission in Tenuro.`,
+  });
+
+  return {
+    tenantId: tenant.id,
+  };
 }

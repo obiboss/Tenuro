@@ -19,11 +19,15 @@ export const onboardingPersonalDetailsSchema = z.object({
   fullName: z.string().trim().min(2, "Enter your full name.").max(120),
   phoneNumber: phoneSchema,
   email: optionalEmailSchema,
-  dateOfBirth: z.coerce.date(),
+  dateOfBirth: z.coerce.date({
+    message: "Enter your date of birth.",
+  }),
   homeAddress: z.string().trim().min(5, "Enter your home address.").max(300),
   occupation: z.string().trim().min(2, "Enter your occupation.").max(120),
   employer: z.string().trim().max(120).optional().or(z.literal("")),
-  idType: z.enum(["nin", "passport", "drivers_license", "voters_card"]),
+  idType: z.enum(["nin", "passport", "drivers_license", "voters_card"], {
+    message: "Select your ID type.",
+  }),
   idNumber: z.string().trim().min(3, "Enter your ID number.").max(80),
 });
 
@@ -45,6 +49,39 @@ export const guarantorDetailsSchema = z.object({
     .min(2, "Enter the relationship.")
     .max(80),
   idDocumentPath: z.string().trim().optional().or(z.literal("")),
+});
+
+export const tenantOnboardingSubmissionSchema = z.object({
+  token: z.string().trim().min(32).max(200),
+
+  fullName: z.string().trim().min(2, "Enter your full name.").max(120),
+  phoneNumber: phoneSchema,
+  email: optionalEmailSchema,
+  dateOfBirth: z.coerce.date({
+    message: "Enter your date of birth.",
+  }),
+  homeAddress: z.string().trim().min(5, "Enter your home address.").max(300),
+  occupation: z.string().trim().min(2, "Enter your occupation.").max(120),
+  employer: z.string().trim().max(120).optional().or(z.literal("")),
+
+  idType: z.enum(["nin", "passport", "drivers_license", "voters_card"], {
+    message: "Select your ID type.",
+  }),
+  idNumber: z.string().trim().min(3, "Enter your ID number.").max(80),
+
+  guarantorFullName: z.string().trim().min(2, "Enter guarantor name.").max(120),
+  guarantorPhoneNumber: phoneSchema,
+  guarantorEmail: optionalEmailSchema,
+  guarantorAddress: z
+    .string()
+    .trim()
+    .min(5, "Enter guarantor address.")
+    .max(300),
+  guarantorRelationshipToTenant: z
+    .string()
+    .trim()
+    .min(2, "Enter the relationship.")
+    .max(80),
 });
 
 export const openingBalanceConfirmationSchema = z.object({
@@ -70,6 +107,9 @@ export type OnboardingDocumentsInput = z.infer<
   typeof onboardingDocumentsSchema
 >;
 export type GuarantorDetailsInput = z.infer<typeof guarantorDetailsSchema>;
+export type TenantOnboardingSubmissionInput = z.infer<
+  typeof tenantOnboardingSubmissionSchema
+>;
 export type OpeningBalanceConfirmationInput = z.infer<
   typeof openingBalanceConfirmationSchema
 >;

@@ -1,8 +1,15 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { errorResult } from "@/server/errors/result";
-import { generateTenantOnboardingLink } from "@/server/services/onboarding.service";
-import { generateOnboardingLinkSchema } from "@/server/validators/onboarding.schema";
+import {
+  generateTenantOnboardingLink,
+  submitTenantOnboardingProfile,
+} from "@/server/services/onboarding.service";
+import {
+  generateOnboardingLinkSchema,
+  tenantOnboardingSubmissionSchema,
+} from "@/server/validators/onboarding.schema";
 
 export type OnboardingInviteActionState = {
   ok: boolean;
@@ -11,6 +18,12 @@ export type OnboardingInviteActionState = {
   whatsappMessage?: string;
   expiresAt?: string;
   notificationId?: string;
+  fieldErrors?: Record<string, string[]>;
+};
+
+export type TenantOnboardingActionState = {
+  ok: boolean;
+  message: string;
   fieldErrors?: Record<string, string[]>;
 };
 
@@ -40,12 +53,54 @@ export async function generateTenantOnboardingLinkAction(
 
     return {
       ok: false,
+      message: result.message,
+      fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
+    };
+  }
+}
+
+export async function submitTenantOnboardingAction(
+  _previousState: TenantOnboardingActionState,
+  formData: FormData,
+): Promise<TenantOnboardingActionState> {
+  try {
+    const parsed = tenantOnboardingSubmissionSchema.parse({
+      token: formData.get("token"),
+      fullName: formData.get("fullName"),
+      phoneNumber: formData.get("phoneNumber"),
+      email: formData.get("email"),
+      dateOfBirth: formData.get("dateOfBirth"),
+      homeAddress: formData.get("homeAddress"),
+      occupation: formData.get("occupation"),
+      employer: formData.get("employer"),
+      idType: formData.get("idType"),
+      idNumber: formData.get("idNumber"),
+      guarantorFullName: formData.get("guarantorFullName"),
+      guarantorPhoneNumber: formData.get("guarantorPhoneNumber"),
+      guarantorEmail: formData.get("guarantorEmail"),
+      guarantorAddress: formData.get("guarantorAddress"),
+      guarantorRelationshipToTenant: formData.get(
+        "guarantorRelationshipToTenant",
+      ),
+    });
+
+    const result = await submitTenantOnboardingProfile(parsed);
+
+    revalidatePath(`/tenants/${result.tenantId}`);
+
+    return {
+      ok: true,
       message:
-        result.message === "Something went wrong. Please try again."
-          ? error instanceof Error
-            ? error.message
-            : result.message
-          : result.message,
+        "Your tenant profile has been submitted. The landlord will review it and contact you with the next step.",
+    };
+  } catch (error) {
+    console.error("submitTenantOnboardingAction failed:", error);
+
+    const result = errorResult(error);
+
+    return {
+      ok: false,
+      message: result.message,
       fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
     };
   }
