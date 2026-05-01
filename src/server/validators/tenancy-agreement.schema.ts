@@ -18,7 +18,7 @@ export const finalizeTenancyAgreementSchema = z.object({
   agreementId: uuidSchema,
 });
 
-export const generateAgreementAcceptanceLinkSchema = z.object({
+export const refreshTenancyAgreementAcceptanceLinkSchema = z.object({
   agreementId: uuidSchema,
 });
 
@@ -38,8 +38,8 @@ export type FinalizeTenancyAgreementInput = z.infer<
   typeof finalizeTenancyAgreementSchema
 >;
 
-export type GenerateAgreementAcceptanceLinkInput = z.infer<
-  typeof generateAgreementAcceptanceLinkSchema
+export type RefreshTenancyAgreementAcceptanceLinkInput = z.infer<
+  typeof refreshTenancyAgreementAcceptanceLinkSchema
 >;
 
 export type AcceptTenancyAgreementInput = z.infer<

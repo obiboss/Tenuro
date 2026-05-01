@@ -222,7 +222,7 @@ export function TenancyAgreementDocumentCard({
               <p className="text-sm font-extrabold text-text-strong">
                 Final agreement content
               </p>
-              <pre className="mt-3 max-h-[560px] overflow-auto whitespace-pre-wrap rounded-button bg-white p-4 text-sm leading-7 text-text-normal ring-1 ring-border-soft">
+              <pre className="mt-3 max-h-140 overflow-auto whitespace-pre-wrap rounded-button bg-white p-4 text-sm leading-7 text-text-normal ring-1 ring-border-soft">
                 {agreement.finalized_body || agreement.agreement_body}
               </pre>
             </div>

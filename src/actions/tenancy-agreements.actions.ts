@@ -2,19 +2,19 @@
 
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { errorResult, successResult } from "@/server/errors/result";
+import { errorResult } from "@/server/errors/result";
 import {
-  acceptTenancyAgreementByToken,
+  acceptTenancyAgreementFromTenant,
   finalizeTenancyAgreementForCurrentLandlord,
-  generateAgreementAcceptanceLinkForCurrentLandlord,
   generateTenancyAgreementForCurrentLandlord,
+  refreshTenancyAgreementAcceptanceLinkForCurrentLandlord,
   saveTenancyAgreementDraftForCurrentLandlord,
 } from "@/server/services/tenancy-agreements.service";
 import {
   acceptTenancyAgreementSchema,
   finalizeTenancyAgreementSchema,
-  generateAgreementAcceptanceLinkSchema,
   generateTenancyAgreementSchema,
+  refreshTenancyAgreementAcceptanceLinkSchema,
   saveTenancyAgreementDraftSchema,
 } from "@/server/validators/tenancy-agreement.schema";
 
@@ -23,7 +23,6 @@ export type TenancyAgreementActionState = {
   message: string;
   agreementId?: string;
   acceptanceUrl?: string;
-  expiresAt?: string;
   fieldErrors?: Record<string, string[]>;
 };
 
@@ -74,9 +73,11 @@ export async function saveTenancyAgreementDraftAction(
     revalidatePath("/tenants");
     revalidatePath(`/tenants/${agreement.tenant_id}`);
 
-    return successResult("Agreement draft saved.", {
+    return {
+      ok: true,
+      message: "Agreement draft saved.",
       agreementId: agreement.id,
-    });
+    };
   } catch (error) {
     console.error("saveTenancyAgreementDraftAction failed:", error);
 
@@ -99,16 +100,16 @@ export async function finalizeTenancyAgreementAction(
       agreementId: formData.get("agreementId"),
     });
 
-    const agreement = await finalizeTenancyAgreementForCurrentLandlord(parsed);
+    const result = await finalizeTenancyAgreementForCurrentLandlord(parsed);
 
     revalidatePath("/tenants");
-    revalidatePath(`/tenants/${agreement.tenant_id}`);
+    revalidatePath(`/tenants/${result.agreement.tenant_id}`);
 
     return {
       ok: true,
-      message:
-        "Agreement finalized. You can now generate the tenant acceptance link.",
-      agreementId: agreement.id,
+      message: "Agreement finalized. Send the acceptance link to the tenant.",
+      agreementId: result.agreement.id,
+      acceptanceUrl: result.acceptanceUrl,
     };
   } catch (error) {
     console.error("finalizeTenancyAgreementAction failed:", error);
@@ -123,30 +124,29 @@ export async function finalizeTenancyAgreementAction(
   }
 }
 
-export async function generateAgreementAcceptanceLinkAction(
+export async function refreshTenancyAgreementAcceptanceLinkAction(
   _previousState: TenancyAgreementActionState,
   formData: FormData,
 ): Promise<TenancyAgreementActionState> {
   try {
-    const parsed = generateAgreementAcceptanceLinkSchema.parse({
+    const parsed = refreshTenancyAgreementAcceptanceLinkSchema.parse({
       agreementId: formData.get("agreementId"),
     });
 
     const result =
-      await generateAgreementAcceptanceLinkForCurrentLandlord(parsed);
+      await refreshTenancyAgreementAcceptanceLinkForCurrentLandlord(parsed);
 
     revalidatePath("/tenants");
     revalidatePath(`/tenants/${result.agreement.tenant_id}`);
 
     return {
       ok: true,
-      message: "Tenant agreement acceptance link prepared.",
+      message: "Agreement acceptance link prepared.",
       agreementId: result.agreement.id,
       acceptanceUrl: result.acceptanceUrl,
-      expiresAt: result.expiresAt,
     };
   } catch (error) {
-    console.error("generateAgreementAcceptanceLinkAction failed:", error);
+    console.error("refreshTenancyAgreementAcceptanceLinkAction failed:", error);
 
     const result = errorResult(error);
 
@@ -158,7 +158,7 @@ export async function generateAgreementAcceptanceLinkAction(
   }
 }
 
-export async function acceptTenantAgreementAction(
+export async function acceptTenancyAgreementAction(
   _previousState: TenancyAgreementActionState,
   formData: FormData,
 ): Promise<TenancyAgreementActionState> {
@@ -167,16 +167,19 @@ export async function acceptTenantAgreementAction(
       token: formData.get("token"),
     });
 
-    const headerStore = await headers();
-    const forwardedFor = headerStore.get("x-forwarded-for");
+    const requestHeaders = await headers();
+    const forwardedFor = requestHeaders.get("x-forwarded-for");
     const ipAddress = forwardedFor?.split(",")[0]?.trim() || null;
-    const userAgent = headerStore.get("user-agent");
+    const userAgent = requestHeaders.get("user-agent");
 
-    const agreement = await acceptTenancyAgreementByToken({
+    const agreement = await acceptTenancyAgreementFromTenant({
       token: parsed.token,
       ipAddress,
       userAgent,
     });
+
+    revalidatePath("/tenants");
+    revalidatePath(`/tenants/${agreement.tenant_id}`);
 
     return {
       ok: true,
@@ -184,7 +187,7 @@ export async function acceptTenantAgreementAction(
       agreementId: agreement.id,
     };
   } catch (error) {
-    console.error("acceptTenantAgreementAction failed:", error);
+    console.error("acceptTenancyAgreementAction failed:", error);
 
     const result = errorResult(error);
 

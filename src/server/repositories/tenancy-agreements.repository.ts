@@ -174,22 +174,26 @@ export async function updateTenancyAgreementDraft(
   return data;
 }
 
-export async function finalizeTenancyAgreementDraft(
+export async function finalizeTenancyAgreement(
   supabase: SupabaseClient,
   params: {
     agreementId: string;
     finalizedBy: string;
+    tokenHash: string;
+    tokenExpiresAt: string;
   },
 ) {
-  const existing = await getTenancyAgreementById(supabase, params.agreementId);
+  const agreement = await getTenancyAgreementById(supabase, params.agreementId);
 
   const { data, error } = await supabase
     .from("tenancy_agreement_documents")
     .update({
-      document_status: "finalized",
-      finalized_body: existing.agreement_body,
+      document_status: "sent_to_tenant",
+      finalized_body: agreement.agreement_body,
       finalized_at: new Date().toISOString(),
       finalized_by: params.finalizedBy,
+      tenant_acceptance_token_hash: params.tokenHash,
+      tenant_acceptance_token_expires_at: params.tokenExpiresAt,
       updated_at: new Date().toISOString(),
     })
     .eq("id", params.agreementId)
@@ -205,12 +209,12 @@ export async function finalizeTenancyAgreementDraft(
   return data;
 }
 
-export async function saveAgreementAcceptanceToken(
+export async function refreshAgreementAcceptanceToken(
   supabase: SupabaseClient,
   params: {
     agreementId: string;
     tokenHash: string;
-    expiresAt: string;
+    tokenExpiresAt: string;
   },
 ) {
   const { data, error } = await supabase
@@ -218,11 +222,11 @@ export async function saveAgreementAcceptanceToken(
     .update({
       document_status: "sent_to_tenant",
       tenant_acceptance_token_hash: params.tokenHash,
-      tenant_acceptance_token_expires_at: params.expiresAt,
+      tenant_acceptance_token_expires_at: params.tokenExpiresAt,
       updated_at: new Date().toISOString(),
     })
     .eq("id", params.agreementId)
-    .in("document_status", ["finalized", "sent_to_tenant"])
+    .in("document_status", ["sent_to_tenant", "finalized"])
     .is("deleted_at", null)
     .select(AGREEMENT_SELECT)
     .single<TenancyAgreementDocumentRow>();

@@ -1,15 +1,14 @@
 import "server-only";
 
 import { AppError } from "@/server/errors/app-error";
-import { getAppBaseUrl } from "@/server/constants/routes";
 import {
   acceptTenancyAgreement,
   createTenancyAgreementDraft,
-  finalizeTenancyAgreementDraft,
+  finalizeTenancyAgreement,
   getTenancyAgreementByAcceptanceTokenHash,
   getTenancyAgreementById,
   getTenancyAgreementByTenancyId,
-  saveAgreementAcceptanceToken,
+  refreshAgreementAcceptanceToken,
   updateTenancyAgreementDraft,
 } from "@/server/repositories/tenancy-agreements.repository";
 import { getTenancyById } from "@/server/repositories/tenancies.repository";
@@ -23,15 +22,27 @@ import {
 import type {
   AcceptTenancyAgreementInput,
   FinalizeTenancyAgreementInput,
-  GenerateAgreementAcceptanceLinkInput,
   GenerateTenancyAgreementInput,
+  RefreshTenancyAgreementAcceptanceLinkInput,
   SaveTenancyAgreementDraftInput,
 } from "@/server/validators/tenancy-agreement.schema";
 import { requireLandlord } from "./auth.service";
+import { getAppBaseUrl } from "@/server/constants/routes";
 import { buildTenancyAgreementTemplate } from "./tenancy-agreement-template.service";
 
 function buildAgreementUrl(token: string) {
   return `${getAppBaseUrl()}/t/agreement/${token}`;
+}
+
+function createAcceptanceToken() {
+  const rawToken = generateSecureToken();
+
+  return {
+    rawToken,
+    tokenHash: sha256Hex(rawToken),
+    expiresAt: getExpiryDateFromNow(168),
+    acceptanceUrl: buildAgreementUrl(rawToken),
+  };
 }
 
 function buildSnapshots(params: {
@@ -83,19 +94,6 @@ function buildSnapshots(params: {
       openingBalanceNote: params.tenancy.opening_balance_note,
     },
   };
-}
-
-function ensureAgreementBelongsToLandlord(params: {
-  landlordId: string;
-  agreementLandlordId: string;
-}) {
-  if (params.landlordId !== params.agreementLandlordId) {
-    throw new AppError(
-      "FORBIDDEN",
-      "You do not have permission to manage this agreement.",
-      403,
-    );
-  }
 }
 
 export async function getCurrentTenancyAgreementByTenancyId(tenancyId: string) {
@@ -175,10 +173,13 @@ export async function saveTenancyAgreementDraftForCurrentLandlord(
 
   const agreement = await getTenancyAgreementById(supabase, input.agreementId);
 
-  ensureAgreementBelongsToLandlord({
-    landlordId: landlord.id,
-    agreementLandlordId: agreement.landlord_id,
-  });
+  if (agreement.landlord_id !== landlord.id) {
+    throw new AppError(
+      "FORBIDDEN",
+      "You do not have permission to edit this agreement.",
+      403,
+    );
+  }
 
   if (agreement.document_status !== "draft") {
     throw new AppError(
@@ -202,75 +203,79 @@ export async function finalizeTenancyAgreementForCurrentLandlord(
 
   const agreement = await getTenancyAgreementById(supabase, input.agreementId);
 
-  ensureAgreementBelongsToLandlord({
-    landlordId: landlord.id,
-    agreementLandlordId: agreement.landlord_id,
-  });
+  if (agreement.landlord_id !== landlord.id) {
+    throw new AppError(
+      "FORBIDDEN",
+      "You do not have permission to finalize this agreement.",
+      403,
+    );
+  }
 
   if (agreement.document_status !== "draft") {
     throw new AppError(
-      "AGREEMENT_LOCKED",
-      "Only draft agreements can be finalized.",
+      "AGREEMENT_NOT_DRAFT",
+      "Only a draft agreement can be finalized.",
       400,
     );
   }
 
-  return finalizeTenancyAgreementDraft(supabase, {
+  const token = createAcceptanceToken();
+
+  const updatedAgreement = await finalizeTenancyAgreement(supabase, {
     agreementId: input.agreementId,
     finalizedBy: landlord.id,
+    tokenHash: token.tokenHash,
+    tokenExpiresAt: token.expiresAt.toISOString(),
   });
+
+  return {
+    agreement: updatedAgreement,
+    acceptanceUrl: token.acceptanceUrl,
+  };
 }
 
-export async function generateAgreementAcceptanceLinkForCurrentLandlord(
-  input: GenerateAgreementAcceptanceLinkInput,
+export async function refreshTenancyAgreementAcceptanceLinkForCurrentLandlord(
+  input: RefreshTenancyAgreementAcceptanceLinkInput,
 ) {
   const landlord = await requireLandlord();
   const supabase = await createSupabaseServerClient();
 
   const agreement = await getTenancyAgreementById(supabase, input.agreementId);
 
-  ensureAgreementBelongsToLandlord({
-    landlordId: landlord.id,
-    agreementLandlordId: agreement.landlord_id,
-  });
+  if (agreement.landlord_id !== landlord.id) {
+    throw new AppError(
+      "FORBIDDEN",
+      "You do not have permission to create this agreement link.",
+      403,
+    );
+  }
 
   if (
-    agreement.document_status !== "finalized" &&
-    agreement.document_status !== "sent_to_tenant"
+    agreement.document_status !== "sent_to_tenant" &&
+    agreement.document_status !== "finalized"
   ) {
     throw new AppError(
-      "AGREEMENT_NOT_FINALIZED",
-      "Finalize the agreement before generating the tenant acceptance link.",
+      "AGREEMENT_LINK_NOT_AVAILABLE",
+      "Finalize the agreement before creating the tenant acceptance link.",
       400,
     );
   }
 
-  if (!agreement.finalized_body) {
-    throw new AppError(
-      "AGREEMENT_NOT_FINALIZED",
-      "Finalize the agreement before generating the tenant acceptance link.",
-      400,
-    );
-  }
+  const token = createAcceptanceToken();
 
-  const rawToken = generateSecureToken();
-  const tokenHash = sha256Hex(rawToken);
-  const expiresAt = getExpiryDateFromNow(168);
-
-  const updatedAgreement = await saveAgreementAcceptanceToken(supabase, {
-    agreementId: agreement.id,
-    tokenHash,
-    expiresAt: expiresAt.toISOString(),
+  const updatedAgreement = await refreshAgreementAcceptanceToken(supabase, {
+    agreementId: input.agreementId,
+    tokenHash: token.tokenHash,
+    tokenExpiresAt: token.expiresAt.toISOString(),
   });
 
   return {
     agreement: updatedAgreement,
-    acceptanceUrl: buildAgreementUrl(rawToken),
-    expiresAt: expiresAt.toISOString(),
+    acceptanceUrl: token.acceptanceUrl,
   };
 }
 
-export async function resolveAgreementAcceptanceToken(token: string) {
+export async function resolveTenancyAgreementAcceptanceToken(token: string) {
   const tokenHash = sha256Hex(token);
   const supabase = createSupabaseAdminClient();
 
@@ -305,30 +310,27 @@ export async function resolveAgreementAcceptanceToken(token: string) {
     );
   }
 
-  if (
-    agreement.document_status !== "sent_to_tenant" &&
-    agreement.document_status !== "accepted"
-  ) {
-    throw new AppError(
-      "AGREEMENT_NOT_READY",
-      "This agreement is not ready for tenant acceptance.",
-      400,
-    );
-  }
-
   return agreement;
 }
 
-export async function acceptTenancyAgreementByToken(
+export async function acceptTenancyAgreementFromTenant(
   input: AcceptTenancyAgreementInput & {
     ipAddress: string | null;
     userAgent: string | null;
   },
 ) {
-  const agreement = await resolveAgreementAcceptanceToken(input.token);
+  const agreement = await resolveTenancyAgreementAcceptanceToken(input.token);
 
   if (agreement.document_status === "accepted") {
     return agreement;
+  }
+
+  if (agreement.document_status !== "sent_to_tenant") {
+    throw new AppError(
+      "AGREEMENT_NOT_READY",
+      "This agreement is not ready for acceptance.",
+      400,
+    );
   }
 
   const supabase = createSupabaseAdminClient();
