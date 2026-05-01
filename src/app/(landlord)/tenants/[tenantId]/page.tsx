@@ -1,14 +1,9 @@
 import Link from "next/link";
-import {
-  ArrowLeft,
-  FileCheck2,
-  FileText,
-  Phone,
-  UserRound,
-} from "lucide-react";
+import { ArrowLeft, FileCheck2, Phone, UserRound } from "lucide-react";
 import { RentPaymentModal } from "@/components/payment/rent-payment-modal";
 import { OnboardingInviteCard } from "@/components/tenant/onboarding-invite-card";
 import { TenantReviewCard } from "@/components/tenant/tenant-review-card";
+import { TenancyAgreementDocumentCard } from "@/components/tenancy/tenancy-agreement-document-card";
 import { TenancyForm } from "@/components/tenancy/tenancy-form";
 import { TenancySummaryCard } from "@/components/tenancy/tenancy-summary-card";
 import { TenantBalanceCard } from "@/components/tenancy/tenant-balance-card";
@@ -19,6 +14,7 @@ import { SectionCard } from "@/components/ui/section-card";
 import { TrustNotice } from "@/components/ui/trust-notice";
 import { TENANT_ONBOARDING_STATUS_COPY } from "@/lib/status-copy";
 import { getCurrentTenantLedgerSummary } from "@/server/services/ledger.service";
+import { getCurrentTenancyAgreementByTenancyId } from "@/server/services/tenancy-agreements.service";
 import {
   getCurrentLandlordTenant,
   getCurrentLandlordTenantGuarantor,
@@ -46,11 +42,16 @@ export default async function TenantDetailPage({
       getCurrentTenantLedgerSummary(tenantId),
     ]);
 
+  const agreementDocument = activeTenancy
+    ? await getCurrentTenancyAgreementByTenancyId(activeTenancy.id)
+    : null;
+
   const status =
     TENANT_ONBOARDING_STATUS_COPY[tenant.onboarding_status] ??
     TENANT_ONBOARDING_STATUS_COPY.invited;
 
   const outstandingBalance = ledgerSummary.balance?.outstanding_balance ?? 0;
+
   const canSendPaymentLink = Boolean(
     activeTenancy && ledgerSummary.balance && outstandingBalance > 0,
   );
@@ -88,6 +89,7 @@ export default async function TenantDetailPage({
                     <UserRound aria-hidden="true" size={18} strokeWidth={2.5} />
                     <p className="text-sm font-bold">Tenant Name</p>
                   </div>
+
                   <p className="mt-2 font-extrabold text-text-strong">
                     {tenant.full_name}
                   </p>
@@ -98,6 +100,7 @@ export default async function TenantDetailPage({
                     <Phone aria-hidden="true" size={18} strokeWidth={2.5} />
                     <p className="text-sm font-bold">Phone Number</p>
                   </div>
+
                   <p className="mt-2 font-extrabold text-text-strong">
                     {tenant.phone_number}
                   </p>
@@ -105,6 +108,7 @@ export default async function TenantDetailPage({
 
                 <div className="rounded-button bg-background p-4">
                   <p className="text-sm font-bold text-text-muted">Property</p>
+
                   <p className="mt-2 font-extrabold text-text-strong">
                     {tenant.units?.properties?.property_name ?? "Not set"}
                   </p>
@@ -112,6 +116,7 @@ export default async function TenantDetailPage({
 
                 <div className="rounded-button bg-background p-4">
                   <p className="text-sm font-bold text-text-muted">Unit</p>
+
                   <p className="mt-2 font-extrabold text-text-strong">
                     {tenant.units?.unit_identifier ?? "Not set"}
                   </p>
@@ -130,18 +135,10 @@ export default async function TenantDetailPage({
             <>
               <TenancySummaryCard tenancy={activeTenancy} />
 
-              <SectionCard
-                title="Tenancy Agreement Document"
-                description="Generate the full agreement document the tenant will review, accept online, and download as a PDF."
-              >
-                <TrustNotice
-                  title="Agreement generator coming next"
-                  description="This will create a complete tenancy agreement with landlord, tenant, property, rent, term, deposit, obligations, signatures, and witness sections."
-                  icon={
-                    <FileText aria-hidden="true" size={22} strokeWidth={2.6} />
-                  }
-                />
-              </SectionCard>
+              <TenancyAgreementDocumentCard
+                tenancyId={activeTenancy.id}
+                agreement={agreementDocument}
+              />
             </>
           ) : null}
 

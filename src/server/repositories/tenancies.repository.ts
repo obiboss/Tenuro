@@ -26,6 +26,7 @@ export type TenancyDetailRow = TenancyRow & {
     full_name: string;
     phone_number: string;
     email: string | null;
+    home_address: string | null;
   } | null;
   units: {
     id: string;
@@ -76,12 +77,13 @@ const TENANCY_DETAIL_SELECT = `
   status,
   agreement_notes,
   created_at,
-  tenants (
-    id,
-    full_name,
-    phone_number,
-    email
-  ),
+ tenants (
+  id,
+  full_name,
+  phone_number,
+  email,
+  home_address
+),
   units (
     id,
     unit_identifier,
@@ -96,10 +98,7 @@ const TENANCY_DETAIL_SELECT = `
 `;
 
 function createTenancyReference() {
-  const datePart = new Date()
-    .toISOString()
-    .slice(0, 10)
-    .replaceAll("-", "");
+  const datePart = new Date().toISOString().slice(0, 10).replaceAll("-", "");
 
   const randomPart =
     typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -248,6 +247,25 @@ export async function getTenanciesForLandlord(
     .is("archived_at", null)
     .order("created_at", { ascending: false })
     .returns<TenancyDetailRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getTenancyById(
+  supabase: SupabaseClient,
+  tenancyId: string,
+) {
+  const { data, error } = await supabase
+    .from("tenancies")
+    .select(TENANCY_DETAIL_SELECT)
+    .eq("id", tenancyId)
+    .is("deleted_at", null)
+    .is("archived_at", null)
+    .single<TenancyDetailRow>();
 
   if (error) {
     throw error;
