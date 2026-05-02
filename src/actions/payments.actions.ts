@@ -10,7 +10,7 @@ import {
   recordManualPaymentSchema,
   setupLandlordBankAccountSchema,
 } from "@/server/validators/payment.schema";
-import { generateRentReceiptForCurrentLandlord } from "@/server/services/receipt.service";
+import { generateRentReceiptForCurrentLandlord } from "@/server/services/receipts.service";
 
 export type PaymentActionState = {
   ok: boolean;
