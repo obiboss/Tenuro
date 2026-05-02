@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useTransition } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 type PaymentVerificationAutoRefreshProps = {
@@ -10,24 +10,21 @@ type PaymentVerificationAutoRefreshProps = {
 
 export function PaymentVerificationAutoRefresh({
   enabled,
-  intervalMs = 4000,
+  intervalMs = 2500,
 }: PaymentVerificationAutoRefreshProps) {
   const router = useRouter();
-  const [, startTransition] = useTransition();
 
   useEffect(() => {
     if (!enabled) {
       return;
     }
 
-    const timer = window.setInterval(() => {
-      startTransition(() => {
-        router.refresh();
-      });
+    const intervalId = window.setInterval(() => {
+      router.refresh();
     }, intervalMs);
 
     return () => {
-      window.clearInterval(timer);
+      window.clearInterval(intervalId);
     };
   }, [enabled, intervalMs, router]);
 

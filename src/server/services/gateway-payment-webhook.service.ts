@@ -1,6 +1,5 @@
 import "server-only";
 
-import { inngest } from "@/server/jobs/inngest.client";
 import { AppError, isAppError } from "@/server/errors/app-error";
 import {
   getGatewayPaymentIntentByReference,
@@ -89,23 +88,6 @@ async function generateReceiptSafely(paymentId: string) {
   }
 }
 
-async function queueReceiptGeneration(params: {
-  paymentId: string;
-  tenancyId: string;
-  tenantId: string;
-  landlordId: string;
-  paymentReference: string;
-}) {
-  try {
-    await inngest.send({
-      name: "tenuro/receipt.generate",
-      data: params,
-    });
-  } catch (error) {
-    console.error("Receipt generation event could not be queued:", error);
-  }
-}
-
 export async function processVerifiedGatewayPaymentReference(
   reference: string,
 ): Promise<GatewayPaymentWebhookResult> {
@@ -122,6 +104,8 @@ export async function processVerifiedGatewayPaymentReference(
   }
 
   if (intent.status === "paid" && intent.processed_payment_id) {
+    await generateReceiptSafely(intent.processed_payment_id);
+
     return {
       status: "duplicate",
       message: "Gateway payment already recorded.",
@@ -198,14 +182,6 @@ export async function processVerifiedGatewayPaymentReference(
   });
 
   await generateReceiptSafely(paymentId);
-
-  await queueReceiptGeneration({
-    paymentId,
-    tenancyId: intent.tenancy_id,
-    tenantId: intent.tenant_id,
-    landlordId: intent.landlord_id,
-    paymentReference: intent.paystack_reference,
-  });
 
   return {
     status: existingPayment ? "duplicate" : "processed",

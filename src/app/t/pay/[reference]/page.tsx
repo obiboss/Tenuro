@@ -6,6 +6,7 @@ import {
   Clock3,
   CreditCard,
 } from "lucide-react";
+import { PaymentVerificationAutoRefresh } from "@/components/payment/payment-verification-auto-refresh";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -20,6 +21,8 @@ type TenantPaymentPageProps = {
   }>;
   searchParams: Promise<{
     verify?: string | string[];
+    trxref?: string | string[];
+    reference?: string | string[];
   }>;
 };
 
@@ -137,10 +140,13 @@ export default async function TenantPaymentPage({
   }
 
   const statusCopy = getStatusCopy(checkout.status);
+  const shouldAutoRefresh = shouldVerify && checkout.status === "initialized";
   const canPay = checkout.status !== "paid";
 
   return (
     <main className="min-h-screen bg-background">
+      <PaymentVerificationAutoRefresh enabled={shouldAutoRefresh} />
+
       <section className="mx-auto max-w-5xl px-4 py-8 md:px-6 lg:py-10">
         <TenantPaymentLogo />
 
@@ -235,12 +241,12 @@ export default async function TenantPaymentPage({
                   </div>
                 </div>
 
-                {shouldVerify && checkout.status === "initialized" ? (
+                {shouldAutoRefresh ? (
                   <div className="mt-6 rounded-button bg-warning-soft p-4 text-sm font-semibold leading-6 text-warning">
                     <span className="inline-flex items-center gap-2">
                       <Clock3 aria-hidden="true" size={18} strokeWidth={2.6} />
-                      Payment verification is still processing. Refresh this
-                      page in a moment.
+                      Payment verification is still processing. Tenuro will
+                      update this page automatically.
                     </span>
                   </div>
                 ) : null}
