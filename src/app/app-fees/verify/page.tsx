@@ -6,6 +6,7 @@ import {
   Clock3,
   CreditCard,
 } from "lucide-react";
+import { PaymentVerificationAutoRefresh } from "@/components/payment/payment-verification-auto-refresh";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -73,7 +74,7 @@ function getStatusCopy(status: string): {
   return {
     title: "App fee is processing",
     description:
-      "Paystack redirected back to Tenuro. We are checking the app fee payment status.",
+      "Paystack redirected back to Tenuro. We are checking the app fee payment status and will update this page automatically.",
     tone: "warning",
     badge: "Processing",
     icon: <Clock3 aria-hidden="true" size={24} strokeWidth={2.6} />,
@@ -156,9 +157,12 @@ export default async function AppFeeVerifyPage({
   }
 
   const statusCopy = getStatusCopy(intent.status);
+  const shouldAutoRefresh = intent.status === "initialized";
 
   return (
     <div>
+      <PaymentVerificationAutoRefresh enabled={shouldAutoRefresh} />
+
       <Link
         href="/payments"
         className="mb-5 inline-flex items-center gap-2 text-sm font-bold text-primary hover:text-primary-hover"
@@ -214,6 +218,13 @@ export default async function AppFeeVerifyPage({
                   </p>
                 </div>
               </div>
+
+              {shouldAutoRefresh ? (
+                <div className="mt-6 rounded-button bg-warning-soft p-4 text-sm font-semibold leading-6 text-warning">
+                  Tenuro is checking this app fee payment automatically. You do
+                  not need to refresh the page.
+                </div>
+              ) : null}
 
               <Link
                 href="/payments"
