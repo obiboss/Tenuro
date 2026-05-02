@@ -25,6 +25,7 @@ import {
   verifyPaystackTransaction,
   verifyPaystackWebhookSignature,
 } from "@/server/services/paystack.service";
+import { generateRentReceiptSystem } from "@/server/services/receipt.service";
 
 export type GatewayPaymentWebhookResult = {
   status: "processed" | "duplicate" | "ignored" | "failed";
@@ -78,6 +79,14 @@ function mapPaystackStatusToIntentStatus(status: string) {
   }
 
   return "failed" as const;
+}
+
+async function generateReceiptSafely(paymentId: string) {
+  try {
+    await generateRentReceiptSystem(paymentId);
+  } catch (error) {
+    console.error("Receipt generation failed after gateway payment:", error);
+  }
 }
 
 async function queueReceiptGeneration(params: {
@@ -187,6 +196,8 @@ export async function processVerifiedGatewayPaymentReference(
     paidAt: verifiedTransaction.paid_at ?? new Date().toISOString(),
     verifiedPayload,
   });
+
+  await generateReceiptSafely(paymentId);
 
   await queueReceiptGeneration({
     paymentId,

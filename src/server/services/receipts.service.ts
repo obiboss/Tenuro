@@ -4,6 +4,7 @@ import { AppError } from "@/server/errors/app-error";
 import {
   getRentPaymentById,
   markRentPaymentReceiptFailed,
+  type RentPaymentRow,
   updateRentPaymentReceipt,
 } from "@/server/repositories/payments.repository";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
@@ -14,6 +15,7 @@ import {
 } from "@/server/services/storage.service";
 import { requireLandlord } from "./auth.service";
 import { renderRentReceiptPdf } from "./receipt-pdf.service";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 function buildReceiptNumber(paymentId: string) {
   return `REC-${paymentId.slice(0, 8).toUpperCase()}`;
@@ -33,14 +35,81 @@ function buildReceiptPath(params: {
   ].join("/");
 }
 
+async function generateRentReceiptWithClient(params: {
+  supabase: SupabaseClient;
+  payment: RentPaymentRow;
+}) {
+  if (params.payment.status !== "posted") {
+    throw new AppError(
+      "PAYMENT_NOT_POSTED",
+      "Receipt can only be generated for a posted payment.",
+      400,
+    );
+  }
+
+  if (params.payment.receipt_path) {
+    const receiptDownloadUrl = await createSignedRentReceiptPdfUrl(
+      params.payment.receipt_path,
+    );
+
+    return {
+      payment: params.payment,
+      receiptDownloadUrl,
+    };
+  }
+
+  try {
+    const receiptNumber =
+      params.payment.receipt_number ?? buildReceiptNumber(params.payment.id);
+
+    const paymentForPdf: RentPaymentRow = {
+      ...params.payment,
+      receipt_number: receiptNumber,
+    };
+
+    const pdfBuffer = await renderRentReceiptPdf(paymentForPdf);
+
+    const receiptPath = buildReceiptPath({
+      landlordId: params.payment.landlord_id,
+      tenantId: params.payment.tenant_id,
+      tenancyId: params.payment.tenancy_id,
+      paymentId: params.payment.id,
+    });
+
+    await uploadRentReceiptPdf({
+      path: receiptPath,
+      pdfBuffer,
+    });
+
+    const updatedPayment = await updateRentPaymentReceipt(params.supabase, {
+      paymentId: params.payment.id,
+      receiptPath,
+      receiptNumber,
+    });
+
+    const receiptDownloadUrl = await createSignedRentReceiptPdfUrl(receiptPath);
+
+    return {
+      payment: updatedPayment,
+      receiptDownloadUrl,
+    };
+  } catch (error) {
+    try {
+      await markRentPaymentReceiptFailed(params.supabase, params.payment.id);
+    } catch (markFailedError) {
+      console.error(
+        "Failed to mark receipt generation as failed:",
+        markFailedError,
+      );
+    }
+
+    throw error;
+  }
+}
+
 export async function generateRentReceiptForCurrentLandlord(paymentId: string) {
   const landlord = await requireLandlord();
 
-  /*
-   * Authenticated client is used first to prove the logged-in landlord can see
-   * this payment. Admin client is only used after ownership is verified, because
-   * receipt generation updates system-managed receipt fields.
-   */
   const userSupabase = await createSupabaseServerClient();
   const adminSupabase = createSupabaseAdminClient();
 
@@ -54,72 +123,20 @@ export async function generateRentReceiptForCurrentLandlord(paymentId: string) {
     );
   }
 
-  if (payment.status !== "posted") {
-    throw new AppError(
-      "PAYMENT_NOT_POSTED",
-      "Receipt can only be generated for a posted payment.",
-      400,
-    );
-  }
+  return generateRentReceiptWithClient({
+    supabase: adminSupabase,
+    payment,
+  });
+}
 
-  if (payment.receipt_path) {
-    const receiptDownloadUrl = await createSignedRentReceiptPdfUrl(
-      payment.receipt_path,
-    );
+export async function generateRentReceiptSystem(paymentId: string) {
+  const adminSupabase = createSupabaseAdminClient();
+  const payment = await getRentPaymentById(adminSupabase, paymentId);
 
-    return {
-      payment,
-      receiptDownloadUrl,
-    };
-  }
-
-  try {
-    const receiptNumber =
-      payment.receipt_number ?? buildReceiptNumber(payment.id);
-
-    const paymentForPdf = {
-      ...payment,
-      receipt_number: receiptNumber,
-    };
-
-    const pdfBuffer = await renderRentReceiptPdf(paymentForPdf);
-
-    const receiptPath = buildReceiptPath({
-      landlordId: payment.landlord_id,
-      tenantId: payment.tenant_id,
-      tenancyId: payment.tenancy_id,
-      paymentId: payment.id,
-    });
-
-    await uploadRentReceiptPdf({
-      path: receiptPath,
-      pdfBuffer,
-    });
-
-    const updatedPayment = await updateRentPaymentReceipt(adminSupabase, {
-      paymentId: payment.id,
-      receiptPath,
-      receiptNumber,
-    });
-
-    const receiptDownloadUrl = await createSignedRentReceiptPdfUrl(receiptPath);
-
-    return {
-      payment: updatedPayment,
-      receiptDownloadUrl,
-    };
-  } catch (error) {
-    try {
-      await markRentPaymentReceiptFailed(adminSupabase, payment.id);
-    } catch (markFailedError) {
-      console.error(
-        "Failed to mark receipt generation as failed:",
-        markFailedError,
-      );
-    }
-
-    throw error;
-  }
+  return generateRentReceiptWithClient({
+    supabase: adminSupabase,
+    payment,
+  });
 }
 
 export async function getRentReceiptDownloadUrlForCurrentLandlord(

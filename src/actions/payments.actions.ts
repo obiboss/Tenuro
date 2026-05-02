@@ -10,6 +10,7 @@ import {
   recordManualPaymentSchema,
   setupLandlordBankAccountSchema,
 } from "@/server/validators/payment.schema";
+import { generateRentReceiptForCurrentLandlord } from "@/server/services/receipt.service";
 
 export type PaymentActionState = {
   ok: boolean;
@@ -17,6 +18,7 @@ export type PaymentActionState = {
   paymentId?: string;
   authorizationUrl?: string;
   tenantPaymentUrl?: string;
+  receiptDownloadUrl?: string | null;
   reference?: string;
   fieldErrors?: Record<string, string[]>;
 };
@@ -108,11 +110,27 @@ export async function recordManualPaymentAction(
     revalidatePath("/overview");
     revalidatePath("/tenants");
 
-    return {
-      ok: true,
-      message: "Payment recorded successfully.",
-      paymentId: result.paymentId,
-    };
+    try {
+      const receipt = await generateRentReceiptForCurrentLandlord(
+        result.paymentId,
+      );
+
+      return {
+        ok: true,
+        message: "Payment recorded successfully. Receipt prepared.",
+        paymentId: result.paymentId,
+        receiptDownloadUrl: receipt.receiptDownloadUrl,
+      };
+    } catch (receiptError) {
+      console.error("Manual payment receipt generation failed:", receiptError);
+
+      return {
+        ok: true,
+        message:
+          "Payment recorded successfully. Receipt can be generated from payment history.",
+        paymentId: result.paymentId,
+      };
+    }
   } catch (error) {
     console.error("recordManualPaymentAction failed:", error);
 
