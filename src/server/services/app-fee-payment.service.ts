@@ -62,21 +62,19 @@ function getLandlordPaymentEmail(params: {
   email: string | null;
   phoneNumber: string;
 }) {
-  if (params.email?.trim()) {
-    return params.email.trim();
+  const email = params.email?.trim().toLowerCase();
+
+  if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return email;
   }
 
   const sanitizedPhone = params.phoneNumber.replace(/\D/g, "");
 
-  return `${sanitizedPhone}@payments.tenuro.local`;
-}
-
-function toRecord(value: unknown): Record<string, unknown> {
-  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
+  if (sanitizedPhone.length >= 7) {
+    return `landlord-${sanitizedPhone}@tenuro.app`;
   }
 
-  return {};
+  return "payments@tenuro.app";
 }
 
 function mapPaystackStatus(status: string) {
@@ -201,6 +199,14 @@ export async function initializeManualRentAppFeePayment(
     authorizationUrl: intent.authorization_url,
     reference: intent.paystack_reference,
   };
+}
+
+function toRecord(value: unknown): Record<string, unknown> {
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  return {};
 }
 
 export async function processVerifiedAppFeePaymentReference(reference: string) {
