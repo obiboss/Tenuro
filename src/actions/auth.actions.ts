@@ -3,6 +3,15 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { errorResult } from "@/server/errors/result";
+import {
+  attachTenantProfile,
+  getTenantShellByPhoneCandidates,
+} from "@/server/repositories/tenant-dashboard.repository";
+import {
+  getProfileById,
+  upsertProfile,
+  type ProfileRole,
+} from "@/server/repositories/profiles.repository";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import {
@@ -25,48 +34,74 @@ function toActionError(error: unknown): AuthActionState {
   };
 }
 
+function getPostLoginRedirect(role: ProfileRole) {
+  if (role === "tenant") {
+    return "/tenant";
+  }
+
+  return "/overview";
+}
+
 async function ensureProfileForUser(params: {
   userId: string;
-  role: "landlord" | "tenant" | "caretaker";
+  role: ProfileRole;
   fullName: string;
   phoneNumber: string | null;
   email: string | null;
 }) {
   const supabase = createSupabaseAdminClient();
 
-  const { error } = await supabase.from("profiles").upsert({
+  await upsertProfile(supabase, {
     id: params.userId,
     role: params.role,
-    full_name: params.fullName,
-    phone_number: params.phoneNumber,
+    fullName: params.fullName,
+    phoneNumber: params.phoneNumber,
     email: params.email?.trim() ? params.email.trim() : null,
   });
-
-  if (error) {
-    throw error;
-  }
 }
 
-async function getProfileByUserId(userId: string) {
+async function getOrCreateTenantProfileForPhoneLogin(params: {
+  userId: string;
+  e164Phone: string;
+  localPhone: string;
+  email: string | null;
+}) {
   const supabase = createSupabaseAdminClient();
+  const existingProfile = await getProfileById(supabase, params.userId);
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, role, full_name, phone_number, email")
-    .eq("id", userId)
-    .maybeSingle<{
-      id: string;
-      role: "landlord" | "tenant" | "caretaker";
-      full_name: string;
-      phone_number: string;
-      email: string | null;
-    }>();
-
-  if (error) {
-    throw error;
+  if (existingProfile) {
+    return existingProfile;
   }
 
-  return data;
+  const phoneCandidates = [
+    params.e164Phone,
+    params.localPhone,
+    params.e164Phone.replace("+", ""),
+  ];
+
+  const tenantShell = await getTenantShellByPhoneCandidates(
+    supabase,
+    phoneCandidates,
+  );
+
+  if (!tenantShell) {
+    return null;
+  }
+
+  const profile = await upsertProfile(supabase, {
+    id: params.userId,
+    role: "tenant",
+    fullName: tenantShell.full_name,
+    phoneNumber: params.e164Phone,
+    email: params.email?.trim() ? params.email.trim() : tenantShell.email,
+  });
+
+  await attachTenantProfile(supabase, {
+    tenantId: tenantShell.id,
+    profileId: params.userId,
+  });
+
+  return profile;
 }
 
 export async function requestOTPAction(
@@ -82,8 +117,6 @@ export async function requestOTPAction(
 
     const normalizedPhone = normalisePhoneNumber(parsed.phoneNumber);
     const supabase = await createSupabaseServerClient();
-
-    console.log("OTP request phone:", normalizedPhone.e164);
 
     const { error } = await supabase.auth.signInWithOtp({
       phone: normalizedPhone.e164,
@@ -122,7 +155,7 @@ export async function verifyOTPAction(
   _previousState: AuthActionState,
   formData: FormData,
 ): Promise<AuthActionState> {
-  let shouldRedirect = false;
+  let redirectTo: string | null = null;
 
   try {
     const parsed = verifyOtpSchema.parse({
@@ -155,7 +188,12 @@ export async function verifyOTPAction(
       };
     }
 
-    const profile = await getProfileByUserId(data.user.id);
+    const profile = await getOrCreateTenantProfileForPhoneLogin({
+      userId: data.user.id,
+      e164Phone: normalizedPhone.e164,
+      localPhone: normalizedPhone.local,
+      email: data.user.email,
+    });
 
     if (!profile) {
       await supabase.auth.signOut();
@@ -167,13 +205,13 @@ export async function verifyOTPAction(
       };
     }
 
-    shouldRedirect = true;
+    redirectTo = getPostLoginRedirect(profile.role);
   } catch (error) {
     return toActionError(error);
   }
 
-  if (shouldRedirect) {
-    redirect("/overview");
+  if (redirectTo) {
+    redirect(redirectTo);
   }
 
   return {
@@ -181,76 +219,6 @@ export async function verifyOTPAction(
     message: "Signed in successfully.",
   };
 }
-
-// export async function registerLandlordAction(
-//   _previousState: AuthActionState,
-//   formData: FormData,
-// ): Promise<AuthActionState> {
-//   let shouldRedirect = false;
-
-//   try {
-//     const schema = z.object({
-//       fullName: z.string().trim().min(2, "Enter your full name.").max(120),
-//       phoneNumber: z.string().trim().min(7, "Enter your phone number."),
-//       otpCode: z
-//         .string()
-//         .trim()
-//         .regex(/^\d{6}$/, "Enter the 6-digit code."),
-//     });
-
-//     const parsed = schema.parse({
-//       fullName: formData.get("fullName"),
-//       phoneNumber: formData.get("phoneNumber"),
-//       otpCode: formData.get("otpCode"),
-//     });
-
-//     const normalizedPhone = normalisePhoneNumber(parsed.phoneNumber);
-//     const supabase = await createSupabaseServerClient();
-
-//     console.log("OTP verify phone:", normalizedPhone.e164);
-
-//     const { data, error } = await supabase.auth.verifyOtp({
-//       phone: normalizedPhone.e164,
-//       token: parsed.otpCode,
-//       type: "sms",
-//     });
-
-//     if (error || !data.user) {
-//       console.error("Supabase register OTP verify failed:", {
-//         phone: normalizedPhone.e164,
-//         message: error?.message,
-//         status: error?.status,
-//         code: error?.code,
-//       });
-
-//       return {
-//         ok: false,
-//         message: "That code is incorrect or has expired. Please try again.",
-//       };
-//     }
-
-//     await ensureProfileForUser({
-//       userId: data.user.id,
-//       role: "landlord",
-//       fullName: parsed.fullName,
-//       phoneNumber: normalizedPhone.e164,
-//       email: data.user.email,
-//     });
-
-//     shouldRedirect = true;
-//   } catch (error) {
-//     return toActionError(error);
-//   }
-
-//   if (shouldRedirect) {
-//     redirect("/overview");
-//   }
-
-//   return {
-//     ok: true,
-//     message: "Account created successfully.",
-//   };
-// }
 
 export async function registerLandlordAction(
   _previousState: AuthActionState,
@@ -277,8 +245,6 @@ export async function registerLandlordAction(
     const normalizedPhone = normalisePhoneNumber(parsed.phoneNumber);
     const supabase = await createSupabaseServerClient();
 
-    console.log("OTP verify phone:", normalizedPhone.e164);
-
     const { data, error } = await supabase.auth.verifyOtp({
       phone: normalizedPhone.e164,
       token: parsed.otpCode,
@@ -300,10 +266,6 @@ export async function registerLandlordAction(
     }
 
     if (!data.user) {
-      console.error("Supabase register OTP verify returned no user:", {
-        phone: normalizedPhone.e164,
-      });
-
       return {
         ok: false,
         message:
@@ -311,46 +273,12 @@ export async function registerLandlordAction(
       };
     }
 
-    console.log("Supabase OTP verified user:", {
+    await ensureProfileForUser({
       userId: data.user.id,
-      phone: data.user.phone,
-      email: data.user.email,
-    });
-
-    const supabaseAdmin = createSupabaseAdminClient();
-
-    const { error: profileError } = await supabaseAdmin.from("profiles").upsert(
-      {
-        id: data.user.id,
-        role: "landlord",
-        full_name: parsed.fullName,
-        phone_number: normalizedPhone.e164,
-        email: data.user.email?.trim() ? data.user.email.trim() : null,
-      },
-      {
-        onConflict: "id",
-      },
-    );
-
-    if (profileError) {
-      console.error("Profile upsert failed after phone OTP:", {
-        userId: data.user.id,
-        phone: normalizedPhone.e164,
-        message: profileError.message,
-        details: profileError.details,
-        hint: profileError.hint,
-        code: profileError.code,
-      });
-
-      return {
-        ok: false,
-        message: profileError.message || "Profile setup failed.",
-      };
-    }
-
-    console.log("Profile upsert successful:", {
-      userId: data.user.id,
-      phone: normalizedPhone.e164,
+      role: "landlord",
+      fullName: parsed.fullName,
+      phoneNumber: normalizedPhone.e164,
+      email: data.user.email?.trim() ? data.user.email.trim() : null,
     });
 
     shouldRedirect = true;
@@ -384,7 +312,7 @@ export async function emailPasswordLoginAction(
   _previousState: AuthActionState,
   formData: FormData,
 ): Promise<AuthActionState> {
-  let shouldRedirect = false;
+  let redirectTo: string | null = null;
 
   try {
     const parsed = emailPasswordLoginSchema.parse({
@@ -406,7 +334,8 @@ export async function emailPasswordLoginAction(
       };
     }
 
-    const profile = await getProfileByUserId(data.user.id);
+    const adminSupabase = createSupabaseAdminClient();
+    const profile = await getProfileById(adminSupabase, data.user.id);
 
     if (!profile) {
       await supabase.auth.signOut();
@@ -418,13 +347,13 @@ export async function emailPasswordLoginAction(
       };
     }
 
-    shouldRedirect = true;
+    redirectTo = getPostLoginRedirect(profile.role);
   } catch (error) {
     return toActionError(error);
   }
 
-  if (shouldRedirect) {
-    redirect("/overview");
+  if (redirectTo) {
+    redirect(redirectTo);
   }
 
   return {
