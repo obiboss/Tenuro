@@ -1,12 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { z } from "zod";
 import { errorResult } from "@/server/errors/result";
-import {
-  attachTenantProfile,
-  getTenantShellByPhoneCandidates,
-} from "@/server/repositories/tenant-dashboard.repository";
 import {
   getProfileById,
   upsertProfile,
@@ -18,6 +13,8 @@ import {
   emailPasswordLoginSchema,
   emailPasswordRegisterSchema,
   magicLinkRequestSchema,
+  phonePasswordLoginSchema,
+  registerLandlordSchema,
   requestOtpSchema,
   verifyOtpSchema,
 } from "@/server/validators/auth.schema";
@@ -51,7 +48,7 @@ async function ensureProfileForUser(params: {
 }) {
   const supabase = createSupabaseAdminClient();
 
-  await upsertProfile(supabase, {
+  return upsertProfile(supabase, {
     id: params.userId,
     role: params.role,
     fullName: params.fullName,
@@ -60,140 +57,35 @@ async function ensureProfileForUser(params: {
   });
 }
 
-async function getOrCreateTenantProfileForPhoneLogin(params: {
-  userId: string;
-  e164Phone: string;
-  localPhone: string;
-  email: string | null;
-}) {
-  const supabase = createSupabaseAdminClient();
-  const existingProfile = await getProfileById(supabase, params.userId);
-
-  if (existingProfile) {
-    return existingProfile;
-  }
-
-  const phoneCandidates = [
-    params.e164Phone,
-    params.localPhone,
-    params.e164Phone.replace("+", ""),
-  ];
-
-  const tenantShell = await getTenantShellByPhoneCandidates(
-    supabase,
-    phoneCandidates,
-  );
-
-  if (!tenantShell) {
-    return null;
-  }
-
-  const profile = await upsertProfile(supabase, {
-    id: params.userId,
-    role: "tenant",
-    fullName: tenantShell.full_name,
-    phoneNumber: params.e164Phone,
-    email: params.email?.trim() ? params.email.trim() : tenantShell.email,
-  });
-
-  await attachTenantProfile(supabase, {
-    tenantId: tenantShell.id,
-    profileId: params.userId,
-  });
-
-  return profile;
-}
-
-export async function requestOTPAction(
-  _previousState: AuthActionState,
-  formData: FormData,
-): Promise<AuthActionState> {
-  try {
-    const parsed = requestOtpSchema.parse({
-      phoneNumber: formData.get("phoneNumber"),
-      purpose: formData.get("purpose") || "login",
-      rememberDevice: true,
-    });
-
-    const normalizedPhone = normalisePhoneNumber(parsed.phoneNumber);
-    const supabase = await createSupabaseServerClient();
-
-    const { error } = await supabase.auth.signInWithOtp({
-      phone: normalizedPhone.e164,
-      options: {
-        channel: "sms",
-      },
-    });
-
-    if (error) {
-      console.error("Supabase OTP send failed:", {
-        message: error.message,
-        status: error.status,
-        code: error.code,
-      });
-
-      return {
-        ok: false,
-        message:
-          error.message ||
-          "Verification code could not be sent. Please try again.",
-      };
-    }
-
-    return {
-      ok: true,
-      message: `Verification code sent to ${normalizedPhone.local}.`,
-      phoneNumber: normalizedPhone.e164,
-      maskedPhoneNumber: normalizedPhone.local,
-    };
-  } catch (error) {
-    return toActionError(error);
-  }
-}
-
-export async function verifyOTPAction(
+export async function phonePasswordLoginAction(
   _previousState: AuthActionState,
   formData: FormData,
 ): Promise<AuthActionState> {
   let redirectTo: string | null = null;
 
   try {
-    const parsed = verifyOtpSchema.parse({
+    const parsed = phonePasswordLoginSchema.parse({
       phoneNumber: formData.get("phoneNumber"),
-      otpCode: formData.get("otpCode"),
-      purpose: formData.get("purpose") || "login",
-      rememberDevice: true,
+      password: formData.get("password"),
     });
 
     const normalizedPhone = normalisePhoneNumber(parsed.phoneNumber);
     const supabase = await createSupabaseServerClient();
 
-    const { data, error } = await supabase.auth.verifyOtp({
+    const { data, error } = await supabase.auth.signInWithPassword({
       phone: normalizedPhone.e164,
-      token: parsed.otpCode,
-      type: "sms",
+      password: parsed.password,
     });
 
     if (error || !data.user) {
-      console.error("Supabase login OTP verify failed:", {
-        phone: normalizedPhone.e164,
-        message: error?.message,
-        status: error?.status,
-        code: error?.code,
-      });
-
       return {
         ok: false,
-        message: "That code is incorrect or has expired. Please try again.",
+        message: "That phone number or password is incorrect.",
       };
     }
 
-    const profile = await getOrCreateTenantProfileForPhoneLogin({
-      userId: data.user.id,
-      e164Phone: normalizedPhone.e164,
-      localPhone: normalizedPhone.local,
-      email: data.user.email,
-    });
+    const adminSupabase = createSupabaseAdminClient();
+    const profile = await getProfileById(adminSupabase, data.user.id);
 
     if (!profile) {
       await supabase.auth.signOut();
@@ -201,7 +93,7 @@ export async function verifyOTPAction(
       return {
         ok: false,
         message:
-          "We could not find a Tenuro account for this phone number. Please create an account first.",
+          "We could not find your Tenuro profile. Please contact support.",
       };
     }
 
@@ -227,49 +119,30 @@ export async function registerLandlordAction(
   let shouldRedirect = false;
 
   try {
-    const schema = z.object({
-      fullName: z.string().trim().min(2, "Enter your full name.").max(120),
-      phoneNumber: z.string().trim().min(7, "Enter your phone number."),
-      otpCode: z
-        .string()
-        .trim()
-        .regex(/^\d{6}$/, "Enter the 6-digit code."),
-    });
-
-    const parsed = schema.parse({
+    const parsed = registerLandlordSchema.parse({
       fullName: formData.get("fullName"),
       phoneNumber: formData.get("phoneNumber"),
-      otpCode: formData.get("otpCode"),
+      password: formData.get("password"),
     });
 
     const normalizedPhone = normalisePhoneNumber(parsed.phoneNumber);
     const supabase = await createSupabaseServerClient();
 
-    const { data, error } = await supabase.auth.verifyOtp({
+    const { data, error } = await supabase.auth.signUp({
       phone: normalizedPhone.e164,
-      token: parsed.otpCode,
-      type: "sms",
+      password: parsed.password,
+      options: {
+        data: {
+          full_name: parsed.fullName,
+          role: "landlord",
+        },
+      },
     });
 
-    if (error) {
-      console.error("Supabase register OTP verify failed:", {
-        phone: normalizedPhone.e164,
-        message: error.message,
-        status: error.status,
-        code: error.code,
-      });
-
+    if (error || !data.user) {
       return {
         ok: false,
-        message: error.message || "That code is incorrect or has expired.",
-      };
-    }
-
-    if (!data.user) {
-      return {
-        ok: false,
-        message:
-          "The verification code was accepted, but no user was returned.",
+        message: error?.message ?? "Account could not be created.",
       };
     }
 
@@ -283,19 +156,8 @@ export async function registerLandlordAction(
 
     shouldRedirect = true;
   } catch (error) {
-    console.error("registerLandlordAction unexpected error:", error);
-
-    if (error instanceof Error) {
-      return {
-        ok: false,
-        message: error.message,
-      };
-    }
-
-    return {
-      ok: false,
-      message: "Registration failed. Please try again.",
-    };
+    console.error("registerLandlordAction failed:", error);
+    return toActionError(error);
   }
 
   if (shouldRedirect) {
@@ -455,6 +317,51 @@ export async function requestMagicLinkAction(
     return {
       ok: true,
       message: "Magic link sent. Please check your email.",
+    };
+  } catch (error) {
+    return toActionError(error);
+  }
+}
+
+/**
+ * Legacy OTP actions retained temporarily so old imports do not break.
+ * Normal login/register no longer uses OTP.
+ */
+export async function requestOTPAction(
+  _previousState: AuthActionState,
+  formData: FormData,
+): Promise<AuthActionState> {
+  try {
+    requestOtpSchema.parse({
+      phoneNumber: formData.get("phoneNumber"),
+      purpose: formData.get("purpose") || "login",
+    });
+
+    return {
+      ok: false,
+      message:
+        "OTP login is no longer used. Please sign in with phone number and password.",
+    };
+  } catch (error) {
+    return toActionError(error);
+  }
+}
+
+export async function verifyOTPAction(
+  _previousState: AuthActionState,
+  formData: FormData,
+): Promise<AuthActionState> {
+  try {
+    verifyOtpSchema.parse({
+      phoneNumber: formData.get("phoneNumber"),
+      otpCode: formData.get("otpCode"),
+      purpose: formData.get("purpose") || "login",
+    });
+
+    return {
+      ok: false,
+      message:
+        "OTP login is no longer used. Please sign in with phone number and password.",
     };
   } catch (error) {
     return toActionError(error);

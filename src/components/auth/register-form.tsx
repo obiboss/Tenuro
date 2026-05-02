@@ -1,14 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { registerLandlordAction } from "@/actions/auth.actions";
 import { initialAuthActionState } from "@/actions/auth.state";
+import { PhoneNumberInput } from "@/components/auth/phone-number-input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
 export function RegisterForm() {
+  const [phoneNumber, setPhoneNumber] = useState("");
+
   const [state, formAction, isPending] = useActionState(
     registerLandlordAction,
     initialAuthActionState,
@@ -21,7 +24,11 @@ export function RegisterForm() {
           {state.message ? (
             <div
               role="alert"
-              className="rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
+              className={
+                state.ok
+                  ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
+                  : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
+              }
             >
               {state.message}
             </div>
@@ -31,24 +38,18 @@ export function RegisterForm() {
             label="Full name"
             name="fullName"
             placeholder="Enter your full name"
+            autoComplete="name"
             error={state.fieldErrors?.fullName?.[0]}
             required
           />
 
-          <Input
+          <PhoneNumberInput
             label="Phone number"
             name="phoneNumber"
-            placeholder="Example: 08012345678"
+            value={phoneNumber}
+            onChange={setPhoneNumber}
             error={state.fieldErrors?.phoneNumber?.[0]}
-            required
-          />
-
-          <Input
-            label="Email address"
-            name="email"
-            type="email"
-            placeholder="you@example.com"
-            error={state.fieldErrors?.email?.[0]}
+            helperText="Enter your number without the first 0. Example: 8149761904."
             required
           />
 
@@ -56,6 +57,7 @@ export function RegisterForm() {
             label="Password"
             name="password"
             type="password"
+            autoComplete="new-password"
             placeholder="At least 8 characters"
             error={state.fieldErrors?.password?.[0]}
             required
