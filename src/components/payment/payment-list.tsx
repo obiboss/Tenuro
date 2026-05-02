@@ -2,6 +2,7 @@ import { ReceiptText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ReceiptDownloadButton } from "@/components/payment/receipt-download-button";
 import { formatNaira } from "@/server/utils/money";
 import type { RentPaymentRow } from "@/server/repositories/payments.repository";
 
@@ -50,6 +51,18 @@ function getPaymentPeriod(payment: RentPaymentRow) {
   return formatDate(payment.payment_date);
 }
 
+function getReceiptBadge(payment: RentPaymentRow) {
+  if (payment.receipt_status === "generated") {
+    return <Badge tone="success">Receipt ready</Badge>;
+  }
+
+  if (payment.receipt_status === "failed") {
+    return <Badge tone="danger">Receipt failed</Badge>;
+  }
+
+  return <Badge tone="warning">Receipt pending</Badge>;
+}
+
 export function PaymentList({
   payments,
   emptyTitle = "No payments recorded yet",
@@ -80,9 +93,14 @@ export function PaymentList({
                 </p>
               </div>
 
-              <Badge tone={payment.status === "posted" ? "success" : "danger"}>
-                {payment.status === "posted" ? "Posted" : "Reversed"}
-              </Badge>
+              <div className="flex flex-col items-end gap-2">
+                <Badge
+                  tone={payment.status === "posted" ? "success" : "danger"}
+                >
+                  {payment.status === "posted" ? "Posted" : "Reversed"}
+                </Badge>
+                {getReceiptBadge(payment)}
+              </div>
             </div>
 
             <div className="rounded-button bg-background p-3">
@@ -106,6 +124,13 @@ export function PaymentList({
                 </p>
               ) : null}
             </div>
+
+            {payment.status === "posted" ? (
+              <ReceiptDownloadButton
+                paymentId={payment.id}
+                receiptPath={payment.receipt_path}
+              />
+            ) : null}
           </div>
         </Card>
       ))}

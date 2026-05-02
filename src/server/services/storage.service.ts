@@ -5,6 +5,7 @@ import { createSupabaseAdminClient } from "@/server/supabase/admin";
 
 const TENANT_KYC_BUCKET = "tenant-kyc-documents";
 const TENANCY_AGREEMENT_PDF_BUCKET = "tenancy-agreement-pdfs";
+const RENT_RECEIPTS_BUCKET = "rent-receipts";
 const SIGNED_URL_EXPIRY_SECONDS = 60 * 10;
 
 export type SignedKycDocument = {
@@ -101,6 +102,33 @@ export async function uploadTenancyAgreementPdf(params: {
 export async function createSignedTenancyAgreementPdfUrl(path: string | null) {
   return createSignedStorageUrl({
     bucket: TENANCY_AGREEMENT_PDF_BUCKET,
+    path,
+  });
+}
+
+export async function uploadRentReceiptPdf(params: {
+  path: string;
+  pdfBuffer: Buffer;
+}) {
+  const supabase = createSupabaseAdminClient();
+
+  const { error } = await supabase.storage
+    .from(RENT_RECEIPTS_BUCKET)
+    .upload(params.path, params.pdfBuffer, {
+      contentType: "application/pdf",
+      upsert: true,
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  return params.path;
+}
+
+export async function createSignedRentReceiptPdfUrl(path: string | null) {
+  return createSignedStorageUrl({
+    bucket: RENT_RECEIPTS_BUCKET,
     path,
   });
 }

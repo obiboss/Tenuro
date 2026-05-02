@@ -5,12 +5,23 @@ export type RentPaymentRow = {
   landlord_id: string;
   tenant_id: string;
   tenancy_id: string;
+  receipt_number: string | null;
   amount_paid: number;
+  expected_period_amount: number;
+  currency_code: string;
   payment_method: "paystack_gateway" | "bank_transfer" | "cash" | "other";
   payment_reference: string | null;
   payment_date: string;
   payment_for_period_start: string | null;
   payment_for_period_end: string | null;
+  is_partial: boolean;
+  balance_before: number;
+  balance_after: number;
+  verified_by_landlord: boolean;
+  verified_at: string | null;
+  receipt_status: "pending" | "generated" | "failed" | "voided";
+  receipt_generated: boolean;
+  receipt_path: string | null;
   notes: string | null;
   idempotency_key: string;
   status: "posted" | "reversed";
@@ -19,10 +30,13 @@ export type RentPaymentRow = {
     id: string;
     full_name: string;
     phone_number: string;
+    email?: string | null;
   } | null;
   tenancies: {
     id: string;
     tenancy_reference: string;
+    start_date?: string | null;
+    end_date?: string | null;
     units: {
       id: string;
       unit_identifier: string;
@@ -30,6 +44,7 @@ export type RentPaymentRow = {
       properties: {
         id: string;
         property_name: string;
+        address?: string | null;
       } | null;
     } | null;
   } | null;
@@ -45,12 +60,23 @@ const RENT_PAYMENT_SELECT = `
   landlord_id,
   tenant_id,
   tenancy_id,
+  receipt_number,
   amount_paid,
+  expected_period_amount,
+  currency_code,
   payment_method,
   payment_reference,
   payment_date,
   payment_for_period_start,
   payment_for_period_end,
+  is_partial,
+  balance_before,
+  balance_after,
+  verified_by_landlord,
+  verified_at,
+  receipt_status,
+  receipt_generated,
+  receipt_path,
   notes,
   idempotency_key,
   status,
@@ -58,18 +84,22 @@ const RENT_PAYMENT_SELECT = `
   tenants (
     id,
     full_name,
-    phone_number
+    phone_number,
+    email
   ),
   tenancies (
     id,
     tenancy_reference,
+    start_date,
+    end_date,
     units (
       id,
       unit_identifier,
       building_name,
       properties (
         id,
-        property_name
+        property_name,
+        address
       )
     )
   )
@@ -244,4 +274,50 @@ export async function getRentPaymentById(
   }
 
   return data;
+}
+
+export async function updateRentPaymentReceipt(
+  supabase: SupabaseClient,
+  params: {
+    paymentId: string;
+    receiptPath: string;
+    receiptNumber: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("rent_payments")
+    .update({
+      receipt_number: params.receiptNumber,
+      receipt_path: params.receiptPath,
+      receipt_generated: true,
+      receipt_status: "generated",
+      verified_at: new Date().toISOString(),
+    })
+    .eq("id", params.paymentId)
+    .eq("status", "posted")
+    .select(RENT_PAYMENT_SELECT)
+    .single<RentPaymentRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function markRentPaymentReceiptFailed(
+  supabase: SupabaseClient,
+  paymentId: string,
+) {
+  const { error } = await supabase
+    .from("rent_payments")
+    .update({
+      receipt_status: "failed",
+    })
+    .eq("id", paymentId)
+    .eq("status", "posted");
+
+  if (error) {
+    throw error;
+  }
 }
