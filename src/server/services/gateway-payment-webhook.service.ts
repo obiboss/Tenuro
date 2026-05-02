@@ -25,7 +25,7 @@ import {
   verifyPaystackTransaction,
   verifyPaystackWebhookSignature,
 } from "@/server/services/paystack.service";
-import { generateRentReceiptSystem } from "@/server/services/receipt.service";
+import { generateRentReceiptSystem } from "@/server/services/receipts.service";
 
 export type GatewayPaymentWebhookResult = {
   status: "processed" | "duplicate" | "ignored" | "failed";
