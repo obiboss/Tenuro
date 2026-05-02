@@ -9,7 +9,6 @@ import {
   renderToBuffer,
 } from "@react-pdf/renderer";
 import type { RentPaymentRow } from "@/server/repositories/payments.repository";
-import { formatNaira } from "@/server/utils/money";
 
 const styles = StyleSheet.create({
   page: {
@@ -92,6 +91,15 @@ const styles = StyleSheet.create({
   },
 });
 
+function formatPdfMoney(amount: number) {
+  const formatted = new Intl.NumberFormat("en-NG", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+
+  return `NGN ${formatted}`;
+}
+
 function formatDate(value: string | null) {
   if (!value) {
     return "Not provided";
@@ -170,18 +178,18 @@ function ReceiptPdfDocument({ payment }: { payment: RentPaymentRow }) {
           />
           <Row
             label="Balance Before"
-            value={formatNaira(Number(payment.balance_before))}
+            value={formatPdfMoney(Number(payment.balance_before))}
           />
           <Row
             label="Balance After"
-            value={formatNaira(Number(payment.balance_after))}
+            value={formatPdfMoney(Number(payment.balance_after))}
           />
         </View>
 
         <View style={styles.amountBox}>
           <Text style={styles.amountLabel}>Amount Paid</Text>
           <Text style={styles.amountValue}>
-            {formatNaira(Number(payment.amount_paid))}
+            {formatPdfMoney(Number(payment.amount_paid))}
           </Text>
         </View>
 
