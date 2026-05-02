@@ -15,6 +15,7 @@ import {
   createSignedRentReceiptPdfUrl,
   uploadRentReceiptPdf,
 } from "@/server/services/storage.service";
+import { formatNaira } from "@/server/utils/money";
 import { requireLandlord } from "./auth.service";
 import { renderRentReceiptPdf } from "./receipt-pdf.service";
 
@@ -34,6 +35,78 @@ function buildReceiptPath(params: {
     params.tenancyId,
     `${params.paymentId}.pdf`,
   ].join("/");
+}
+
+function normalizeNigerianWhatsAppPhone(
+  phoneNumber: string | null | undefined,
+) {
+  if (!phoneNumber) {
+    return null;
+  }
+
+  const digits = phoneNumber.replace(/\D/g, "");
+
+  if (digits.startsWith("234") && digits.length >= 13) {
+    return digits;
+  }
+
+  if (digits.startsWith("0") && digits.length === 11) {
+    return `234${digits.slice(1)}`;
+  }
+
+  if (digits.length === 10) {
+    return `234${digits}`;
+  }
+
+  return digits.length >= 10 ? digits : null;
+}
+
+function formatReceiptDate(value: string) {
+  return new Intl.DateTimeFormat("en-NG", {
+    dateStyle: "medium",
+  }).format(new Date(value));
+}
+
+function buildReceiptWhatsAppMessage(params: {
+  payment: RentPaymentRow;
+  receiptDownloadUrl: string;
+}) {
+  const tenantName = params.payment.tenants?.full_name ?? "Tenant";
+  const propertyName =
+    params.payment.tenancies?.units?.properties?.property_name ??
+    "the property";
+  const unitIdentifier =
+    params.payment.tenancies?.units?.unit_identifier ?? "your unit";
+  const receiptNumber = params.payment.receipt_number ?? "your receipt";
+
+  return [
+    `Hello ${tenantName},`,
+    "",
+    `Your rent receipt ${receiptNumber} is ready on Tenuro.`,
+    "",
+    `Property: ${propertyName}`,
+    `Unit: ${unitIdentifier}`,
+    `Amount paid: ${formatNaira(Number(params.payment.amount_paid))}`,
+    `Payment date: ${formatReceiptDate(params.payment.payment_date)}`,
+    "",
+    `Download receipt: ${params.receiptDownloadUrl}`,
+    "",
+    "Thank you.",
+  ].join("\n");
+}
+
+function buildWhatsAppUrl(params: {
+  phoneNumber: string | null | undefined;
+  message: string;
+}) {
+  const normalizedPhone = normalizeNigerianWhatsAppPhone(params.phoneNumber);
+  const encodedMessage = encodeURIComponent(params.message);
+
+  if (!normalizedPhone) {
+    return `https://wa.me/?text=${encodedMessage}`;
+  }
+
+  return `https://wa.me/${normalizedPhone}?text=${encodedMessage}`;
 }
 
 async function generateRentReceiptWithClient(params: {
@@ -157,6 +230,32 @@ export async function getRentReceiptDownloadUrlForCurrentLandlord(
   }
 
   return createSignedRentReceiptPdfUrl(payment.receipt_path);
+}
+
+export async function prepareRentReceiptWhatsAppForCurrentLandlord(
+  paymentId: string,
+) {
+  const receipt = await generateRentReceiptForCurrentLandlord(paymentId);
+
+  if (!receipt.receiptDownloadUrl) {
+    throw new AppError(
+      "RECEIPT_LINK_FAILED",
+      "Receipt link could not be prepared.",
+      400,
+    );
+  }
+
+  const message = buildReceiptWhatsAppMessage({
+    payment: receipt.payment,
+    receiptDownloadUrl: receipt.receiptDownloadUrl,
+  });
+
+  return {
+    whatsappUrl: buildWhatsAppUrl({
+      phoneNumber: receipt.payment.tenants?.phone_number,
+      message,
+    }),
+  };
 }
 
 export async function getTenantRentReceiptDownloadUrlByGatewayReference(

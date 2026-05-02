@@ -1,8 +1,9 @@
 import { ReceiptText } from "lucide-react";
+import { ReceiptDownloadButton } from "@/components/payment/receipt-download-button";
+import { ReceiptWhatsAppButton } from "@/components/payment/receipt-whatsapp-button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { ReceiptDownloadButton } from "@/components/payment/receipt-download-button";
 import { formatNaira } from "@/server/utils/money";
 import type { RentPaymentRow } from "@/server/repositories/payments.repository";
 
@@ -88,6 +89,7 @@ export function PaymentList({
                 <h3 className="truncate font-extrabold text-text-strong">
                   {payment.tenants?.full_name ?? "Tenant"}
                 </h3>
+
                 <p className="mt-1 text-sm font-semibold text-text-muted">
                   {getUnitLabel(payment)}
                 </p>
@@ -99,6 +101,7 @@ export function PaymentList({
                 >
                   {payment.status === "posted" ? "Posted" : "Reversed"}
                 </Badge>
+
                 {getReceiptBadge(payment)}
               </div>
             </div>
@@ -126,10 +129,14 @@ export function PaymentList({
             </div>
 
             {payment.status === "posted" ? (
-              <ReceiptDownloadButton
-                paymentId={payment.id}
-                receiptPath={payment.receipt_path}
-              />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <ReceiptDownloadButton
+                  paymentId={payment.id}
+                  receiptPath={payment.receipt_path}
+                />
+
+                <ReceiptWhatsAppButton paymentId={payment.id} />
+              </div>
             ) : null}
           </div>
         </Card>
