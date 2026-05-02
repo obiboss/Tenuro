@@ -129,17 +129,32 @@ export async function markGatewayPaymentIntentPaid(
       paid_at: params.paidAt,
       failure_reason: null,
       verified_payload: params.verifiedPayload,
+      updated_at: new Date().toISOString(),
     })
     .eq("id", params.intentId)
     .neq("status", "paid")
     .select(GATEWAY_PAYMENT_INTENT_SELECT)
-    .single<GatewayPaymentIntent>();
+    .maybeSingle<GatewayPaymentIntent>();
 
   if (error) {
     throw error;
   }
 
-  return data;
+  if (data) {
+    return data;
+  }
+
+  const { data: existingIntent, error: existingError } = await supabase
+    .from("gateway_payment_intents")
+    .select(GATEWAY_PAYMENT_INTENT_SELECT)
+    .eq("id", params.intentId)
+    .single<GatewayPaymentIntent>();
+
+  if (existingError) {
+    throw existingError;
+  }
+
+  return existingIntent;
 }
 
 export async function markGatewayPaymentIntentFailed(
