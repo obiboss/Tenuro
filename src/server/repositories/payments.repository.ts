@@ -228,3 +228,20 @@ export async function recordManualRentPaymentViaRpc(
 
   return data;
 }
+
+export async function getRentPaymentById(
+  supabase: SupabaseClient,
+  paymentId: string,
+) {
+  const { data, error } = await supabase
+    .from("rent_payments")
+    .select(RENT_PAYMENT_SELECT)
+    .eq("id", paymentId)
+    .single<RentPaymentRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}

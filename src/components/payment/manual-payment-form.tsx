@@ -1,30 +1,29 @@
 "use client";
 
-import { useActionState, useMemo } from "react";
+import { useActionState, useEffect, useMemo } from "react";
+import { initializeManualRentAppFeePaymentAction } from "@/actions/app-fee-payment.actions";
+import { initialAppFeePaymentActionState } from "@/actions/app-fee-payment.state";
 import { recordManualPaymentAction } from "@/actions/payments.actions";
 import { initialPaymentActionState } from "@/actions/payment.state";
 import { ActionResultToast } from "@/components/ui/action-result-toast";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { TrustNotice } from "@/components/ui/trust-notice";
 
-type TenancyOption = {
-  label: string;
-  value: string;
-  rentAmount: number;
-};
-
 type ManualPaymentFormProps = {
-  tenancies: TenancyOption[];
+  tenancies: {
+    label: string;
+    value: string;
+    rentAmount: number;
+  }[];
 };
 
 const paymentMethodOptions = [
   {
-    label: "Bank Transfer",
+    label: "Bank transfer",
     value: "bank_transfer",
   },
   {
@@ -37,126 +36,175 @@ const paymentMethodOptions = [
   },
 ];
 
-function todayDateValue() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 export function ManualPaymentForm({ tenancies }: ManualPaymentFormProps) {
-  const idempotencyKey = useMemo(() => crypto.randomUUID(), []);
+  const manualPaymentIdempotencyKey = useMemo(() => crypto.randomUUID(), []);
+  const appFeeIdempotencyKey = useMemo(() => crypto.randomUUID(), []);
 
-  const [state, formAction, isPending] = useActionState(
+  const [paymentState, paymentFormAction, isRecordingPayment] = useActionState(
     recordManualPaymentAction,
     initialPaymentActionState,
   );
 
-  return (
-    <form action={formAction}>
-      <ActionResultToast
-        ok={state.ok}
-        message={state.message}
-        successTitle="Payment recorded"
-        errorTitle="Payment failed"
-      />
+  const [appFeeState, appFeeFormAction, isPreparingAppFee] = useActionState(
+    initializeManualRentAppFeePaymentAction,
+    initialAppFeePaymentActionState,
+  );
 
-      <Card>
-        <CardContent>
-          <TrustNotice
-            title="Manual payment record"
-            description="Use this when a tenant pays by transfer, cash, or another offline method. Tenuro will post it to the tenant ledger."
+  useEffect(() => {
+    if (appFeeState.ok && appFeeState.authorizationUrl) {
+      window.location.href = appFeeState.authorizationUrl;
+    }
+  }, [appFeeState.ok, appFeeState.authorizationUrl]);
+
+  return (
+    <div className="space-y-5">
+      <form action={paymentFormAction} className="space-y-5">
+        <ActionResultToast
+          ok={paymentState.ok}
+          message={paymentState.message}
+          successTitle="Manual payment recorded"
+          errorTitle="Manual payment failed"
+        />
+
+        <TrustNotice
+          title="Offline rent payment"
+          description="Use this when rent was paid by bank transfer, cash, or another offline method. After recording rent, pay only the Tenuro app fee separately."
+        />
+
+        {paymentState.message ? (
+          <div
+            role="alert"
+            className={
+              paymentState.ok
+                ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
+                : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
+            }
+          >
+            {paymentState.message}
+          </div>
+        ) : null}
+
+        <input
+          type="hidden"
+          name="idempotencyKey"
+          value={manualPaymentIdempotencyKey}
+        />
+
+        <Select
+          label="Tenancy"
+          name="tenancyId"
+          options={tenancies}
+          error={paymentState.fieldErrors?.tenancyId?.[0]}
+          required
+        />
+
+        <CurrencyInput
+          label="Amount paid"
+          name="amountPaid"
+          placeholder="0.00"
+          error={paymentState.fieldErrors?.amountPaid?.[0]}
+          required
+        />
+
+        <Select
+          label="Payment method"
+          name="paymentMethod"
+          options={paymentMethodOptions}
+          error={paymentState.fieldErrors?.paymentMethod?.[0]}
+          required
+        />
+
+        <Input
+          label="Payment reference"
+          name="paymentReference"
+          placeholder="Bank narration, teller number, or receipt reference"
+          error={paymentState.fieldErrors?.paymentReference?.[0]}
+        />
+
+        <Input
+          label="Payment date"
+          name="paymentDate"
+          type="datetime-local"
+          error={paymentState.fieldErrors?.paymentDate?.[0]}
+          required
+        />
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <Input
+            label="Payment period start"
+            name="paymentForPeriodStart"
+            type="date"
+            error={paymentState.fieldErrors?.paymentForPeriodStart?.[0]}
           />
 
-          {state.message ? (
+          <Input
+            label="Payment period end"
+            name="paymentForPeriodEnd"
+            type="date"
+            error={paymentState.fieldErrors?.paymentForPeriodEnd?.[0]}
+          />
+        </div>
+
+        <Textarea
+          label="Notes"
+          name="notes"
+          placeholder="Optional internal note"
+          error={paymentState.fieldErrors?.notes?.[0]}
+        />
+
+        <Button type="submit" isLoading={isRecordingPayment} fullWidth>
+          Record Manual Rent Payment
+        </Button>
+      </form>
+
+      {paymentState.ok && paymentState.paymentId ? (
+        <form action={appFeeFormAction} className="space-y-4">
+          <ActionResultToast
+            ok={appFeeState.ok}
+            message={appFeeState.message}
+            successTitle="App fee checkout prepared"
+            errorTitle="App fee checkout failed"
+          />
+
+          <input
+            type="hidden"
+            name="rentPaymentId"
+            value={paymentState.paymentId}
+          />
+          <input
+            type="hidden"
+            name="idempotencyKey"
+            value={appFeeIdempotencyKey}
+          />
+
+          <TrustNotice
+            title="Tenuro app fee required"
+            description="Because the rent was collected outside Tenuro, the landlord should now pay only the Tenuro app fee. This does not charge the tenant."
+          />
+
+          {appFeeState.message ? (
             <div
               role="alert"
               className={
-                state.ok
+                appFeeState.ok
                   ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
                   : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
               }
             >
-              {state.message}
+              {appFeeState.message}
             </div>
           ) : null}
 
-          <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
-
-          <Select
-            label="Rental agreement"
-            name="tenancyId"
-            placeholder="Select tenant and unit"
-            options={tenancies}
-            error={state.fieldErrors?.tenancyId?.[0]}
-            required
-          />
-
-          <CurrencyInput
-            label="Amount paid"
-            name="amountPaid"
-            placeholder="0.00"
-            error={state.fieldErrors?.amountPaid?.[0]}
-            required
-          />
-
-          <Select
-            label="Payment method"
-            name="paymentMethod"
-            options={paymentMethodOptions}
-            defaultValue="bank_transfer"
-            error={state.fieldErrors?.paymentMethod?.[0]}
-            required
-          />
-
-          <Input
-            label="Payment reference"
-            name="paymentReference"
-            placeholder="Example: bank narration, transfer ref, receipt note"
-            error={state.fieldErrors?.paymentReference?.[0]}
-          />
-
-          <Input
-            label="Payment date"
-            name="paymentDate"
-            type="date"
-            defaultValue={todayDateValue()}
-            error={state.fieldErrors?.paymentDate?.[0]}
-            required
-          />
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <Input
-              label="Period start"
-              name="paymentForPeriodStart"
-              type="date"
-              error={state.fieldErrors?.paymentForPeriodStart?.[0]}
-            />
-
-            <Input
-              label="Period end"
-              name="paymentForPeriodEnd"
-              type="date"
-              error={state.fieldErrors?.paymentForPeriodEnd?.[0]}
-            />
-          </div>
-
-          <Textarea
-            label="Private note"
-            name="notes"
-            placeholder="Optional note about this payment."
-            error={state.fieldErrors?.notes?.[0]}
-          />
-        </CardContent>
-
-        <CardFooter>
           <Button
             type="submit"
-            isLoading={isPending}
+            variant="secondary"
+            isLoading={isPreparingAppFee}
             fullWidth
-            disabled={tenancies.length === 0}
           >
-            Record Payment
+            Pay Tenuro App Fee
           </Button>
-        </CardFooter>
-      </Card>
-    </form>
+        </form>
+      ) : null}
+    </div>
   );
 }

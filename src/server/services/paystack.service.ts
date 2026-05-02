@@ -242,6 +242,36 @@ export async function initializePaystackTransaction(params: {
   });
 }
 
+export async function initializeStandardPaystackTransaction(params: {
+  email: string;
+  amountKobo: number;
+  reference: string;
+  callbackUrl: string;
+  currencyCode: string;
+  metadata: Record<string, unknown>;
+}) {
+  if (params.amountKobo <= 0) {
+    throw new AppError(
+      "PAYSTACK_AMOUNT_INVALID",
+      "Payment amount is not valid.",
+      400,
+    );
+  }
+
+  return paystackRequest<PaystackInitializedTransaction>({
+    path: "/transaction/initialize",
+    method: "POST",
+    body: {
+      email: params.email,
+      amount: params.amountKobo,
+      reference: params.reference,
+      callback_url: params.callbackUrl,
+      currency: params.currencyCode,
+      metadata: params.metadata,
+    },
+  });
+}
+
 export function verifyPaystackWebhookSignature(params: {
   rawBody: string;
   signature: string | null;

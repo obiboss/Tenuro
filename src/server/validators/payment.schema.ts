@@ -14,6 +14,11 @@ export const initializeRentPaymentSchema = z.object({
   idempotencyKey: idempotencyKeySchema,
 });
 
+export const initializeAppFeePaymentSchema = z.object({
+  rentPaymentId: uuidSchema,
+  idempotencyKey: idempotencyKeySchema,
+});
+
 export const recordManualPaymentSchema = z.object({
   tenancyId: uuidSchema,
   amountPaid: positiveMoneySchema,
@@ -77,12 +82,21 @@ export const paystackMetadataSchema = z.object({
 export type InitializeRentPaymentInput = z.infer<
   typeof initializeRentPaymentSchema
 >;
+
+export type InitializeAppFeePaymentInput = z.infer<
+  typeof initializeAppFeePaymentSchema
+>;
+
 export type RecordManualPaymentInput = z.infer<
   typeof recordManualPaymentSchema
 >;
+
 export type ReversePaymentInput = z.infer<typeof reversePaymentSchema>;
+
 export type SetupLandlordBankAccountInput = z.infer<
   typeof setupLandlordBankAccountSchema
 >;
+
 export type PaystackWebhookInput = z.infer<typeof paystackWebhookSchema>;
+
 export type PaystackMetadataInput = z.infer<typeof paystackMetadataSchema>;
