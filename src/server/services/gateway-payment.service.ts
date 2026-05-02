@@ -8,17 +8,18 @@ import {
   getGatewayPaymentIntentByReference,
 } from "@/server/repositories/gateway-payment.repository";
 import { getActiveLandlordPaystackAccount } from "@/server/repositories/landlord-paystack.repository";
-import { getTenancyAgreementByTenancyId } from "@/server/repositories/tenancy-agreements.repository";
 import { getTenancyPaymentContext } from "@/server/repositories/payment-context.repository";
+import { getTenancyAgreementByTenancyId } from "@/server/repositories/tenancy-agreements.repository";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import type { InitializeRentPaymentInput } from "@/server/validators/payment.schema";
 import { requireLandlord } from "./auth.service";
+import { processVerifiedGatewayPaymentReference } from "./gateway-payment-webhook.service";
 import {
   convertNairaToKobo,
   initializePaystackTransaction,
 } from "./paystack.service";
-import { processVerifiedGatewayPaymentReference } from "./gateway-payment-webhook.service";
+import { getTenantRentReceiptDownloadUrlByGatewayReference } from "./receipts.service";
 
 function getAppBaseUrl() {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
@@ -70,13 +71,19 @@ function getTenantPaymentEmail(params: {
   tenantEmail: string | null;
   tenantPhoneNumber: string;
 }) {
-  if (params.tenantEmail?.trim()) {
-    return params.tenantEmail.trim();
+  const email = params.tenantEmail?.trim().toLowerCase();
+
+  if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return email;
   }
 
   const sanitizedPhone = params.tenantPhoneNumber.replace(/\D/g, "");
 
-  return `${sanitizedPhone}@payments.tenuro.local`;
+  if (sanitizedPhone.length >= 7) {
+    return `tenant-${sanitizedPhone}@tenuro.app`;
+  }
+
+  return "payments@tenuro.app";
 }
 
 function assertGatewayAmountStructure(params: {
@@ -295,6 +302,13 @@ export async function getPublicTenantPaymentCheckout(params: {
 
   const metadata = toRecord(intent.metadata);
 
+  const receiptDownloadUrl =
+    intent.status === "paid"
+      ? await getTenantRentReceiptDownloadUrlByGatewayReference(
+          intent.paystack_reference,
+        )
+      : null;
+
   return {
     id: intent.id,
     reference: intent.paystack_reference,
@@ -309,5 +323,6 @@ export async function getPublicTenantPaymentCheckout(params: {
     unitIdentifier: readMetadataText(metadata, "unit_identifier"),
     periodStart: intent.period_start,
     periodEnd: intent.period_end,
+    receiptDownloadUrl,
   };
 }

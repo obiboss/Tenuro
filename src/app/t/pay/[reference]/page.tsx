@@ -7,6 +7,7 @@ import {
   CreditCard,
 } from "lucide-react";
 import { PaymentVerificationAutoRefresh } from "@/components/payment/payment-verification-auto-refresh";
+import { TenantReceiptDownloadCard } from "@/components/payment/tenant-receipt-download-card";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -140,7 +141,12 @@ export default async function TenantPaymentPage({
   }
 
   const statusCopy = getStatusCopy(checkout.status);
-  const shouldAutoRefresh = shouldVerify && checkout.status === "initialized";
+
+  const shouldAutoRefresh =
+    shouldVerify &&
+    (checkout.status === "initialized" ||
+      (checkout.status === "paid" && !checkout.receiptDownloadUrl));
+
   const canPay = checkout.status !== "paid";
 
   return (
@@ -245,8 +251,8 @@ export default async function TenantPaymentPage({
                   <div className="mt-6 rounded-button bg-warning-soft p-4 text-sm font-semibold leading-6 text-warning">
                     <span className="inline-flex items-center gap-2">
                       <Clock3 aria-hidden="true" size={18} strokeWidth={2.6} />
-                      Payment verification is still processing. Tenuro will
-                      update this page automatically.
+                      Tenuro is finishing confirmation and receipt preparation.
+                      This page will update automatically.
                     </span>
                   </div>
                 ) : null}
@@ -263,7 +269,13 @@ export default async function TenantPaymentPage({
             </Card>
           </SectionCard>
 
-          <div className="xl:sticky xl:top-28 xl:self-start">
+          <div className="space-y-6 xl:sticky xl:top-28 xl:self-start">
+            {checkout.status === "paid" ? (
+              <TenantReceiptDownloadCard
+                receiptDownloadUrl={checkout.receiptDownloadUrl}
+              />
+            ) : null}
+
             <TrustNotice
               title="Secure Paystack checkout"
               description="You will complete the payment on Paystack. After payment, Paystack redirects you back to Tenuro for confirmation."

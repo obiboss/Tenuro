@@ -1,6 +1,8 @@
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { AppError } from "@/server/errors/app-error";
+import { getGatewayPaymentIntentByReference } from "@/server/repositories/gateway-payment.repository";
 import {
   getRentPaymentById,
   markRentPaymentReceiptFailed,
@@ -15,7 +17,6 @@ import {
 } from "@/server/services/storage.service";
 import { requireLandlord } from "./auth.service";
 import { renderRentReceiptPdf } from "./receipt-pdf.service";
-import type { SupabaseClient } from "@supabase/supabase-js";
 
 function buildReceiptNumber(paymentId: string) {
   return `REC-${paymentId.slice(0, 8).toUpperCase()}`;
@@ -156,4 +157,20 @@ export async function getRentReceiptDownloadUrlForCurrentLandlord(
   }
 
   return createSignedRentReceiptPdfUrl(payment.receipt_path);
+}
+
+export async function getTenantRentReceiptDownloadUrlByGatewayReference(
+  reference: string,
+) {
+  const supabase = createSupabaseAdminClient();
+
+  const intent = await getGatewayPaymentIntentByReference(supabase, reference);
+
+  if (!intent || intent.status !== "paid" || !intent.processed_payment_id) {
+    return null;
+  }
+
+  const receipt = await generateRentReceiptSystem(intent.processed_payment_id);
+
+  return receipt.receiptDownloadUrl;
 }
