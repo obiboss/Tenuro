@@ -18,6 +18,7 @@ import {
 } from "@/server/utils/tokens";
 import type { ActivateTenantAccountInput } from "@/server/validators/tenant-activation.schema";
 import { requireLandlord } from "./auth.service";
+import { normalisePhoneNumber } from "@/server/utils/phone";
 
 function getAppBaseUrl() {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
@@ -166,8 +167,10 @@ export async function activateTenantAccount(input: ActivateTenantAccountInput) {
   const adminSupabase = createSupabaseAdminClient();
   const userSupabase = await createSupabaseServerClient();
 
+  const normalisedPhone = normalisePhoneNumber(tenant.phone_number);
+
   const { data, error } = await userSupabase.auth.signUp({
-    phone: tenant.phone_number,
+    phone: normalisedPhone.e164,
     password: input.password,
     options: {
       data: {
