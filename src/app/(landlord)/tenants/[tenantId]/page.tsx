@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { RentPaymentModal } from "@/components/payment/rent-payment-modal";
 import { OnboardingInviteCard } from "@/components/tenant/onboarding-invite-card";
+import { TenantActivationInviteCard } from "@/components/tenant/tenant-activation-invite-card";
 import { TenantReviewCard } from "@/components/tenant/tenant-review-card";
 import { TenancyAgreementDocumentCard } from "@/components/tenancy/tenancy-agreement-document-card";
 import { TenancyForm } from "@/components/tenancy/tenancy-form";
@@ -80,6 +81,9 @@ export default async function TenantDetailPage({
 
   const canCreateTenancyRecord =
     tenant.onboarding_status === "approved" && !activeTenancy;
+
+  const canGenerateActivationLink =
+    tenant.onboarding_status === "approved" && !tenant.profile_id;
 
   return (
     <div>
@@ -248,10 +252,21 @@ export default async function TenantDetailPage({
         <div className="space-y-6 xl:sticky xl:top-28 xl:self-start">
           <TrustNotice
             title="Next step"
-            description="Generate and send the tenant onboarding link so they can complete their profile, ID document, and guarantor details."
+            description={
+              tenant.profile_id
+                ? "This tenant already has an active tenant account."
+                : tenant.onboarding_status === "approved"
+                  ? "Generate and send the tenant activation link so they can set their password and access their dashboard."
+                  : "Generate and send the tenant onboarding link so they can complete their profile, ID document, and guarantor details."
+            }
           />
 
           <OnboardingInviteCard tenantId={tenant.id} />
+
+          <TenantActivationInviteCard
+            tenantId={tenant.id}
+            disabled={!canGenerateActivationLink}
+          />
 
           <SectionCard
             title="Private Note"
