@@ -179,7 +179,7 @@ export function LandlordShell({ children, landlordName }: LandlordShellProps) {
           <header className="sticky top-0 z-30 border-b border-border-soft bg-white/95 px-4 py-4 backdrop-blur md:px-6 lg:hidden">
             <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
               <TenuroBrand subtitle="Landlord dashboard" />
-              <LogoutButton compact />
+              <LogoutButton className="shrink-0" />
             </div>
           </header>
 
