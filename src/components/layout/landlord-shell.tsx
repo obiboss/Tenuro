@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Users,
 } from "lucide-react";
+import { LogoutButton } from "@/components/auth/logout-button";
 import { MobileMoreMenu } from "@/components/layout/mobile-more-menu";
 import { Badge } from "@/components/ui/badge";
 import { ToastProvider } from "@/components/ui/toast-provider";
@@ -101,6 +102,25 @@ function getFirstName(fullName: string) {
   return fullName.trim().split(/\s+/)[0] || "Landlord";
 }
 
+function TenuroBrand({ subtitle }: { subtitle: string }) {
+  return (
+    <Link href="/overview" className="flex min-w-0 items-center gap-3">
+      <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-white shadow-soft">
+        <Building2 aria-hidden="true" size={23} strokeWidth={2.7} />
+      </div>
+
+      <div className="min-w-0">
+        <p className="truncate text-lg font-extrabold tracking-tight text-text-strong">
+          Tenuro
+        </p>
+        <p className="truncate text-xs font-semibold text-text-muted">
+          {subtitle}
+        </p>
+      </div>
+    </Link>
+  );
+}
+
 export function LandlordShell({ children, landlordName }: LandlordShellProps) {
   const pathname = usePathname();
   const firstName = getFirstName(landlordName);
@@ -109,20 +129,7 @@ export function LandlordShell({ children, landlordName }: LandlordShellProps) {
     <ToastProvider>
       <div className="min-h-screen bg-background">
         <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-border-soft bg-white px-5 py-6 lg:block">
-          <Link href="/overview" className="flex items-center gap-3">
-            <div className="flex size-11 items-center justify-center rounded-2xl bg-primary text-white shadow-soft">
-              <Building2 aria-hidden="true" size={23} strokeWidth={2.7} />
-            </div>
-
-            <div>
-              <p className="text-lg font-extrabold tracking-tight text-text-strong">
-                Tenuro
-              </p>
-              <p className="text-xs font-semibold text-text-muted">
-                Property records made simple
-              </p>
-            </div>
-          </Link>
+          <TenuroBrand subtitle="Property records made simple" />
 
           <nav className="mt-8 space-y-2">
             {desktopNavItems.map((item) => {
@@ -169,7 +176,14 @@ export function LandlordShell({ children, landlordName }: LandlordShellProps) {
         </aside>
 
         <div className="lg:pl-72">
-          <header className="sticky top-0 z-30 border-b border-border-soft bg-background/90 px-4 py-4 backdrop-blur md:px-6">
+          <header className="sticky top-0 z-30 border-b border-border-soft bg-white/95 px-4 py-4 backdrop-blur md:px-6 lg:hidden">
+            <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
+              <TenuroBrand subtitle="Landlord dashboard" />
+              <LogoutButton compact />
+            </div>
+          </header>
+
+          <header className="sticky top-0 z-30 hidden border-b border-border-soft bg-background/90 px-6 py-4 backdrop-blur lg:block">
             <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold text-text-muted">
@@ -180,16 +194,35 @@ export function LandlordShell({ children, landlordName }: LandlordShellProps) {
                 </h1>
               </div>
 
-              <Badge tone="primary">Landlord</Badge>
+              <div className="flex items-center gap-3">
+                <Badge tone="primary">Landlord</Badge>
+                <LogoutButton />
+              </div>
             </div>
           </header>
 
           <main className="mx-auto max-w-7xl px-4 py-6 pb-28 md:px-6 lg:pb-8">
+            <div className="mb-5 flex items-center justify-between gap-4 lg:hidden">
+              <div>
+                <p className="text-sm font-semibold text-text-muted">
+                  Welcome back,
+                </p>
+                <h1 className="text-xl font-black tracking-tight text-text-strong">
+                  {firstName}
+                </h1>
+              </div>
+
+              <Badge tone="primary">Landlord</Badge>
+            </div>
+
             {children}
           </main>
         </div>
 
-        <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border-soft bg-white px-2 py-2 shadow-2xl lg:hidden">
+        <nav
+          aria-label="Mobile landlord navigation"
+          className="fixed inset-x-0 bottom-0 z-40 border-t border-border-soft bg-white px-2 py-2 shadow-2xl lg:hidden"
+        >
           <div className="flex items-center gap-1">
             {mobilePrimaryItems.map((item) => {
               const Icon = item.icon;
