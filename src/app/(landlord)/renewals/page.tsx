@@ -7,7 +7,6 @@ import {
   RefreshCcw,
   WalletCards,
 } from "lucide-react";
-import { RenewTenancyButton } from "@/components/tenancy/renew-tenancy-button";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
@@ -185,14 +184,12 @@ function RenewalCard({ item }: { item: LandlordRenewalOverviewItem }) {
         </div>
       </div>
 
-      <div className="mt-5 grid gap-3 rounded-button bg-background p-4 md:grid-cols-[1fr_220px] md:items-center">
+      <div className="mt-5 rounded-button bg-background p-4">
         <p className="text-sm leading-6 text-text-muted">
-          Renewing posts a new rent charge for the next period. Any old unpaid
-          balance remains in the ledger and is added to the tenant’s total
-          outstanding balance.
+          This page is for landlord renewal visibility only. Tenant renewal
+          payment will be handled from the tenant side when the renewal payment
+          flow is implemented.
         </p>
-
-        <RenewTenancyButton tenancyId={tenancy.id} />
       </div>
 
       <div className="mt-4">
