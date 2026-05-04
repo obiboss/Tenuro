@@ -1,7 +1,10 @@
 import {
+  addDays,
   addMonths,
   addYears,
   format,
+  getDate,
+  getMonth,
   isValid,
   parseISO,
   subDays,
@@ -43,6 +46,18 @@ export function calculateTenancyEndDate(
           : addMonths(parsedStartDate, 1);
 
   return format(subDays(nextPeriodStart, 1), "yyyy-MM-dd");
+}
+
+export function calculateNextRentChargeDate(endDate: string) {
+  return format(addDays(parseDateInput(endDate), 1), "yyyy-MM-dd");
+}
+
+export function getRentAnchorDay(startDate: string) {
+  return getDate(parseDateInput(startDate));
+}
+
+export function getRentAnchorMonth(startDate: string) {
+  return getMonth(parseDateInput(startDate)) + 1;
 }
 
 export function formatDisplayDate(value: string) {

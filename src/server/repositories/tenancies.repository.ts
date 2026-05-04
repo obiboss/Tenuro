@@ -1,4 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  calculateNextRentChargeDate,
+  getRentAnchorDay,
+  getRentAnchorMonth,
+} from "@/lib/tenancy-period";
 import type { CreateTenancyInput } from "@/server/validators/tenancy.schema";
 
 export type TenancyRow = {
@@ -13,6 +18,11 @@ export type TenancyRow = {
   start_date: string | null;
   end_date: string | null;
   renewal_notice_date: string | null;
+  rent_due_day: number;
+  rent_anchor_month: number | null;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  next_rent_charge_date: string | null;
   opening_balance: number;
   opening_balance_note: string | null;
   status: "draft" | "active" | "expired" | "terminated" | "archived" | null;
@@ -53,6 +63,11 @@ const TENANCY_SELECT = `
   start_date,
   end_date,
   renewal_notice_date,
+  rent_due_day,
+  rent_anchor_month,
+  current_period_start,
+  current_period_end,
+  next_rent_charge_date,
   opening_balance,
   opening_balance_note,
   status,
@@ -72,18 +87,23 @@ const TENANCY_DETAIL_SELECT = `
   start_date,
   end_date,
   renewal_notice_date,
+  rent_due_day,
+  rent_anchor_month,
+  current_period_start,
+  current_period_end,
+  next_rent_charge_date,
   opening_balance,
   opening_balance_note,
   status,
   agreement_notes,
   created_at,
- tenants (
-  id,
-  full_name,
-  phone_number,
-  email,
-  home_address
-),
+  tenants (
+    id,
+    full_name,
+    phone_number,
+    email,
+    home_address
+  ),
   units (
     id,
     unit_identifier,
@@ -106,16 +126,6 @@ function createTenancyReference() {
       : Math.random().toString(36).slice(2, 10).toUpperCase();
 
   return `TEN-${datePart}-${randomPart}`;
-}
-
-function getRentDueDay(startDate: string) {
-  const day = new Date(startDate).getUTCDate();
-
-  if (!Number.isFinite(day) || day < 1 || day > 31) {
-    return 1;
-  }
-
-  return day;
 }
 
 export async function getActiveTenancyForTenant(
@@ -165,7 +175,9 @@ export async function createTenancy(
     input: CreateTenancyInput;
   },
 ) {
-  const rentDueDay = getRentDueDay(params.input.startDate);
+  const rentDueDay = getRentAnchorDay(params.input.startDate);
+  const rentAnchorMonth = getRentAnchorMonth(params.input.startDate);
+  const nextRentChargeDate = calculateNextRentChargeDate(params.input.endDate);
 
   const { data, error } = await supabase
     .from("tenancies")
@@ -183,14 +195,19 @@ export async function createTenancy(
       end_date: params.input.endDate,
       renewal_notice_date: params.input.renewalNoticeDate || null,
 
+      rent_due_day: rentDueDay,
+      rent_anchor_month: rentAnchorMonth,
+      current_period_start: params.input.startDate,
+      current_period_end: params.input.endDate,
+      next_rent_charge_date: nextRentChargeDate,
+
       /*
        * Legacy/current DB-required columns.
        * Keep these mapped until the database is fully consolidated.
        */
       move_in_date: params.input.startDate,
       move_out_date: params.input.endDate,
-      next_renewal_date: params.input.endDate,
-      rent_due_day: rentDueDay,
+      next_renewal_date: nextRentChargeDate,
       tenancy_status: "active",
 
       opening_balance: params.input.openingBalance,
