@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getRentCollectedForLandlord } from "@/server/repositories/payments.repository";
+import { getUpcomingRenewalCountForLandlord } from "@/server/repositories/tenancies.repository";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { requireLandlord } from "./auth.service";
 import { getThisYearPaymentFilter } from "./payments.service";
@@ -51,11 +52,14 @@ export async function getCurrentLandlordOverviewStats(): Promise<OverviewStats> 
     throw tenantError;
   }
 
-  const rentCollectedThisYear = await getRentCollectedForLandlord(
-    supabase,
-    landlord.id,
-    getThisYearPaymentFilter(),
-  );
+  const [rentCollectedThisYear, upcomingRenewals] = await Promise.all([
+    getRentCollectedForLandlord(
+      supabase,
+      landlord.id,
+      getThisYearPaymentFilter(),
+    ),
+    getUpcomingRenewalCountForLandlord(supabase, landlord.id, 90),
+  ]);
 
   const units = properties.flatMap((property) => property.units ?? []);
 
@@ -66,6 +70,6 @@ export async function getCurrentLandlordOverviewStats(): Promise<OverviewStats> 
     vacantUnits: units.filter((unit) => unit.status === "vacant").length,
     totalTenants: tenantCount ?? 0,
     rentCollectedThisYear,
-    upcomingRenewals: 0,
+    upcomingRenewals,
   };
 }

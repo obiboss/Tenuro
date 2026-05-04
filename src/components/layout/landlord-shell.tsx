@@ -53,7 +53,7 @@ const desktopNavItems = [
     label: "Renewals",
     href: "/renewals",
     icon: RefreshCcw,
-    status: "coming_soon",
+    status: "available",
   },
   {
     label: "Caretakers",

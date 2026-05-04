@@ -1,12 +1,16 @@
 import "server-only";
 
+import { differenceInCalendarDays, parseISO } from "date-fns";
 import { AppError } from "@/server/errors/app-error";
+import { postInitialTenancyLedgerEntries } from "@/server/repositories/ledger.repository";
 import {
   createTenancy,
   getActiveTenancyForTenant,
   getActiveTenancyForUnit,
+  getRenewalTenanciesForLandlord,
   getTenanciesForLandlord,
   terminateTenancy,
+  type TenancyDetailRow,
 } from "@/server/repositories/tenancies.repository";
 import { getTenantById } from "@/server/repositories/tenants.repository";
 import {
@@ -18,14 +22,101 @@ import type {
   CreateTenancyInput,
   TerminateTenancyInput,
 } from "@/server/validators/tenancy.schema";
+import { getTenancyBalanceSummary } from "@/server/repositories/ledger.repository";
 import { requireLandlord } from "./auth.service";
-import { postInitialTenancyLedgerEntries } from "@/server/repositories/ledger.repository";
+
+export type RenewalUrgency =
+  | "overdue"
+  | "due_today"
+  | "within_30_days"
+  | "within_60_days"
+  | "within_90_days"
+  | "later";
+
+export type LandlordRenewalOverviewItem = {
+  tenancy: TenancyDetailRow;
+  outstandingBalance: number;
+  daysUntilDue: number | null;
+  urgency: RenewalUrgency;
+};
+
+function getDaysUntilDue(nextRentChargeDate: string | null) {
+  if (!nextRentChargeDate) {
+    return null;
+  }
+
+  return differenceInCalendarDays(parseISO(nextRentChargeDate), new Date());
+}
+
+function getRenewalUrgency(daysUntilDue: number | null): RenewalUrgency {
+  if (daysUntilDue === null) {
+    return "later";
+  }
+
+  if (daysUntilDue < 0) {
+    return "overdue";
+  }
+
+  if (daysUntilDue === 0) {
+    return "due_today";
+  }
+
+  if (daysUntilDue <= 30) {
+    return "within_30_days";
+  }
+
+  if (daysUntilDue <= 60) {
+    return "within_60_days";
+  }
+
+  if (daysUntilDue <= 90) {
+    return "within_90_days";
+  }
+
+  return "later";
+}
 
 export async function getCurrentLandlordTenancies() {
   const landlord = await requireLandlord();
   const supabase = await createSupabaseServerClient();
 
   return getTenanciesForLandlord(supabase, landlord.id);
+}
+
+export async function getCurrentLandlordRenewalOverview() {
+  const landlord = await requireLandlord();
+  const supabase = await createSupabaseServerClient();
+
+  const tenancies = await getRenewalTenanciesForLandlord(supabase, landlord.id);
+
+  const items = await Promise.all(
+    tenancies.map(async (tenancy) => {
+      const balance = await getTenancyBalanceSummary(supabase, tenancy.id);
+      const daysUntilDue = getDaysUntilDue(tenancy.next_rent_charge_date);
+
+      return {
+        tenancy,
+        outstandingBalance: balance.outstanding_balance,
+        daysUntilDue,
+        urgency: getRenewalUrgency(daysUntilDue),
+      };
+    }),
+  );
+
+  return {
+    items,
+    summary: {
+      overdue: items.filter((item) => item.urgency === "overdue").length,
+      dueToday: items.filter((item) => item.urgency === "due_today").length,
+      within30Days: items.filter((item) => item.urgency === "within_30_days")
+        .length,
+      within60Days: items.filter((item) => item.urgency === "within_60_days")
+        .length,
+      within90Days: items.filter((item) => item.urgency === "within_90_days")
+        .length,
+      later: items.filter((item) => item.urgency === "later").length,
+    },
+  };
 }
 
 export async function getCurrentTenantActiveTenancy(tenantId: string) {

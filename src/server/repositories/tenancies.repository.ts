@@ -128,6 +128,17 @@ function createTenancyReference() {
   return `TEN-${datePart}-${randomPart}`;
 }
 
+function addDays(date: Date, days: number) {
+  const nextDate = new Date(date);
+  nextDate.setDate(nextDate.getDate() + days);
+
+  return nextDate;
+}
+
+function toDateOnly(value: Date) {
+  return value.toISOString().slice(0, 10);
+}
+
 export async function getActiveTenancyForTenant(
   supabase: SupabaseClient,
   tenantId: string,
@@ -270,6 +281,56 @@ export async function getTenanciesForLandlord(
   }
 
   return data;
+}
+
+export async function getRenewalTenanciesForLandlord(
+  supabase: SupabaseClient,
+  landlordId: string,
+) {
+  const { data, error } = await supabase
+    .from("tenancies")
+    .select(TENANCY_DETAIL_SELECT)
+    .eq("landlord_id", landlordId)
+    .eq("status", "active")
+    .is("deleted_at", null)
+    .is("archived_at", null)
+    .not("next_rent_charge_date", "is", null)
+    .order("next_rent_charge_date", { ascending: true })
+    .returns<TenancyDetailRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getUpcomingRenewalCountForLandlord(
+  supabase: SupabaseClient,
+  landlordId: string,
+  daysAhead = 90,
+) {
+  const today = new Date();
+  const upperDate = addDays(today, daysAhead);
+
+  const { count, error } = await supabase
+    .from("tenancies")
+    .select("id", {
+      count: "exact",
+      head: true,
+    })
+    .eq("landlord_id", landlordId)
+    .eq("status", "active")
+    .is("deleted_at", null)
+    .is("archived_at", null)
+    .not("next_rent_charge_date", "is", null)
+    .lte("next_rent_charge_date", toDateOnly(upperDate));
+
+  if (error) {
+    throw error;
+  }
+
+  return count ?? 0;
 }
 
 export async function getTenancyById(
