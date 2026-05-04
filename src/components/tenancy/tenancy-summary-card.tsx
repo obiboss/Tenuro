@@ -1,4 +1,9 @@
-import { CalendarDays, FileCheck2, ReceiptText } from "lucide-react";
+import {
+  CalendarDays,
+  FileCheck2,
+  ReceiptText,
+  RefreshCcw,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { TenancyDetailRow } from "@/server/repositories/tenancies.repository";
@@ -21,8 +26,23 @@ function formatDate(value: string | null) {
   }
 
   return new Intl.DateTimeFormat("en-NG", {
-    dateStyle: "medium",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
   }).format(new Date(value));
+}
+
+function formatAnchorDate(day: number | null, month: number | null) {
+  if (!day || !month) {
+    return "Not set";
+  }
+
+  const anchorDate = new Date(Date.UTC(2026, month - 1, day));
+
+  return new Intl.DateTimeFormat("en-NG", {
+    day: "2-digit",
+    month: "long",
+  }).format(anchorDate);
 }
 
 export function TenancySummaryCard({ tenancy }: TenancySummaryCardProps) {
@@ -43,8 +63,9 @@ export function TenancySummaryCard({ tenancy }: TenancySummaryCardProps) {
 
       <CardContent>
         <div className="mb-5 rounded-button bg-primary-soft p-4 text-sm leading-6 text-text-normal">
-          This record tracks rent, dates, opening balance, and ledger status. It
-          is not the full tenancy agreement document.
+          This record tracks rent, the tenant’s rent calendar, renewal anchor,
+          opening balance, and ledger status. It is not the full tenancy
+          agreement document.
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
@@ -74,20 +95,27 @@ export function TenancySummaryCard({ tenancy }: TenancySummaryCardProps) {
           <div className="rounded-button bg-background p-4">
             <div className="flex items-center gap-2 text-text-muted">
               <CalendarDays aria-hidden="true" size={18} strokeWidth={2.5} />
-              <p className="text-sm font-bold">Start Date</p>
+              <p className="text-sm font-bold">Current Rent Period</p>
             </div>
             <p className="mt-2 font-extrabold text-text-strong">
-              {formatDate(tenancy.start_date)}
+              {formatDate(tenancy.current_period_start ?? tenancy.start_date)} –{" "}
+              {formatDate(tenancy.current_period_end ?? tenancy.end_date)}
             </p>
           </div>
 
           <div className="rounded-button bg-background p-4">
             <div className="flex items-center gap-2 text-text-muted">
-              <CalendarDays aria-hidden="true" size={18} strokeWidth={2.5} />
-              <p className="text-sm font-bold">End Date</p>
+              <RefreshCcw aria-hidden="true" size={18} strokeWidth={2.5} />
+              <p className="text-sm font-bold">Renewal Anchor</p>
             </div>
             <p className="mt-2 font-extrabold text-text-strong">
-              {formatDate(tenancy.end_date)}
+              {formatAnchorDate(
+                tenancy.rent_due_day,
+                tenancy.rent_anchor_month,
+              )}
+            </p>
+            <p className="mt-1 text-sm text-text-muted">
+              Next rent charge: {formatDate(tenancy.next_rent_charge_date)}
             </p>
           </div>
         </div>

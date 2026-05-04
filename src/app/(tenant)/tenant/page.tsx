@@ -1,4 +1,10 @@
-import { CalendarDays, FileText, Home, ReceiptText } from "lucide-react";
+import {
+  CalendarDays,
+  FileText,
+  Home,
+  ReceiptText,
+  RefreshCcw,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -14,8 +20,26 @@ function formatDate(value: string | null | undefined) {
   }
 
   return new Intl.DateTimeFormat("en-NG", {
-    dateStyle: "medium",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
   }).format(new Date(value));
+}
+
+function formatAnchorDate(
+  day: number | null | undefined,
+  month: number | null | undefined,
+) {
+  if (!day || !month) {
+    return "Not available";
+  }
+
+  const anchorDate = new Date(Date.UTC(2026, month - 1, day));
+
+  return new Intl.DateTimeFormat("en-NG", {
+    day: "2-digit",
+    month: "long",
+  }).format(anchorDate);
 }
 
 function paymentMethodLabel(method: string) {
@@ -39,6 +63,7 @@ export default async function TenantDashboardPage() {
 
   const property = dashboard.tenant.units?.properties;
   const unit = dashboard.tenant.units;
+  const tenancy = dashboard.tenancy;
 
   return (
     <div className="space-y-6">
@@ -87,13 +112,13 @@ export default async function TenantDashboardPage() {
           <CardContent>
             <div className="flex items-center gap-3">
               <div className="flex size-11 items-center justify-center rounded-full bg-primary-soft text-primary">
-                <ReceiptText aria-hidden="true" size={21} strokeWidth={2.6} />
+                <RefreshCcw aria-hidden="true" size={21} strokeWidth={2.6} />
               </div>
 
               <div>
-                <p className="text-sm font-bold text-text-muted">Payments</p>
+                <p className="text-sm font-bold text-text-muted">Renewal Due</p>
                 <p className="mt-1 font-extrabold text-text-strong">
-                  {dashboard.payments.length}
+                  {formatDate(tenancy?.next_rent_charge_date)}
                 </p>
               </div>
             </div>
@@ -252,23 +277,38 @@ export default async function TenantDashboardPage() {
             </SectionCard>
           </div>
 
-          {dashboard.tenancy ? (
+          {tenancy ? (
             <SectionCard
               title="Tenancy Period"
-              description="Current active tenancy dates."
+              description="Your current rent calendar and renewal date."
             >
               <div className="space-y-3">
                 <div className="rounded-button bg-background p-4">
-                  <p className="text-sm font-bold text-text-muted">Start</p>
+                  <p className="text-sm font-bold text-text-muted">
+                    Current Rent Period
+                  </p>
                   <p className="mt-2 font-extrabold text-text-strong">
-                    {formatDate(dashboard.tenancy.start_date)}
+                    {formatDate(
+                      tenancy.current_period_start ?? tenancy.start_date,
+                    )}{" "}
+                    –{" "}
+                    {formatDate(tenancy.current_period_end ?? tenancy.end_date)}
                   </p>
                 </div>
 
                 <div className="rounded-button bg-background p-4">
-                  <p className="text-sm font-bold text-text-muted">End</p>
+                  <p className="text-sm font-bold text-text-muted">
+                    Renewal Anchor
+                  </p>
                   <p className="mt-2 font-extrabold text-text-strong">
-                    {formatDate(dashboard.tenancy.end_date)}
+                    {formatAnchorDate(
+                      tenancy.rent_due_day,
+                      tenancy.rent_anchor_month,
+                    )}
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-text-muted">
+                    Next rent charge date:{" "}
+                    {formatDate(tenancy.next_rent_charge_date)}
                   </p>
                 </div>
               </div>

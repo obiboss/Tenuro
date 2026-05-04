@@ -35,6 +35,11 @@ export type TenantDashboardTenancyRow = {
   currency_code: string;
   start_date: string;
   end_date: string;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  next_rent_charge_date: string | null;
+  rent_due_day: number | null;
+  rent_anchor_month: number | null;
   status: string;
   opening_balance: number;
 };
@@ -203,6 +208,11 @@ export async function getActiveTenantTenancy(
         currency_code,
         start_date,
         end_date,
+        current_period_start,
+        current_period_end,
+        next_rent_charge_date,
+        rent_due_day,
+        rent_anchor_month,
         status,
         opening_balance
       `,
