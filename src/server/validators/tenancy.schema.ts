@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { calculateTenancyEndDate } from "@/lib/tenancy-period";
 import {
   dateStringSchema,
   moneySchema,
@@ -17,7 +18,6 @@ export const createTenancySchema = z
       })
       .default("annual"),
     startDate: dateStringSchema,
-    endDate: dateStringSchema,
     renewalNoticeDate: dateStringSchema.optional().or(z.literal("")),
     openingBalance: moneySchema.default(0),
     openingBalanceNote: z
@@ -29,9 +29,26 @@ export const createTenancySchema = z
     agreementNotes: z.string().trim().max(2000).optional().or(z.literal("")),
     currencyCode: z.string().length(3).default("NGN"),
   })
-  .refine((value) => new Date(value.endDate) > new Date(value.startDate), {
-    path: ["endDate"],
-    message: "End date must be after start date.",
+  .transform((value, context) => {
+    try {
+      const endDate = calculateTenancyEndDate(
+        value.startDate,
+        value.paymentFrequency,
+      );
+
+      return {
+        ...value,
+        endDate,
+      };
+    } catch {
+      context.addIssue({
+        code: "custom",
+        path: ["startDate"],
+        message: "Enter a valid start date.",
+      });
+
+      return z.NEVER;
+    }
   });
 
 export const terminateTenancySchema = z.object({

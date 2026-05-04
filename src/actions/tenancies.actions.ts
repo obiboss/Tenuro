@@ -28,7 +28,6 @@ export async function createTenancyAction(
       rentAmount: formData.get("rentAmount"),
       paymentFrequency: formData.get("paymentFrequency"),
       startDate: formData.get("startDate"),
-      endDate: formData.get("endDate"),
       renewalNoticeDate: formData.get("renewalNoticeDate") || undefined,
       openingBalance: formData.get("openingBalance") || 0,
       openingBalanceNote: formData.get("openingBalanceNote"),
@@ -50,8 +49,7 @@ export async function createTenancyAction(
 
     return {
       ok: false,
-      message:
-        result.message,
+      message: result.message,
       fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
     };
   }
