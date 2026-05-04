@@ -1,7 +1,12 @@
 import "server-only";
 
-import { AppError } from "@/server/errors/app-error";
+import {
+  AUDIT_ACTOR_ROLES,
+  AUDIT_ENTITY_TYPES,
+  AUDIT_EVENT_TYPES,
+} from "@/server/constants/audit-events";
 import { getAppBaseUrl } from "@/server/constants/routes";
+import { AppError } from "@/server/errors/app-error";
 import {
   acceptTenancyAgreement,
   createTenancyAgreementDraft,
@@ -14,6 +19,12 @@ import {
   type TenancyAgreementDocumentRow,
 } from "@/server/repositories/tenancy-agreements.repository";
 import { getTenancyById } from "@/server/repositories/tenancies.repository";
+import {
+  writeAuditLog,
+  writeSystemAuditLog,
+} from "@/server/services/audit-log.service";
+import { createSignedTenancyAgreementPdfUrl } from "@/server/services/storage.service";
+import { generateAndStoreTenancyAgreementPdf } from "@/server/services/tenancy-agreement-pdf.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { sha256Hex } from "@/server/utils/crypto";
@@ -22,8 +33,6 @@ import {
   generateSecureToken,
   getExpiryDateFromNow,
 } from "@/server/utils/tokens";
-import { generateAndStoreTenancyAgreementPdf } from "@/server/services/tenancy-agreement-pdf.service";
-import { createSignedTenancyAgreementPdfUrl } from "@/server/services/storage.service";
 import type {
   AcceptTenancyAgreementInput,
   FinalizeTenancyAgreementInput,
@@ -233,13 +242,34 @@ export async function generateTenancyAgreementForCurrentLandlord(
     tenancy,
   });
 
-  return createTenancyAgreementDraft(supabase, {
+  const agreement = await createTenancyAgreementDraft(supabase, {
     landlordId: landlord.id,
     tenantId: tenancy.tenant_id,
     tenancyId: tenancy.id,
     agreementBody,
     ...snapshots,
   });
+
+  await writeAuditLog({
+    landlordId: landlord.id,
+    tenantId: tenancy.tenant_id,
+    tenancyId: tenancy.id,
+    unitId: tenancy.unit_id,
+    propertyId: tenancy.units?.properties?.id ?? null,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.agreementGenerated,
+    entityType: AUDIT_ENTITY_TYPES.agreement,
+    entityId: agreement.id,
+    description: "Tenancy agreement draft generated.",
+    metadata: {
+      agreement_id: agreement.id,
+      tenancy_reference: tenancy.tenancy_reference,
+      document_status: agreement.document_status,
+    },
+  });
+
+  return agreement;
 }
 
 export async function saveTenancyAgreementDraftForCurrentLandlord(
@@ -266,10 +296,28 @@ export async function saveTenancyAgreementDraftForCurrentLandlord(
     );
   }
 
-  return updateTenancyAgreementDraft(supabase, {
+  const updatedAgreement = await updateTenancyAgreementDraft(supabase, {
     agreementId: input.agreementId,
     agreementBody: input.agreementBody,
   });
+
+  await writeAuditLog({
+    landlordId: landlord.id,
+    tenantId: agreement.tenant_id,
+    tenancyId: agreement.tenancy_id,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.agreementSaved,
+    entityType: AUDIT_ENTITY_TYPES.agreement,
+    entityId: agreement.id,
+    description: "Tenancy agreement draft saved.",
+    metadata: {
+      agreement_id: agreement.id,
+      document_status: updatedAgreement.document_status,
+    },
+  });
+
+  return updatedAgreement;
 }
 
 export async function finalizeTenancyAgreementForCurrentLandlord(
@@ -309,6 +357,24 @@ export async function finalizeTenancyAgreementForCurrentLandlord(
     landlordName: landlord.fullName,
     agreement: updatedAgreement,
     acceptanceUrl: token.acceptanceUrl,
+  });
+
+  await writeAuditLog({
+    landlordId: landlord.id,
+    tenantId: updatedAgreement.tenant_id,
+    tenancyId: updatedAgreement.tenancy_id,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.agreementFinalized,
+    entityType: AUDIT_ENTITY_TYPES.agreement,
+    entityId: updatedAgreement.id,
+    description: "Tenancy agreement finalized and acceptance link prepared.",
+    metadata: {
+      agreement_id: updatedAgreement.id,
+      document_status: updatedAgreement.document_status,
+      finalized_at: updatedAgreement.finalized_at,
+      token_expires_at: updatedAgreement.tenant_acceptance_token_expires_at,
+    },
   });
 
   return {
@@ -447,6 +513,25 @@ export async function acceptTenancyAgreementFromTenant(
   const pdfDownloadUrl = await createSignedTenancyAgreementPdfUrl(
     agreementWithPdf.pdf_path,
   );
+
+  await writeSystemAuditLog({
+    landlordId: agreementWithPdf.landlord_id,
+    tenantId: agreementWithPdf.tenant_id,
+    tenancyId: agreementWithPdf.tenancy_id,
+    eventType: AUDIT_EVENT_TYPES.agreementAccepted,
+    entityType: AUDIT_ENTITY_TYPES.agreement,
+    entityId: agreementWithPdf.id,
+    description: "Tenant accepted tenancy agreement.",
+    metadata: {
+      agreement_id: agreementWithPdf.id,
+      accepted_at: agreementWithPdf.tenant_accepted_at,
+      ip_address: input.ipAddress,
+      user_agent: input.userAgent,
+      pdf_path: agreementWithPdf.pdf_path,
+    },
+    ipAddress: input.ipAddress,
+    userAgent: input.userAgent,
+  });
 
   return {
     agreement: agreementWithPdf,

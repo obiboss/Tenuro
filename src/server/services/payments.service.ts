@@ -1,12 +1,18 @@
 import "server-only";
 
+import {
+  AUDIT_ACTOR_ROLES,
+  AUDIT_ENTITY_TYPES,
+  AUDIT_EVENT_TYPES,
+} from "@/server/constants/audit-events";
 import { AppError } from "@/server/errors/app-error";
+import { getTenancyPaymentContext } from "@/server/repositories/payment-context.repository";
 import {
   getRentPaymentsForLandlord,
   recordManualRentPaymentViaRpc,
   type RentPaymentFilter,
 } from "@/server/repositories/payments.repository";
-import { getTenancyPaymentContext } from "@/server/repositories/payment-context.repository";
+import { writeAuditLog } from "@/server/services/audit-log.service";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import type { RecordManualPaymentInput } from "@/server/validators/payment.schema";
 import { requireLandlord } from "./auth.service";
@@ -55,20 +61,45 @@ export async function recordManualPaymentForCurrentLandlord(
     );
   }
 
+  const periodStart = input.paymentForPeriodStart
+    ? input.paymentForPeriodStart.toISOString().slice(0, 10)
+    : null;
+
+  const periodEnd = input.paymentForPeriodEnd
+    ? input.paymentForPeriodEnd.toISOString().slice(0, 10)
+    : null;
+
   const paymentId = await recordManualRentPaymentViaRpc(supabase, {
     tenancyId: input.tenancyId,
     amountPaid: input.amountPaid,
     paymentMethod: input.paymentMethod,
     paymentReference: input.paymentReference || null,
     paymentDate: input.paymentDate.toISOString(),
-    periodStart: input.paymentForPeriodStart
-      ? input.paymentForPeriodStart.toISOString().slice(0, 10)
-      : null,
-    periodEnd: input.paymentForPeriodEnd
-      ? input.paymentForPeriodEnd.toISOString().slice(0, 10)
-      : null,
+    periodStart,
+    periodEnd,
     notes: input.notes || null,
     idempotencyKey: input.idempotencyKey,
+  });
+
+  await writeAuditLog({
+    landlordId: landlord.id,
+    tenantId: tenancy.tenant_id,
+    tenancyId: tenancy.id,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.manualPaymentRecorded,
+    entityType: AUDIT_ENTITY_TYPES.payment,
+    entityId: paymentId,
+    description: "Manual rent payment recorded.",
+    metadata: {
+      payment_id: paymentId,
+      amount_paid: input.amountPaid,
+      payment_method: input.paymentMethod,
+      payment_reference: input.paymentReference || null,
+      payment_date: input.paymentDate.toISOString(),
+      period_start: periodStart,
+      period_end: periodEnd,
+    },
   });
 
   return {

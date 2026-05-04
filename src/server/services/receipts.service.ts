@@ -1,6 +1,10 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  AUDIT_ENTITY_TYPES,
+  AUDIT_EVENT_TYPES,
+} from "@/server/constants/audit-events";
 import { AppError } from "@/server/errors/app-error";
 import { getGatewayPaymentIntentByReference } from "@/server/repositories/gateway-payment.repository";
 import {
@@ -9,12 +13,13 @@ import {
   type RentPaymentRow,
   updateRentPaymentReceipt,
 } from "@/server/repositories/payments.repository";
-import { createSupabaseAdminClient } from "@/server/supabase/admin";
-import { createSupabaseServerClient } from "@/server/supabase/server";
+import { writeSystemAuditLog } from "@/server/services/audit-log.service";
 import {
   createSignedRentReceiptPdfUrl,
   uploadRentReceiptPdf,
 } from "@/server/services/storage.service";
+import { createSupabaseAdminClient } from "@/server/supabase/admin";
+import { createSupabaseServerClient } from "@/server/supabase/server";
 import { formatNaira } from "@/server/utils/money";
 import { requireLandlord } from "./auth.service";
 import { renderRentReceiptPdf } from "./receipt-pdf.service";
@@ -159,6 +164,23 @@ async function generateRentReceiptWithClient(params: {
       paymentId: params.payment.id,
       receiptPath,
       receiptNumber,
+    });
+
+    await writeSystemAuditLog({
+      landlordId: updatedPayment.landlord_id,
+      tenantId: updatedPayment.tenant_id,
+      tenancyId: updatedPayment.tenancy_id,
+      eventType: AUDIT_EVENT_TYPES.receiptGenerated,
+      entityType: AUDIT_ENTITY_TYPES.receipt,
+      entityId: updatedPayment.id,
+      description: "Rent receipt generated.",
+      metadata: {
+        payment_id: updatedPayment.id,
+        receipt_number: updatedPayment.receipt_number,
+        receipt_path: updatedPayment.receipt_path,
+        amount_paid: updatedPayment.amount_paid,
+        payment_date: updatedPayment.payment_date,
+      },
     });
 
     const receiptDownloadUrl = await createSignedRentReceiptPdfUrl(receiptPath);

@@ -1,5 +1,9 @@
 import "server-only";
 
+import {
+  AUDIT_ENTITY_TYPES,
+  AUDIT_EVENT_TYPES,
+} from "@/server/constants/audit-events";
 import { AppError, isAppError } from "@/server/errors/app-error";
 import {
   getGatewayPaymentIntentByReference,
@@ -16,7 +20,7 @@ import {
   findPaymentByIdempotencyKey,
   recordGatewayRentPaymentViaRpc,
 } from "@/server/repositories/payments.repository";
-import { createSupabaseAdminClient } from "@/server/supabase/admin";
+import { writeSystemAuditLog } from "@/server/services/audit-log.service";
 import {
   convertKoboToNaira,
   convertNairaToKobo,
@@ -25,6 +29,7 @@ import {
   verifyPaystackWebhookSignature,
 } from "@/server/services/paystack.service";
 import { generateRentReceiptSystem } from "@/server/services/receipts.service";
+import { createSupabaseAdminClient } from "@/server/supabase/admin";
 
 export type GatewayPaymentWebhookResult = {
   status: "processed" | "duplicate" | "ignored" | "failed";
@@ -179,6 +184,27 @@ export async function processVerifiedGatewayPaymentReference(
     paymentId,
     paidAt: verifiedTransaction.paid_at ?? new Date().toISOString(),
     verifiedPayload,
+  });
+
+  await writeSystemAuditLog({
+    landlordId: intent.landlord_id,
+    tenantId: intent.tenant_id,
+    tenancyId: intent.tenancy_id,
+    eventType: AUDIT_EVENT_TYPES.gatewayPaymentVerified,
+    entityType: AUDIT_ENTITY_TYPES.payment,
+    entityId: paymentId,
+    description: "Paystack gateway payment verified.",
+    metadata: {
+      payment_id: paymentId,
+      gateway_payment_intent_id: intent.id,
+      paystack_reference: intent.paystack_reference,
+      amount_paid: intent.rent_amount,
+      total_amount: intent.total_amount,
+      verified_amount_kobo: verifiedTransaction.amount,
+      paid_at: verifiedTransaction.paid_at,
+      period_start: intent.period_start,
+      period_end: intent.period_end,
+    },
   });
 
   await generateReceiptSafely(paymentId);

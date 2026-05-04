@@ -1,6 +1,11 @@
 import "server-only";
 
 import crypto from "node:crypto";
+import {
+  AUDIT_ACTOR_ROLES,
+  AUDIT_ENTITY_TYPES,
+  AUDIT_EVENT_TYPES,
+} from "@/server/constants/audit-events";
 import { AppError } from "@/server/errors/app-error";
 import {
   createGatewayPaymentIntent,
@@ -10,6 +15,7 @@ import {
 import { getActiveLandlordPaystackAccount } from "@/server/repositories/landlord-paystack.repository";
 import { getTenancyPaymentContext } from "@/server/repositories/payment-context.repository";
 import { getTenancyAgreementByTenancyId } from "@/server/repositories/tenancy-agreements.repository";
+import { writeAuditLog } from "@/server/services/audit-log.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { normalisePhoneNumber } from "@/server/utils/phone";
@@ -320,6 +326,29 @@ export async function initializeRentPayment(input: InitializeRentPaymentInput) {
   });
 
   const tenantPaymentUrl = getTenantPaymentUrl(intent.paystack_reference);
+
+  await writeAuditLog({
+    landlordId: landlord.id,
+    tenantId: tenancy.tenant_id,
+    tenancyId: tenancy.id,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.paymentLinkSent,
+    entityType: AUDIT_ENTITY_TYPES.payment,
+    entityId: intent.id,
+    description: "Tenant rent payment link sent.",
+    metadata: {
+      gateway_payment_intent_id: intent.id,
+      paystack_reference: intent.paystack_reference,
+      rent_amount: rentAmount,
+      tenuro_fee_amount: tenuroFeeAmount,
+      total_amount: totalAmount,
+      period_start: input.periodStart ?? null,
+      period_end: input.periodEnd ?? null,
+      property_name: propertyName,
+      unit_identifier: unitName,
+    },
+  });
 
   return {
     tenantId: tenancy.tenant_id,
