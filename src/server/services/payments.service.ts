@@ -73,5 +73,6 @@ export async function recordManualPaymentForCurrentLandlord(
 
   return {
     paymentId,
+    tenantId: tenancy.tenant_id,
   };
 }

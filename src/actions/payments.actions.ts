@@ -118,6 +118,7 @@ export async function recordManualPaymentAction(
     revalidatePath("/payments");
     revalidatePath("/overview");
     revalidatePath("/tenants");
+    revalidatePath(`/tenants/${result.tenantId}`);
 
     try {
       const receipt = await generateRentReceiptForCurrentLandlord(

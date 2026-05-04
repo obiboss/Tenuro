@@ -85,7 +85,9 @@ export default async function TenantDetailPage({
 
   const canCreateTenancyRecord = isTenantApproved && !activeTenancy;
 
-  const shouldShowOnboardingCard = !isTenantApproved;
+  const shouldShowOnboardingCard =
+    tenant.onboarding_status === "invited" ||
+    tenant.onboarding_status === "rejected";
 
   const shouldShowActivationCard = Boolean(
     isTenantApproved &&
@@ -97,17 +99,19 @@ export default async function TenantDetailPage({
 
   const nextStepDescription = tenant.profile_id
     ? "This tenant already has an active tenant account."
-    : !isTenantApproved
-      ? "Generate and send the tenant onboarding link so they can complete their profile, ID document, and guarantor details."
-      : !activeTenancy
-        ? "Create the tenancy record before sending agreement, payment, or account activation links."
-        : !agreementDocument
-          ? "Generate the tenancy agreement draft and prepare it for tenant acceptance."
-          : !isAgreementAccepted
-            ? "Finalize the agreement and send the tenant acceptance link."
-            : hasOutstandingBalance
-              ? "Send the tenant rent payment link before account activation."
-              : "Generate and send the tenant activation link so they can set their password and access their dashboard.";
+    : tenant.onboarding_status === "profile_complete"
+      ? "Review the tenant KYC submission and approve the tenant before creating the tenancy record."
+      : !isTenantApproved
+        ? "Send the tenant onboarding link so they can complete their profile, ID document, and guarantor details."
+        : !activeTenancy
+          ? "Create the tenancy record before sending agreement, payment, or account activation links."
+          : !agreementDocument
+            ? "Generate the tenancy agreement draft before sending it to the tenant."
+            : !isAgreementAccepted
+              ? "Send the agreement acceptance link to the tenant."
+              : hasOutstandingBalance
+                ? "Send the tenant rent payment link before account activation."
+                : "Send the tenant activation link so they can set their password and access their dashboard.";
 
   return (
     <div>
@@ -263,7 +267,7 @@ export default async function TenantDetailPage({
           {canSendPaymentLink && activeTenancy ? (
             <SectionCard
               title="Send Tenant Payment Link"
-              description="Prepare a Paystack rent payment checkout for this tenant. The tenant pays rent plus the Tenuro fee through the payment link."
+              description="Send a secure Paystack rent payment link to the tenant on WhatsApp. The tenant must fully settle the balance before account activation becomes available."
             >
               <RentPaymentModal
                 tenancyId={activeTenancy.id}
