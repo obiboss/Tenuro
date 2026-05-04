@@ -272,6 +272,8 @@ export default async function TenantDetailPage({
               <RentPaymentModal
                 tenancyId={activeTenancy.id}
                 defaultAmount={outstandingBalance}
+                periodStart={activeTenancy.start_date}
+                periodEnd={activeTenancy.end_date}
               />
             </SectionCard>
           ) : null}

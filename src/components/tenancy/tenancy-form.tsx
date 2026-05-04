@@ -58,7 +58,7 @@ export function TenancyForm({
 
   const displayedEndDate = calculatedEndDate
     ? formatDisplayDate(calculatedEndDate)
-    : "Select a valid start date";
+    : "Select a valid rent start date";
 
   function handleStartDateChange(event: ChangeEvent<HTMLInputElement>) {
     setStartDate(event.target.value);
@@ -82,7 +82,7 @@ export function TenancyForm({
           <div className="space-y-5">
             <TrustNotice
               title="Create rental agreement"
-              description="Set the rent amount and start date. Tenuro automatically calculates the rent period end date using the selected payment frequency."
+              description="Set the rent amount and agreed rent start date. This date controls the tenant’s rent calendar, renewal date, agreement period, and payment period."
             />
 
             {state.message ? (
@@ -124,23 +124,25 @@ export function TenancyForm({
 
             <div className="grid gap-4 md:grid-cols-2">
               <Input
-                label="Start date"
+                label="Rent start / move-in date"
                 name="startDate"
                 type="date"
                 value={startDate}
                 onChange={handleStartDateChange}
                 error={state.fieldErrors?.startDate?.[0]}
-                helperText="Default is today. Change only if the tenant moves in later."
+                helperText="Use the agreed date the tenant’s rent calendar starts. This may be different from the payment date."
                 required
               />
 
               <div className="rounded-button border border-border-soft bg-background px-4 py-3">
-                <p className="text-sm font-bold text-text-muted">End date</p>
+                <p className="text-sm font-bold text-text-muted">
+                  Rent end date
+                </p>
                 <p className="mt-2 text-lg font-extrabold text-text-strong">
                   {displayedEndDate}
                 </p>
                 <p className="mt-1 text-sm leading-6 text-text-muted">
-                  Automatically calculated from the start date and payment
+                  Automatically calculated from the rent start date and payment
                   frequency.
                 </p>
               </div>
