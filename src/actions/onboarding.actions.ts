@@ -16,6 +16,7 @@ export type OnboardingInviteActionState = {
   message: string;
   onboardingUrl?: string;
   whatsappMessage?: string;
+  tenantWhatsappNumber?: string;
   expiresAt?: string;
   notificationId?: string;
   fieldErrors?: Record<string, string[]>;
@@ -43,6 +44,7 @@ export async function generateTenantOnboardingLinkAction(
       message: "Onboarding link prepared.",
       onboardingUrl: result.onboardingUrl,
       whatsappMessage: result.messageBody,
+      tenantWhatsappNumber: result.tenantWhatsappNumber,
       expiresAt: result.expiresAt,
       notificationId: result.notificationId,
     };

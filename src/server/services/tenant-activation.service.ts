@@ -12,13 +12,13 @@ import { upsertProfile } from "@/server/repositories/profiles.repository";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { sha256Hex } from "@/server/utils/crypto";
+import { normalisePhoneNumber } from "@/server/utils/phone";
 import {
   generateSecureToken,
   getExpiryDateFromNow,
 } from "@/server/utils/tokens";
 import type { ActivateTenantAccountInput } from "@/server/validators/tenant-activation.schema";
 import { requireLandlord } from "./auth.service";
-import { normalisePhoneNumber } from "@/server/utils/phone";
 
 function getAppBaseUrl() {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
@@ -78,6 +78,7 @@ export async function generateTenantActivationLink(tenantId: string) {
     );
   }
 
+  const tenantPhone = normalisePhoneNumber(tenant.phone_number);
   const rawToken = generateSecureToken();
   const tokenHash = sha256Hex(rawToken);
   const expiresAt = getExpiryDateFromNow(72);
@@ -97,6 +98,7 @@ export async function generateTenantActivationLink(tenantId: string) {
   return {
     activationUrl,
     expiresAt: expiresAt.toISOString(),
+    tenantWhatsappNumber: tenantPhone.national,
     whatsappMessage: buildActivationMessage({
       tenantName: tenant.full_name,
       propertyName,
@@ -166,7 +168,6 @@ export async function activateTenantAccount(input: ActivateTenantAccountInput) {
 
   const adminSupabase = createSupabaseAdminClient();
   const userSupabase = await createSupabaseServerClient();
-
   const normalisedPhone = normalisePhoneNumber(tenant.phone_number);
 
   const { data, error } = await userSupabase.auth.signUp({
@@ -192,7 +193,7 @@ export async function activateTenantAccount(input: ActivateTenantAccountInput) {
     id: data.user.id,
     role: "tenant",
     fullName: tenant.full_name,
-    phoneNumber: tenant.phone_number,
+    phoneNumber: normalisedPhone.e164,
     email: tenant.email,
   });
 

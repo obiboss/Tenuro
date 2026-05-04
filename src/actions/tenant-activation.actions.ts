@@ -17,6 +17,7 @@ export type TenantActivationInviteActionState = {
   message: string;
   activationUrl?: string;
   whatsappMessage?: string;
+  tenantWhatsappNumber?: string;
   expiresAt?: string;
   fieldErrors?: Record<string, string[]>;
 };
@@ -43,6 +44,7 @@ export async function generateTenantActivationLinkAction(
       message: "Tenant activation link prepared.",
       activationUrl: result.activationUrl,
       whatsappMessage: result.whatsappMessage,
+      tenantWhatsappNumber: result.tenantWhatsappNumber,
       expiresAt: result.expiresAt,
     };
   } catch (error) {

@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
+import { Copy } from "lucide-react";
 import {
   finalizeTenancyAgreementAction,
   generateTenancyAgreementAction,
@@ -21,6 +22,7 @@ import {
 } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { TrustNotice } from "@/components/ui/trust-notice";
+import { WhatsAppSendButton } from "@/components/ui/whatsapp-send-button";
 import type { TenancyAgreementDocumentRow } from "@/server/repositories/tenancy-agreements.repository";
 
 type TenancyAgreementDocumentCardProps = {
@@ -60,24 +62,75 @@ function getStatusTone(status: TenancyAgreementDocumentRow["document_status"]) {
   return "warning" as const;
 }
 
-function AgreementLinkBox({ url }: { url?: string }) {
+function AgreementLinkBox({
+  url,
+  message,
+  phoneNumber,
+}: {
+  url?: string;
+  message?: string;
+  phoneNumber?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
   if (!url) {
     return null;
   }
 
+  async function copyAgreementMessage() {
+    if (!message) {
+      return;
+    }
+
+    await navigator.clipboard.writeText(message);
+    setCopied(true);
+  }
+
+  const canSendViaWhatsApp = Boolean(phoneNumber && message);
+
   return (
-    <div className="rounded-button bg-success-soft p-4">
-      <p className="text-sm font-extrabold text-success">
-        Tenant acceptance link
-      </p>
+    <div className="space-y-3 rounded-button bg-success-soft p-4">
+      <div>
+        <p className="text-sm font-extrabold text-success">
+          Tenant acceptance link ready
+        </p>
 
-      <p className="mt-2 break-all text-sm font-semibold leading-6 text-text-strong">
-        {url}
-      </p>
+        <p className="mt-2 break-all text-sm font-semibold leading-6 text-text-strong">
+          {url}
+        </p>
+      </div>
 
-      <p className="mt-2 text-sm leading-6 text-text-muted">
-        Copy and send this link to the tenant on WhatsApp.
-      </p>
+      {message ? (
+        <div className="rounded-button bg-white/70 p-3">
+          <p className="text-xs font-extrabold uppercase tracking-wide text-text-muted">
+            Message preview
+          </p>
+
+          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-text-normal">
+            {message}
+          </p>
+        </div>
+      ) : null}
+
+      {canSendViaWhatsApp ? (
+        <WhatsAppSendButton
+          phoneNumber={phoneNumber ?? ""}
+          message={message ?? ""}
+          label="Send Agreement Link"
+        />
+      ) : null}
+
+      {message ? (
+        <Button
+          type="button"
+          variant="secondary"
+          fullWidth
+          onClick={copyAgreementMessage}
+        >
+          <Copy aria-hidden="true" size={18} strokeWidth={2.6} />
+          {copied ? "Copied" : "Copy Message"}
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -241,6 +294,11 @@ export function TenancyAgreementDocumentCard({
         <div className="space-y-4">
           <AgreementLinkBox
             url={finalizeState.acceptanceUrl || linkState.acceptanceUrl}
+            message={finalizeState.whatsappMessage || linkState.whatsappMessage}
+            phoneNumber={
+              finalizeState.tenantWhatsappNumber ||
+              linkState.tenantWhatsappNumber
+            }
           />
 
           <PdfDownloadBox url={currentPdfDownloadUrl} />

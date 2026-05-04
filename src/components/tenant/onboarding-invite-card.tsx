@@ -7,6 +7,7 @@ import { initialOnboardingInviteActionState } from "@/actions/onboarding.state";
 import { Button } from "@/components/ui/button";
 import { SectionCard } from "@/components/ui/section-card";
 import { TrustNotice } from "@/components/ui/trust-notice";
+import { WhatsAppSendButton } from "@/components/ui/whatsapp-send-button";
 
 type OnboardingInviteCardProps = {
   tenantId: string;
@@ -28,17 +29,21 @@ export function OnboardingInviteCard({ tenantId }: OnboardingInviteCardProps) {
     setCopied(true);
   }
 
+  const canSendViaWhatsApp = Boolean(
+    state.tenantWhatsappNumber && state.whatsappMessage,
+  );
+
   return (
     <SectionCard
       title="Tenant Onboarding"
-      description="Prepare a secure link the tenant can use to complete their profile."
+      description="Prepare and send a secure link for the tenant to complete their profile."
     >
       <form action={formAction} className="space-y-4">
         <input type="hidden" name="tenantId" value={tenantId} />
 
         <TrustNotice
           title="Secure tenant link"
-          description="The link expires after 72 hours and only the protected token is stored."
+          description="Generate the link, then send it directly to the tenant on WhatsApp."
           icon={
             <MessageCircle aria-hidden="true" size={22} strokeWidth={2.6} />
           }
@@ -61,21 +66,21 @@ export function OnboardingInviteCard({ tenantId }: OnboardingInviteCardProps) {
           <div className="space-y-3">
             <div className="rounded-button bg-background p-4">
               <p className="text-sm font-bold text-text-strong">
-                Onboarding link
+                Message preview
               </p>
-              <p className="mt-2 break-all text-sm leading-6 text-text-muted">
-                {state.onboardingUrl}
-              </p>
-            </div>
 
-            <div className="rounded-button bg-background p-4">
-              <p className="text-sm font-bold text-text-strong">
-                WhatsApp message
-              </p>
-              <p className="mt-2 text-sm leading-6 text-text-muted">
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-text-muted">
                 {state.whatsappMessage}
               </p>
             </div>
+
+            {canSendViaWhatsApp ? (
+              <WhatsAppSendButton
+                phoneNumber={state.tenantWhatsappNumber ?? ""}
+                message={state.whatsappMessage ?? ""}
+                label="Send Onboarding Link"
+              />
+            ) : null}
 
             <Button
               type="button"
@@ -84,7 +89,7 @@ export function OnboardingInviteCard({ tenantId }: OnboardingInviteCardProps) {
               onClick={copyInviteText}
             >
               <Copy aria-hidden="true" size={18} strokeWidth={2.6} />
-              {copied ? "Copied" : "Copy WhatsApp Message"}
+              {copied ? "Copied" : "Copy Message"}
             </Button>
           </div>
         ) : null}

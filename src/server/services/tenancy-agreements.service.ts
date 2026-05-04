@@ -11,11 +11,13 @@ import {
   getTenancyAgreementByTenancyId,
   refreshAgreementAcceptanceToken,
   updateTenancyAgreementDraft,
+  type TenancyAgreementDocumentRow,
 } from "@/server/repositories/tenancy-agreements.repository";
 import { getTenancyById } from "@/server/repositories/tenancies.repository";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { sha256Hex } from "@/server/utils/crypto";
+import { normalisePhoneNumber } from "@/server/utils/phone";
 import {
   generateSecureToken,
   getExpiryDateFromNow,
@@ -32,6 +34,78 @@ import type {
 } from "@/server/validators/tenancy-agreement.schema";
 import { requireLandlord } from "./auth.service";
 import { buildTenancyAgreementTemplate } from "./tenancy-agreement-template.service";
+
+function getSnapshotTextValue(
+  snapshot: Record<string, unknown>,
+  key: string,
+  fallback: string,
+) {
+  const value = snapshot[key];
+
+  return typeof value === "string" && value.trim() ? value : fallback;
+}
+
+function buildAgreementWhatsAppMessage(params: {
+  tenantName: string;
+  landlordName: string;
+  propertyName: string;
+  unitName: string;
+  acceptanceUrl: string;
+}) {
+  return [
+    `Hello ${params.tenantName},`,
+    "",
+    `${params.landlordName} has prepared your tenancy agreement for ${params.unitName} at ${params.propertyName}.`,
+    "",
+    "Please open this secure link to review and accept the agreement:",
+    params.acceptanceUrl,
+    "",
+    "After acceptance, your rent payment link can be sent to you.",
+  ].join("\n");
+}
+
+function buildAgreementDeliveryDetails(params: {
+  landlordName: string;
+  agreement: TenancyAgreementDocumentRow;
+  acceptanceUrl: string;
+}) {
+  const tenantName = getSnapshotTextValue(
+    params.agreement.tenant_snapshot,
+    "fullName",
+    "Tenant",
+  );
+
+  const tenantPhoneNumber = getSnapshotTextValue(
+    params.agreement.tenant_snapshot,
+    "phoneNumber",
+    "",
+  );
+
+  const propertyName = getSnapshotTextValue(
+    params.agreement.property_snapshot,
+    "propertyName",
+    "your apartment",
+  );
+
+  const unitName = getSnapshotTextValue(
+    params.agreement.property_snapshot,
+    "unitIdentifier",
+    "your unit",
+  );
+
+  const tenantPhone = normalisePhoneNumber(tenantPhoneNumber);
+
+  return {
+    tenantWhatsappNumber: tenantPhone.national,
+    whatsappMessage: buildAgreementWhatsAppMessage({
+      tenantName,
+      landlordName: params.landlordName,
+      propertyName,
+      unitName,
+      acceptanceUrl: params.acceptanceUrl,
+    }),
+  };
+}
 
 function buildAgreementUrl(token: string) {
   return `${getAppBaseUrl()}/t/agreement/${token}`;
@@ -231,9 +305,16 @@ export async function finalizeTenancyAgreementForCurrentLandlord(
     tokenExpiresAt: token.expiresAt.toISOString(),
   });
 
+  const deliveryDetails = buildAgreementDeliveryDetails({
+    landlordName: landlord.fullName,
+    agreement: updatedAgreement,
+    acceptanceUrl: token.acceptanceUrl,
+  });
+
   return {
     agreement: updatedAgreement,
     acceptanceUrl: token.acceptanceUrl,
+    ...deliveryDetails,
   };
 }
 
@@ -272,9 +353,16 @@ export async function refreshTenancyAgreementAcceptanceLinkForCurrentLandlord(
     tokenExpiresAt: token.expiresAt.toISOString(),
   });
 
+  const deliveryDetails = buildAgreementDeliveryDetails({
+    landlordName: landlord.fullName,
+    agreement: updatedAgreement,
+    acceptanceUrl: token.acceptanceUrl,
+  });
+
   return {
     agreement: updatedAgreement,
     acceptanceUrl: token.acceptanceUrl,
+    ...deliveryDetails,
   };
 }
 

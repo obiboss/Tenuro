@@ -25,6 +25,8 @@ export type TenancyAgreementActionState = {
   message: string;
   agreementId?: string;
   acceptanceUrl?: string;
+  whatsappMessage?: string;
+  tenantWhatsappNumber?: string;
   pdfDownloadUrl?: string | null;
   fieldErrors?: Record<string, string[]>;
 };
@@ -113,6 +115,8 @@ export async function finalizeTenancyAgreementAction(
       message: "Agreement finalized. Send the acceptance link to the tenant.",
       agreementId: result.agreement.id,
       acceptanceUrl: result.acceptanceUrl,
+      whatsappMessage: result.whatsappMessage,
+      tenantWhatsappNumber: result.tenantWhatsappNumber,
     };
   } catch (error) {
     console.error("finalizeTenancyAgreementAction failed:", error);
@@ -147,6 +151,8 @@ export async function refreshTenancyAgreementAcceptanceLinkAction(
       message: "Agreement acceptance link prepared.",
       agreementId: result.agreement.id,
       acceptanceUrl: result.acceptanceUrl,
+      whatsappMessage: result.whatsappMessage,
+      tenantWhatsappNumber: result.tenantWhatsappNumber,
     };
   } catch (error) {
     console.error("refreshTenancyAgreementAcceptanceLinkAction failed:", error);

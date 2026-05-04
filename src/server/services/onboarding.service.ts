@@ -18,6 +18,7 @@ import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { sha256Hex } from "@/server/utils/crypto";
 import { encryptText } from "@/server/utils/encryption";
+import { normalisePhoneNumber } from "@/server/utils/phone";
 import {
   generateSecureToken,
   getExpiryDateFromNow,
@@ -49,6 +50,7 @@ export async function generateTenantOnboardingLink(tenantId: string) {
     );
   }
 
+  const tenantPhone = normalisePhoneNumber(tenant.phone_number);
   const unit = await getUnitWithPropertyById(supabase, tenant.unit_id);
 
   if (!unit.properties) {
@@ -101,6 +103,7 @@ export async function generateTenantOnboardingLink(tenantId: string) {
     expiresAt: expiresAt.toISOString(),
     notificationId: notification.id,
     messageBody,
+    tenantWhatsappNumber: tenantPhone.national,
   };
 }
 

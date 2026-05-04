@@ -7,15 +7,14 @@ import { initialTenantActivationInviteActionState } from "@/actions/tenant-activ
 import { Button } from "@/components/ui/button";
 import { SectionCard } from "@/components/ui/section-card";
 import { TrustNotice } from "@/components/ui/trust-notice";
+import { WhatsAppSendButton } from "@/components/ui/whatsapp-send-button";
 
 type TenantActivationInviteCardProps = {
   tenantId: string;
-  disabled?: boolean;
 };
 
 export function TenantActivationInviteCard({
   tenantId,
-  disabled = false,
 }: TenantActivationInviteCardProps) {
   const [copied, setCopied] = useState(false);
 
@@ -33,21 +32,21 @@ export function TenantActivationInviteCard({
     setCopied(true);
   }
 
+  const canSendViaWhatsApp = Boolean(
+    state.tenantWhatsappNumber && state.whatsappMessage,
+  );
+
   return (
     <SectionCard
       title="Tenant Account Activation"
-      description="Prepare the link the tenant uses to set a password and access their dashboard."
+      description="Send the password setup link after the tenant has completed the required rental steps."
     >
       <form action={formAction} className="space-y-4">
         <input type="hidden" name="tenantId" value={tenantId} />
 
         <TrustNotice
           title="Password setup link"
-          description={
-            disabled
-              ? "Approve the tenant before sending account activation."
-              : "The tenant will use this secure link to create their login password."
-          }
+          description="The tenant will use this secure link to create their login password."
           icon={<KeyRound aria-hidden="true" size={22} strokeWidth={2.6} />}
         />
 
@@ -68,21 +67,21 @@ export function TenantActivationInviteCard({
           <div className="space-y-3">
             <div className="rounded-button bg-background p-4">
               <p className="text-sm font-bold text-text-strong">
-                Activation link
+                Message preview
               </p>
-              <p className="mt-2 break-all text-sm leading-6 text-text-muted">
-                {state.activationUrl}
-              </p>
-            </div>
 
-            <div className="rounded-button bg-background p-4">
-              <p className="text-sm font-bold text-text-strong">
-                WhatsApp message
-              </p>
               <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-text-muted">
                 {state.whatsappMessage}
               </p>
             </div>
+
+            {canSendViaWhatsApp ? (
+              <WhatsAppSendButton
+                phoneNumber={state.tenantWhatsappNumber ?? ""}
+                message={state.whatsappMessage ?? ""}
+                label="Send Activation Link"
+              />
+            ) : null}
 
             <Button
               type="button"
@@ -91,17 +90,12 @@ export function TenantActivationInviteCard({
               onClick={copyInviteText}
             >
               <Copy aria-hidden="true" size={18} strokeWidth={2.6} />
-              {copied ? "Copied" : "Copy WhatsApp Message"}
+              {copied ? "Copied" : "Copy Message"}
             </Button>
           </div>
         ) : null}
 
-        <Button
-          type="submit"
-          isLoading={isPending}
-          fullWidth
-          disabled={disabled}
-        >
+        <Button type="submit" isLoading={isPending} fullWidth>
           Generate Activation Link
         </Button>
       </form>
