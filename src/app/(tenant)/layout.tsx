@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { Building2, LogOut } from "lucide-react";
-import { signOutAction } from "@/actions/auth.actions";
+import { Building2 } from "lucide-react";
+import { LogoutButton } from "@/components/auth/logout-button";
+import { TenantMobileNav } from "@/components/layout/tenant-mobile-nav";
 import { requireTenant } from "@/server/services/auth.service";
 
 type TenantLayoutProps = {
@@ -12,18 +13,18 @@ export default async function TenantLayout({ children }: TenantLayoutProps) {
 
   return (
     <main className="min-h-screen bg-background">
-      <header className="border-b border-border-soft bg-white">
+      <header className="sticky top-0 z-30 border-b border-border-soft bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 md:px-6">
-          <Link href="/tenant" className="flex items-center gap-3">
-            <div className="flex size-11 items-center justify-center rounded-2xl bg-primary text-white shadow-soft">
+          <Link href="/tenant" className="flex min-w-0 items-center gap-3">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-white shadow-soft">
               <Building2 aria-hidden="true" size={23} strokeWidth={2.7} />
             </div>
 
-            <div>
-              <p className="text-lg font-extrabold tracking-tight text-text-strong">
+            <div className="min-w-0">
+              <p className="truncate text-lg font-extrabold tracking-tight text-text-strong">
                 Tenuro
               </p>
-              <p className="text-xs font-semibold text-text-muted">
+              <p className="truncate text-xs font-semibold text-text-muted">
                 Tenant dashboard
               </p>
             </div>
@@ -34,22 +35,16 @@ export default async function TenantLayout({ children }: TenantLayoutProps) {
               {tenant.fullName}
             </p>
 
-            <form action={signOutAction}>
-              <button
-                type="submit"
-                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-button border border-border-soft bg-white px-4 py-2 text-sm font-extrabold text-text-strong shadow-soft hover:bg-background"
-              >
-                <LogOut aria-hidden="true" size={16} strokeWidth={2.6} />
-                Sign out
-              </button>
-            </form>
+            <LogoutButton className="shrink-0" />
           </div>
         </div>
       </header>
 
-      <section className="mx-auto max-w-6xl px-4 py-8 md:px-6 lg:py-10">
+      <section className="mx-auto max-w-6xl px-4 py-8 pb-28 md:px-6 lg:py-10">
         {children}
       </section>
+
+      <TenantMobileNav />
     </main>
   );
 }

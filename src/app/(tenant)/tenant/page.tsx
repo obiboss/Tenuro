@@ -48,7 +48,7 @@ export default async function TenantDashboardPage() {
         action={<Badge tone="success">Tenant</Badge>}
       />
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div id="rent" className="grid scroll-mt-28 gap-4 md:grid-cols-3">
         <Card>
           <CardContent>
             <div className="flex items-center gap-3">
@@ -103,138 +103,154 @@ export default async function TenantDashboardPage() {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <div className="space-y-6">
-          <SectionCard
-            title="My Apartment"
-            description="Your current assigned property and unit."
-          >
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-button bg-background p-4">
-                <p className="text-sm font-bold text-text-muted">Property</p>
-                <p className="mt-2 font-extrabold text-text-strong">
-                  {property?.property_name ?? "Not available"}
-                </p>
-                <p className="mt-1 text-sm leading-6 text-text-muted">
-                  {property?.address ?? "Address not available"}
-                </p>
+          <div id="profile" className="scroll-mt-28">
+            <SectionCard
+              title="My Apartment"
+              description="Your current assigned property and unit."
+            >
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-button bg-background p-4">
+                  <p className="text-sm font-bold text-text-muted">Property</p>
+                  <p className="mt-2 font-extrabold text-text-strong">
+                    {property?.property_name ?? "Not available"}
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-text-muted">
+                    {property?.address ?? "Address not available"}
+                  </p>
+                </div>
+
+                <div className="rounded-button bg-background p-4">
+                  <p className="text-sm font-bold text-text-muted">Unit</p>
+                  <p className="mt-2 font-extrabold text-text-strong">
+                    {unit?.unit_identifier ?? "Not available"}
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-text-muted">
+                    {unit?.unit_type ?? "Unit type not available"}
+                  </p>
+                </div>
               </div>
+            </SectionCard>
+          </div>
 
-              <div className="rounded-button bg-background p-4">
-                <p className="text-sm font-bold text-text-muted">Unit</p>
-                <p className="mt-2 font-extrabold text-text-strong">
-                  {unit?.unit_identifier ?? "Not available"}
-                </p>
-                <p className="mt-1 text-sm leading-6 text-text-muted">
-                  {unit?.unit_type ?? "Unit type not available"}
-                </p>
-              </div>
-            </div>
-          </SectionCard>
+          <div id="payments" className="scroll-mt-28">
+            <SectionCard
+              title="Payment History"
+              description="Your recorded rent payments and available receipts."
+            >
+              {dashboard.payments.length === 0 ? (
+                <EmptyState
+                  title="No payments yet"
+                  description="Your rent payment history will appear here after payment is recorded."
+                  icon={
+                    <ReceiptText
+                      aria-hidden="true"
+                      size={24}
+                      strokeWidth={2.6}
+                    />
+                  }
+                />
+              ) : (
+                <div className="space-y-3">
+                  {dashboard.payments.map((payment) => (
+                    <Card key={payment.id}>
+                      <CardHeader>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <CardTitle>
+                              {formatNaira(Number(payment.amount_paid))}
+                            </CardTitle>
+                            <p className="mt-1 text-sm leading-6 text-text-muted">
+                              {paymentMethodLabel(payment.payment_method)} ·{" "}
+                              {formatDate(payment.payment_date)}
+                            </p>
+                          </div>
 
-          <SectionCard
-            title="Payment History"
-            description="Your recorded rent payments and available receipts."
-          >
-            {dashboard.payments.length === 0 ? (
-              <EmptyState
-                title="No payments yet"
-                description="Your rent payment history will appear here after payment is recorded."
-                icon={
-                  <ReceiptText aria-hidden="true" size={24} strokeWidth={2.6} />
-                }
-              />
-            ) : (
-              <div className="space-y-3">
-                {dashboard.payments.map((payment) => (
-                  <Card key={payment.id}>
-                    <CardHeader>
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <CardTitle>
-                            {formatNaira(Number(payment.amount_paid))}
-                          </CardTitle>
-                          <p className="mt-1 text-sm leading-6 text-text-muted">
-                            {paymentMethodLabel(payment.payment_method)} ·{" "}
-                            {formatDate(payment.payment_date)}
-                          </p>
-                        </div>
-
-                        <Badge
-                          tone={
-                            payment.status === "posted" ? "success" : "danger"
-                          }
-                        >
-                          {payment.status === "posted" ? "Posted" : "Reversed"}
-                        </Badge>
-                      </div>
-                    </CardHeader>
-
-                    <CardContent>
-                      <div className="rounded-button bg-background p-4">
-                        <p className="text-sm font-bold text-text-muted">
-                          Receipt
-                        </p>
-
-                        <p className="mt-1 text-sm leading-6 text-text-muted">
-                          {payment.receipt_number ?? "Receipt not generated"}
-                        </p>
-
-                        {payment.receiptDownloadUrl ? (
-                          <a
-                            href={payment.receiptDownloadUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="mt-3 inline-flex min-h-10 items-center justify-center rounded-button bg-primary px-4 py-2 text-sm font-extrabold text-white shadow-soft hover:bg-primary-hover"
+                          <Badge
+                            tone={
+                              payment.status === "posted" ? "success" : "danger"
+                            }
                           >
-                            Download Receipt
-                          </a>
-                        ) : null}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </SectionCard>
+                            {payment.status === "posted"
+                              ? "Posted"
+                              : "Reversed"}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+
+                      <CardContent>
+                        <div className="rounded-button bg-background p-4">
+                          <p className="text-sm font-bold text-text-muted">
+                            Receipt
+                          </p>
+
+                          <p className="mt-1 text-sm leading-6 text-text-muted">
+                            {payment.receipt_number ?? "Receipt not generated"}
+                          </p>
+
+                          {payment.receiptDownloadUrl ? (
+                            <a
+                              href={payment.receiptDownloadUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-3 inline-flex min-h-10 items-center justify-center rounded-button bg-primary px-4 py-2 text-sm font-extrabold text-white shadow-soft hover:bg-primary-hover"
+                            >
+                              Download Receipt
+                            </a>
+                          ) : null}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </SectionCard>
+          </div>
         </div>
 
         <div className="space-y-6 lg:sticky lg:top-8 lg:self-start">
-          <SectionCard
-            title="Agreement"
-            description="Your accepted tenancy agreement."
-          >
-            {dashboard.agreement ? (
-              <div className="space-y-4">
+          <div id="agreement" className="scroll-mt-28">
+            <SectionCard
+              title="Agreement"
+              description="Your accepted tenancy agreement."
+            >
+              {dashboard.agreement ? (
+                <div className="space-y-4">
+                  <TrustNotice
+                    title="Agreement accepted"
+                    description={`Accepted on ${formatDate(
+                      dashboard.agreement.tenant_accepted_at,
+                    )}.`}
+                    icon={
+                      <FileText
+                        aria-hidden="true"
+                        size={22}
+                        strokeWidth={2.6}
+                      />
+                    }
+                  />
+
+                  {dashboard.agreementDownloadUrl ? (
+                    <a
+                      href={dashboard.agreementDownloadUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex min-h-11 w-full items-center justify-center rounded-button bg-primary px-5 py-2.5 text-sm font-extrabold text-white shadow-soft hover:bg-primary-hover"
+                    >
+                      Download Agreement
+                    </a>
+                  ) : null}
+                </div>
+              ) : (
                 <TrustNotice
-                  title="Agreement accepted"
-                  description={`Accepted on ${formatDate(
-                    dashboard.agreement.tenant_accepted_at,
-                  )}.`}
+                  title="Agreement not available"
+                  description="Your accepted agreement will appear here when available."
                   icon={
                     <FileText aria-hidden="true" size={22} strokeWidth={2.6} />
                   }
                 />
-
-                {dashboard.agreementDownloadUrl ? (
-                  <a
-                    href={dashboard.agreementDownloadUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex min-h-11 w-full items-center justify-center rounded-button bg-primary px-5 py-2.5 text-sm font-extrabold text-white shadow-soft hover:bg-primary-hover"
-                  >
-                    Download Agreement
-                  </a>
-                ) : null}
-              </div>
-            ) : (
-              <TrustNotice
-                title="Agreement not available"
-                description="Your accepted agreement will appear here when available."
-                icon={
-                  <FileText aria-hidden="true" size={22} strokeWidth={2.6} />
-                }
-              />
-            )}
-          </SectionCard>
+              )}
+            </SectionCard>
+          </div>
 
           {dashboard.tenancy ? (
             <SectionCard
