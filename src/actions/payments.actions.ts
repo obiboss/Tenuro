@@ -18,6 +18,8 @@ export type PaymentActionState = {
   paymentId?: string;
   authorizationUrl?: string;
   tenantPaymentUrl?: string;
+  whatsappMessage?: string;
+  tenantWhatsappNumber?: string;
   receiptDownloadUrl?: string | null;
   reference?: string;
   fieldErrors?: Record<string, string[]>;
@@ -69,11 +71,18 @@ export async function initializeRentPaymentAction(
 
     const result = await initializeRentPayment(parsed);
 
+    revalidatePath("/payments");
+    revalidatePath("/overview");
+    revalidatePath("/tenants");
+    revalidatePath(`/tenants/${result.tenantId}`);
+
     return {
       ok: true,
-      message: "Tenant payment link prepared.",
+      message: "Tenant payment link ready. WhatsApp will open now.",
       authorizationUrl: result.authorizationUrl,
       tenantPaymentUrl: result.tenantPaymentUrl,
+      whatsappMessage: result.whatsappMessage,
+      tenantWhatsappNumber: result.tenantWhatsappNumber,
       reference: result.reference,
     };
   } catch (error) {

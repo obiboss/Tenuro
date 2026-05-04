@@ -12,6 +12,7 @@ import { getTenancyPaymentContext } from "@/server/repositories/payment-context.
 import { getTenancyAgreementByTenancyId } from "@/server/repositories/tenancy-agreements.repository";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
+import { normalisePhoneNumber } from "@/server/utils/phone";
 import type { InitializeRentPaymentInput } from "@/server/validators/payment.schema";
 import { requireLandlord } from "./auth.service";
 import { processVerifiedGatewayPaymentReference } from "./gateway-payment-webhook.service";
@@ -37,6 +38,36 @@ function getTenantPaymentUrl(reference: string) {
 
 function getTenantPaymentVerifyUrl(reference: string) {
   return `${getTenantPaymentUrl(reference)}?verify=1`;
+}
+
+function formatNairaAmount(amount: number) {
+  return new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency: "NGN",
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+function buildTenantPaymentMessage(params: {
+  tenantName: string;
+  landlordName: string;
+  propertyName: string;
+  unitName: string;
+  rentAmount: number;
+  paymentUrl: string;
+}) {
+  return [
+    `Hello ${params.tenantName},`,
+    "",
+    `${params.landlordName} has sent your rent payment link for ${params.unitName} at ${params.propertyName}.`,
+    "",
+    `Rent amount: ${formatNairaAmount(params.rentAmount)}`,
+    "",
+    "Please use this secure link to review the amount and continue to Paystack:",
+    params.paymentUrl,
+    "",
+    "Your tenant account activation will only be available after your full payment is confirmed.",
+  ].join("\n");
 }
 
 function getTenuroGatewayAdminFee() {
@@ -137,23 +168,6 @@ export async function initializeRentPayment(input: InitializeRentPaymentInput) {
   const landlord = await requireLandlord();
   const supabase = await createSupabaseServerClient();
 
-  const existingIntent = await getGatewayPaymentIntentByIdempotencyKey(
-    supabase,
-    {
-      landlordId: landlord.id,
-      idempotencyKey: input.idempotencyKey,
-    },
-  );
-
-  if (existingIntent) {
-    return {
-      authorizationUrl: existingIntent.authorization_url,
-      accessCode: existingIntent.paystack_access_code,
-      reference: existingIntent.paystack_reference,
-      tenantPaymentUrl: getTenantPaymentUrl(existingIntent.paystack_reference),
-    };
-  }
-
   const tenancy = await getTenancyPaymentContext(supabase, input.tenancyId);
 
   if (tenancy.landlord_id !== landlord.id) {
@@ -178,6 +192,42 @@ export async function initializeRentPayment(input: InitializeRentPaymentInput) {
       "We could not find the tenant for this payment.",
       404,
     );
+  }
+
+  const tenantPhone = normalisePhoneNumber(tenancy.tenants.phone_number);
+  const propertyName =
+    tenancy.units?.properties?.property_name ?? "your apartment";
+  const unitName = tenancy.units?.unit_identifier ?? "your unit";
+
+  const existingIntent = await getGatewayPaymentIntentByIdempotencyKey(
+    supabase,
+    {
+      landlordId: landlord.id,
+      idempotencyKey: input.idempotencyKey,
+    },
+  );
+
+  if (existingIntent) {
+    const tenantPaymentUrl = getTenantPaymentUrl(
+      existingIntent.paystack_reference,
+    );
+
+    return {
+      tenantId: tenancy.tenant_id,
+      authorizationUrl: existingIntent.authorization_url,
+      accessCode: existingIntent.paystack_access_code,
+      reference: existingIntent.paystack_reference,
+      tenantPaymentUrl,
+      tenantWhatsappNumber: tenantPhone.national,
+      whatsappMessage: buildTenantPaymentMessage({
+        tenantName: tenancy.tenants.full_name,
+        landlordName: landlord.fullName,
+        propertyName,
+        unitName,
+        rentAmount: Number(existingIntent.rent_amount),
+        paymentUrl: tenantPaymentUrl,
+      }),
+    };
   }
 
   const agreement = await getTenancyAgreementByTenancyId(supabase, tenancy.id);
@@ -228,8 +278,8 @@ export async function initializeRentPayment(input: InitializeRentPaymentInput) {
     period_start: input.periodStart,
     period_end: input.periodEnd,
     idempotency_key: input.idempotencyKey,
-    property_name: tenancy.units?.properties?.property_name ?? null,
-    unit_identifier: tenancy.units?.unit_identifier ?? null,
+    property_name: propertyName,
+    unit_identifier: unitName,
     paystack_split: {
       mode: "subaccount_flat_fee",
       subaccount: paystackAccount.paystack_subaccount_code,
@@ -269,11 +319,23 @@ export async function initializeRentPayment(input: InitializeRentPaymentInput) {
     metadata,
   });
 
+  const tenantPaymentUrl = getTenantPaymentUrl(intent.paystack_reference);
+
   return {
+    tenantId: tenancy.tenant_id,
     authorizationUrl: intent.authorization_url,
     accessCode: intent.paystack_access_code,
     reference: intent.paystack_reference,
-    tenantPaymentUrl: getTenantPaymentUrl(intent.paystack_reference),
+    tenantPaymentUrl,
+    tenantWhatsappNumber: tenantPhone.national,
+    whatsappMessage: buildTenantPaymentMessage({
+      tenantName: tenancy.tenants.full_name,
+      landlordName: landlord.fullName,
+      propertyName,
+      unitName,
+      rentAmount,
+      paymentUrl: tenantPaymentUrl,
+    }),
   };
 }
 
