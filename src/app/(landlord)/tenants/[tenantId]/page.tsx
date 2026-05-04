@@ -70,6 +70,10 @@ export default async function TenantDetailPage({
   );
 
   const isAgreementAccepted = agreementDocument?.document_status === "accepted";
+  const isTenantApproved = tenant.onboarding_status === "approved";
+  const isRentSettled = Boolean(
+    ledgerSummary.balance && outstandingBalance <= 0,
+  );
 
   const canSendPaymentLink = Boolean(
     activeTenancy && hasOutstandingBalance && isAgreementAccepted,
@@ -79,11 +83,31 @@ export default async function TenantDetailPage({
     activeTenancy && hasOutstandingBalance && !isAgreementAccepted,
   );
 
-  const canCreateTenancyRecord =
-    tenant.onboarding_status === "approved" && !activeTenancy;
+  const canCreateTenancyRecord = isTenantApproved && !activeTenancy;
 
-  const canGenerateActivationLink =
-    tenant.onboarding_status === "approved" && !tenant.profile_id;
+  const shouldShowOnboardingCard = !isTenantApproved;
+
+  const shouldShowActivationCard = Boolean(
+    isTenantApproved &&
+    activeTenancy &&
+    isAgreementAccepted &&
+    isRentSettled &&
+    !tenant.profile_id,
+  );
+
+  const nextStepDescription = tenant.profile_id
+    ? "This tenant already has an active tenant account."
+    : !isTenantApproved
+      ? "Generate and send the tenant onboarding link so they can complete their profile, ID document, and guarantor details."
+      : !activeTenancy
+        ? "Create the tenancy record before sending agreement, payment, or account activation links."
+        : !agreementDocument
+          ? "Generate the tenancy agreement draft and prepare it for tenant acceptance."
+          : !isAgreementAccepted
+            ? "Finalize the agreement and send the tenant acceptance link."
+            : hasOutstandingBalance
+              ? "Send the tenant rent payment link before account activation."
+              : "Generate and send the tenant activation link so they can set their password and access their dashboard.";
 
   return (
     <div>
@@ -182,7 +206,7 @@ export default async function TenantDetailPage({
             </SectionCard>
           ) : null}
 
-          {!activeTenancy && tenant.onboarding_status !== "approved" ? (
+          {!activeTenancy && !isTenantApproved ? (
             <SectionCard
               title="Tenancy Record Locked"
               description="Approve the tenant before creating the tenancy record."
@@ -250,23 +274,15 @@ export default async function TenantDetailPage({
         </div>
 
         <div className="space-y-6 xl:sticky xl:top-28 xl:self-start">
-          <TrustNotice
-            title="Next step"
-            description={
-              tenant.profile_id
-                ? "This tenant already has an active tenant account."
-                : tenant.onboarding_status === "approved"
-                  ? "Generate and send the tenant activation link so they can set their password and access their dashboard."
-                  : "Generate and send the tenant onboarding link so they can complete their profile, ID document, and guarantor details."
-            }
-          />
+          <TrustNotice title="Next step" description={nextStepDescription} />
 
-          <OnboardingInviteCard tenantId={tenant.id} />
+          {shouldShowOnboardingCard ? (
+            <OnboardingInviteCard tenantId={tenant.id} />
+          ) : null}
 
-          <TenantActivationInviteCard
-            tenantId={tenant.id}
-            disabled={!canGenerateActivationLink}
-          />
+          {shouldShowActivationCard ? (
+            <TenantActivationInviteCard tenantId={tenant.id} />
+          ) : null}
 
           <SectionCard
             title="Private Note"

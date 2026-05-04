@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef } from "react";
 import { createUnitAction } from "@/actions/units.actions";
 import { initialUnitActionState } from "@/actions/unit.state";
+import { ActionResultToast } from "@/components/ui/action-result-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { CurrencyInput } from "@/components/ui/currency-input";
@@ -75,12 +76,24 @@ type UnitFormProps = {
   propertyId: string;
 };
 
-export function UnitForm({ propertyId }: UnitFormProps) {
-  const createAction = createUnitAction.bind(null, propertyId);
+function setFormNumberValue(
+  form: HTMLFormElement | null,
+  fieldName: string,
+  value: number,
+) {
+  const field = form?.elements.namedItem(fieldName);
 
-  const [unitType, setUnitType] = useState("");
-  const [bedrooms, setBedrooms] = useState(0);
-  const [bathrooms, setBathrooms] = useState(0);
+  if (!(field instanceof HTMLInputElement)) {
+    return;
+  }
+
+  field.value = String(value);
+}
+
+export function UnitForm({ propertyId }: UnitFormProps) {
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const handledSuccessMessageRef = useRef<string | null>(null);
+  const createAction = createUnitAction.bind(null, propertyId);
 
   const [state, formAction, isPending] = useActionState(
     createAction,
@@ -88,101 +101,118 @@ export function UnitForm({ propertyId }: UnitFormProps) {
   );
 
   useEffect(() => {
-    if (!unitType) {
+    if (!state.ok || !state.message) {
       return;
     }
 
-    const defaults = unitTypeDefaults[unitType];
+    if (handledSuccessMessageRef.current === state.message) {
+      return;
+    }
+
+    handledSuccessMessageRef.current = state.message;
+    formRef.current?.reset();
+  }, [state.message, state.ok]);
+
+  function handleUnitTypeChange(event: React.ChangeEvent<HTMLSelectElement>) {
+    const defaults = unitTypeDefaults[event.target.value];
 
     if (!defaults) {
       return;
     }
 
-    setBedrooms(defaults.bedrooms);
-    setBathrooms(defaults.bathrooms);
-  }, [unitType]);
+    setFormNumberValue(formRef.current, "bedrooms", defaults.bedrooms);
+    setFormNumberValue(formRef.current, "bathrooms", defaults.bathrooms);
+  }
 
   return (
-    <form action={formAction}>
+    <form ref={formRef} action={formAction}>
+      <ActionResultToast
+        ok={state.ok}
+        message={state.message}
+        successTitle="Unit saved"
+        errorTitle="Unit could not be saved"
+      />
+
       <Card>
         <CardContent>
-          {state.message ? (
-            <div
-              role="alert"
-              className={
-                state.ok
-                  ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
-                  : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
-              }
-            >
-              {state.message}
-            </div>
-          ) : null}
+          <div className="space-y-5">
+            {state.message ? (
+              <div
+                role="alert"
+                className={
+                  state.ok
+                    ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
+                    : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
+                }
+              >
+                {state.ok
+                  ? "Unit saved. The form is ready for the next unit."
+                  : state.message}
+              </div>
+            ) : null}
 
-          <Input
-            label="Building or block"
-            name="buildingName"
-            placeholder="Example: Block A, Back Building, Landlord House"
-            helperText="Use this if the property has more than one building or block."
-          />
-
-          <Input
-            label="Unit name"
-            name="unitIdentifier"
-            placeholder="Example: Flat 3, Room 2A, Shop 1"
-            error={state.fieldErrors?.unitIdentifier?.[0]}
-            required
-          />
-
-          <Select
-            label="Unit type"
-            name="unitType"
-            options={unitTypeOptions}
-            value={unitType}
-            onChange={(event) => setUnitType(event.target.value)}
-            error={state.fieldErrors?.unitType?.[0]}
-            required
-          />
-
-          <div className="grid gap-4 md:grid-cols-2">
             <Input
-              label="Bedrooms"
-              name="bedrooms"
-              type="number"
-              min={0}
-              value={bedrooms}
-              onChange={(event) => setBedrooms(Number(event.target.value))}
-              error={state.fieldErrors?.bedrooms?.[0]}
-              helperText="Auto-filled from unit type. You can adjust it."
+              label="Building or block"
+              name="buildingName"
+              placeholder="Example: Block A, Back Building, Landlord House"
+              helperText="Use this if the property has more than one building or block."
             />
 
             <Input
-              label="Bathrooms"
-              name="bathrooms"
-              type="number"
-              min={0}
-              value={bathrooms}
-              onChange={(event) => setBathrooms(Number(event.target.value))}
-              error={state.fieldErrors?.bathrooms?.[0]}
-              helperText="Auto-filled from unit type. You can adjust it."
+              label="Unit name"
+              name="unitIdentifier"
+              placeholder="Example: Flat 3, Room 2A, Shop 1"
+              error={state.fieldErrors?.unitIdentifier?.[0]}
+              required
+            />
+
+            <Select
+              label="Unit type"
+              name="unitType"
+              options={unitTypeOptions}
+              onChange={handleUnitTypeChange}
+              error={state.fieldErrors?.unitType?.[0]}
+              required
+            />
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <Input
+                label="Bedrooms"
+                name="bedrooms"
+                type="number"
+                min={0}
+                defaultValue={0}
+                error={state.fieldErrors?.bedrooms?.[0]}
+                helperText="Auto-filled from unit type. You can adjust it."
+              />
+
+              <Input
+                label="Bathrooms"
+                name="bathrooms"
+                type="number"
+                min={0}
+                defaultValue={0}
+                error={state.fieldErrors?.bathrooms?.[0]}
+                helperText="Auto-filled from unit type. You can adjust it."
+              />
+            </div>
+
+            <CurrencyInput
+              label="Annual rent"
+              name="annualRent"
+              placeholder="0.00"
+              error={state.fieldErrors?.annualRent?.[0]}
+              helperText="Most Nigerian landlords collect rent yearly, so this is the main rent amount."
+            />
+
+            <CurrencyInput
+              label="Monthly rent"
+              name="monthlyRent"
+              placeholder="0.00"
+              error={state.fieldErrors?.monthlyRent?.[0]}
+              helperText="Use only if this unit is rented monthly."
             />
           </div>
-
-          <CurrencyInput
-            label="Annual rent"
-            name="annualRent"
-            placeholder="0.00"
-            error={state.fieldErrors?.annualRent?.[0]}
-            helperText="Most Nigerian landlords collect rent yearly, so this is the main rent amount."
-          />
-
-          <CurrencyInput
-            label="Monthly rent"
-            name="monthlyRent"
-            placeholder="0.00"
-            error={state.fieldErrors?.monthlyRent?.[0]}
-            helperText="Use only if this unit is rented monthly."
-          />
         </CardContent>
 
         <CardFooter>
