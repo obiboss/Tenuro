@@ -212,10 +212,6 @@ export async function createTenancy(
       current_period_end: params.input.endDate,
       next_rent_charge_date: nextRentChargeDate,
 
-      /*
-       * Legacy/current DB-required columns.
-       * Keep these mapped until the database is fully consolidated.
-       */
       move_in_date: params.input.startDate,
       move_out_date: params.input.endDate,
       next_renewal_date: nextRentChargeDate,
@@ -231,6 +227,25 @@ export async function createTenancy(
 
   if (error) {
     throw error;
+  }
+
+  return data;
+}
+
+export async function renewTenancyPeriod(
+  supabase: SupabaseClient,
+  tenancyId: string,
+) {
+  const { data, error } = await supabase.rpc("renew_tenancy_period", {
+    p_tenancy_id: tenancyId,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  if (typeof data !== "string") {
+    throw new Error("Renewal RPC did not return a tenancy id.");
   }
 
   return data;

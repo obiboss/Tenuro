@@ -5,9 +5,9 @@ import {
   Clock3,
   Home,
   RefreshCcw,
-  UserRound,
   WalletCards,
 } from "lucide-react";
+import { RenewTenancyButton } from "@/components/tenancy/renew-tenancy-button";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
@@ -98,10 +98,7 @@ function RenewalCard({ item }: { item: LandlordRenewalOverviewItem }) {
   const copy = urgencyCopy[item.urgency];
 
   return (
-    <Link
-      href={`/tenants/${tenancy.tenant_id}`}
-      className="block rounded-card border border-border-soft bg-white p-5 shadow-card transition hover:-translate-y-0.5 hover:shadow-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-    >
+    <article className="rounded-card border border-border-soft bg-white p-5 shadow-card">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -137,6 +134,7 @@ function RenewalCard({ item }: { item: LandlordRenewalOverviewItem }) {
               Current Period
             </p>
           </div>
+
           <p className="mt-2 text-sm font-extrabold text-text-strong">
             {formatDate(tenancy.current_period_start ?? tenancy.start_date)}
           </p>
@@ -150,6 +148,7 @@ function RenewalCard({ item }: { item: LandlordRenewalOverviewItem }) {
             <WalletCards aria-hidden="true" size={17} strokeWidth={2.5} />
             <p className="text-xs font-bold uppercase tracking-wide">Rent</p>
           </div>
+
           <p className="mt-2 text-sm font-extrabold text-text-strong">
             {formatNaira(tenancy.rent_amount)}
           </p>
@@ -163,6 +162,7 @@ function RenewalCard({ item }: { item: LandlordRenewalOverviewItem }) {
             <AlertTriangle aria-hidden="true" size={17} strokeWidth={2.5} />
             <p className="text-xs font-bold uppercase tracking-wide">Balance</p>
           </div>
+
           <p className="mt-2 text-sm font-extrabold text-text-strong">
             {formatNaira(Math.max(item.outstandingBalance, 0))}
           </p>
@@ -178,12 +178,32 @@ function RenewalCard({ item }: { item: LandlordRenewalOverviewItem }) {
               Guidance
             </p>
           </div>
+
           <p className="mt-2 text-sm font-bold leading-6 text-text-normal">
             {copy.description}
           </p>
         </div>
       </div>
-    </Link>
+
+      <div className="mt-5 grid gap-3 rounded-button bg-background p-4 md:grid-cols-[1fr_220px] md:items-center">
+        <p className="text-sm leading-6 text-text-muted">
+          Renewing posts a new rent charge for the next period. Any old unpaid
+          balance remains in the ledger and is added to the tenant’s total
+          outstanding balance.
+        </p>
+
+        <RenewTenancyButton tenancyId={tenancy.id} />
+      </div>
+
+      <div className="mt-4">
+        <Link
+          href={`/tenants/${tenancy.tenant_id}`}
+          className="inline-flex text-sm font-extrabold text-primary hover:text-primary-hover"
+        >
+          View tenant record
+        </Link>
+      </div>
+    </article>
   );
 }
 

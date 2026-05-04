@@ -2,13 +2,18 @@ import "server-only";
 
 import { differenceInCalendarDays, parseISO } from "date-fns";
 import { AppError } from "@/server/errors/app-error";
-import { postInitialTenancyLedgerEntries } from "@/server/repositories/ledger.repository";
+import {
+  getTenancyBalanceSummary,
+  postInitialTenancyLedgerEntries,
+} from "@/server/repositories/ledger.repository";
 import {
   createTenancy,
   getActiveTenancyForTenant,
   getActiveTenancyForUnit,
   getRenewalTenanciesForLandlord,
   getTenanciesForLandlord,
+  getTenancyById,
+  renewTenancyPeriod,
   terminateTenancy,
   type TenancyDetailRow,
 } from "@/server/repositories/tenancies.repository";
@@ -20,9 +25,9 @@ import {
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import type {
   CreateTenancyInput,
+  RenewTenancyInput,
   TerminateTenancyInput,
 } from "@/server/validators/tenancy.schema";
-import { getTenancyBalanceSummary } from "@/server/repositories/ledger.repository";
 import { requireLandlord } from "./auth.service";
 
 export type RenewalUrgency =
@@ -208,6 +213,28 @@ export async function createTenancyForCurrentLandlord(
   await markUnitOccupied(supabase, input.unitId);
 
   return tenancy;
+}
+
+export async function renewTenancyForCurrentLandlord(input: RenewTenancyInput) {
+  const landlord = await requireLandlord();
+  const supabase = await createSupabaseServerClient();
+
+  const tenancy = await getTenancyById(supabase, input.tenancyId);
+
+  if (tenancy.landlord_id !== landlord.id) {
+    throw new AppError(
+      "FORBIDDEN",
+      "You do not have permission to renew this tenancy.",
+      403,
+    );
+  }
+
+  await renewTenancyPeriod(supabase, input.tenancyId);
+
+  return {
+    tenancyId: tenancy.id,
+    tenantId: tenancy.tenant_id,
+  };
 }
 
 export async function terminateTenancyForCurrentLandlord(

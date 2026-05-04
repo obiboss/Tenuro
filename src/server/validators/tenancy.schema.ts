@@ -51,10 +51,15 @@ export const createTenancySchema = z
     }
   });
 
+export const renewTenancySchema = z.object({
+  tenancyId: uuidSchema,
+});
+
 export const terminateTenancySchema = z.object({
   tenancyId: uuidSchema,
   reason: z.string().trim().min(3, "Enter the reason.").max(500),
 });
 
 export type CreateTenancyInput = z.infer<typeof createTenancySchema>;
+export type RenewTenancyInput = z.infer<typeof renewTenancySchema>;
 export type TerminateTenancyInput = z.infer<typeof terminateTenancySchema>;

@@ -4,10 +4,12 @@ import { revalidatePath } from "next/cache";
 import { errorResult, successResult } from "@/server/errors/result";
 import {
   createTenancyForCurrentLandlord,
+  renewTenancyForCurrentLandlord,
   terminateTenancyForCurrentLandlord,
 } from "@/server/services/tenancies.service";
 import {
   createTenancySchema,
+  renewTenancySchema,
   terminateTenancySchema,
 } from "@/server/validators/tenancy.schema";
 
@@ -40,10 +42,41 @@ export async function createTenancyAction(
     revalidatePath("/tenants");
     revalidatePath(`/tenants/${parsed.tenantId}`);
     revalidatePath("/overview");
+    revalidatePath("/renewals");
 
     return successResult("Rental agreement created.");
   } catch (error) {
     console.error("createTenancyAction failed:", error);
+
+    const result = errorResult(error);
+
+    return {
+      ok: false,
+      message: result.message,
+      fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
+    };
+  }
+}
+
+export async function renewTenancyAction(
+  _previousState: TenancyActionState,
+  formData: FormData,
+): Promise<TenancyActionState> {
+  try {
+    const parsed = renewTenancySchema.parse({
+      tenancyId: formData.get("tenancyId"),
+    });
+
+    const result = await renewTenancyForCurrentLandlord(parsed);
+
+    revalidatePath("/renewals");
+    revalidatePath("/overview");
+    revalidatePath("/tenants");
+    revalidatePath(`/tenants/${result.tenantId}`);
+
+    return successResult("Tenancy renewed and new rent charge posted.");
+  } catch (error) {
+    console.error("renewTenancyAction failed:", error);
 
     const result = errorResult(error);
 
@@ -69,6 +102,7 @@ export async function terminateTenancyAction(
 
     revalidatePath("/tenants");
     revalidatePath("/overview");
+    revalidatePath("/renewals");
 
     return successResult("Rental agreement ended.");
   } catch (error) {
