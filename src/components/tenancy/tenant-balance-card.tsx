@@ -38,6 +38,43 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+function formatPeriodDate(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) {
+    return null;
+  }
+
+  return new Intl.DateTimeFormat("en-NG", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function getEntryPeriodLabel(metadata: Record<string, unknown>) {
+  const periodStart = formatPeriodDate(metadata.period_start);
+  const periodEnd = formatPeriodDate(metadata.period_end);
+
+  if (!periodStart || !periodEnd) {
+    return null;
+  }
+
+  return `${periodStart} – ${periodEnd}`;
+}
+
+function getEntrySourceLabel(metadata: Record<string, unknown>) {
+  const source = metadata.source;
+
+  if (source === "initial_tenancy_charge") {
+    return "Initial rent period";
+  }
+
+  if (source === "tenancy_creation") {
+    return "Opening balance";
+  }
+
+  return null;
+}
+
 export function TenantBalanceCard({
   balance,
   entries,
@@ -53,7 +90,7 @@ export function TenantBalanceCard({
           <div>
             <CardTitle>Rent Balance</CardTitle>
             <p className="mt-1 text-sm text-text-muted">
-              Balance is calculated from the rent ledger.
+              Balance is calculated from period-aware rent ledger entries.
             </p>
           </div>
 
@@ -109,37 +146,56 @@ export function TenantBalanceCard({
             </p>
           ) : (
             <div className="mt-3 divide-y divide-border-soft overflow-hidden rounded-card border border-border-soft bg-white">
-              {entries.map((entry) => (
-                <div
-                  key={entry.id}
-                  className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div>
-                    <p className="font-bold text-text-strong">
-                      {entryTypeLabel(entry.entry_type)}
-                    </p>
-                    <p className="mt-1 text-sm text-text-muted">
-                      {entry.description}
-                    </p>
-                    <p className="mt-1 text-xs font-semibold text-text-muted">
-                      {formatDate(entry.entry_date)}
-                    </p>
-                  </div>
+              {entries.map((entry) => {
+                const periodLabel = getEntryPeriodLabel(entry.metadata);
+                const sourceLabel = getEntrySourceLabel(entry.metadata);
 
-                  <div className="text-left sm:text-right">
-                    <Badge
-                      tone={
-                        entry.direction === "credit" ? "success" : "warning"
-                      }
-                    >
-                      {entry.direction === "credit" ? "Credit" : "Debit"}
-                    </Badge>
-                    <p className="mt-2 font-extrabold text-text-strong">
-                      {formatNaira(entry.amount)}
-                    </p>
+                return (
+                  <div
+                    key={entry.id}
+                    className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-bold text-text-strong">
+                          {entryTypeLabel(entry.entry_type)}
+                        </p>
+
+                        {sourceLabel ? (
+                          <Badge tone="primary">{sourceLabel}</Badge>
+                        ) : null}
+                      </div>
+
+                      <p className="mt-1 text-sm text-text-muted">
+                        {entry.description}
+                      </p>
+
+                      {periodLabel ? (
+                        <p className="mt-1 text-xs font-bold text-text-muted">
+                          Period: {periodLabel}
+                        </p>
+                      ) : null}
+
+                      <p className="mt-1 text-xs font-semibold text-text-muted">
+                        Entry date: {formatDate(entry.entry_date)}
+                      </p>
+                    </div>
+
+                    <div className="text-left sm:text-right">
+                      <Badge
+                        tone={
+                          entry.direction === "credit" ? "success" : "warning"
+                        }
+                      >
+                        {entry.direction === "credit" ? "Credit" : "Debit"}
+                      </Badge>
+                      <p className="mt-2 font-extrabold text-text-strong">
+                        {formatNaira(entry.amount)}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
