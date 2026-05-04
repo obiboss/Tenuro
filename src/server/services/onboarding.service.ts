@@ -1,9 +1,14 @@
-import { AppError } from "@/server/errors/app-error";
+import {
+  AUDIT_ACTOR_ROLES,
+  AUDIT_ENTITY_TYPES,
+  AUDIT_EVENT_TYPES,
+} from "@/server/constants/audit-events";
 import {
   NOTIFICATION_CHANNELS,
   NOTIFICATION_TYPES,
 } from "@/server/constants/notification-types";
 import { APP_ROUTES, getAppBaseUrl } from "@/server/constants/routes";
+import { AppError } from "@/server/errors/app-error";
 import { replaceTenantGuarantor } from "@/server/repositories/guarantors.repository";
 import { createNotification } from "@/server/repositories/notifications.repository";
 import {
@@ -16,6 +21,7 @@ import { getTenantById } from "@/server/repositories/tenants.repository";
 import { getUnitWithPropertyById } from "@/server/repositories/units.repository";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
+import { writeAuditLog } from "@/server/services/audit-log.service";
 import { sha256Hex } from "@/server/utils/crypto";
 import { encryptText } from "@/server/utils/encryption";
 import { normalisePhoneNumber } from "@/server/utils/phone";
@@ -96,6 +102,27 @@ export async function generateTenantOnboardingLink(tenantId: string) {
     channel: NOTIFICATION_CHANNELS.whatsapp,
     notificationType: NOTIFICATION_TYPES.onboardingInvite,
     messageBody,
+  });
+
+  await writeAuditLog({
+    landlordId: landlord.id,
+    tenantId,
+    unitId: tenant.unit_id,
+    propertyId: unit.properties.id,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.onboardingLinkSent,
+    entityType: AUDIT_ENTITY_TYPES.onboarding,
+    entityId: tenantId,
+    description: `Onboarding link sent to ${tenant.full_name}.`,
+    metadata: {
+      tenant_name: tenant.full_name,
+      property_name: unit.properties.property_name,
+      unit_identifier: unit.unit_identifier,
+      notification_id: notification.id,
+      expires_at: expiresAt.toISOString(),
+      delivery_channel: NOTIFICATION_CHANNELS.whatsapp,
+    },
   });
 
   return {

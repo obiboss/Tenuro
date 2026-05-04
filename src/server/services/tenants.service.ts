@@ -1,6 +1,11 @@
+import {
+  AUDIT_ACTOR_ROLES,
+  AUDIT_ENTITY_TYPES,
+  AUDIT_EVENT_TYPES,
+} from "@/server/constants/audit-events";
 import { AppError } from "@/server/errors/app-error";
-import { createSupabaseServerClient } from "@/server/supabase/server";
-import { requireLandlord } from "./auth.service";
+import { getActiveGuarantorForTenant } from "@/server/repositories/guarantors.repository";
+import { getPropertyById } from "@/server/repositories/properties.repository";
 import {
   approveTenant,
   archiveTenant,
@@ -10,19 +15,20 @@ import {
   rejectTenant,
   updateTenant,
 } from "@/server/repositories/tenants.repository";
-import { getActiveGuarantorForTenant } from "@/server/repositories/guarantors.repository";
 import {
   getUnitById,
   getVacantUnitsForLandlord,
   markUnitOccupied,
 } from "@/server/repositories/units.repository";
-import { getPropertyById } from "@/server/repositories/properties.repository";
+import { createSupabaseServerClient } from "@/server/supabase/server";
+import { writeAuditLog } from "@/server/services/audit-log.service";
 import { createTenantKycDocumentLinks } from "@/server/services/storage.service";
 import type {
   CreateTenantShellInput,
   RejectTenantInput,
   UpdateTenantInput,
 } from "@/server/validators/tenant.schema";
+import { requireLandlord } from "./auth.service";
 
 export async function getCurrentLandlordTenants() {
   const landlord = await requireLandlord();
@@ -130,6 +136,25 @@ export async function createTenantShellForCurrentLandlord(
    */
   await markUnitOccupied(supabase, input.unitId);
 
+  await writeAuditLog({
+    landlordId: landlord.id,
+    tenantId: tenant.id,
+    unitId: input.unitId,
+    propertyId: property.id,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.tenantCreated,
+    entityType: AUDIT_ENTITY_TYPES.tenant,
+    entityId: tenant.id,
+    description: `Tenant shell created for ${tenant.full_name}.`,
+    metadata: {
+      tenant_name: tenant.full_name,
+      unit_identifier: unit.unit_identifier,
+      property_name: property.property_name,
+      onboarding_status: tenant.onboarding_status,
+    },
+  });
+
   return tenant;
 }
 
@@ -175,10 +200,31 @@ export async function approveTenantForCurrentLandlord(tenantId: string) {
     );
   }
 
-  return approveTenant(supabase, {
+  const approvedTenant = await approveTenant(supabase, {
     tenantId,
     approvedBy: landlord.id,
   });
+
+  await writeAuditLog({
+    landlordId: landlord.id,
+    tenantId,
+    unitId: tenant.unit_id,
+    propertyId: tenant.units?.properties?.id ?? null,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.tenantApproved,
+    entityType: AUDIT_ENTITY_TYPES.tenant,
+    entityId: tenantId,
+    description: `${tenant.full_name} was approved for tenancy setup.`,
+    metadata: {
+      tenant_name: tenant.full_name,
+      previous_status: tenant.onboarding_status,
+      new_status: approvedTenant.onboarding_status,
+      approved_at: approvedTenant.approved_at,
+    },
+  });
+
+  return approvedTenant;
 }
 
 export async function rejectTenantForCurrentLandlord(
@@ -209,10 +255,31 @@ export async function rejectTenantForCurrentLandlord(
     );
   }
 
-  return rejectTenant(supabase, {
+  const rejectedTenant = await rejectTenant(supabase, {
     tenantId,
     reason: input.reason,
   });
+
+  await writeAuditLog({
+    landlordId: landlord.id,
+    tenantId,
+    unitId: tenant.unit_id,
+    propertyId: tenant.units?.properties?.id ?? null,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.tenantRejected,
+    entityType: AUDIT_ENTITY_TYPES.tenant,
+    entityId: tenantId,
+    description: `${tenant.full_name} was rejected from tenant onboarding.`,
+    metadata: {
+      tenant_name: tenant.full_name,
+      previous_status: tenant.onboarding_status,
+      new_status: rejectedTenant.onboarding_status,
+      rejection_reason: input.reason,
+    },
+  });
+
+  return rejectedTenant;
 }
 
 export async function archiveTenantForCurrentLandlord(tenantId: string) {
