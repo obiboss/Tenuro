@@ -228,7 +228,7 @@ export async function getAcceptedTenantAgreement(
   },
 ) {
   const { data, error } = await supabase
-    .from("tenancy_agreements")
+    .from("tenancy_agreement_documents")
     .select(
       `
         id,
