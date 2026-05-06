@@ -15,6 +15,7 @@ export const AUDIT_ENTITY_TYPES = {
   bankAccount: "bank_account",
   onboarding: "onboarding",
   activation: "activation",
+  quitNotice: "quit_notice",
 } as const;
 
 export const AUDIT_EVENT_TYPES = {
@@ -57,6 +58,12 @@ export const AUDIT_EVENT_TYPES = {
   unitUpdated: "unit.updated",
   unitArchived: "unit.archived",
   unitStatusChanged: "unit.status_changed",
+
+  quitNoticeDrafted: "quit_notice.drafted",
+  quitNoticeIssued: "quit_notice.issued",
+  quitNoticeDownloaded: "quit_notice.downloaded",
+  quitNoticeSentPrepared: "quit_notice.sent_prepared",
+  quitNoticeWithdrawn: "quit_notice.withdrawn",
 } as const;
 
 export type AuditActorRole =
