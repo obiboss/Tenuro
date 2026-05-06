@@ -18,7 +18,9 @@ export type UnitType =
 
 export type UnitStatus =
   | "vacant"
+  | "reserved"
   | "occupied"
+  | "unavailable"
   | "under_renovation"
   | "hold"
   | "pending_vacancy"
@@ -154,18 +156,22 @@ export async function getUnitsForProperty(
 }
 
 export async function archiveUnit(supabase: SupabaseClient, unitId: string) {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("units")
     .update({
       archived_at: new Date().toISOString(),
       status: "archived",
     })
     .eq("id", unitId)
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .select(UNIT_SELECT)
+    .single<UnitRow>();
 
   if (error) {
     throw error;
   }
+
+  return data;
 }
 
 export async function getUnitById(supabase: SupabaseClient, unitId: string) {
@@ -239,21 +245,56 @@ export async function getVacantUnitsForLandlord(
   });
 }
 
-export async function markUnitOccupied(
+async function updateUnitStatus(
   supabase: SupabaseClient,
-  unitId: string,
+  params: {
+    unitId: string;
+    status: UnitStatus;
+  },
 ) {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("units")
     .update({
-      status: "occupied",
+      status: params.status,
+      updated_at: new Date().toISOString(),
     })
-    .eq("id", unitId)
-    .is("deleted_at", null);
+    .eq("id", params.unitId)
+    .is("deleted_at", null)
+    .select(UNIT_SELECT)
+    .single<UnitRow>();
 
   if (error) {
     throw error;
   }
+
+  return data;
+}
+
+export async function markUnitReserved(
+  supabase: SupabaseClient,
+  unitId: string,
+) {
+  return updateUnitStatus(supabase, {
+    unitId,
+    status: "reserved",
+  });
+}
+
+export async function markUnitVacant(supabase: SupabaseClient, unitId: string) {
+  return updateUnitStatus(supabase, {
+    unitId,
+    status: "vacant",
+  });
+}
+
+export async function markUnitOccupied(
+  supabase: SupabaseClient,
+  unitId: string,
+) {
+  return updateUnitStatus(supabase, {
+    unitId,
+    status: "occupied",
+  });
 }
 
 export async function getUnitWithPropertyById(

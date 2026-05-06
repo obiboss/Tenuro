@@ -15,10 +15,12 @@ import {
   rejectTenant,
   updateTenant,
 } from "@/server/repositories/tenants.repository";
+import { getActiveTenancyForUnit } from "@/server/repositories/tenancies.repository";
 import {
   getUnitById,
   getVacantUnitsForLandlord,
-  markUnitOccupied,
+  markUnitReserved,
+  markUnitVacant,
 } from "@/server/repositories/units.repository";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { writeAuditLog } from "@/server/services/audit-log.service";
@@ -103,6 +105,47 @@ export async function getCurrentLandlordVacantUnits() {
   return getVacantUnitsForLandlord(supabase, landlord.id);
 }
 
+async function releaseUnitIfNoActiveTenancy(params: {
+  landlordId: string;
+  actorProfileId: string;
+  tenantId: string;
+  unitId: string;
+  propertyId: string | null;
+  tenantName: string;
+  previousStatus: string | null;
+  reason: string;
+}) {
+  const supabase = await createSupabaseServerClient();
+  const activeTenancy = await getActiveTenancyForUnit(supabase, params.unitId);
+
+  if (activeTenancy) {
+    return null;
+  }
+
+  const releasedUnit = await markUnitVacant(supabase, params.unitId);
+
+  await writeAuditLog({
+    landlordId: params.landlordId,
+    tenantId: params.tenantId,
+    unitId: params.unitId,
+    propertyId: params.propertyId,
+    actorProfileId: params.actorProfileId,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.unitStatusChanged,
+    entityType: AUDIT_ENTITY_TYPES.unit,
+    entityId: params.unitId,
+    description: `${releasedUnit.unit_identifier} was released back to vacant.`,
+    metadata: {
+      tenant_name: params.tenantName,
+      previous_unit_status: params.previousStatus,
+      new_unit_status: releasedUnit.status,
+      reason: params.reason,
+    },
+  });
+
+  return releasedUnit;
+}
+
 export async function createTenantShellForCurrentLandlord(
   input: CreateTenantShellInput,
 ) {
@@ -129,12 +172,7 @@ export async function createTenantShellForCurrentLandlord(
   }
 
   const tenant = await createTenantShell(supabase, landlord.id, input);
-
-  /*
-   * Existing behaviour kept for now to avoid changing occupancy logic inside
-   * this review batch. We should revisit this in a later unit reservation batch.
-   */
-  await markUnitOccupied(supabase, input.unitId);
+  const reservedUnit = await markUnitReserved(supabase, input.unitId);
 
   await writeAuditLog({
     landlordId: landlord.id,
@@ -152,6 +190,27 @@ export async function createTenantShellForCurrentLandlord(
       unit_identifier: unit.unit_identifier,
       property_name: property.property_name,
       onboarding_status: tenant.onboarding_status,
+    },
+  });
+
+  await writeAuditLog({
+    landlordId: landlord.id,
+    tenantId: tenant.id,
+    unitId: input.unitId,
+    propertyId: property.id,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.unitStatusChanged,
+    entityType: AUDIT_ENTITY_TYPES.unit,
+    entityId: input.unitId,
+    description: `${unit.unit_identifier} was reserved for ${tenant.full_name}.`,
+    metadata: {
+      tenant_name: tenant.full_name,
+      unit_identifier: unit.unit_identifier,
+      property_name: property.property_name,
+      previous_unit_status: unit.status,
+      new_unit_status: reservedUnit.status,
+      reason: "tenant_shell_created",
     },
   });
 
@@ -281,6 +340,17 @@ export async function rejectTenantForCurrentLandlord(
     reason: input.reason,
   });
 
+  await releaseUnitIfNoActiveTenancy({
+    landlordId: landlord.id,
+    actorProfileId: landlord.id,
+    tenantId,
+    unitId: tenant.unit_id,
+    propertyId: tenant.units?.properties?.id ?? null,
+    tenantName: tenant.full_name,
+    previousStatus: tenant.units?.status ?? null,
+    reason: "tenant_rejected",
+  });
+
   await writeAuditLog({
     landlordId: landlord.id,
     tenantId,
@@ -317,7 +387,18 @@ export async function archiveTenantForCurrentLandlord(tenantId: string) {
     );
   }
 
-  const archivedTenant = await archiveTenant(supabase, tenantId);
+  await archiveTenant(supabase, tenantId);
+
+  await releaseUnitIfNoActiveTenancy({
+    landlordId: landlord.id,
+    actorProfileId: landlord.id,
+    tenantId,
+    unitId: tenant.unit_id,
+    propertyId: tenant.units?.properties?.id ?? null,
+    tenantName: tenant.full_name,
+    previousStatus: tenant.units?.status ?? null,
+    reason: "tenant_archived_without_active_tenancy",
+  });
 
   await writeAuditLog({
     landlordId: landlord.id,
@@ -336,6 +417,4 @@ export async function archiveTenantForCurrentLandlord(tenantId: string) {
       archived_at: new Date().toISOString(),
     },
   });
-
-  return archivedTenant;
 }

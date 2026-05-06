@@ -23,10 +23,7 @@ import {
   type TenancyDetailRow,
 } from "@/server/repositories/tenancies.repository";
 import { getTenantById } from "@/server/repositories/tenants.repository";
-import {
-  getUnitById,
-  markUnitOccupied,
-} from "@/server/repositories/units.repository";
+import { getUnitById } from "@/server/repositories/units.repository";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { writeAuditLog } from "@/server/services/audit-log.service";
 import type {
@@ -184,6 +181,18 @@ export async function createTenancyForCurrentLandlord(
     );
   }
 
+  if (
+    unit.status !== "reserved" &&
+    unit.status !== "vacant" &&
+    unit.status !== "occupied"
+  ) {
+    throw new AppError(
+      "UNIT_NOT_AVAILABLE_FOR_TENANCY",
+      "This unit is not available for tenancy setup.",
+      400,
+    );
+  }
+
   const existingTenantTenancy = await getActiveTenancyForTenant(
     supabase,
     input.tenantId,
@@ -216,7 +225,6 @@ export async function createTenancyForCurrentLandlord(
   });
 
   await postInitialTenancyLedgerEntries(supabase, tenancy.id);
-  await markUnitOccupied(supabase, input.unitId);
 
   await writeAuditLog({
     landlordId: landlord.id,
@@ -240,6 +248,7 @@ export async function createTenancyForCurrentLandlord(
       current_period_start: tenancy.current_period_start,
       current_period_end: tenancy.current_period_end,
       next_rent_charge_date: tenancy.next_rent_charge_date,
+      unit_status_at_creation: unit.status,
     },
   });
 
