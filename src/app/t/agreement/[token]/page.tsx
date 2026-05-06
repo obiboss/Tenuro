@@ -133,7 +133,7 @@ export default async function TenantAgreementPage({
                 title={agreement.title}
                 description="This is the final agreement prepared by the landlord."
               >
-                <pre className="max-h-[720px] overflow-auto whitespace-pre-wrap rounded-button bg-white p-5 text-sm leading-7 text-text-normal shadow-soft ring-1 ring-border-soft">
+                <pre className="max-h-180 overflow-auto whitespace-pre-wrap rounded-button bg-white p-5 text-sm leading-7 text-text-normal shadow-soft ring-1 ring-border-soft">
                   {agreement.finalized_body || agreement.agreement_body}
                 </pre>
               </SectionCard>
