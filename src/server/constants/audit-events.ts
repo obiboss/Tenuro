@@ -64,6 +64,7 @@ export const AUDIT_EVENT_TYPES = {
   quitNoticeDownloaded: "quit_notice.downloaded",
   quitNoticeSentPrepared: "quit_notice.sent_prepared",
   quitNoticeWithdrawn: "quit_notice.withdrawn",
+  tenantMoveOutRequested: "tenant.move_out_requested",
 } as const;
 
 export type AuditActorRole =

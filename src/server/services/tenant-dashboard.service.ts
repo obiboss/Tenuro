@@ -3,6 +3,7 @@ import "server-only";
 import { AppError } from "@/server/errors/app-error";
 import {
   getAcceptedTenantAgreement,
+  getActiveTenantMoveOutNotice,
   getActiveTenantTenancy,
   getTenantDashboardTenantByProfile,
   getTenantPayments,
@@ -60,6 +61,10 @@ export async function getCurrentTenantDashboard() {
       })
     : null;
 
+  const moveOutNotice = tenancy
+    ? await getActiveTenantMoveOutNotice(supabase, tenancy.id)
+    : null;
+
   const agreementDownloadUrl = agreement?.pdf_path
     ? await createSignedTenancyAgreementPdfUrl(agreement.pdf_path)
     : null;
@@ -88,6 +93,7 @@ export async function getCurrentTenantDashboard() {
     tenancy,
     agreement,
     agreementDownloadUrl,
+    moveOutNotice,
     outstandingBalance,
     payments: paymentHistory,
   };

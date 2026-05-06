@@ -12,3 +12,16 @@ export const initialQuitNoticeActionState: QuitNoticeActionState = {
   ok: false,
   message: "",
 };
+
+export type TenantMoveOutNoticeActionState = {
+  ok: boolean;
+  message: string;
+  quitNoticeId?: string;
+  fieldErrors?: Record<string, string[]>;
+};
+
+export const initialTenantMoveOutNoticeActionState: TenantMoveOutNoticeActionState =
+  {
+    ok: false,
+    message: "",
+  };

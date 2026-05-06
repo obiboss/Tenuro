@@ -283,6 +283,28 @@ export async function getQuitNoticesForTenancy(
   return data;
 }
 
+export async function getActiveTenantIntentToVacateForTenancy(
+  supabase: SupabaseClient,
+  tenancyId: string,
+) {
+  const { data, error } = await supabase
+    .from("quit_notices")
+    .select(QUIT_NOTICE_DETAIL_SELECT)
+    .eq("tenancy_id", tenancyId)
+    .eq("notice_type", "tenant_intent_to_vacate")
+    .in("status", ["draft", "issued", "delivered", "acknowledged"])
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<QuitNoticeDetailRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 export async function issueQuitNotice(
   supabase: SupabaseClient,
   params: IssueQuitNoticeParams,

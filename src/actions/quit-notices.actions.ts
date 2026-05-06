@@ -4,10 +4,14 @@ import { revalidatePath } from "next/cache";
 import { errorResult } from "@/server/errors/result";
 import {
   createQuitNoticeDraftForCurrentLandlord,
+  createTenantMoveOutNoticeForCurrentTenant,
   issueQuitNoticeForCurrentLandlord,
   prepareQuitNoticeDeliveryForCurrentLandlord,
 } from "@/server/services/quit-notices.service";
-import type { QuitNoticeActionState } from "./quit-notices.state";
+import type {
+  QuitNoticeActionState,
+  TenantMoveOutNoticeActionState,
+} from "./quit-notices.state";
 
 function readRequiredString(formData: FormData, key: string) {
   const value = String(formData.get(key) ?? "").trim();
@@ -59,6 +63,37 @@ export async function createAndIssueQuitNoticeAction(
     };
   } catch (error) {
     console.error("createAndIssueQuitNoticeAction failed:", error);
+
+    const result = errorResult(error);
+
+    return {
+      ok: false,
+      message: result.message,
+      fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
+    };
+  }
+}
+
+export async function createTenantMoveOutNoticeAction(
+  _previousState: TenantMoveOutNoticeActionState,
+  formData: FormData,
+): Promise<TenantMoveOutNoticeActionState> {
+  try {
+    const moveOutNotice = await createTenantMoveOutNoticeForCurrentTenant({
+      plannedMoveOutDate: readRequiredString(formData, "plannedMoveOutDate"),
+      reason: readRequiredString(formData, "reason"),
+    });
+
+    revalidatePath("/tenant");
+
+    return {
+      ok: true,
+      message:
+        "Your move-out notice has been submitted. Your landlord will review it.",
+      quitNoticeId: moveOutNotice.id,
+    };
+  } catch (error) {
+    console.error("createTenantMoveOutNoticeAction failed:", error);
 
     const result = errorResult(error);
 

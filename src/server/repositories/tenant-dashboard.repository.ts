@@ -70,6 +70,16 @@ export type TenantDashboardPaymentRow = {
   status: "posted" | "reversed";
 };
 
+export type TenantDashboardMoveOutNoticeRow = {
+  id: string;
+  status: string;
+  notice_date: string;
+  vacate_by_date: string;
+  reason: string;
+  created_at: string;
+  pdf_path: string | null;
+};
+
 const TENANT_SELECT = `
   id,
   profile_id,
@@ -291,6 +301,38 @@ export async function getTenantPayments(
     .eq("tenant_id", tenantId)
     .order("payment_date", { ascending: false })
     .returns<TenantDashboardPaymentRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getActiveTenantMoveOutNotice(
+  supabase: SupabaseClient,
+  tenancyId: string,
+) {
+  const { data, error } = await supabase
+    .from("quit_notices")
+    .select(
+      `
+        id,
+        status,
+        notice_date,
+        vacate_by_date,
+        reason,
+        created_at,
+        pdf_path
+      `,
+    )
+    .eq("tenancy_id", tenancyId)
+    .eq("notice_type", "tenant_intent_to_vacate")
+    .in("status", ["draft", "issued", "delivered", "acknowledged"])
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<TenantDashboardMoveOutNoticeRow>();
 
   if (error) {
     throw error;

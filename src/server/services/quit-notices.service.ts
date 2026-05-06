@@ -8,6 +8,7 @@ import {
 import { AppError } from "@/server/errors/app-error";
 import {
   createQuitNoticeDraft,
+  getActiveTenantIntentToVacateForTenancy,
   getQuitNoticeById,
   getQuitNoticesForLandlord,
   getQuitNoticesForTenancy,
@@ -17,6 +18,10 @@ import {
   type QuitNoticeDetailRow,
   type QuitNoticeType,
 } from "@/server/repositories/quit-notices.repository";
+import {
+  getActiveTenantTenancy,
+  getTenantDashboardTenantByProfile,
+} from "@/server/repositories/tenant-dashboard.repository";
 import { getTenancyById } from "@/server/repositories/tenancies.repository";
 import { writeAuditLog } from "@/server/services/audit-log.service";
 import { generateAndStoreQuitNoticePdf } from "@/server/services/quit-notice-pdf.service";
@@ -25,7 +30,7 @@ import { createSignedQuitNoticePdfUrl } from "@/server/services/storage.service"
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { buildWaMeUrl } from "@/server/utils/whatsapp";
-import { requireLandlord } from "./auth.service";
+import { requireLandlord, requireTenant } from "./auth.service";
 
 export type CreateQuitNoticeDraftInput = {
   tenancyId: string;
@@ -35,6 +40,11 @@ export type CreateQuitNoticeDraftInput = {
   reason: string;
   landlordNotes?: string | null;
   deliveryMethod?: QuitNoticeDeliveryMethod;
+};
+
+export type CreateTenantMoveOutNoticeInput = {
+  plannedMoveOutDate: string;
+  reason: string;
 };
 
 export type IssueQuitNoticeInput = {
@@ -67,6 +77,10 @@ function parseDateOnly(value: string) {
   return date;
 }
 
+function toDateOnly(value: Date) {
+  return value.toISOString().slice(0, 10);
+}
+
 function formatDate(value: string | null) {
   if (!value) {
     return "Not provided";
@@ -97,6 +111,27 @@ function validateQuitNoticeDates(params: {
     throw new AppError(
       "VACATE_DATE_BEFORE_NOTICE_DATE",
       "The vacate-by date cannot be before the notice date.",
+      400,
+    );
+  }
+}
+
+function validateTenantMoveOutDate(value: string) {
+  const moveOutDate = parseDateOnly(value);
+  const today = parseDateOnly(toDateOnly(new Date()));
+
+  if (!moveOutDate || !today) {
+    throw new AppError(
+      "INVALID_MOVE_OUT_DATE",
+      "Enter a valid planned move-out date.",
+      400,
+    );
+  }
+
+  if (moveOutDate < today) {
+    throw new AppError(
+      "MOVE_OUT_DATE_IN_PAST",
+      "The planned move-out date cannot be in the past.",
       400,
     );
   }
@@ -294,6 +329,197 @@ export async function createQuitNoticeDraftForCurrentLandlord(
   });
 
   return quitNotice;
+}
+
+export async function createTenantMoveOutNoticeForCurrentTenant(
+  input: CreateTenantMoveOutNoticeInput,
+) {
+  const user = await requireTenant();
+  const supabase = createSupabaseAdminClient();
+
+  validateTenantMoveOutDate(input.plannedMoveOutDate);
+
+  assertTextLength({
+    value: input.reason,
+    code: "MOVE_OUT_REASON_REQUIRED",
+    message: "Enter a short note about your move-out plan.",
+    minLength: 5,
+  });
+
+  const tenant = await getTenantDashboardTenantByProfile(supabase, {
+    profileId: user.id,
+    phoneNumber: user.phoneNumber,
+  });
+
+  if (!tenant) {
+    throw new AppError(
+      "TENANT_RECORD_NOT_FOUND",
+      "We could not find your tenant record.",
+      404,
+    );
+  }
+
+  const activeTenancy = await getActiveTenantTenancy(supabase, tenant.id);
+
+  if (!activeTenancy) {
+    throw new AppError(
+      "ACTIVE_TENANCY_NOT_FOUND",
+      "You do not have an active tenancy to submit a move-out notice for.",
+      404,
+    );
+  }
+
+  const existingMoveOutNotice = await getActiveTenantIntentToVacateForTenancy(
+    supabase,
+    activeTenancy.id,
+  );
+
+  if (existingMoveOutNotice) {
+    throw new AppError(
+      "MOVE_OUT_NOTICE_ALREADY_EXISTS",
+      "You already have an active move-out notice for this tenancy.",
+      400,
+    );
+  }
+
+  const tenancy = await getTenancyById(supabase, activeTenancy.id);
+
+  if (
+    tenancy.tenant_id !== tenant.id ||
+    tenancy.landlord_id !== tenant.landlord_id
+  ) {
+    throw new AppError(
+      "FORBIDDEN",
+      "You do not have permission to submit a move-out notice for this tenancy.",
+      403,
+    );
+  }
+
+  if (tenancy.status !== "active") {
+    throw new AppError(
+      "TENANCY_NOT_ACTIVE",
+      "Move-out notice can only be submitted for an active tenancy.",
+      400,
+    );
+  }
+
+  if (!tenancy.tenants || !tenancy.units || !tenancy.units.properties) {
+    throw new AppError(
+      "TENANCY_RECORD_INCOMPLETE",
+      "This tenancy record is incomplete. Please contact your landlord.",
+      400,
+    );
+  }
+
+  const noticeDate = toDateOnly(new Date());
+
+  const draftSeed: QuitNoticeDetailRow = {
+    id: "",
+    landlord_id: tenancy.landlord_id,
+    tenant_id: tenancy.tenant_id,
+    tenancy_id: tenancy.id,
+    unit_id: tenancy.unit_id,
+    property_id: tenancy.units.properties.id,
+    notice_type: "tenant_intent_to_vacate",
+    status: "draft",
+    notice_date: noticeDate,
+    vacate_by_date: input.plannedMoveOutDate,
+    reason: input.reason.trim(),
+    landlord_notes: null,
+    delivery_method: "other",
+    delivery_metadata: {},
+    document_body: null,
+    pdf_path: null,
+    issued_at: null,
+    issued_by: null,
+    delivered_at: null,
+    acknowledged_at: null,
+    withdrawn_at: null,
+    withdrawn_reason: null,
+    metadata: {},
+    created_by: user.id,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    deleted_at: null,
+    tenants: tenancy.tenants,
+    tenancies: {
+      id: tenancy.id,
+      tenancy_reference: tenancy.tenancy_reference,
+      start_date: tenancy.start_date,
+      end_date: tenancy.end_date,
+      rent_amount: tenancy.rent_amount,
+      currency_code: tenancy.currency_code,
+    },
+    units: tenancy.units,
+  };
+
+  const documentBody = buildQuitNoticeTemplate(draftSeed);
+
+  const draft = await createQuitNoticeDraft(supabase, {
+    landlordId: tenancy.landlord_id,
+    tenantId: tenancy.tenant_id,
+    tenancyId: tenancy.id,
+    unitId: tenancy.unit_id,
+    propertyId: tenancy.units.properties.id,
+    noticeType: "tenant_intent_to_vacate",
+    noticeDate,
+    vacateByDate: input.plannedMoveOutDate,
+    reason: input.reason.trim(),
+    landlordNotes: null,
+    deliveryMethod: "other",
+    documentBody,
+    metadata: {
+      tenancy_reference: tenancy.tenancy_reference,
+      tenant_name: tenancy.tenants.full_name,
+      property_name: tenancy.units.properties.property_name,
+      unit_identifier: tenancy.units.unit_identifier,
+      source: "tenant_dashboard_move_out_notice",
+    },
+    createdBy: user.id,
+  });
+
+  const issuedNotice = await issueQuitNotice(supabase, {
+    quitNoticeId: draft.id,
+    issuedBy: user.id,
+    deliveryMetadata: {
+      submitted_from: "tenant_dashboard",
+      delivery_status: "submitted_not_confirmed",
+      tenant_profile_id: user.id,
+    },
+  });
+
+  await writeAuditLog({
+    landlordId: issuedNotice.landlord_id,
+    tenantId: issuedNotice.tenant_id,
+    tenancyId: issuedNotice.tenancy_id,
+    unitId: issuedNotice.unit_id,
+    propertyId: issuedNotice.property_id,
+    actorProfileId: user.id,
+    actorRole: AUDIT_ACTOR_ROLES.tenant,
+    eventType: AUDIT_EVENT_TYPES.tenantMoveOutRequested,
+    entityType: AUDIT_ENTITY_TYPES.quitNotice,
+    entityId: issuedNotice.id,
+    description: "Tenant submitted intention to move out.",
+    metadata: {
+      quit_notice_id: issuedNotice.id,
+      notice_type: issuedNotice.notice_type,
+      status: issuedNotice.status,
+      notice_date: issuedNotice.notice_date,
+      planned_move_out_date: issuedNotice.vacate_by_date,
+      tenant_name: issuedNotice.tenants?.full_name ?? tenant.full_name,
+      property_name:
+        issuedNotice.units?.properties?.property_name ??
+        tenant.units?.properties?.property_name ??
+        null,
+      unit_identifier:
+        issuedNotice.units?.unit_identifier ??
+        tenant.units?.unit_identifier ??
+        null,
+      source: "tenant_dashboard",
+    },
+  });
+
+  return issuedNotice;
 }
 
 export async function issueQuitNoticeForCurrentLandlord(

@@ -5,16 +5,17 @@ import {
   ReceiptText,
   RefreshCcw,
 } from "lucide-react";
+import { TenantMoveOutNoticeCard } from "@/components/tenant/tenant-move-out-notice-card";
 import { TenantPaymentSummary } from "@/components/tenant/tenant-payment-summary";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
+import { ToastProvider } from "@/components/ui/toast-provider";
 import { TrustNotice } from "@/components/ui/trust-notice";
 import { getCurrentTenantDashboard } from "@/server/services/tenant-dashboard.service";
 import { formatNaira } from "@/server/utils/money";
-import { ToastProvider } from "@/components/ui/toast-provider";
 
 function formatDate(value: string | null | undefined) {
   if (!value) {
@@ -72,7 +73,7 @@ export default async function TenantDashboardPage() {
       <div className="space-y-6">
         <PageHeader
           title={`Welcome, ${dashboard.tenant.full_name}`}
-          description="View your apartment, agreement, rent balance, payment history, and receipts."
+          description="View your apartment, agreement, rent balance, payment history, receipts, and move-out notice."
           action={<Badge tone="success">Tenant</Badge>}
         />
 
@@ -241,6 +242,27 @@ export default async function TenantDashboardPage() {
                       </Card>
                     ))}
                   </div>
+                )}
+              </SectionCard>
+            </div>
+
+            <div id="move-out" className="scroll-mt-28">
+              <SectionCard
+                title="Move-Out Notice"
+                description="Let your landlord know if you intend to leave at the end of your tenancy."
+              >
+                {tenancy ? (
+                  <TenantMoveOutNoticeCard
+                    moveOutNotice={dashboard.moveOutNotice}
+                  />
+                ) : (
+                  <TrustNotice
+                    title="No active tenancy"
+                    description="Move-out notice becomes available when you have an active tenancy."
+                    icon={
+                      <Home aria-hidden="true" size={22} strokeWidth={2.6} />
+                    }
+                  />
                 )}
               </SectionCard>
             </div>
