@@ -1,6 +1,7 @@
 import {
   Building2,
   ClipboardList,
+  History,
   Home,
   ReceiptText,
   RefreshCcw,
@@ -34,6 +35,11 @@ export const LANDLORD_NAVIGATION = [
     label: "Renewals",
     href: "/renewals",
     icon: RefreshCcw,
+  },
+  {
+    label: "Activity",
+    href: "/activity",
+    icon: History,
   },
   {
     label: "Caretakers",

@@ -6,6 +6,7 @@ import {
   BarChart3,
   Building2,
   CreditCard,
+  History,
   Home,
   LockKeyhole,
   RefreshCcw,
@@ -56,6 +57,12 @@ const desktopNavItems = [
     status: "available",
   },
   {
+    label: "Activity",
+    href: "/activity",
+    icon: History,
+    status: "available",
+  },
+  {
     label: "Caretakers",
     href: "/caretakers",
     icon: ShieldCheck,
@@ -73,7 +80,7 @@ const desktopNavItems = [
     icon: Settings,
     status: "available",
   },
-];
+] as const;
 
 const mobilePrimaryItems = [
   {
@@ -96,7 +103,7 @@ const mobilePrimaryItems = [
     href: "/payments",
     icon: CreditCard,
   },
-];
+] as const;
 
 function getFirstName(fullName: string) {
   return fullName.trim().split(/\s+/)[0] || "Landlord";
