@@ -36,6 +36,7 @@ export const AUDIT_EVENT_TYPES = {
   agreementAcceptanceLinkRefreshed: "agreement.acceptance_link_refreshed",
 
   paymentLinkSent: "payment.link_sent",
+  paymentLinkExpired: "payment.link_expired",
   manualPaymentRecorded: "payment.manual_recorded",
   gatewayPaymentVerified: "payment.gateway_verified",
   gatewayPaymentFailed: "payment.gateway_failed",

@@ -22,6 +22,7 @@ export type PaymentActionState = {
   tenantWhatsappNumber?: string;
   receiptDownloadUrl?: string | null;
   reference?: string;
+  expiresAt?: string | null;
   fieldErrors?: Record<string, string[]>;
 };
 
@@ -78,12 +79,13 @@ export async function initializeRentPaymentAction(
 
     return {
       ok: true,
-      message: "Tenant payment link ready. WhatsApp will open now.",
+      message: "Tenant payment link prepared for WhatsApp.",
       authorizationUrl: result.authorizationUrl,
       tenantPaymentUrl: result.tenantPaymentUrl,
       whatsappMessage: result.whatsappMessage,
       tenantWhatsappNumber: result.tenantWhatsappNumber,
       reference: result.reference,
+      expiresAt: result.expiresAt,
     };
   } catch (error) {
     const result = errorResult(error);

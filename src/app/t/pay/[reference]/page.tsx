@@ -45,17 +45,18 @@ function formatDate(value: string | null | undefined) {
   return new Intl.DateTimeFormat("en-NG", {
     dateStyle: "medium",
     timeStyle: "short",
+    timeZone: "Africa/Lagos",
   }).format(new Date(value));
 }
 
-function getStatusCopy(status: string): {
+function getStatusCopy(params: { status: string; isExpired: boolean }): {
   title: string;
   description: string;
   badge: string;
   tone: StatusTone;
   icon: React.ReactNode;
 } {
-  if (status === "paid") {
+  if (params.status === "paid") {
     return {
       title: "Payment successful",
       description:
@@ -66,11 +67,26 @@ function getStatusCopy(status: string): {
     };
   }
 
-  if (status === "failed" || status === "abandoned" || status === "cancelled") {
+  if (params.isExpired) {
+    return {
+      title: "Payment link expired",
+      description:
+        "This rent payment link has expired. Please ask your landlord to prepare a fresh payment link.",
+      badge: "Expired",
+      tone: "warning",
+      icon: <Clock3 aria-hidden="true" size={24} strokeWidth={2.6} />,
+    };
+  }
+
+  if (
+    params.status === "failed" ||
+    params.status === "abandoned" ||
+    params.status === "cancelled"
+  ) {
     return {
       title: "Payment was not completed",
       description:
-        "The transaction was not completed successfully. You can retry with the payment button below if the link is still valid.",
+        "The transaction was not completed successfully. You can retry with the payment button below while this link is still valid.",
       badge: "Failed",
       tone: "danger",
       icon: <AlertTriangle aria-hidden="true" size={24} strokeWidth={2.6} />,
@@ -140,14 +156,18 @@ export default async function TenantPaymentPage({
     );
   }
 
-  const statusCopy = getStatusCopy(checkout.status);
+  const statusCopy = getStatusCopy({
+    status: checkout.status,
+    isExpired: checkout.isExpired,
+  });
 
   const shouldAutoRefresh =
     shouldVerify &&
+    !checkout.isExpired &&
     (checkout.status === "initialized" ||
       (checkout.status === "paid" && !checkout.receiptDownloadUrl));
 
-  const canPay = checkout.status !== "paid";
+  const canPay = checkout.status !== "paid" && !checkout.isExpired;
 
   return (
     <main className="min-h-screen bg-background">
@@ -245,7 +265,26 @@ export default async function TenantPaymentPage({
                       {formatDate(checkout.periodEnd)}
                     </p>
                   </div>
+
+                  <div className="rounded-button bg-background p-4 md:col-span-2">
+                    <p className="text-sm font-bold text-text-muted">
+                      Link Expiry
+                    </p>
+                    <p className="mt-2 font-extrabold text-text-strong">
+                      {formatDate(checkout.expiresAt)}
+                    </p>
+                  </div>
                 </div>
+
+                {checkout.isExpired && checkout.status !== "paid" ? (
+                  <div className="mt-6 rounded-button bg-warning-soft p-4 text-sm font-semibold leading-6 text-warning">
+                    <span className="inline-flex items-center gap-2">
+                      <Clock3 aria-hidden="true" size={18} strokeWidth={2.6} />
+                      This link has expired and can no longer be used for
+                      Paystack checkout.
+                    </span>
+                  </div>
+                ) : null}
 
                 {shouldAutoRefresh ? (
                   <div className="mt-6 rounded-button bg-warning-soft p-4 text-sm font-semibold leading-6 text-warning">

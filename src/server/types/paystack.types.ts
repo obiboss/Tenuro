@@ -93,6 +93,7 @@ export type GatewayPaymentIntent = {
   idempotency_key: string;
   status: "initialized" | "paid" | "failed" | "abandoned" | "cancelled";
   metadata: Record<string, unknown>;
+  expires_at: string | null;
   paid_at?: string | null;
   processed_payment_id?: string | null;
   failure_reason?: string | null;

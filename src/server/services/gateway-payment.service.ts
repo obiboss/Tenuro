@@ -15,7 +15,10 @@ import {
 import { getActiveLandlordPaystackAccount } from "@/server/repositories/landlord-paystack.repository";
 import { getTenancyPaymentContext } from "@/server/repositories/payment-context.repository";
 import { getTenancyAgreementByTenancyId } from "@/server/repositories/tenancy-agreements.repository";
-import { writeAuditLog } from "@/server/services/audit-log.service";
+import {
+  writeAuditLog,
+  writeSystemAuditLog,
+} from "@/server/services/audit-log.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { normalisePhoneNumber } from "@/server/utils/phone";
@@ -27,6 +30,8 @@ import {
   initializePaystackTransaction,
 } from "./paystack.service";
 import { getTenantRentReceiptDownloadUrlByGatewayReference } from "./receipts.service";
+
+const PAYMENT_LINK_EXPIRY_HOURS = 24;
 
 function getAppBaseUrl() {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
@@ -61,13 +66,21 @@ function buildTenantPaymentMessage(params: {
   unitName: string;
   rentAmount: number;
   paymentUrl: string;
+  expiresAt: string;
 }) {
+  const expiryText = new Intl.DateTimeFormat("en-NG", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Africa/Lagos",
+  }).format(new Date(params.expiresAt));
+
   return [
     `Hello ${params.tenantName},`,
     "",
-    `${params.landlordName} has sent your rent payment link for ${params.unitName} at ${params.propertyName}.`,
+    `${params.landlordName} has prepared your rent payment link for ${params.unitName} at ${params.propertyName}.`,
     "",
     `Rent amount: ${formatNairaAmount(params.rentAmount)}`,
+    `Link expires: ${expiryText}`,
     "",
     "Please use this secure link to review the amount and continue to Paystack:",
     params.paymentUrl,
@@ -102,6 +115,52 @@ function getTenuroGatewayAdminFee() {
 
 function createPaymentReference() {
   return `tenuro_${crypto.randomUUID().replaceAll("-", "")}`;
+}
+
+function createPaymentLinkExpiry() {
+  return new Date(
+    Date.now() + PAYMENT_LINK_EXPIRY_HOURS * 60 * 60 * 1000,
+  ).toISOString();
+}
+
+function getFallbackExpiryFromCreatedAt(createdAt: string) {
+  const createdDate = new Date(createdAt);
+
+  if (Number.isNaN(createdDate.getTime())) {
+    return null;
+  }
+
+  return new Date(
+    createdDate.getTime() + PAYMENT_LINK_EXPIRY_HOURS * 60 * 60 * 1000,
+  ).toISOString();
+}
+
+function getEffectiveExpiry(params: {
+  expiresAt: string | null;
+  createdAt: string;
+}) {
+  return params.expiresAt ?? getFallbackExpiryFromCreatedAt(params.createdAt);
+}
+
+function isPaymentIntentExpired(params: {
+  status: string;
+  expiresAt: string | null;
+  createdAt: string;
+}) {
+  if (params.status === "paid") {
+    return false;
+  }
+
+  const expiry = getEffectiveExpiry({
+    expiresAt: params.expiresAt,
+    createdAt: params.createdAt,
+  });
+
+  if (!expiry) {
+    return false;
+  }
+
+  return new Date(expiry).getTime() <= Date.now();
 }
 
 function getTenantPaymentEmail(params: {
@@ -170,6 +229,30 @@ function readMetadataText(
   return typeof value === "string" && value.trim() ? value : null;
 }
 
+async function auditExpiredPaymentLinkOnce(params: {
+  landlordId: string;
+  tenantId: string;
+  tenancyId: string;
+  intentId: string;
+  reference: string;
+  expiresAt: string | null;
+}) {
+  await writeSystemAuditLog({
+    landlordId: params.landlordId,
+    tenantId: params.tenantId,
+    tenancyId: params.tenancyId,
+    eventType: AUDIT_EVENT_TYPES.paymentLinkExpired,
+    entityType: AUDIT_ENTITY_TYPES.payment,
+    entityId: params.intentId,
+    description: "Tenant rent payment link expired.",
+    metadata: {
+      gateway_payment_intent_id: params.intentId,
+      paystack_reference: params.reference,
+      expires_at: params.expiresAt,
+    },
+  });
+}
+
 export async function initializeRentPayment(input: InitializeRentPaymentInput) {
   const landlord = await requireLandlord();
   const supabase = await createSupabaseServerClient();
@@ -214,6 +297,34 @@ export async function initializeRentPayment(input: InitializeRentPaymentInput) {
   );
 
   if (existingIntent) {
+    const existingExpiry = getEffectiveExpiry({
+      expiresAt: existingIntent.expires_at,
+      createdAt: existingIntent.created_at,
+    });
+
+    if (
+      isPaymentIntentExpired({
+        status: existingIntent.status,
+        expiresAt: existingIntent.expires_at,
+        createdAt: existingIntent.created_at,
+      })
+    ) {
+      await auditExpiredPaymentLinkOnce({
+        landlordId: existingIntent.landlord_id,
+        tenantId: existingIntent.tenant_id,
+        tenancyId: existingIntent.tenancy_id,
+        intentId: existingIntent.id,
+        reference: existingIntent.paystack_reference,
+        expiresAt: existingExpiry,
+      });
+
+      throw new AppError(
+        "PAYMENT_LINK_EXPIRED",
+        "This payment link has expired. Please prepare a new payment link.",
+        410,
+      );
+    }
+
     const tenantPaymentUrl = getTenantPaymentUrl(
       existingIntent.paystack_reference,
     );
@@ -225,6 +336,7 @@ export async function initializeRentPayment(input: InitializeRentPaymentInput) {
       reference: existingIntent.paystack_reference,
       tenantPaymentUrl,
       tenantWhatsappNumber: tenantPhone.national,
+      expiresAt: existingExpiry,
       whatsappMessage: buildTenantPaymentMessage({
         tenantName: tenancy.tenants.full_name,
         landlordName: landlord.fullName,
@@ -232,6 +344,7 @@ export async function initializeRentPayment(input: InitializeRentPaymentInput) {
         unitName,
         rentAmount: Number(existingIntent.rent_amount),
         paymentUrl: tenantPaymentUrl,
+        expiresAt: existingExpiry ?? existingIntent.created_at,
       }),
     };
   }
@@ -262,6 +375,7 @@ export async function initializeRentPayment(input: InitializeRentPaymentInput) {
   const rentAmount = input.amount;
   const tenuroFeeAmount = getTenuroGatewayAdminFee();
   const totalAmount = rentAmount + tenuroFeeAmount;
+  const expiresAt = createPaymentLinkExpiry();
 
   assertGatewayAmountStructure({
     rentAmount,
@@ -283,6 +397,7 @@ export async function initializeRentPayment(input: InitializeRentPaymentInput) {
     currency_code: tenancy.currency_code,
     period_start: input.periodStart,
     period_end: input.periodEnd,
+    payment_link_expires_at: expiresAt,
     idempotency_key: input.idempotencyKey,
     property_name: propertyName,
     unit_identifier: unitName,
@@ -321,6 +436,7 @@ export async function initializeRentPayment(input: InitializeRentPaymentInput) {
     currencyCode: tenancy.currency_code,
     periodStart: input.periodStart ?? null,
     periodEnd: input.periodEnd ?? null,
+    expiresAt,
     idempotencyKey: input.idempotencyKey,
     metadata,
   });
@@ -336,7 +452,7 @@ export async function initializeRentPayment(input: InitializeRentPaymentInput) {
     eventType: AUDIT_EVENT_TYPES.paymentLinkSent,
     entityType: AUDIT_ENTITY_TYPES.payment,
     entityId: intent.id,
-    description: "Tenant rent payment link sent.",
+    description: "Tenant rent payment link prepared for WhatsApp.",
     metadata: {
       gateway_payment_intent_id: intent.id,
       paystack_reference: intent.paystack_reference,
@@ -345,6 +461,7 @@ export async function initializeRentPayment(input: InitializeRentPaymentInput) {
       total_amount: totalAmount,
       period_start: input.periodStart ?? null,
       period_end: input.periodEnd ?? null,
+      expires_at: expiresAt,
       property_name: propertyName,
       unit_identifier: unitName,
     },
@@ -357,6 +474,7 @@ export async function initializeRentPayment(input: InitializeRentPaymentInput) {
     reference: intent.paystack_reference,
     tenantPaymentUrl,
     tenantWhatsappNumber: tenantPhone.national,
+    expiresAt,
     whatsappMessage: buildTenantPaymentMessage({
       tenantName: tenancy.tenants.full_name,
       landlordName: landlord.fullName,
@@ -364,6 +482,7 @@ export async function initializeRentPayment(input: InitializeRentPaymentInput) {
       unitName,
       rentAmount,
       paymentUrl: tenantPaymentUrl,
+      expiresAt,
     }),
   };
 }
@@ -392,6 +511,26 @@ export async function getPublicTenantPaymentCheckout(params: {
   }
 
   const metadata = toRecord(intent.metadata);
+  const expiresAt = getEffectiveExpiry({
+    expiresAt: intent.expires_at,
+    createdAt: intent.created_at,
+  });
+  const isExpired = isPaymentIntentExpired({
+    status: intent.status,
+    expiresAt: intent.expires_at,
+    createdAt: intent.created_at,
+  });
+
+  if (isExpired) {
+    await auditExpiredPaymentLinkOnce({
+      landlordId: intent.landlord_id,
+      tenantId: intent.tenant_id,
+      tenancyId: intent.tenancy_id,
+      intentId: intent.id,
+      reference: intent.paystack_reference,
+      expiresAt,
+    });
+  }
 
   const receiptDownloadUrl =
     intent.status === "paid"
@@ -410,6 +549,8 @@ export async function getPublicTenantPaymentCheckout(params: {
     currencyCode: intent.currency_code,
     status: intent.status,
     paidAt: intent.paid_at,
+    expiresAt,
+    isExpired,
     propertyName: readMetadataText(metadata, "property_name"),
     unitIdentifier: readMetadataText(metadata, "unit_identifier"),
     periodStart: intent.period_start,

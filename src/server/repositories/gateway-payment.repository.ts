@@ -18,6 +18,7 @@ const GATEWAY_PAYMENT_INTENT_SELECT = `
   idempotency_key,
   status,
   metadata,
+  expires_at,
   paid_at,
   processed_payment_id,
   failure_reason,
@@ -79,6 +80,7 @@ export async function createGatewayPaymentIntent(
     currencyCode: string;
     periodStart?: string | null;
     periodEnd?: string | null;
+    expiresAt: string;
     idempotencyKey: string;
     metadata: Record<string, unknown>;
   },
@@ -98,6 +100,7 @@ export async function createGatewayPaymentIntent(
       currency_code: params.currencyCode,
       period_start: params.periodStart ?? null,
       period_end: params.periodEnd ?? null,
+      expires_at: params.expiresAt,
       idempotency_key: params.idempotencyKey,
       status: "initialized",
       metadata: params.metadata,
@@ -172,6 +175,7 @@ export async function markGatewayPaymentIntentFailed(
       status: params.status,
       failure_reason: params.reason,
       verified_payload: params.verifiedPayload ?? {},
+      updated_at: new Date().toISOString(),
     })
     .eq("id", params.intentId)
     .neq("status", "paid");
