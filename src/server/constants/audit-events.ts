@@ -28,6 +28,7 @@ export const AUDIT_EVENT_TYPES = {
   tenantAccountActivated: "tenant.account_activated",
 
   tenancyCreated: "tenancy.created",
+  rentChargePosted: "tenancy.rent_charge_posted",
 
   agreementGenerated: "agreement.generated",
   agreementSaved: "agreement.saved",

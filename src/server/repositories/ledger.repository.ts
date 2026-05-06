@@ -24,8 +24,23 @@ export type LedgerEntryRow = {
   currency_code: string;
   description: string;
   entry_date: string;
+  period_start: string | null;
+  period_end: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
+};
+
+export type PostedRentChargeRow = {
+  tenancy_id: string;
+  landlord_id: string;
+  tenant_id: string;
+  unit_id: string;
+  ledger_entry_id: string;
+  rent_amount: number;
+  currency_code: string;
+  period_start: string;
+  period_end: string;
+  next_rent_charge_date: string;
 };
 
 export async function postInitialTenancyLedgerEntries(
@@ -39,6 +54,23 @@ export async function postInitialTenancyLedgerEntries(
   if (error) {
     throw error;
   }
+}
+
+export async function postDueRentCharges(
+  supabase: SupabaseClient,
+  runDate?: string,
+) {
+  const { data, error } = await supabase
+    .rpc("post_due_rent_charges", {
+      p_run_date: runDate ?? new Date().toISOString().slice(0, 10),
+    })
+    .returns<PostedRentChargeRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data ?? [];
 }
 
 export async function getTenancyBalanceSummary(
@@ -72,7 +104,7 @@ export async function getLedgerEntriesForTenancy(
   const { data, error } = await supabase
     .from("ledger_entries")
     .select(
-      "id, landlord_id, tenant_id, tenancy_id, payment_id, entry_type, direction, amount, currency_code, description, entry_date, metadata, created_at",
+      "id, landlord_id, tenant_id, tenancy_id, payment_id, entry_type, direction, amount, currency_code, description, entry_date, period_start, period_end, metadata, created_at",
     )
     .eq("tenancy_id", tenancyId)
     .order("entry_date", { ascending: false })
