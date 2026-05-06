@@ -3,12 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { errorResult } from "@/server/errors/result";
 import {
+  confirmTenantMoveOutForCurrentLandlord,
   createQuitNoticeDraftForCurrentLandlord,
   createTenantMoveOutNoticeForCurrentTenant,
   issueQuitNoticeForCurrentLandlord,
   prepareQuitNoticeDeliveryForCurrentLandlord,
 } from "@/server/services/quit-notices.service";
 import type {
+  ConfirmMoveOutActionState,
   QuitNoticeActionState,
   TenantMoveOutNoticeActionState,
 } from "./quit-notices.state";
@@ -94,6 +96,42 @@ export async function createTenantMoveOutNoticeAction(
     };
   } catch (error) {
     console.error("createTenantMoveOutNoticeAction failed:", error);
+
+    const result = errorResult(error);
+
+    return {
+      ok: false,
+      message: result.message,
+      fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
+    };
+  }
+}
+
+export async function confirmTenantMoveOutAction(
+  _previousState: ConfirmMoveOutActionState,
+  formData: FormData,
+): Promise<ConfirmMoveOutActionState> {
+  try {
+    const tenantId = readRequiredString(formData, "tenantId");
+
+    await confirmTenantMoveOutForCurrentLandlord({
+      quitNoticeId: readRequiredString(formData, "quitNoticeId"),
+      actualMoveOutDate: readRequiredString(formData, "actualMoveOutDate"),
+      finalNote: String(formData.get("finalNote") ?? "").trim() || null,
+    });
+
+    revalidatePath("/tenants");
+    revalidatePath(`/tenants/${tenantId}`);
+    revalidatePath("/units");
+    revalidatePath("/properties");
+
+    return {
+      ok: true,
+      message:
+        "Move-out confirmed. The tenancy has been closed and the unit is now vacant.",
+    };
+  } catch (error) {
+    console.error("confirmTenantMoveOutAction failed:", error);
 
     const result = errorResult(error);
 

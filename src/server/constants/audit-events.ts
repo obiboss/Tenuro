@@ -29,6 +29,7 @@ export const AUDIT_EVENT_TYPES = {
   tenantAccountActivated: "tenant.account_activated",
 
   tenancyCreated: "tenancy.created",
+  tenancyMoveOutConfirmed: "tenancy.move_out_confirmed",
   rentChargePosted: "tenancy.rent_charge_posted",
   renewalReminderPrepared: "tenancy.renewal_reminder_prepared",
 
@@ -64,6 +65,7 @@ export const AUDIT_EVENT_TYPES = {
   quitNoticeDownloaded: "quit_notice.downloaded",
   quitNoticeSentPrepared: "quit_notice.sent_prepared",
   quitNoticeWithdrawn: "quit_notice.withdrawn",
+  quitNoticeAcknowledged: "quit_notice.acknowledged",
   tenantMoveOutRequested: "tenant.move_out_requested",
 } as const;
 

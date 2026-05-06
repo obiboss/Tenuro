@@ -17,6 +17,7 @@ export type TenancyRow = {
   currency_code: string;
   start_date: string | null;
   end_date: string | null;
+  move_out_date: string | null;
   renewal_notice_date: string | null;
   rent_due_day: number;
   rent_anchor_month: number | null;
@@ -27,6 +28,7 @@ export type TenancyRow = {
   opening_balance_note: string | null;
   status: "draft" | "active" | "expired" | "terminated" | "archived" | null;
   agreement_notes: string | null;
+  archived_at: string | null;
   created_at: string;
 };
 
@@ -62,6 +64,7 @@ const TENANCY_SELECT = `
   currency_code,
   start_date,
   end_date,
+  move_out_date,
   renewal_notice_date,
   rent_due_day,
   rent_anchor_month,
@@ -72,6 +75,7 @@ const TENANCY_SELECT = `
   opening_balance_note,
   status,
   agreement_notes,
+  archived_at,
   created_at
 `;
 
@@ -86,6 +90,7 @@ const TENANCY_DETAIL_SELECT = `
   currency_code,
   start_date,
   end_date,
+  move_out_date,
   renewal_notice_date,
   rent_due_day,
   rent_anchor_month,
@@ -96,6 +101,7 @@ const TENANCY_DETAIL_SELECT = `
   opening_balance_note,
   status,
   agreement_notes,
+  archived_at,
   created_at,
   tenants (
     id,
@@ -213,7 +219,7 @@ export async function createTenancy(
       next_rent_charge_date: nextRentChargeDate,
 
       move_in_date: params.input.startDate,
-      move_out_date: params.input.endDate,
+      move_out_date: null,
       next_renewal_date: nextRentChargeDate,
       tenancy_status: "active",
 
@@ -256,18 +262,24 @@ export async function terminateTenancy(
   params: {
     tenancyId: string;
     reason: string;
+    actualMoveOutDate?: string | null;
   },
 ) {
+  const archivedAt = new Date().toISOString();
+
   const { data, error } = await supabase
     .from("tenancies")
     .update({
       status: "terminated",
       tenancy_status: "terminated",
+      move_out_date: params.actualMoveOutDate ?? toDateOnly(new Date()),
       agreement_notes: params.reason,
-      archived_at: new Date().toISOString(),
+      archived_at: archivedAt,
     })
     .eq("id", params.tenancyId)
     .eq("status", "active")
+    .is("deleted_at", null)
+    .is("archived_at", null)
     .select(TENANCY_SELECT)
     .single<TenancyRow>();
 

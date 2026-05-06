@@ -6,6 +6,7 @@ import {
   Phone,
   UserRound,
 } from "lucide-react";
+import { MoveOutConfirmationCard } from "@/components/quit-notices/move-out-confirmation-card";
 import { RentPaymentModal } from "@/components/payment/rent-payment-modal";
 import { QuitNoticeIssueCard } from "@/components/quit-notices/quit-notice-issue-card";
 import { OnboardingInviteCard } from "@/components/tenant/onboarding-invite-card";
@@ -32,6 +33,7 @@ import {
   getCurrentLandlordTenantKycDocumentLinks,
 } from "@/server/services/tenants.service";
 import { getCurrentTenantActiveTenancy } from "@/server/services/tenancies.service";
+import { getCurrentLandlordQuitNoticesForTenancy } from "@/server/services/quit-notices.service";
 
 type TenantDetailPageProps = {
   params: Promise<{
@@ -60,6 +62,10 @@ export default async function TenantDetailPage({
   const agreementPdfDownloadUrl = agreementDocument?.pdf_path
     ? await getCurrentTenancyAgreementPdfDownloadUrl(agreementDocument.id)
     : null;
+
+  const quitNotices = activeTenancy
+    ? await getCurrentLandlordQuitNoticesForTenancy(activeTenancy.id)
+    : [];
 
   const status =
     TENANT_ONBOARDING_STATUS_COPY[tenant.onboarding_status] ??
@@ -291,6 +297,18 @@ export default async function TenantDetailPage({
               <QuitNoticeIssueCard
                 tenantId={tenant.id}
                 tenancyId={activeTenancy.id}
+              />
+            </SectionCard>
+          ) : null}
+
+          {activeTenancy ? (
+            <SectionCard
+              title="Confirm Move-Out"
+              description="Use this only after the tenant has actually moved out and the unit should become vacant."
+            >
+              <MoveOutConfirmationCard
+                tenantId={tenant.id}
+                notices={quitNotices}
               />
             </SectionCard>
           ) : null}

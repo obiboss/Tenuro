@@ -7,6 +7,7 @@ import {
 } from "@/server/constants/audit-events";
 import { AppError } from "@/server/errors/app-error";
 import {
+  acknowledgeQuitNotice,
   createQuitNoticeDraft,
   getActiveTenantIntentToVacateForTenancy,
   getQuitNoticeById,
@@ -22,7 +23,11 @@ import {
   getActiveTenantTenancy,
   getTenantDashboardTenantByProfile,
 } from "@/server/repositories/tenant-dashboard.repository";
-import { getTenancyById } from "@/server/repositories/tenancies.repository";
+import {
+  getTenancyById,
+  terminateTenancy,
+} from "@/server/repositories/tenancies.repository";
+import { markUnitVacant } from "@/server/repositories/units.repository";
 import { writeAuditLog } from "@/server/services/audit-log.service";
 import { generateAndStoreQuitNoticePdf } from "@/server/services/quit-notice-pdf.service";
 import { buildQuitNoticeTemplate } from "@/server/services/quit-notice-template.service";
@@ -49,6 +54,12 @@ export type CreateTenantMoveOutNoticeInput = {
 
 export type IssueQuitNoticeInput = {
   quitNoticeId: string;
+};
+
+export type ConfirmTenantMoveOutInput = {
+  quitNoticeId: string;
+  actualMoveOutDate: string;
+  finalNote?: string | null;
 };
 
 export type WithdrawQuitNoticeInput = {
@@ -134,6 +145,33 @@ function validateTenantMoveOutDate(value: string) {
       "The planned move-out date cannot be in the past.",
       400,
     );
+  }
+}
+
+function validateActualMoveOutDate(params: {
+  actualMoveOutDate: string;
+  tenancyStartDate: string | null;
+}) {
+  const actualMoveOutDate = parseDateOnly(params.actualMoveOutDate);
+
+  if (!actualMoveOutDate) {
+    throw new AppError(
+      "INVALID_ACTUAL_MOVE_OUT_DATE",
+      "Enter a valid actual move-out date.",
+      400,
+    );
+  }
+
+  if (params.tenancyStartDate) {
+    const tenancyStartDate = parseDateOnly(params.tenancyStartDate);
+
+    if (tenancyStartDate && actualMoveOutDate < tenancyStartDate) {
+      throw new AppError(
+        "MOVE_OUT_BEFORE_TENANCY_START",
+        "Move-out date cannot be before the tenancy start date.",
+        400,
+      );
+    }
   }
 }
 
@@ -520,6 +558,160 @@ export async function createTenantMoveOutNoticeForCurrentTenant(
   });
 
   return issuedNotice;
+}
+
+export async function confirmTenantMoveOutForCurrentLandlord(
+  input: ConfirmTenantMoveOutInput,
+) {
+  const landlord = await requireLandlord();
+  const supabase = await createSupabaseServerClient();
+
+  const quitNotice = await getQuitNoticeById(supabase, input.quitNoticeId);
+
+  if (quitNotice.landlord_id !== landlord.id) {
+    throw new AppError(
+      "FORBIDDEN",
+      "You do not have permission to confirm this move-out.",
+      403,
+    );
+  }
+
+  if (quitNotice.status !== "issued" && quitNotice.status !== "delivered") {
+    throw new AppError(
+      "QUIT_NOTICE_NOT_CONFIRMABLE",
+      "Only an issued or delivered notice can be used to confirm move-out.",
+      400,
+    );
+  }
+
+  const tenancy = await getTenancyById(supabase, quitNotice.tenancy_id);
+
+  if (tenancy.landlord_id !== landlord.id) {
+    throw new AppError(
+      "FORBIDDEN",
+      "You do not have permission to close this tenancy.",
+      403,
+    );
+  }
+
+  if (tenancy.status !== "active") {
+    throw new AppError(
+      "TENANCY_NOT_ACTIVE",
+      "This tenancy is no longer active.",
+      400,
+    );
+  }
+
+  validateActualMoveOutDate({
+    actualMoveOutDate: input.actualMoveOutDate,
+    tenancyStartDate: tenancy.start_date,
+  });
+
+  const finalNote = input.finalNote?.trim() || null;
+
+  const terminationReason = [
+    `Move-out confirmed from notice ${quitNotice.id}.`,
+    `Notice type: ${quitNotice.notice_type}.`,
+    `Actual move-out date: ${input.actualMoveOutDate}.`,
+    finalNote ? `Final note: ${finalNote}` : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const terminatedTenancy = await terminateTenancy(supabase, {
+    tenancyId: tenancy.id,
+    reason: terminationReason,
+    actualMoveOutDate: input.actualMoveOutDate,
+  });
+
+  const updatedUnit = await markUnitVacant(supabase, tenancy.unit_id);
+
+  const acknowledgedNotice = await acknowledgeQuitNotice(supabase, {
+    quitNoticeId: quitNotice.id,
+    deliveryMetadata: {
+      ...quitNotice.delivery_metadata,
+      move_out_confirmed_at: new Date().toISOString(),
+      actual_move_out_date: input.actualMoveOutDate,
+      confirmed_by: landlord.id,
+      confirmed_by_name: landlord.fullName,
+      final_note: finalNote,
+    },
+  });
+
+  await writeAuditLog({
+    landlordId: landlord.id,
+    tenantId: quitNotice.tenant_id,
+    tenancyId: quitNotice.tenancy_id,
+    unitId: quitNotice.unit_id,
+    propertyId: quitNotice.property_id,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.tenancyMoveOutConfirmed,
+    entityType: AUDIT_ENTITY_TYPES.tenancy,
+    entityId: tenancy.id,
+    description: "Tenant move-out confirmed and tenancy closed.",
+    metadata: {
+      quit_notice_id: quitNotice.id,
+      notice_type: quitNotice.notice_type,
+      previous_tenancy_status: tenancy.status,
+      new_tenancy_status: terminatedTenancy.status,
+      actual_move_out_date: input.actualMoveOutDate,
+      final_note: finalNote,
+      tenancy_reference: tenancy.tenancy_reference,
+      tenant_name: tenancy.tenants?.full_name ?? null,
+      property_name: tenancy.units?.properties?.property_name ?? null,
+      unit_identifier: tenancy.units?.unit_identifier ?? null,
+    },
+  });
+
+  await writeAuditLog({
+    landlordId: landlord.id,
+    tenantId: quitNotice.tenant_id,
+    tenancyId: quitNotice.tenancy_id,
+    unitId: quitNotice.unit_id,
+    propertyId: quitNotice.property_id,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.unitStatusChanged,
+    entityType: AUDIT_ENTITY_TYPES.unit,
+    entityId: quitNotice.unit_id,
+    description: "Unit marked vacant after move-out confirmation.",
+    metadata: {
+      quit_notice_id: quitNotice.id,
+      previous_status: "occupied",
+      current_status: updatedUnit.status,
+      actual_move_out_date: input.actualMoveOutDate,
+      unit_identifier: tenancy.units?.unit_identifier ?? null,
+      property_name: tenancy.units?.properties?.property_name ?? null,
+    },
+  });
+
+  await writeAuditLog({
+    landlordId: landlord.id,
+    tenantId: quitNotice.tenant_id,
+    tenancyId: quitNotice.tenancy_id,
+    unitId: quitNotice.unit_id,
+    propertyId: quitNotice.property_id,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.quitNoticeAcknowledged,
+    entityType: AUDIT_ENTITY_TYPES.quitNotice,
+    entityId: acknowledgedNotice.id,
+    description: "Quit notice acknowledged through move-out confirmation.",
+    metadata: {
+      quit_notice_id: acknowledgedNotice.id,
+      notice_type: acknowledgedNotice.notice_type,
+      status: acknowledgedNotice.status,
+      acknowledged_at: acknowledgedNotice.acknowledged_at,
+      actual_move_out_date: input.actualMoveOutDate,
+    },
+  });
+
+  return {
+    quitNotice: acknowledgedNotice,
+    tenancy: terminatedTenancy,
+    unit: updatedUnit,
+  };
 }
 
 export async function issueQuitNoticeForCurrentLandlord(

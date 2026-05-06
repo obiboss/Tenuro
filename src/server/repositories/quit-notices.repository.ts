@@ -98,6 +98,11 @@ export type IssueQuitNoticeParams = {
   deliveryMetadata: Record<string, unknown>;
 };
 
+export type AcknowledgeQuitNoticeParams = {
+  quitNoticeId: string;
+  deliveryMetadata: Record<string, unknown>;
+};
+
 export type WithdrawQuitNoticeParams = {
   quitNoticeId: string;
   withdrawnReason: string;
@@ -319,6 +324,30 @@ export async function issueQuitNotice(
     })
     .eq("id", params.quitNoticeId)
     .eq("status", "draft")
+    .is("deleted_at", null)
+    .select(QUIT_NOTICE_DETAIL_SELECT)
+    .single<QuitNoticeDetailRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function acknowledgeQuitNotice(
+  supabase: SupabaseClient,
+  params: AcknowledgeQuitNoticeParams,
+) {
+  const { data, error } = await supabase
+    .from("quit_notices")
+    .update({
+      status: "acknowledged",
+      acknowledged_at: new Date().toISOString(),
+      delivery_metadata: params.deliveryMetadata,
+    })
+    .eq("id", params.quitNoticeId)
+    .in("status", ["issued", "delivered"])
     .is("deleted_at", null)
     .select(QUIT_NOTICE_DETAIL_SELECT)
     .single<QuitNoticeDetailRow>();

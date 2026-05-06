@@ -25,3 +25,14 @@ export const initialTenantMoveOutNoticeActionState: TenantMoveOutNoticeActionSta
     ok: false,
     message: "",
   };
+
+export type ConfirmMoveOutActionState = {
+  ok: boolean;
+  message: string;
+  fieldErrors?: Record<string, string[]>;
+};
+
+export const initialConfirmMoveOutActionState: ConfirmMoveOutActionState = {
+  ok: false,
+  message: "",
+};
