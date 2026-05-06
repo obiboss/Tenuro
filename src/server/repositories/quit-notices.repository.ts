@@ -103,6 +103,11 @@ export type WithdrawQuitNoticeParams = {
   withdrawnReason: string;
 };
 
+export type UpdateQuitNoticePdfPathParams = {
+  quitNoticeId: string;
+  pdfPath: string;
+};
+
 const QUIT_NOTICE_SELECT = `
   id,
   landlord_id,
@@ -319,6 +324,27 @@ export async function withdrawQuitNotice(
     .is("deleted_at", null)
     .select(QUIT_NOTICE_SELECT)
     .single<QuitNoticeRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function updateQuitNoticePdfPath(
+  supabase: SupabaseClient,
+  params: UpdateQuitNoticePdfPathParams,
+) {
+  const { data, error } = await supabase
+    .from("quit_notices")
+    .update({
+      pdf_path: params.pdfPath,
+    })
+    .eq("id", params.quitNoticeId)
+    .is("deleted_at", null)
+    .select(QUIT_NOTICE_DETAIL_SELECT)
+    .single<QuitNoticeDetailRow>();
 
   if (error) {
     throw error;

@@ -6,6 +6,7 @@ import { createSupabaseAdminClient } from "@/server/supabase/admin";
 const TENANT_KYC_BUCKET = "tenant-kyc-documents";
 const TENANCY_AGREEMENT_PDF_BUCKET = "tenancy-agreement-pdfs";
 const RENT_RECEIPTS_BUCKET = "rent-receipts";
+const QUIT_NOTICE_PDF_BUCKET = "quit-notice-pdfs";
 const SIGNED_URL_EXPIRY_SECONDS = 60 * 10;
 
 export type SignedKycDocument = {
@@ -37,6 +38,27 @@ async function createSignedStorageUrl(params: {
   }
 
   return data.signedUrl;
+}
+
+async function uploadPdfToBucket(params: {
+  bucket: string;
+  path: string;
+  pdfBuffer: Buffer;
+}) {
+  const supabase = createSupabaseAdminClient();
+
+  const { error } = await supabase.storage
+    .from(params.bucket)
+    .upload(params.path, params.pdfBuffer, {
+      contentType: "application/pdf",
+      upsert: true,
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  return params.path;
 }
 
 export async function createTenantKycDocumentLinks(params: {
@@ -83,20 +105,11 @@ export async function uploadTenancyAgreementPdf(params: {
   path: string;
   pdfBuffer: Buffer;
 }) {
-  const supabase = createSupabaseAdminClient();
-
-  const { error } = await supabase.storage
-    .from(TENANCY_AGREEMENT_PDF_BUCKET)
-    .upload(params.path, params.pdfBuffer, {
-      contentType: "application/pdf",
-      upsert: true,
-    });
-
-  if (error) {
-    throw error;
-  }
-
-  return params.path;
+  return uploadPdfToBucket({
+    bucket: TENANCY_AGREEMENT_PDF_BUCKET,
+    path: params.path,
+    pdfBuffer: params.pdfBuffer,
+  });
 }
 
 export async function createSignedTenancyAgreementPdfUrl(path: string | null) {
@@ -110,25 +123,34 @@ export async function uploadRentReceiptPdf(params: {
   path: string;
   pdfBuffer: Buffer;
 }) {
-  const supabase = createSupabaseAdminClient();
-
-  const { error } = await supabase.storage
-    .from(RENT_RECEIPTS_BUCKET)
-    .upload(params.path, params.pdfBuffer, {
-      contentType: "application/pdf",
-      upsert: true,
-    });
-
-  if (error) {
-    throw error;
-  }
-
-  return params.path;
+  return uploadPdfToBucket({
+    bucket: RENT_RECEIPTS_BUCKET,
+    path: params.path,
+    pdfBuffer: params.pdfBuffer,
+  });
 }
 
 export async function createSignedRentReceiptPdfUrl(path: string | null) {
   return createSignedStorageUrl({
     bucket: RENT_RECEIPTS_BUCKET,
+    path,
+  });
+}
+
+export async function uploadQuitNoticePdf(params: {
+  path: string;
+  pdfBuffer: Buffer;
+}) {
+  return uploadPdfToBucket({
+    bucket: QUIT_NOTICE_PDF_BUCKET,
+    path: params.path,
+    pdfBuffer: params.pdfBuffer,
+  });
+}
+
+export async function createSignedQuitNoticePdfUrl(path: string | null) {
+  return createSignedStorageUrl({
+    bucket: QUIT_NOTICE_PDF_BUCKET,
     path,
   });
 }

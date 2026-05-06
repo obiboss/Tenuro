@@ -18,6 +18,10 @@ import {
 } from "@/server/repositories/quit-notices.repository";
 import { getTenancyById } from "@/server/repositories/tenancies.repository";
 import { writeAuditLog } from "@/server/services/audit-log.service";
+import { generateAndStoreQuitNoticePdf } from "@/server/services/quit-notice-pdf.service";
+import { buildQuitNoticeTemplate } from "@/server/services/quit-notice-template.service";
+import { createSignedQuitNoticePdfUrl } from "@/server/services/storage.service";
+import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { requireLandlord } from "./auth.service";
 
@@ -38,6 +42,10 @@ export type IssueQuitNoticeInput = {
 export type WithdrawQuitNoticeInput = {
   quitNoticeId: string;
   withdrawnReason: string;
+};
+
+export type GenerateQuitNoticePdfInput = {
+  quitNoticeId: string;
 };
 
 function parseDateOnly(value: string) {
@@ -83,36 +91,6 @@ function assertTextLength(params: {
   if (params.value.trim().length < params.minLength) {
     throw new AppError(params.code, params.message, 400);
   }
-}
-
-function buildQuitNoticeDocumentBody(params: {
-  tenantName: string;
-  landlordName: string;
-  propertyName: string;
-  unitName: string;
-  noticeDate: string;
-  vacateByDate: string;
-  reason: string;
-}) {
-  return [
-    "QUIT NOTICE",
-    "",
-    `Date of Notice: ${params.noticeDate}`,
-    "",
-    `To: ${params.tenantName}`,
-    `Property: ${params.propertyName}`,
-    `Unit: ${params.unitName}`,
-    "",
-    `This notice is issued by ${params.landlordName}.`,
-    "",
-    "You are hereby notified to vacate the above-mentioned premises on or before:",
-    params.vacateByDate,
-    "",
-    "Reason:",
-    params.reason,
-    "",
-    "This document is a draft foundation record. Formal PDF generation will be handled in the quit notice PDF batch.",
-  ].join("\n");
 }
 
 export async function createQuitNoticeDraftForCurrentLandlord(
@@ -175,15 +153,47 @@ export async function createQuitNoticeDraftForCurrentLandlord(
     );
   }
 
-  const documentBody = buildQuitNoticeDocumentBody({
-    tenantName: tenancy.tenants.full_name,
-    landlordName: landlord.fullName,
-    propertyName: tenancy.units.properties.property_name,
-    unitName: tenancy.units.unit_identifier,
-    noticeDate: input.noticeDate,
-    vacateByDate: input.vacateByDate,
-    reason: input.reason,
-  });
+  const draftSeed = {
+    id: "",
+    landlord_id: landlord.id,
+    tenant_id: tenancy.tenant_id,
+    tenancy_id: tenancy.id,
+    unit_id: tenancy.unit_id,
+    property_id: tenancy.units.properties.id,
+    notice_type: input.noticeType,
+    status: "draft" as const,
+    notice_date: input.noticeDate,
+    vacate_by_date: input.vacateByDate,
+    reason: input.reason.trim(),
+    landlord_notes: input.landlordNotes?.trim() || null,
+    delivery_method: input.deliveryMethod ?? "whatsapp",
+    delivery_metadata: {},
+    document_body: null,
+    pdf_path: null,
+    issued_at: null,
+    issued_by: null,
+    delivered_at: null,
+    acknowledged_at: null,
+    withdrawn_at: null,
+    withdrawn_reason: null,
+    metadata: {},
+    created_by: landlord.id,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    deleted_at: null,
+    tenants: tenancy.tenants,
+    tenancies: {
+      id: tenancy.id,
+      tenancy_reference: tenancy.tenancy_reference,
+      start_date: tenancy.start_date,
+      end_date: tenancy.end_date,
+      rent_amount: tenancy.rent_amount,
+      currency_code: tenancy.currency_code,
+    },
+    units: tenancy.units,
+  };
+
+  const documentBody = buildQuitNoticeTemplate(draftSeed);
 
   const quitNotice = await createQuitNoticeDraft(supabase, {
     landlordId: landlord.id,
@@ -257,13 +267,19 @@ export async function issueQuitNoticeForCurrentLandlord(
     );
   }
 
+  const adminSupabase = createSupabaseAdminClient();
+  const noticeWithPdf = existingNotice.pdf_path
+    ? existingNotice
+    : await generateAndStoreQuitNoticePdf(adminSupabase, existingNotice);
+
   const quitNotice = await issueQuitNotice(supabase, {
-    quitNoticeId: input.quitNoticeId,
+    quitNoticeId: noticeWithPdf.id,
     issuedBy: landlord.id,
     deliveryMetadata: {
-      prepared_channel: existingNotice.delivery_method,
+      prepared_channel: noticeWithPdf.delivery_method,
       delivery_status: "prepared_not_sent",
       issued_by_name: landlord.fullName,
+      pdf_path: noticeWithPdf.pdf_path,
     },
   });
 
@@ -286,6 +302,7 @@ export async function issueQuitNoticeForCurrentLandlord(
       issued_at: quitNotice.issued_at,
       delivery_method: quitNotice.delivery_method,
       delivery_status: "prepared_not_sent",
+      pdf_path: quitNotice.pdf_path,
     },
   });
 
@@ -354,6 +371,85 @@ export async function withdrawQuitNoticeForCurrentLandlord(
   });
 
   return quitNotice;
+}
+
+export async function generateQuitNoticePdfForCurrentLandlord(
+  input: GenerateQuitNoticePdfInput,
+) {
+  const landlord = await requireLandlord();
+  const userSupabase = await createSupabaseServerClient();
+  const adminSupabase = createSupabaseAdminClient();
+
+  const quitNotice = await getQuitNoticeById(userSupabase, input.quitNoticeId);
+
+  if (quitNotice.landlord_id !== landlord.id) {
+    throw new AppError(
+      "FORBIDDEN",
+      "You do not have permission to generate this quit notice PDF.",
+      403,
+    );
+  }
+
+  const noticeWithPdf = await generateAndStoreQuitNoticePdf(
+    adminSupabase,
+    quitNotice,
+  );
+
+  const pdfDownloadUrl = await createSignedQuitNoticePdfUrl(
+    noticeWithPdf.pdf_path,
+  );
+
+  await writeAuditLog({
+    landlordId: landlord.id,
+    tenantId: noticeWithPdf.tenant_id,
+    tenancyId: noticeWithPdf.tenancy_id,
+    unitId: noticeWithPdf.unit_id,
+    propertyId: noticeWithPdf.property_id,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.quitNoticeDownloaded,
+    entityType: AUDIT_ENTITY_TYPES.quitNotice,
+    entityId: noticeWithPdf.id,
+    description: "Quit notice PDF prepared.",
+    metadata: {
+      quit_notice_id: noticeWithPdf.id,
+      notice_type: noticeWithPdf.notice_type,
+      status: noticeWithPdf.status,
+      pdf_path: noticeWithPdf.pdf_path,
+    },
+  });
+
+  return {
+    quitNotice: noticeWithPdf,
+    pdfDownloadUrl,
+  };
+}
+
+export async function getQuitNoticePdfDownloadUrlForCurrentLandlord(
+  quitNoticeId: string,
+) {
+  const landlord = await requireLandlord();
+  const supabase = await createSupabaseServerClient();
+
+  const quitNotice = await getQuitNoticeById(supabase, quitNoticeId);
+
+  if (quitNotice.landlord_id !== landlord.id) {
+    throw new AppError(
+      "FORBIDDEN",
+      "You do not have permission to download this quit notice PDF.",
+      403,
+    );
+  }
+
+  if (!quitNotice.pdf_path) {
+    throw new AppError(
+      "QUIT_NOTICE_PDF_NOT_READY",
+      "Generate the quit notice PDF before downloading it.",
+      400,
+    );
+  }
+
+  return createSignedQuitNoticePdfUrl(quitNotice.pdf_path);
 }
 
 export async function getCurrentLandlordQuitNotices() {
