@@ -59,18 +59,35 @@ export async function postInitialTenancyLedgerEntries(
 export async function postDueRentCharges(
   supabase: SupabaseClient,
   runDate?: string,
-) {
-  const { data, error } = await supabase
-    .rpc("post_due_rent_charges", {
-      p_run_date: runDate ?? new Date().toISOString().slice(0, 10),
-    })
-    .returns<PostedRentChargeRow[]>();
+): Promise<PostedRentChargeRow[]> {
+  const { data, error } = await supabase.rpc("post_due_rent_charges", {
+    p_run_date: runDate ?? new Date().toISOString().slice(0, 10),
+  });
 
   if (error) {
     throw error;
   }
 
-  return data ?? [];
+  if (!Array.isArray(data)) {
+    return [];
+  }
+
+  return data.map((row) => {
+    const charge = row as Record<string, unknown>;
+
+    return {
+      tenancy_id: String(charge.tenancy_id),
+      landlord_id: String(charge.landlord_id),
+      tenant_id: String(charge.tenant_id),
+      unit_id: String(charge.unit_id),
+      ledger_entry_id: String(charge.ledger_entry_id),
+      rent_amount: Number(charge.rent_amount),
+      currency_code: String(charge.currency_code),
+      period_start: String(charge.period_start),
+      period_end: String(charge.period_end),
+      next_rent_charge_date: String(charge.next_rent_charge_date),
+    };
+  });
 }
 
 export async function getTenancyBalanceSummary(
