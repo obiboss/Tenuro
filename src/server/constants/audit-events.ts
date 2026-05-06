@@ -23,17 +23,37 @@ export const AUDIT_EVENT_TYPES = {
   tenantKycSubmitted: "tenant.kyc_submitted",
   tenantApproved: "tenant.approved",
   tenantRejected: "tenant.rejected",
+  tenantUpdated: "tenant.updated",
+  tenantArchived: "tenant.archived",
+  tenantAccountActivated: "tenant.account_activated",
+
   tenancyCreated: "tenancy.created",
+
   agreementGenerated: "agreement.generated",
   agreementSaved: "agreement.saved",
   agreementFinalized: "agreement.finalized",
   agreementAccepted: "agreement.accepted",
+  agreementAcceptanceLinkRefreshed: "agreement.acceptance_link_refreshed",
+
   paymentLinkSent: "payment.link_sent",
   manualPaymentRecorded: "payment.manual_recorded",
   gatewayPaymentVerified: "payment.gateway_verified",
+  gatewayPaymentFailed: "payment.gateway_failed",
+  gatewayPaymentIgnored: "payment.gateway_ignored",
+
   receiptGenerated: "receipt.generated",
-  tenantAccountActivated: "tenant.account_activated",
+  receiptWhatsappPrepared: "receipt.whatsapp_prepared",
+
   bankAccountSetup: "bank_account.setup",
+
+  propertyCreated: "property.created",
+  propertyUpdated: "property.updated",
+  propertyArchived: "property.archived",
+
+  unitCreated: "unit.created",
+  unitUpdated: "unit.updated",
+  unitArchived: "unit.archived",
+  unitStatusChanged: "unit.status_changed",
 } as const;
 
 export type AuditActorRole =

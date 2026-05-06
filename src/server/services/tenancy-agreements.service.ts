@@ -425,6 +425,23 @@ export async function refreshTenancyAgreementAcceptanceLinkForCurrentLandlord(
     acceptanceUrl: token.acceptanceUrl,
   });
 
+  await writeAuditLog({
+    landlordId: landlord.id,
+    tenantId: updatedAgreement.tenant_id,
+    tenancyId: updatedAgreement.tenancy_id,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.agreementAcceptanceLinkRefreshed,
+    entityType: AUDIT_ENTITY_TYPES.agreement,
+    entityId: updatedAgreement.id,
+    description: "Tenancy agreement acceptance link refreshed.",
+    metadata: {
+      agreement_id: updatedAgreement.id,
+      document_status: updatedAgreement.document_status,
+      token_expires_at: updatedAgreement.tenant_acceptance_token_expires_at,
+    },
+  });
+
   return {
     agreement: updatedAgreement,
     acceptanceUrl: token.acceptanceUrl,

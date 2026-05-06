@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  AUDIT_ACTOR_ROLES,
   AUDIT_ENTITY_TYPES,
   AUDIT_EVENT_TYPES,
 } from "@/server/constants/audit-events";
@@ -13,7 +14,10 @@ import {
   type RentPaymentRow,
   updateRentPaymentReceipt,
 } from "@/server/repositories/payments.repository";
-import { writeSystemAuditLog } from "@/server/services/audit-log.service";
+import {
+  writeAuditLog,
+  writeSystemAuditLog,
+} from "@/server/services/audit-log.service";
 import {
   createSignedRentReceiptPdfUrl,
   uploadRentReceiptPdf,
@@ -257,6 +261,7 @@ export async function getRentReceiptDownloadUrlForCurrentLandlord(
 export async function prepareRentReceiptWhatsAppForCurrentLandlord(
   paymentId: string,
 ) {
+  const landlord = await requireLandlord();
   const receipt = await generateRentReceiptForCurrentLandlord(paymentId);
 
   if (!receipt.receiptDownloadUrl) {
@@ -272,14 +277,33 @@ export async function prepareRentReceiptWhatsAppForCurrentLandlord(
     receiptDownloadUrl: receipt.receiptDownloadUrl,
   });
 
+  const whatsappUrl = buildWhatsAppUrl({
+    phoneNumber: receipt.payment.tenants?.phone_number,
+    message,
+  });
+
+  await writeAuditLog({
+    landlordId: landlord.id,
+    tenantId: receipt.payment.tenant_id,
+    tenancyId: receipt.payment.tenancy_id,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.receiptWhatsappPrepared,
+    entityType: AUDIT_ENTITY_TYPES.receipt,
+    entityId: receipt.payment.id,
+    description: "Rent receipt WhatsApp message prepared.",
+    metadata: {
+      payment_id: receipt.payment.id,
+      receipt_number: receipt.payment.receipt_number,
+      receipt_path: receipt.payment.receipt_path,
+      tenant_phone_present: Boolean(receipt.payment.tenants?.phone_number),
+    },
+  });
+
   return {
-    whatsappUrl: buildWhatsAppUrl({
-      phoneNumber: receipt.payment.tenants?.phone_number,
-      message,
-    }),
+    whatsappUrl,
   };
 }
-
 export async function getTenantRentReceiptDownloadUrlByGatewayReference(
   reference: string,
 ) {

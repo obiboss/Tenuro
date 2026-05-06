@@ -19,6 +19,12 @@ import {
 } from "@/server/utils/tokens";
 import type { ActivateTenantAccountInput } from "@/server/validators/tenant-activation.schema";
 import { requireLandlord } from "./auth.service";
+import {
+  AUDIT_ACTOR_ROLES,
+  AUDIT_ENTITY_TYPES,
+  AUDIT_EVENT_TYPES,
+} from "@/server/constants/audit-events";
+import { writeAuditLog } from "@/server/services/audit-log.service";
 
 function getAppBaseUrl() {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
@@ -203,6 +209,25 @@ export async function activateTenantAccount(input: ActivateTenantAccountInput) {
   });
 
   await markTenantActivationTokenUsed(adminSupabase, activationToken.id);
+
+  await writeAuditLog({
+    landlordId: tenant.landlord_id,
+    tenantId: tenant.id,
+    unitId: tenant.unit_id,
+    propertyId: tenant.units?.properties?.id ?? null,
+    actorProfileId: data.user.id,
+    actorRole: AUDIT_ACTOR_ROLES.tenant,
+    eventType: AUDIT_EVENT_TYPES.tenantAccountActivated,
+    entityType: AUDIT_ENTITY_TYPES.activation,
+    entityId: activationToken.id,
+    description: `${tenant.full_name} activated their tenant account.`,
+    metadata: {
+      tenant_name: tenant.full_name,
+      tenant_profile_id: data.user.id,
+      activation_token_id: activationToken.id,
+      activated_at: new Date().toISOString(),
+    },
+  });
 
   return {
     tenantId: tenant.id,

@@ -149,6 +149,23 @@ export async function processVerifiedGatewayPaymentReference(
       verifiedPayload,
     });
 
+    await writeSystemAuditLog({
+      landlordId: intent.landlord_id,
+      tenantId: intent.tenant_id,
+      tenancyId: intent.tenancy_id,
+      eventType: AUDIT_EVENT_TYPES.gatewayPaymentFailed,
+      entityType: AUDIT_ENTITY_TYPES.payment,
+      entityId: intent.id,
+      description: "Paystack gateway payment was not successful.",
+      metadata: {
+        gateway_payment_intent_id: intent.id,
+        paystack_reference: intent.paystack_reference,
+        paystack_status: verifiedTransaction.status,
+        expected_total_amount: intent.total_amount,
+        verified_amount_kobo: verifiedTransaction.amount,
+      },
+    });
+
     return {
       status: "ignored",
       message: "Payment was not successful.",
@@ -269,6 +286,27 @@ export async function processGatewayPaystackWebhook(params: {
         reason: `Unsupported Paystack event: ${webhook.event}`,
       });
 
+      const ignoredIntent = await getGatewayPaymentIntentByReference(
+        supabase,
+        webhook.data.reference,
+      );
+
+      await writeSystemAuditLog({
+        landlordId: ignoredIntent?.landlord_id ?? null,
+        tenantId: ignoredIntent?.tenant_id ?? null,
+        tenancyId: ignoredIntent?.tenancy_id ?? null,
+        eventType: AUDIT_EVENT_TYPES.gatewayPaymentIgnored,
+        entityType: AUDIT_ENTITY_TYPES.payment,
+        entityId: ignoredIntent?.id ?? registeredEvent.event.id,
+        description: `Unsupported Paystack webhook ignored: ${webhook.event}.`,
+        metadata: {
+          gateway_payment_intent_id: ignoredIntent?.id ?? null,
+          gateway_payment_event_id: registeredEvent.event.id,
+          paystack_reference: webhook.data.reference,
+          webhook_event: webhook.event,
+        },
+      });
+
       return {
         status: "ignored",
         message: "Webhook ignored.",
@@ -306,6 +344,28 @@ export async function processGatewayPaystackWebhook(params: {
     await markGatewayPaymentEventFailed(supabase, {
       eventId: registeredEvent.event.id,
       reason: message,
+    });
+
+    const failedIntent = await getGatewayPaymentIntentByReference(
+      supabase,
+      webhook.data.reference,
+    );
+
+    await writeSystemAuditLog({
+      landlordId: failedIntent?.landlord_id ?? null,
+      tenantId: failedIntent?.tenant_id ?? null,
+      tenancyId: failedIntent?.tenancy_id ?? null,
+      eventType: AUDIT_EVENT_TYPES.gatewayPaymentFailed,
+      entityType: AUDIT_ENTITY_TYPES.payment,
+      entityId: failedIntent?.id ?? registeredEvent.event.id,
+      description: "Paystack webhook processing failed.",
+      metadata: {
+        gateway_payment_intent_id: failedIntent?.id ?? null,
+        gateway_payment_event_id: registeredEvent.event.id,
+        paystack_reference: webhook.data.reference,
+        webhook_event: webhook.event,
+        failure_reason: message,
+      },
     });
 
     return {

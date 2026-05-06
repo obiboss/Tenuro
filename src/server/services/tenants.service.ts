@@ -175,7 +175,28 @@ export async function updateTenantForCurrentLandlord(
     );
   }
 
-  return updateTenant(supabase, tenantId, input);
+  const updatedTenant = await updateTenant(supabase, tenantId, input);
+
+  await writeAuditLog({
+    landlordId: landlord.id,
+    tenantId,
+    unitId: tenant.unit_id,
+    propertyId: tenant.units?.properties?.id ?? null,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.tenantUpdated,
+    entityType: AUDIT_ENTITY_TYPES.tenant,
+    entityId: tenantId,
+    description: `${tenant.full_name} tenant details were updated.`,
+    metadata: {
+      tenant_name: tenant.full_name,
+      updated_fields: Object.keys(input),
+      previous_onboarding_status: tenant.onboarding_status,
+      current_onboarding_status: updatedTenant.onboarding_status,
+    },
+  });
+
+  return updatedTenant;
 }
 
 export async function approveTenantForCurrentLandlord(tenantId: string) {
@@ -296,5 +317,25 @@ export async function archiveTenantForCurrentLandlord(tenantId: string) {
     );
   }
 
-  return archiveTenant(supabase, tenantId);
+  const archivedTenant = await archiveTenant(supabase, tenantId);
+
+  await writeAuditLog({
+    landlordId: landlord.id,
+    tenantId,
+    unitId: tenant.unit_id,
+    propertyId: tenant.units?.properties?.id ?? null,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.tenantArchived,
+    entityType: AUDIT_ENTITY_TYPES.tenant,
+    entityId: tenantId,
+    description: `${tenant.full_name} was archived.`,
+    metadata: {
+      tenant_name: tenant.full_name,
+      previous_onboarding_status: tenant.onboarding_status,
+      archived_at: new Date().toISOString(),
+    },
+  });
+
+  return archivedTenant;
 }
