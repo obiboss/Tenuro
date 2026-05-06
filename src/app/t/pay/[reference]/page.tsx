@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Clock3,
   CreditCard,
+  KeyRound,
 } from "lucide-react";
 import { PaymentVerificationAutoRefresh } from "@/components/payment/payment-verification-auto-refresh";
 import { TenantReceiptDownloadCard } from "@/components/payment/tenant-receipt-download-card";
@@ -320,13 +321,33 @@ export default async function TenantPaymentPage({
                 title="Activate Tenant Dashboard"
                 description="Your first rent payment has been confirmed. Create your password to access your tenant dashboard."
               >
+                <TrustNotice
+                  title="Activation link ready"
+                  description={`This secure link expires on ${formatDate(
+                    checkout.activationExpiresAt,
+                  )}.`}
+                  icon={
+                    <KeyRound aria-hidden="true" size={22} strokeWidth={2.6} />
+                  }
+                />
+
                 <a
                   href={checkout.activationUrl}
-                  className="inline-flex min-h-11 w-full items-center justify-center rounded-button bg-primary px-5 py-2.5 text-sm font-extrabold text-white shadow-soft hover:bg-primary-hover"
+                  className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-button bg-primary px-5 py-2.5 text-sm font-extrabold text-white shadow-soft hover:bg-primary-hover"
                 >
                   Activate My Tenant Account
                 </a>
               </SectionCard>
+            ) : null}
+
+            {checkout.status === "paid" && !checkout.activationUrl ? (
+              <TrustNotice
+                title="Activation unavailable"
+                description="Your payment is confirmed. If you have already activated your account, sign in from the tenant login page. Otherwise, contact your landlord."
+                icon={
+                  <KeyRound aria-hidden="true" size={22} strokeWidth={2.6} />
+                }
+              />
             ) : null}
 
             <TrustNotice
