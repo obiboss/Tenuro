@@ -5,6 +5,7 @@ import {
   ReceiptText,
   RefreshCcw,
 } from "lucide-react";
+import { TenantPaymentSummary } from "@/components/tenant/tenant-payment-summary";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -233,6 +234,15 @@ export default async function TenantDashboardPage() {
         </div>
 
         <div className="space-y-6 lg:sticky lg:top-8 lg:self-start">
+          <SectionCard
+            title="Pay Rent"
+            description="Pay outstanding rent securely through Paystack."
+          >
+            <TenantPaymentSummary
+              outstandingBalance={dashboard.outstandingBalance}
+            />
+          </SectionCard>
+
           <div id="agreement" className="scroll-mt-28">
             <SectionCard
               title="Agreement"

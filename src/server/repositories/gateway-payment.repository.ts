@@ -184,3 +184,26 @@ export async function markGatewayPaymentIntentFailed(
     throw error;
   }
 }
+
+export async function getLatestGatewayPaymentIntentForTenancyPurpose(
+  supabase: SupabaseClient,
+  params: {
+    tenancyId: string;
+    paymentPurpose: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("gateway_payment_intents")
+    .select(GATEWAY_PAYMENT_INTENT_SELECT)
+    .eq("tenancy_id", params.tenancyId)
+    .eq("metadata->>payment_purpose", params.paymentPurpose)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<GatewayPaymentIntent>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}

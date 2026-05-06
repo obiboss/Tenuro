@@ -233,3 +233,49 @@ export async function activateTenantAccount(input: ActivateTenantAccountInput) {
     tenantId: tenant.id,
   };
 }
+
+export async function generateTenantActivationLinkSystem(tenantId: string) {
+  const supabase = createSupabaseAdminClient();
+  const tenant = await getTenantById(supabase, tenantId);
+
+  if (tenant.onboarding_status !== "approved") {
+    throw new AppError(
+      "TENANT_NOT_APPROVED",
+      "Approve this tenant before preparing account activation.",
+      400,
+    );
+  }
+
+  if (tenant.profile_id) {
+    return null;
+  }
+
+  const tenantPhone = normalisePhoneNumber(tenant.phone_number);
+  const rawToken = generateSecureToken();
+  const tokenHash = sha256Hex(rawToken);
+  const expiresAt = getExpiryDateFromNow(72);
+
+  await saveTenantActivationToken(supabase, {
+    landlordId: tenant.landlord_id,
+    tenantId,
+    tokenHash,
+    expiresAt: expiresAt.toISOString(),
+  });
+
+  const activationUrl = `${getAppBaseUrl()}/t/activate/${rawToken}`;
+  const propertyName =
+    tenant.units?.properties?.property_name ?? "your apartment";
+  const unitName = tenant.units?.unit_identifier ?? "your unit";
+
+  return {
+    activationUrl,
+    expiresAt: expiresAt.toISOString(),
+    tenantWhatsappNumber: tenantPhone.national,
+    whatsappMessage: buildActivationMessage({
+      tenantName: tenant.full_name,
+      propertyName,
+      unitName,
+      activationUrl,
+    }),
+  };
+}

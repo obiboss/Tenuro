@@ -315,6 +315,20 @@ export default async function TenantPaymentPage({
               />
             ) : null}
 
+            {checkout.status === "paid" && checkout.activationUrl ? (
+              <SectionCard
+                title="Activate Tenant Dashboard"
+                description="Your first rent payment has been confirmed. Create your password to access your tenant dashboard."
+              >
+                <a
+                  href={checkout.activationUrl}
+                  className="inline-flex min-h-11 w-full items-center justify-center rounded-button bg-primary px-5 py-2.5 text-sm font-extrabold text-white shadow-soft hover:bg-primary-hover"
+                >
+                  Activate My Tenant Account
+                </a>
+              </SectionCard>
+            ) : null}
+
             <TrustNotice
               title="Secure Paystack checkout"
               description="You will complete the payment on Paystack. After payment, Paystack redirects you back to Tenuro for confirmation."

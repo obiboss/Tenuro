@@ -2,15 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import { errorResult } from "@/server/errors/result";
-import { initializeRentPayment } from "@/server/services/gateway-payment.service";
+import {
+  initializeRentPayment,
+  initializeTenantDashboardRentPayment,
+} from "@/server/services/gateway-payment.service";
 import { setupLandlordBankAccount } from "@/server/services/landlord-bank.service";
 import { recordManualPaymentForCurrentLandlord } from "@/server/services/payments.service";
+import { generateRentReceiptForCurrentLandlord } from "@/server/services/receipts.service";
 import {
   initializeRentPaymentSchema,
   recordManualPaymentSchema,
   setupLandlordBankAccountSchema,
 } from "@/server/validators/payment.schema";
-import { generateRentReceiptForCurrentLandlord } from "@/server/services/receipts.service";
 
 export type PaymentActionState = {
   ok: boolean;
@@ -84,6 +87,38 @@ export async function initializeRentPaymentAction(
       tenantPaymentUrl: result.tenantPaymentUrl,
       whatsappMessage: result.whatsappMessage,
       tenantWhatsappNumber: result.tenantWhatsappNumber,
+      reference: result.reference,
+      expiresAt: result.expiresAt,
+    };
+  } catch (error) {
+    const result = errorResult(error);
+
+    return {
+      ok: false,
+      message: result.message,
+      fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
+    };
+  }
+}
+
+export async function initializeTenantDashboardRentPaymentAction(
+  _previousState: PaymentActionState,
+  formData: FormData,
+): Promise<PaymentActionState> {
+  try {
+    const idempotencyKey = String(formData.get("idempotencyKey") ?? "").trim();
+
+    const result = await initializeTenantDashboardRentPayment({
+      idempotencyKey,
+    });
+
+    revalidatePath("/tenant");
+
+    return {
+      ok: true,
+      message: "Rent payment checkout prepared.",
+      authorizationUrl: result.authorizationUrl,
+      tenantPaymentUrl: result.tenantPaymentUrl,
       reference: result.reference,
       expiresAt: result.expiresAt,
     };

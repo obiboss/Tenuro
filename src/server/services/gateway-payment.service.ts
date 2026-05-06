@@ -7,23 +7,30 @@ import {
   AUDIT_EVENT_TYPES,
 } from "@/server/constants/audit-events";
 import { AppError } from "@/server/errors/app-error";
+import { getTenancyBalanceSummary } from "@/server/repositories/ledger.repository";
 import {
   createGatewayPaymentIntent,
   getGatewayPaymentIntentByIdempotencyKey,
   getGatewayPaymentIntentByReference,
+  getLatestGatewayPaymentIntentForTenancyPurpose,
 } from "@/server/repositories/gateway-payment.repository";
 import { getActiveLandlordPaystackAccount } from "@/server/repositories/landlord-paystack.repository";
 import { getTenancyPaymentContext } from "@/server/repositories/payment-context.repository";
+import {
+  getActiveTenantTenancy,
+  getTenantDashboardTenantByProfile,
+} from "@/server/repositories/tenant-dashboard.repository";
 import { getTenancyAgreementByTenancyId } from "@/server/repositories/tenancy-agreements.repository";
 import {
   writeAuditLog,
   writeSystemAuditLog,
 } from "@/server/services/audit-log.service";
+import { generateTenantActivationLinkSystem } from "@/server/services/tenant-activation.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { normalisePhoneNumber } from "@/server/utils/phone";
 import type { InitializeRentPaymentInput } from "@/server/validators/payment.schema";
-import { requireLandlord } from "./auth.service";
+import { requireLandlord, requireTenant } from "./auth.service";
 import { processVerifiedGatewayPaymentReference } from "./gateway-payment-webhook.service";
 import {
   convertNairaToKobo,
@@ -32,6 +39,8 @@ import {
 import { getTenantRentReceiptDownloadUrlByGatewayReference } from "./receipts.service";
 
 const PAYMENT_LINK_EXPIRY_HOURS = 24;
+const PAYMENT_PURPOSE_NEW_TENANT_FIRST_RENT = "new_tenant_first_rent";
+const PAYMENT_PURPOSE_TENANT_DASHBOARD_RENT = "tenant_dashboard_rent";
 
 function getAppBaseUrl() {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
@@ -115,6 +124,10 @@ function getTenuroGatewayAdminFee() {
 
 function createPaymentReference() {
   return `tenuro_${crypto.randomUUID().replaceAll("-", "")}`;
+}
+
+function createPaymentIdempotencyKey() {
+  return crypto.randomUUID();
 }
 
 function createPaymentLinkExpiry() {
@@ -229,6 +242,13 @@ function readMetadataText(
   return typeof value === "string" && value.trim() ? value : null;
 }
 
+function readMetadataBoolean(
+  metadata: Record<string, unknown>,
+  key: string,
+): boolean {
+  return metadata[key] === true;
+}
+
 async function auditExpiredPaymentLinkOnce(params: {
   landlordId: string;
   tenantId: string;
@@ -253,19 +273,25 @@ async function auditExpiredPaymentLinkOnce(params: {
   });
 }
 
-export async function initializeRentPayment(input: InitializeRentPaymentInput) {
-  const landlord = await requireLandlord();
-  const supabase = await createSupabaseServerClient();
+type GatewayPaymentInitializerActorRole =
+  | typeof AUDIT_ACTOR_ROLES.landlord
+  | typeof AUDIT_ACTOR_ROLES.tenant
+  | typeof AUDIT_ACTOR_ROLES.system;
 
-  const tenancy = await getTenancyPaymentContext(supabase, input.tenancyId);
-
-  if (tenancy.landlord_id !== landlord.id) {
-    throw new AppError(
-      "FORBIDDEN",
-      "You do not have permission to receive payment for this rental agreement.",
-      403,
-    );
-  }
+async function initializeGatewayPaymentForTenancy(params: {
+  tenancyId: string;
+  amount: number;
+  periodStart: string | null;
+  periodEnd: string | null;
+  idempotencyKey: string;
+  paymentPurpose: string;
+  sendWhatsappAuditDescription: string;
+  actorProfileId: string | null;
+  actorRole: GatewayPaymentInitializerActorRole;
+  requireAcceptedAgreement: boolean;
+}) {
+  const supabase = createSupabaseAdminClient();
+  const tenancy = await getTenancyPaymentContext(supabase, params.tenancyId);
 
   if (tenancy.status !== "active") {
     throw new AppError(
@@ -283,38 +309,46 @@ export async function initializeRentPayment(input: InitializeRentPaymentInput) {
     );
   }
 
-  const tenantPhone = normalisePhoneNumber(tenancy.tenants.phone_number);
-  const propertyName =
-    tenancy.units?.properties?.property_name ?? "your apartment";
-  const unitName = tenancy.units?.unit_identifier ?? "your unit";
+  if (params.requireAcceptedAgreement) {
+    const agreement = await getTenancyAgreementByTenancyId(
+      supabase,
+      tenancy.id,
+    );
 
-  const existingIntent = await getGatewayPaymentIntentByIdempotencyKey(
-    supabase,
-    {
-      landlordId: landlord.id,
-      idempotencyKey: input.idempotencyKey,
-    },
-  );
+    if (agreement?.document_status !== "accepted") {
+      throw new AppError(
+        "AGREEMENT_NOT_ACCEPTED",
+        "The tenant must accept the tenancy agreement before rent payment can continue.",
+        400,
+      );
+    }
+  }
 
-  if (existingIntent) {
-    const existingExpiry = getEffectiveExpiry({
-      expiresAt: existingIntent.expires_at,
-      createdAt: existingIntent.created_at,
+  const existingIdempotentIntent =
+    await getGatewayPaymentIntentByIdempotencyKey(supabase, {
+      landlordId: tenancy.landlord_id,
+      idempotencyKey: params.idempotencyKey,
     });
 
+  if (existingIdempotentIntent) {
     if (
       isPaymentIntentExpired({
-        status: existingIntent.status,
-        expiresAt: existingIntent.expires_at,
-        createdAt: existingIntent.created_at,
+        status: existingIdempotentIntent.status,
+        expiresAt: existingIdempotentIntent.expires_at,
+        createdAt: existingIdempotentIntent.created_at,
       })
     ) {
+      const existingExpiry = getEffectiveExpiry({
+        expiresAt: existingIdempotentIntent.expires_at,
+        createdAt: existingIdempotentIntent.created_at,
+      });
+
       await auditExpiredPaymentLinkOnce({
-        landlordId: existingIntent.landlord_id,
-        tenantId: existingIntent.tenant_id,
-        tenancyId: existingIntent.tenancy_id,
-        intentId: existingIntent.id,
-        reference: existingIntent.paystack_reference,
+        landlordId: existingIdempotentIntent.landlord_id,
+        tenantId: existingIdempotentIntent.tenant_id,
+        tenancyId: existingIdempotentIntent.tenancy_id,
+        intentId: existingIdempotentIntent.id,
+        reference: existingIdempotentIntent.paystack_reference,
         expiresAt: existingExpiry,
       });
 
@@ -326,53 +360,99 @@ export async function initializeRentPayment(input: InitializeRentPaymentInput) {
     }
 
     const tenantPaymentUrl = getTenantPaymentUrl(
-      existingIntent.paystack_reference,
+      existingIdempotentIntent.paystack_reference,
     );
+
+    const tenantPhone = normalisePhoneNumber(tenancy.tenants.phone_number);
+
+    const existingExpiry = getEffectiveExpiry({
+      expiresAt: existingIdempotentIntent.expires_at,
+      createdAt: existingIdempotentIntent.created_at,
+    });
 
     return {
       tenantId: tenancy.tenant_id,
-      authorizationUrl: existingIntent.authorization_url,
-      accessCode: existingIntent.paystack_access_code,
-      reference: existingIntent.paystack_reference,
+      authorizationUrl: existingIdempotentIntent.authorization_url,
+      accessCode: existingIdempotentIntent.paystack_access_code,
+      reference: existingIdempotentIntent.paystack_reference,
       tenantPaymentUrl,
       tenantWhatsappNumber: tenantPhone.national,
       expiresAt: existingExpiry,
       whatsappMessage: buildTenantPaymentMessage({
         tenantName: tenancy.tenants.full_name,
-        landlordName: landlord.fullName,
-        propertyName,
-        unitName,
-        rentAmount: Number(existingIntent.rent_amount),
+        landlordName: "Your landlord",
+        propertyName:
+          tenancy.units?.properties?.property_name ?? "your apartment",
+        unitName: tenancy.units?.unit_identifier ?? "your unit",
+        rentAmount: Number(existingIdempotentIntent.rent_amount),
         paymentUrl: tenantPaymentUrl,
-        expiresAt: existingExpiry ?? existingIntent.created_at,
+        expiresAt: existingExpiry ?? existingIdempotentIntent.created_at,
       }),
     };
   }
 
-  const agreement = await getTenancyAgreementByTenancyId(supabase, tenancy.id);
+  const latestPurposeIntent =
+    await getLatestGatewayPaymentIntentForTenancyPurpose(supabase, {
+      tenancyId: tenancy.id,
+      paymentPurpose: params.paymentPurpose,
+    });
 
-  if (agreement?.document_status !== "accepted") {
-    throw new AppError(
-      "AGREEMENT_NOT_ACCEPTED",
-      "The tenant must accept the tenancy agreement before a rent payment link can be sent.",
-      400,
+  if (
+    latestPurposeIntent &&
+    !isPaymentIntentExpired({
+      status: latestPurposeIntent.status,
+      expiresAt: latestPurposeIntent.expires_at,
+      createdAt: latestPurposeIntent.created_at,
+    })
+  ) {
+    const tenantPaymentUrl = getTenantPaymentUrl(
+      latestPurposeIntent.paystack_reference,
     );
+    const tenantPhone = normalisePhoneNumber(tenancy.tenants.phone_number);
+    const expiry = getEffectiveExpiry({
+      expiresAt: latestPurposeIntent.expires_at,
+      createdAt: latestPurposeIntent.created_at,
+    });
+
+    return {
+      tenantId: tenancy.tenant_id,
+      authorizationUrl: latestPurposeIntent.authorization_url,
+      accessCode: latestPurposeIntent.paystack_access_code,
+      reference: latestPurposeIntent.paystack_reference,
+      tenantPaymentUrl,
+      tenantWhatsappNumber: tenantPhone.national,
+      expiresAt: expiry,
+      whatsappMessage: buildTenantPaymentMessage({
+        tenantName: tenancy.tenants.full_name,
+        landlordName: "Your landlord",
+        propertyName:
+          tenancy.units?.properties?.property_name ?? "your apartment",
+        unitName: tenancy.units?.unit_identifier ?? "your unit",
+        rentAmount: Number(latestPurposeIntent.rent_amount),
+        paymentUrl: tenantPaymentUrl,
+        expiresAt: expiry ?? latestPurposeIntent.created_at,
+      }),
+    };
   }
 
   const paystackAccount = await getActiveLandlordPaystackAccount(
     supabase,
-    landlord.id,
+    tenancy.landlord_id,
   );
 
   if (!paystackAccount) {
     throw new AppError(
       "BANK_ACCOUNT_REQUIRED",
-      "Set up your payout bank account before accepting gateway payments.",
+      "The landlord payout account is not ready for online rent payment.",
       400,
     );
   }
 
-  const rentAmount = input.amount;
+  const tenantPhone = normalisePhoneNumber(tenancy.tenants.phone_number);
+  const propertyName =
+    tenancy.units?.properties?.property_name ?? "your apartment";
+  const unitName = tenancy.units?.unit_identifier ?? "your unit";
+  const rentAmount = params.amount;
   const tenuroFeeAmount = getTenuroGatewayAdminFee();
   const totalAmount = rentAmount + tenuroFeeAmount;
   const expiresAt = createPaymentLinkExpiry();
@@ -395,12 +475,15 @@ export async function initializeRentPayment(input: InitializeRentPaymentInput) {
     tenuro_fee_naira: tenuroFeeAmount,
     total_amount_naira: totalAmount,
     currency_code: tenancy.currency_code,
-    period_start: input.periodStart,
-    period_end: input.periodEnd,
+    period_start: params.periodStart,
+    period_end: params.periodEnd,
     payment_link_expires_at: expiresAt,
-    idempotency_key: input.idempotencyKey,
+    idempotency_key: params.idempotencyKey,
     property_name: propertyName,
     unit_identifier: unitName,
+    payment_purpose: params.paymentPurpose,
+    automatic_after_agreement:
+      params.paymentPurpose === PAYMENT_PURPOSE_NEW_TENANT_FIRST_RENT,
     paystack_split: {
       mode: "subaccount_flat_fee",
       subaccount: paystackAccount.paystack_subaccount_code,
@@ -424,7 +507,7 @@ export async function initializeRentPayment(input: InitializeRentPaymentInput) {
   });
 
   const intent = await createGatewayPaymentIntent(supabase, {
-    landlordId: landlord.id,
+    landlordId: tenancy.landlord_id,
     tenantId: tenancy.tenant_id,
     tenancyId: tenancy.id,
     paystackReference: initializedTransaction.reference,
@@ -434,36 +517,37 @@ export async function initializeRentPayment(input: InitializeRentPaymentInput) {
     tenuroFeeAmount,
     totalAmount,
     currencyCode: tenancy.currency_code,
-    periodStart: input.periodStart ?? null,
-    periodEnd: input.periodEnd ?? null,
+    periodStart: params.periodStart,
+    periodEnd: params.periodEnd,
     expiresAt,
-    idempotencyKey: input.idempotencyKey,
+    idempotencyKey: params.idempotencyKey,
     metadata,
   });
 
   const tenantPaymentUrl = getTenantPaymentUrl(intent.paystack_reference);
 
   await writeAuditLog({
-    landlordId: landlord.id,
+    landlordId: tenancy.landlord_id,
     tenantId: tenancy.tenant_id,
     tenancyId: tenancy.id,
-    actorProfileId: landlord.id,
-    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    actorProfileId: params.actorProfileId,
+    actorRole: params.actorRole,
     eventType: AUDIT_EVENT_TYPES.paymentLinkSent,
     entityType: AUDIT_ENTITY_TYPES.payment,
     entityId: intent.id,
-    description: "Tenant rent payment link prepared for WhatsApp.",
+    description: params.sendWhatsappAuditDescription,
     metadata: {
       gateway_payment_intent_id: intent.id,
       paystack_reference: intent.paystack_reference,
       rent_amount: rentAmount,
       tenuro_fee_amount: tenuroFeeAmount,
       total_amount: totalAmount,
-      period_start: input.periodStart ?? null,
-      period_end: input.periodEnd ?? null,
+      period_start: params.periodStart,
+      period_end: params.periodEnd,
       expires_at: expiresAt,
       property_name: propertyName,
       unit_identifier: unitName,
+      payment_purpose: params.paymentPurpose,
     },
   });
 
@@ -477,7 +561,7 @@ export async function initializeRentPayment(input: InitializeRentPaymentInput) {
     expiresAt,
     whatsappMessage: buildTenantPaymentMessage({
       tenantName: tenancy.tenants.full_name,
-      landlordName: landlord.fullName,
+      landlordName: "Your landlord",
       propertyName,
       unitName,
       rentAmount,
@@ -485,6 +569,133 @@ export async function initializeRentPayment(input: InitializeRentPaymentInput) {
       expiresAt,
     }),
   };
+}
+
+export async function initializeRentPayment(input: InitializeRentPaymentInput) {
+  const landlord = await requireLandlord();
+  const supabase = await createSupabaseServerClient();
+
+  const tenancy = await getTenancyPaymentContext(supabase, input.tenancyId);
+
+  if (tenancy.landlord_id !== landlord.id) {
+    throw new AppError(
+      "FORBIDDEN",
+      "You do not have permission to receive payment for this rental agreement.",
+      403,
+    );
+  }
+
+  return initializeGatewayPaymentForTenancy({
+    tenancyId: input.tenancyId,
+    amount: input.amount,
+    periodStart: input.periodStart ?? null,
+    periodEnd: input.periodEnd ?? null,
+    idempotencyKey: input.idempotencyKey,
+    paymentPurpose: "landlord_prepared_rent_payment",
+    sendWhatsappAuditDescription:
+      "Tenant rent payment link prepared for WhatsApp.",
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    requireAcceptedAgreement: true,
+  });
+}
+
+export async function initializeFirstRentPaymentAfterAgreementAcceptance(params: {
+  tenancyId: string;
+}) {
+  const supabase = createSupabaseAdminClient();
+  const tenancy = await getTenancyPaymentContext(supabase, params.tenancyId);
+
+  const agreement = await getTenancyAgreementByTenancyId(
+    supabase,
+    params.tenancyId,
+  );
+
+  if (agreement?.document_status !== "accepted") {
+    throw new AppError(
+      "AGREEMENT_NOT_ACCEPTED",
+      "Accept the tenancy agreement before making the first rent payment.",
+      400,
+    );
+  }
+
+  return initializeGatewayPaymentForTenancy({
+    tenancyId: params.tenancyId,
+    amount: Number(tenancy.rent_amount),
+    periodStart: tenancy.id ? null : null,
+    periodEnd: null,
+    idempotencyKey: createPaymentIdempotencyKey(),
+    paymentPurpose: PAYMENT_PURPOSE_NEW_TENANT_FIRST_RENT,
+    sendWhatsappAuditDescription:
+      "First rent payment link automatically prepared after agreement acceptance.",
+    actorProfileId: null,
+    actorRole: AUDIT_ACTOR_ROLES.system,
+    requireAcceptedAgreement: true,
+  });
+}
+
+export async function initializeTenantDashboardRentPayment(params: {
+  idempotencyKey: string;
+}) {
+  const idempotencyKey = params.idempotencyKey.trim();
+
+  if (!idempotencyKey) {
+    throw new AppError(
+      "IDEMPOTENCY_KEY_REQUIRED",
+      "Payment request could not be prepared. Please refresh and try again.",
+      400,
+    );
+  }
+
+  const user = await requireTenant();
+  const supabase = createSupabaseAdminClient();
+
+  const tenant = await getTenantDashboardTenantByProfile(supabase, {
+    profileId: user.id,
+    phoneNumber: user.phoneNumber,
+  });
+
+  if (!tenant) {
+    throw new AppError(
+      "TENANT_RECORD_NOT_FOUND",
+      "We could not find your tenant record.",
+      404,
+    );
+  }
+
+  const tenancy = await getActiveTenantTenancy(supabase, tenant.id);
+
+  if (!tenancy) {
+    throw new AppError(
+      "ACTIVE_TENANCY_NOT_FOUND",
+      "You do not have an active tenancy to pay for.",
+      404,
+    );
+  }
+
+  const balance = await getTenancyBalanceSummary(supabase, tenancy.id);
+
+  if (Number(balance.outstanding_balance) <= 0) {
+    throw new AppError(
+      "NO_RENT_DUE",
+      "There is no outstanding rent due for this tenancy.",
+      400,
+    );
+  }
+
+  return initializeGatewayPaymentForTenancy({
+    tenancyId: tenancy.id,
+    amount: Number(balance.outstanding_balance),
+    periodStart: tenancy.current_period_start,
+    periodEnd: tenancy.current_period_end,
+    idempotencyKey,
+    paymentPurpose: PAYMENT_PURPOSE_TENANT_DASHBOARD_RENT,
+    sendWhatsappAuditDescription:
+      "Tenant dashboard rent payment link prepared.",
+    actorProfileId: user.id,
+    actorRole: AUDIT_ACTOR_ROLES.tenant,
+    requireAcceptedAgreement: true,
+  });
 }
 
 export async function getPublicTenantPaymentCheckout(params: {
@@ -539,6 +750,12 @@ export async function getPublicTenantPaymentCheckout(params: {
         )
       : null;
 
+  const activation =
+    intent.status === "paid" &&
+    readMetadataBoolean(metadata, "automatic_after_agreement")
+      ? await generateTenantActivationLinkSystem(intent.tenant_id)
+      : null;
+
   return {
     id: intent.id,
     reference: intent.paystack_reference,
@@ -556,5 +773,7 @@ export async function getPublicTenantPaymentCheckout(params: {
     periodStart: intent.period_start,
     periodEnd: intent.period_end,
     receiptDownloadUrl,
+    activationUrl: activation?.activationUrl ?? null,
+    activationExpiresAt: activation?.expiresAt ?? null,
   };
 }

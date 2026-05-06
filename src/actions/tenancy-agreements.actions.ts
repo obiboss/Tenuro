@@ -28,6 +28,9 @@ export type TenancyAgreementActionState = {
   whatsappMessage?: string;
   tenantWhatsappNumber?: string;
   pdfDownloadUrl?: string | null;
+  tenantPaymentUrl?: string;
+  paymentReference?: string;
+  paymentExpiresAt?: string | null;
   fieldErrors?: Record<string, string[]>;
 };
 
@@ -192,9 +195,13 @@ export async function acceptTenancyAgreementAction(
 
     return {
       ok: true,
-      message: "Agreement accepted successfully.",
+      message:
+        "Agreement accepted successfully. Your rent payment checkout is ready.",
       agreementId: result.agreement.id,
       pdfDownloadUrl: result.pdfDownloadUrl,
+      tenantPaymentUrl: result.firstPayment?.tenantPaymentUrl,
+      paymentReference: result.firstPayment?.reference,
+      paymentExpiresAt: result.firstPayment?.expiresAt,
     };
   } catch (error) {
     console.error("acceptTenancyAgreementAction failed:", error);

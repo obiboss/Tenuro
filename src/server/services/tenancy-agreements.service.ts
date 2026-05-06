@@ -23,6 +23,7 @@ import {
   writeAuditLog,
   writeSystemAuditLog,
 } from "@/server/services/audit-log.service";
+import { initializeFirstRentPaymentAfterAgreementAcceptance } from "@/server/services/gateway-payment.service";
 import { createSignedTenancyAgreementPdfUrl } from "@/server/services/storage.service";
 import { generateAndStoreTenancyAgreementPdf } from "@/server/services/tenancy-agreement-pdf.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
@@ -500,9 +501,15 @@ export async function acceptTenancyAgreementFromTenant(
       agreement.pdf_path,
     );
 
+    const firstPayment =
+      await initializeFirstRentPaymentAfterAgreementAcceptance({
+        tenancyId: agreement.tenancy_id,
+      });
+
     return {
       agreement,
       pdfDownloadUrl,
+      firstPayment,
     };
   }
 
@@ -550,9 +557,16 @@ export async function acceptTenancyAgreementFromTenant(
     userAgent: input.userAgent,
   });
 
+  const firstPayment = await initializeFirstRentPaymentAfterAgreementAcceptance(
+    {
+      tenancyId: agreementWithPdf.tenancy_id,
+    },
+  );
+
   return {
     agreement: agreementWithPdf,
     pdfDownloadUrl,
+    firstPayment,
   };
 }
 
