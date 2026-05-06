@@ -162,7 +162,7 @@ export default async function ActivityPage() {
                       </p>
 
                       {log.entityId ? (
-                        <p className="mt-1 max-w-[180px] truncate text-xs font-semibold text-text-muted">
+                        <p className="mt-1 max-w-45 truncate text-xs font-semibold text-text-muted">
                           {log.entityId}
                         </p>
                       ) : null}

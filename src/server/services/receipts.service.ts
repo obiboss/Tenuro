@@ -25,6 +25,7 @@ import {
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { formatNaira } from "@/server/utils/money";
+import { buildWaMeUrl } from "@/server/utils/whatsapp";
 import { requireLandlord } from "./auth.service";
 import { renderRentReceiptPdf } from "./receipt-pdf.service";
 
@@ -44,30 +45,6 @@ function buildReceiptPath(params: {
     params.tenancyId,
     `${params.paymentId}.pdf`,
   ].join("/");
-}
-
-function normalizeNigerianWhatsAppPhone(
-  phoneNumber: string | null | undefined,
-) {
-  if (!phoneNumber) {
-    return null;
-  }
-
-  const digits = phoneNumber.replace(/\D/g, "");
-
-  if (digits.startsWith("234") && digits.length >= 13) {
-    return digits;
-  }
-
-  if (digits.startsWith("0") && digits.length === 11) {
-    return `234${digits.slice(1)}`;
-  }
-
-  if (digits.length === 10) {
-    return `234${digits}`;
-  }
-
-  return digits.length >= 10 ? digits : null;
 }
 
 function formatReceiptDate(value: string) {
@@ -102,20 +79,6 @@ function buildReceiptWhatsAppMessage(params: {
     "",
     "Thank you.",
   ].join("\n");
-}
-
-function buildWhatsAppUrl(params: {
-  phoneNumber: string | null | undefined;
-  message: string;
-}) {
-  const normalizedPhone = normalizeNigerianWhatsAppPhone(params.phoneNumber);
-  const encodedMessage = encodeURIComponent(params.message);
-
-  if (!normalizedPhone) {
-    return `https://wa.me/?text=${encodedMessage}`;
-  }
-
-  return `https://wa.me/${normalizedPhone}?text=${encodedMessage}`;
 }
 
 async function generateRentReceiptWithClient(params: {
@@ -277,7 +240,7 @@ export async function prepareRentReceiptWhatsAppForCurrentLandlord(
     receiptDownloadUrl: receipt.receiptDownloadUrl,
   });
 
-  const whatsappUrl = buildWhatsAppUrl({
+  const whatsappUrl = buildWaMeUrl({
     phoneNumber: receipt.payment.tenants?.phone_number,
     message,
   });

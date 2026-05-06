@@ -4,2492 +4,1172 @@
 
 **Project Name:** Tenuro
 
-**Core Purpose:** A property and rent management platform designed specifically for Nigerian landlords to manage tenants, track rent payments, generate receipts, and maintain proper rental records without relying on notebooks or scattered WhatsApp messages.
+**Core Purpose:** A comprehensive property and rent management platform designed specifically for Nigerian landlords to manage properties, tenants, track rent payments, generate professional receipts, maintain rental agreements, and streamline the entire rental lifecycle.
 
 **Target Users:**
-
-- Nigerian landlords with single or multiple properties
+- Nigerian landlords with single or multiple properties  
 - Property managers acting as caretakers
-- Tenants activated via the platform
-- Payment processors and integrations (Paystack)
+- Tenants activated via the platform 
+- Payment processors (Paystack integration)
 
 **Business/Domain Context:**
-
-- Solves the problem of disorganized rental record-keeping in Nigeria
-- Targets informal property rental sector where digital records are lacking
-- Integrates with Paystack for payment processing
-- Supports multiple rent payment methods: bank transfers, cash, online payments
+- Solves disorganized rental record-keeping in Nigeria's informal property sector
+- Addresses widespread issue of notebooks/WhatsApp for rent tracking
+- Enables professional, legally-valid rental agreements
+- Integrates with Paystack for secure payment processing
+- Supports multiple payment methods: bank transfers, cash, online via Paystack
 - Generates and distributes professional receipts via WhatsApp
-- Supports rental agreement creation and management
+- Maintains complete audit trails for compliance and dispute resolution
 
-**Product Philosophy/Design Philosophy/UX Principles:**
-
-- **Trust & Clarity:** "Property records made simple" - builds trust with users through clear, organized information
-- **Nigerian-First Design:** Uses Nigerian-specific context (phone numbers, states, LGAs, currency)
-- **Simplicity Over Complexity:** Focus on core features: properties, tenants, rent, receipts, agreements
-- **Mobile-Responsive:** Designed for mobile-first usage with sticky sidebar on desktop
-- **Action-Oriented UI:** Each section has clear primary actions (Add Property, Add Tenant, Record Payment)
-- **Progressive Disclosure:** Features introduced through onboarding journey and guided setup
-- **Professional Appearance:** Modern design system with consistent colors, spacing, and typography
+**Product Philosophy:**
+- **Trust & Clarity:** "Property records made simple"
+- **Nigerian-First Design:** Phone numbers, states/LGAs, NGN currency, WhatsApp integration
+- **Simplicity Over Complexity:** Core features only - properties, units, tenants, payments, agreements, receipts
+- **Mobile-Responsive:** Mobile-first with sticky desktop navigation
+- **Action-Oriented UI:** Clear primary actions throughout
+- **Progressive Disclosure:** Features introduced through onboarding
+- **Professional Appearance:** Consistent design system
+- **Transparency & Control:** Full visibility of all transactions and communications
 
 ---
 
 ## 2. Tech Stack
 
 **Frontend:**
-
-- **Framework:** Next.js 16.2.4 (App Router)
-- **Language:** TypeScript 5
-- **React:** 19.2.4 (with React DOM 19.2.4)
-- **Styling:** Tailwind CSS 4 with custom PostCSS
-- **UI Component Library:** Custom components (no external UI library)
-- **Icons:** Lucide React 1.11.0
-- **Form Handling:** HTML5 forms with Server Actions and useActionState hook
-- **PDF Rendering:** @react-pdf/renderer 4.5.1
+- Next.js 16.2.4 (App Router) | TypeScript 5 | React 19.2.4
+- Tailwind CSS 4 | Custom components (no external UI library)
+- Lucide React 1.11.0 for icons
+- @react-pdf/renderer 4.5.1 for PDF generation
 
 **Backend:**
+- Node.js | Next.js Server Actions | Supabase PostgreSQL
+- Supabase Auth (password + phone/email) | Resend 6.12.2 (email)
+- Zod 4.3.6 (validation) | Custom AppError class
 
-- **Runtime:** Node.js (Next.js API routes and Server Actions)
-- **Server Framework:** Next.js Server Actions ("use server")
-- **Database:** Supabase (PostgreSQL)
-- **Authentication:** Supabase Auth
-- **Email/SMS:** Resend 6.12.2
+**Integrations:**
+- Paystack (payment gateway) | WhatsApp (via Paystack) | Resend (email)
+- Supabase Storage (documents/PDFs) | Inngest 4.2.4 (background jobs - configured)
 
-**State Management:**
-
-- **Client State:** None (form state via HTML forms + useActionState)
-- **Server State:** Supabase real-time subscriptions (not currently in use for primary data flow)
-- **State Patterns:** Action states (initial state → pending → result)
-
-**Data Management:**
-
-- **Database:** Supabase PostgreSQL
-- **ORM/Query:** Supabase JS SDK with direct RPC calls and table queries
-- **Data Validation:** Zod 4.3.6 (all inputs validated via schemas)
-
-**Background Jobs:**
-
-- **Job Queue:** Inngest 4.2.4 (configured but not fully active)
-- **Scheduled Tasks:** Inngest for payments, receipts, renewals, notifications
-
-**Third-Party Integrations:**
-
-- **Payment Gateway:** Paystack (Nigerian payment processor)
-- **Email:** Resend (email service)
-- **Notifications:** Custom WhatsApp integration via Paystack
-- **Cloud Storage:** Supabase Storage for documents, PDFs, photos
-
-**Deployment/Infrastructure:**
-
-- **Hosting:** Vercel (inferred from Next.js configuration)
-- **Database:** Supabase (managed PostgreSQL)
-- **Environment Variables:** Managed via Vercel/Supabase configs
-
-**Build & Development:**
-
-- **Build Tool:** Next.js built-in
-- **Linting:** ESLint 9 with Prettier 3.8.3
-- **TypeScript:** Strict mode enabled
-- **Development Server:** Next.js dev server (`npm run dev`)
+**Deployment:**
+- Vercel (hosting) | Supabase (managed PostgreSQL)
 
 ---
 
 ## 3. Architecture Overview
 
-### High-Level Architecture Pattern
-
-**Client → Server Action → Repository/Service → Database**
-
-The application follows a **layered server-centric architecture** with clear separation of concerns:
-
+**Layered Server-Centric Architecture:**
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     Client Layer (Browser)                  │
-│  - React Components | Forms | useActionState Hook           │
-├─────────────────────────────────────────────────────────────┤
-│              Server Actions Layer (/actions)                │
-│  - Entry points for all mutations                           │
-│  - Form data parsing & validation via Zod schemas          │
-│  - Error handling & result transformation                   │
-├─────────────────────────────────────────────────────────────┤
-│         Business Logic Layer (/server/services)            │
-│  - Orchestrate repositories                                 │
-│  - Implement business rules & authorization                 │
-│  - Handle payment processing, PDF generation, etc.         │
-├─────────────────────────────────────────────────────────────┤
-│      Data Access Layer (/server/repositories)               │
-│  - Type-safe Supabase queries                               │
-│  - RPC calls for complex operations                         │
-│  - SQL-level data transformations                           │
-├─────────────────────────────────────────────────────────────┤
-│               Supabase PostgreSQL Database                   │
-│  - All data persistence                                     │
-│  - RPC functions for complex operations                     │
-└─────────────────────────────────────────────────────────────┘
+Client (React) → Server Actions → Services → Repositories → Supabase DB
 ```
 
-### Data Flow Architecture
+**Data Flow:**
+- **Read:** Server Component → Service → Repository → Supabase → Render
+- **Write:** Form → Server Action → Validate (Zod) → Service → Repository → Supabase → Result Toast
+- **Auth:** Supabase Auth → Session Cookie → requireUser/requireLandlord/requireTenant
 
-**Read Flow (Server Components):**
-
-1. Server Component calls service directly
-2. Service calls repository
-3. Repository queries Supabase
-4. Data returned and rendered in component
-
-**Write Flow (Form Submission):**
-
-1. Form submits to Server Action via `form action`
-2. Server Action validates with Zod schema
-3. Server Action calls service
-4. Service calls repository for mutations
-5. Repository executes RPC or direct insert/update
-6. Result (ok/error) returned to client
-7. Form state updated via `useActionState`
-8. UI updates with ActionResultToast component
-
-**Authentication Flow:**
-
-1. Supabase Auth handles user registration/login
-2. Auth creates session via JWT in cookies
-3. `requireUser()` service checks session + profile
-4. `requireLandlord()` or `requireTenant()` enforces role
-5. Unauthorized access → redirect to /login
-
-### Component Architecture Philosophy
-
-**Server Components (Default):**
-
-- Fetch data directly in components
-- No JavaScript shipped to client
-- Cannot use hooks (except async components)
-- Used for: pages, layout, data fetching components
-
-**Client Components ("use client"):**
-
-- Handle interactivity and forms
-- Use hooks (useState, useActionState, useEffect)
-- Use "use client" directive at top
-- Minimal JavaScript sent to client
-- Used for: forms, buttons, interactive UI, navigation
-
-**UI Component Pattern:**
-
-- Reusable, presentational components
-- Located in `src/components/ui/`
-- Accept styled variants and sizes
-- Fully styled with Tailwind
-- No business logic
-- Examples: Button, Input, Card, Badge
-
-### State Management Architecture
-
-**Form State Pattern:**
-
-```typescript
-// In actions.ts
-export type ActionState = {
-  ok: boolean;
-  message: string;
-  fieldErrors?: Record<string, string[]>;
-};
-
-export const initialActionState: ActionState = { ok: false, message: "" };
-
-export async function someAction(
-  _previousState: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  // ... validation, service call
-}
-```
-
-```typescript
-// In component.tsx
-"use client";
-
-const [state, formAction, isPending] = useActionState(
-  someAction,
-  initialActionState,
-);
-```
-
-**Why This Pattern:**
-
-- No React state hooks needed for forms
-- Server-side validation with Zod
-- Automatic error display via fieldErrors
-- ActionResultToast shows success/error message
-- Idempotent operations via idempotencyKey
-
-### API/Service Layer Structure
-
-**Services Layer:**
-
-- Located in `src/server/services/`
-- Pure business logic
-- All services prefixed with "use server"
-- Handle authorization checks
-- Orchestrate repositories
-- Implement domain logic
-- Examples:
-  - `tenants.service.ts` - tenant CRUD logic
-  - `payments.service.ts` - payment recording
-  - `gateway-payment.service.ts` - Paystack integration
-  - `receipts.service.ts` - receipt generation
-
-**Repositories Layer:**
-
-- Located in `src/server/repositories/`
-- Data access only
-- Type-safe Supabase queries
-- SQL RPC calls
-- No business logic
-- No authorization (delegated to services)
-- Examples:
-  - `tenants.repository.ts` - tenant queries
-  - `payments.repository.ts` - payment queries
-  - `properties.repository.ts` - property queries
-
-**Type System:**
-
-- Row types mirror database tables: `TenantRow`, `PropertyRow`, etc.
-- Separate input types for mutations: `CreatePropertyInput`, `UpdatePropertyInput`
-- Types validated with Zod schemas
-
-### Validation/Error Handling Approach
-
-**Validation Layers:**
-
-1. **Zod Schema Validation** (First Layer)
-   - All FormData converted to objects and validated
-   - Returns ZodError with fieldErrors
-   - Example: `createPropertySchema.parse(data)`
-
-2. **Business Logic Validation** (Second Layer)
-   - Services check business rules
-   - Example: "Can only record payment for active tenancy"
-   - Throws AppError with specific code
-
-3. **Authorization** (Third Layer)
-   - `requireLandlord()` checks user is authenticated landlord
-   - `requireTenant()` checks user is authenticated tenant
-   - Services check landlord owns resource
-   - Throws AppError with code "FORBIDDEN"
-
-**Error Handling Pattern:**
-
-```typescript
-// In services
-if (tenant.landlord_id !== landlord.id) {
-  throw new AppError(
-    "FORBIDDEN",
-    "You do not have permission to view this tenant.",
-    403,
-  );
-}
-
-// In actions
-try {
-  const parsed = someSchema.parse(data);
-  const result = await someService(parsed);
-  revalidatePath("/some-path");
-  return { ok: true, message: "Success" };
-} catch (error) {
-  const result = errorResult(error); // Converts AppError/ZodError to result
-  return {
-    ok: false,
-    message: result.message,
-    fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
-  };
-}
-```
-
-**Error Result Mapping:**
-
-- `AppError` → user-friendly message + HTTP status
-- `ZodError` → field-specific error messages
-- Database errors → mapped to specific messages (constraint violations, etc.)
-- Unknown errors → generic fallback message
+**Key Principles:**
+- All business logic on server (Server Actions, API routes)
+- Client handles UI only
+- No direct Supabase access from client
+- Form state via useActionState hook
+- Cache invalidation via revalidatePath()
+- Validation always server-side
 
 ---
 
 ## 4. Project Structure
 
-### Root Level
-
 ```
-tenuro/
-├── src/                          # All source code
-├── supabase/                     # Database migrations (currently empty)
-├── public/                       # Static assets
-├── eslint.config.mjs            # ESLint configuration
-├── next.config.ts               # Next.js configuration
-├── tsconfig.json                # TypeScript configuration
-├── tailwind.config.ts           # Tailwind CSS theme & colors
-├── postcss.config.mjs           # PostCSS configuration
-├── package.json                 # Dependencies and scripts
-├── next-env.d.ts                # Next.js TypeScript definitions
-├── AGENTS.md                    # AI agent rules (Breaking changes notice)
-├── CLAUDE.md                    # References AGENTS.md
-└── README.md                    # Basic project info
-```
-
-### `/src` Structure
-
-#### `/src/app` - Next.js App Router Pages
-
-```
-app/
-├── globals.css                  # Global styles (Tailwind imports)
-├── layout.tsx                   # Root layout (html, body, fonts)
-├── page.tsx                     # Home page (public landing page)
+src/
+├── app/                              # Next.js App Router
+│   ├── (auth)/                       # Public auth routes
+│   ├── (landlord)/                   # Protected landlord routes
+│   ├── (tenant)/                     # Protected tenant routes  
+│   ├── api/                          # API routes
+│   │   ├── webhooks/paystack/
+│   │   ├── inngest/
+│   │   ├── files/
+│   │   ├── onboarding/
+│   │   └── cron/
+│   └── t/                            # Public tenant routes (no auth)
 │
-├── (auth)/                      # Auth pages group (no layout)
-│   ├── layout.tsx              # Auth section layout
-│   ├── login/page.tsx          # Login page
-│   └── register/page.tsx       # Registration page
+├── actions/                          # Server Actions
+│   ├── *.actions.ts                  # Action functions
+│   └── *.state.ts                    # Initial action states
 │
-├── (landlord)/                  # Landlord dashboard group
-│   ├── layout.tsx              # Landlord layout (AppShell)
-│   ├── overview/page.tsx       # Dashboard overview
-│   ├── properties/
-│   │   ├── page.tsx            # List properties
-│   │   ├── new/page.tsx        # Create property
-│   │   └── [propertyId]/page.tsx # Property detail
-│   ├── tenants/
-│   │   ├── page.tsx            # List tenants
-│   │   ├── new/page.tsx        # Create tenant
-│   │   └── [tenantId]/page.tsx # Tenant detail
-│   ├── payments/
-│   │   ├── page.tsx            # Payment list & manual form
-│   │   └── verify/page.tsx     # Payment verification
-│   ├── renewals/page.tsx       # Renewals dashboard (stub)
-│   ├── caretakers/page.tsx     # Caretakers management (stub)
-│   ├── reports/page.tsx        # Reports dashboard (stub)
-│   └── settings/page.tsx       # Landlord settings
+├── components/                       # React components
+│   ├── auth/                         # Auth components
+│   ├── layout/                       # Layout components (sidebar, topbar)
+│   ├── payment/                      # Payment UI components
+│   ├── property/                     # Property management components
+│   ├── tenancy/                      # Tenancy components
+│   ├── tenant/                       # Tenant dashboard components
+│   └── ui/                           # Base UI components
 │
-├── (tenant)/                    # Tenant dashboard group
-│   ├── layout.tsx              # Tenant layout
-│   └── tenant/page.tsx         # Tenant dashboard
+├── lib/                              # Utilities
+│   ├── cn.ts                         # classNameMerge helper
+│   ├── navigation.ts                 # Navigation config
+│   ├── tenancy-period.ts             # Date calculations
+│   └── status-copy.ts                # Status labels
 │
-├── api/                        # API routes & webhooks
-│   ├── inngest/route.ts        # Inngest jobs endpoint
-│   ├── webhooks/
-│   │   ├── paystack/route.ts   # Paystack webhook handler
-│   │   └── whatsapp/route.ts   # WhatsApp webhook handler
-│   ├── files/route.ts          # File uploads/downloads
-│   ├── onboarding/route.ts     # Onboarding endpoints
-│   └── cron/route.ts           # Scheduled tasks
-│
-├── app-fees/
-│   └── verify/page.tsx         # App fee verification
-│
-├── auth/
-│   └── callback/page.tsx       # OAuth callback handler
-│
-└── t/                          # Public tenant flows (no auth)
-    ├── activate/[token]/page.tsx       # Tenant account activation
-    ├── agreement/[token]/page.tsx      # Tenancy agreement signing
-    ├── onboarding/[token]/page.tsx     # Tenant profile completion
-    └── pay/[reference]/page.tsx        # Tenant payment page
-```
-
-#### `/src/actions` - Server Actions
-
-Entry points for all data mutations. Each file handles one domain:
-
-```
-actions/
-├── auth.actions.ts                     # Login, register, sign out, OTP
-├── auth.state.ts                       # Initial auth state
-├── tenants.actions.ts                  # Create, update, approve, reject tenant
-├── tenant.state.ts                     # Tenant action initial state
-├── properties.actions.ts               # Create, update, archive property
-├── property.state.ts                   # Property action initial state
-├── units.actions.ts                    # Create, update, archive unit
-├── unit.state.ts                       # Unit action initial state
-├── tenancies.actions.ts                # Create, terminate tenancy
-├── tenancy.state.ts                    # Tenancy action initial state
-├── payments.actions.ts                 # Record payment, setup bank account
-├── payment.state.ts                    # Payment action initial state
-├── onboarding.actions.ts               # Tenant onboarding completion
-├── onboarding.state.ts                 # Onboarding action initial state
-├── tenant-activation.actions.ts        # Tenant account activation
-├── tenant-activation.state.ts          # Activation action initial state
-├── tenancy-agreements.actions.ts       # Generate, finalize, accept agreements
-├── tenancy-agreement.state.ts          # Agreement action initial state
-├── receipts.actions.ts                 # Generate receipt, WhatsApp sharing
-├── receipt.state.ts                    # Receipt action initial state
-├── renewals.actions.ts                 # Renewal management
-├── app-fee-payment.actions.ts          # App fee payment
-└── app-fee-payment.state.ts            # App fee action initial state
-```
-
-**Action Pattern:**
-
-```typescript
-export async function someAction(
-  _previousState: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  try {
-    const parsed = someSchema.parse(Object.fromEntries(formData));
-    await someService(parsed);
-    revalidatePath("/path");
-    return { ok: true, message: "Success" };
-  } catch (error) {
-    return toActionError(error);
-  }
-}
-```
-
-#### `/src/components` - React Components
-
-Organized by feature domain:
-
-```
-components/
-├── ui/                         # Reusable UI components
-│   ├── button.tsx             # Button (primary, secondary, danger, ghost)
-│   ├── input.tsx              # Text input with label & error
-│   ├── textarea.tsx           # Textarea with label & error
-│   ├── select.tsx             # Select dropdown
-│   ├── card.tsx               # Card container with header/footer
-│   ├── badge.tsx              # Status badge
-│   ├── status-pill.tsx        # Inline status indicator
-│   ├── page-header.tsx        # Page title & description
-│   ├── section-card.tsx       # Section heading with card
-│   ├── stat-card.tsx          # Statistics card (for overview)
-│   ├── empty-state.tsx        # Empty state illustration
-│   ├── error-state.tsx        # Error state display
-│   ├── loading-state.tsx      # Loading skeleton
-│   ├── toast.tsx              # Toast notification
-│   ├── toast-provider.tsx     # Toast context provider
-│   ├── use-toast.ts           # useToast hook
-│   ├── action-result-toast.tsx# Integrates action results with toast
-│   ├── trust-notice.tsx       # Trust/info notice box
-│   └── currency-input.tsx     # Money amount input
-│
-├── auth/                       # Authentication components
-│   ├── login-form.tsx         # Email/password login
-│   ├── register-form.tsx      # Email/password registration
-│   ├── phone-login-form.tsx   # Phone/password login
-│   ├── phone-number-input.tsx # Phone input with validation
-│   ├── otp-code-input.tsx     # OTP code entry
-│   ├── magic-link-form.tsx    # Magic link request
-│   ├── email-fallback-panel.tsx # Email fallback UI
-│   ├── landlord-profile-setup.tsx # Post-signup profile completion
-│   └── logout-button.tsx      # Sign out button
-│
-├── layout/                     # Layout components
-│   ├── app-shell.tsx          # Main app container with nav
-│   ├── landlord-shell.tsx     # Landlord-specific layout
-│   ├── sidebar.tsx            # Left navigation (desktop)
-│   ├── topbar.tsx             # Top bar with user menu
-│   ├── mobile-nav.tsx         # Mobile bottom navigation
-│   └── mobile-more-menu.tsx   # Mobile menu for additional items
-│
-├── property/                   # Property management
-│   ├── property-form.tsx      # Create/edit property
-│   ├── property-card.tsx      # Property list item
-│   ├── unit-form.tsx          # Create/edit unit
-│   ├── unit-card.tsx          # Unit list item
-│   ├── occupancy-summary.tsx  # Units occupied/vacant
-│   └── archive-property-button.tsx # Delete property button
-│
-├── tenant/                     # Tenant management
-│   ├── tenant-form.tsx        # Create/edit tenant
-│   ├── tenant-card.tsx        # Tenant list item
-│   ├── tenant-activation-form.tsx # Tenant account activation
-│   └── [other tenant components]
-│
-├── tenancy/                    # Tenancy/rental agreement
-│   ├── [tenancy agreement components]
-│
-├── payment/                    # Payment components
-│   ├── payment-form.tsx       # Generic payment form
-│   ├── manual-payment-form.tsx # Record manual payment
-│   ├── bank-setup-form.tsx    # Configure bank account
-│   ├── payment-list.tsx       # Payment history table
-│   ├── balance-preview.tsx    # Payment balance summary
-│   └── [other payment components]
-│
-├── renewal/                    # Renewal components
-│   └── [renewal components]
-│
-└── onboarding/                 # Onboarding flow
-    ├── onboarding-shell.tsx   # Onboarding layout
-    ├── onboarding-progress.tsx # Progress indicator
-    ├── onboarding-step-card.tsx # Step content card
-    └── [other onboarding components]
-```
-
-#### `/src/server` - Backend Server Code
-
-```
-server/
-├── services/                   # Business logic (33 service files)
-│   ├── auth.service.ts        # User/role requirements
-│   ├── tenants.service.ts     # Tenant CRUD + approval
-│   ├── properties.service.ts  # Property CRUD + archiving
-│   ├── payments.service.ts    # Payment recording
-│   ├── gateway-payment.service.ts # Paystack payment init
-│   ├── paystack.service.ts    # Paystack API integration
-│   ├── receipts.service.ts    # Receipt generation & WhatsApp
-│   ├── receipt-pdf.service.tsx # PDF rendering
-│   ├── tenancy-agreements.service.ts # Agreement CRUD
-│   ├── tenancy-agreement-pdf.service.tsx # Agreement PDF
-│   ├── onboarding.service.ts  # Tenant onboarding flow
-│   ├── tenant-activation.service.ts # Account activation
-│   ├── storage.service.ts     # File uploads/downloads
-│   ├── overview.service.ts    # Dashboard stats
-│   ├── whatsapp.service.ts    # WhatsApp messages
-│   ├── notification-queue.service.ts # Notification queuing
-│   ├── otp.service.ts         # OTP generation/verification
-│   ├── session.service.ts     # Session management
-│   └── [other services]
-│
-├── repositories/               # Data access (25 repository files)
-│   ├── profiles.repository.ts # Auth profile queries
-│   ├── tenants.repository.ts  # Tenant queries
-│   ├── properties.repository.ts # Property queries
-│   ├── units.repository.ts    # Unit queries
-│   ├── payments.repository.ts # Payment queries + RPC
-│   ├── tenancies.repository.ts # Tenancy queries
-│   ├── tenancy-agreements.repository.ts
-│   ├── gateway-payment.repository.ts # Paystack intent tracking
-│   ├── receipts.repository.ts # Receipt data
-│   ├── guarantors.repository.ts # Guarantor data
-│   ├── caretakers.repository.ts
-│   ├── notifications.repository.ts
-│   ├── landlord-paystack.repository.ts
-│   └── [other repositories]
-│
-├── validators/                 # Zod schema validation
-│   ├── common.schema.ts       # Shared schemas (uuid, money, phone, etc.)
-│   ├── auth.schema.ts         # Login/register/OTP schemas
-│   ├── tenant.schema.ts       # Tenant CRUD schemas
-│   ├── property.schema.ts     # Property CRUD schemas
-│   ├── unit.schema.ts         # Unit CRUD schemas
-│   ├── payment.schema.ts      # Payment schemas
-│   ├── tenancy.schema.ts      # Tenancy schemas
-│   ├── tenancy-agreement.schema.ts # Agreement schemas
-│   ├── onboarding.schema.ts   # Onboarding schemas
-│   └── [other validators]
-│
-├── types/                      # TypeScript types
-│   ├── auth.types.ts          # Auth-specific types
-│   ├── payment.types.ts       # Payment types
-│   ├── paystack.types.ts      # Paystack API types
-│   ├── onboarding.types.ts    # Onboarding types
-│   └── compliance.types.ts    # KYC/compliance types
-│
-├── errors/                     # Error handling
-│   ├── app-error.ts           # Custom AppError class
-│   ├── error-map.ts           # Error code → message mapping
-│   └── result.ts              # Result type & helpers
-│
-├── utils/                      # Utility functions
-│   ├── money.ts               # formatNaira, kobo conversion
-│   ├── dates.ts               # Date formatting
-│   ├── phone.ts               # Phone number normalization
-│   ├── crypto.ts              # Hash functions
-│   ├── encryption.ts          # Text encryption/decryption
-│   ├── tokens.ts              # Secure token generation
-│   └── [other utils]
-│
-├── constants/                  # Application constants
-│   ├── routes.ts              # App URL building
-│   ├── notification-types.ts  # Notification channels & types
-│   ├── permissions.ts         # Role-based permissions
-│   ├── session.ts             # Session config
-│   └── storage-paths.ts       # Supabase storage paths
-│
-├── supabase/                   # Database client setup
-│   ├── server.ts              # Server client (with cookies)
-│   └── admin.ts               # Admin client (for system operations)
-│
-└── jobs/                       # Inngest background jobs
-    ├── inngest.client.ts      # Inngest client setup
-    ├── payment.jobs.ts        # Payment-related jobs
-    ├── receipt.jobs.ts        # Receipt generation jobs
-    ├── notification.jobs.ts   # Notification jobs
-    └── renewal.jobs.ts        # Renewal jobs
-```
-
-#### `/src/lib` - Helper Functions
-
-```
-lib/
-├── cn.ts                      # Tailwind className merging (clsx + merge)
-├── navigation.ts              # LANDLORD_NAVIGATION constant
-├── status-copy.ts             # Status value → display text
+└── server/                           # Server-only code
+    ├── constants/                    # Constants
+    │   ├── audit-events.ts
+    │   ├── notification-types.ts
+    │   ├── permissions.ts
+    │   ├── routes.ts
+    │   ├── session.ts
+    │   └── storage-paths.ts
+    │
+    ├── errors/                       # Error handling
+    │   ├── app-error.ts
+    │   ├── result.ts
+    │   └── error-map.ts
+    │
+    ├── repositories/                 # Data access
+    │   ├── profiles.repository.ts
+    │   ├── properties.repository.ts
+    │   ├── payments.repository.ts
+    │   ├── receipts.repository.ts
+    │   ├── tenancy-agreements.repository.ts
+    │   └── [...25 more files]
+    │
+    ├── services/                     # Business logic
+    │   ├── auth.service.ts
+    │   ├── properties.service.ts
+    │   ├── payments.service.ts
+    │   ├── receipts.service.ts
+    │   ├── tenancy-agreements.service.ts
+    │   ├── gateway-payment.service.ts
+    │   ├── gateway-payment-webhook.service.ts
+    │   ├── paystack.service.ts
+    │   ├── onboarding.service.ts
+    │   ├── tenant-dashboard.service.ts
+    │   ├── audit-log.service.ts
+    │   └── [...20+ more files]
+    │
+    ├── jobs/                         # Background jobs (Inngest)
+    │   ├── inngest.client.ts
+    │   ├── payment.jobs.ts
+    │   ├── notification.jobs.ts
+    │   └── renewal.jobs.ts
+    │
+    ├── supabase/
+    │   ├── admin.ts                  # Admin client (service role)
+    │   └── server.ts                 # Server client (user session)
+    │
+    ├── types/                        # TypeScript types
+    │   ├── auth.types.ts
+    │   ├── payment.types.ts
+    │   ├── paystack.types.ts
+    │   └── [...5+ more]
+    │
+    ├── validators/                   # Zod schemas
+    │   ├── common.schema.ts
+    │   ├── auth.schema.ts
+    │   ├── property.schema.ts
+    │   ├── payment.schema.ts
+    │   ├── tenancy.schema.ts
+    │   ├── tenant.schema.ts
+    │   └── [...10+ more]
+    │
+    └── utils/                        # Server utilities
+        ├── phone.ts
+        ├── money.ts
+        ├── dates.ts
+        ├── crypto.ts
+        ├── tokens.ts
+        └── encryption.ts
 ```
 
 ---
 
 ## 5. Implemented Features
 
-### ✅ Authentication & Authorization
+### Complete & Production-Ready
 
-**Implemented:**
+**Authentication & User Management**
+- Phone + password authentication
+- Email + password authentication (configured)
+- Role-based user creation (landlord, tenant, caretaker)
+- Session management with Supabase Auth
 
-- Email/password login and registration
-- Phone/password login and registration
-- Magic link authentication
-- OTP-based login (legacy, kept for compatibility)
-- Supabase Auth integration
-- Role-based access control (landlord, tenant, caretaker)
-- Session management via HTTP-only cookies
-- Sign out functionality
-- Password requirements (8+ chars, max 72 chars)
-
-**How It Works:**
-
-1. User registers with email/phone + password
-2. Supabase Auth creates user account
-3. Profile created with role (landlord/tenant)
-4. Login returns JWT in cookie
-5. `requireLandlord()` / `requireTenant()` checks role
-6. Unauthorized users redirected to /login
-
-### ✅ Property Management
-
-**Implemented:**
-
-- Create properties (name, address, state, LGA, type)
-- Update property details
-- Archive properties (soft delete)
-- List all properties for landlord
-- View property details
-- Unit management within properties
-
-**Features:**
-
-- Property types: residential, mixed_use, flat_complex
+**Property Management**
+- Create/update/archive properties
 - Nigerian state/LGA selection
-- Multiple units per property
-- Occupancy tracking (occupied/vacant)
-- Property status & modification timestamps
+- Multiple property types (residential, mixed-use, flat complex)
+- Unit creation and occupancy tracking
 
-### ✅ Unit/Room Management
+**Tenant Management**
+- Tenant creation with contact info
+- Approval/rejection workflow
+- KYC data storage
+- Status tracking (pending, approved, active, inactive)
 
-**Implemented:**
+**Tenancy Management**
+- Create rental agreements with payment terms
+- Support for annual/biannual/quarterly/monthly frequencies
+- Auto-calculated tenancy periods
+- Opening balance for arrears
+- Renewal notice dates
 
-- Create units (building name, identifier, type, bedrooms, bathrooms)
-- Update unit details
-- Archive units
-- Set rent amounts (monthly and/or annual)
-- Track unit status (vacant, occupied, under_renovation, hold, pending_vacancy, archived)
+**Tenancy Agreements**
+- Template-based document generation
+- Draft saving and editing
+- Finalization workflow
+- Tenant acceptance via secure tokens
+- WhatsApp delivery of acceptance links
+- PDF generation and storage
+- Digital signatures via token acceptance
 
-**Unit Types:**
+**Payment Processing**
+- Manual rent recording (bank transfer, cash, other)
+- Paystack gateway integration
+- Payment verification workflow
+- Opening balance management
+- Payment ledger tracking
+- Idempotency key support
 
-- single_room, self_contain, room_and_parlour, mini_flat, two_bedroom_flat, three_bedroom_flat, duplex, shop, office_space, other
+**Receipt Management**
+- Automatic generation after posting
+- Professional PDF formatting
+- Receipt number generation
+- Secure download URLs
+- WhatsApp delivery
+- Receipt history tracking
 
-### ✅ Tenant Management
+**Audit Logging**
+- Comprehensive audit trail
+- Actor (landlord/tenant/system) tracking
+- Event type documentation
+- IP address and user agent capture
+- Immutable records
 
-**Implemented:**
+**Notifications**
+- WhatsApp message delivery (Paystack)
+- Email via Resend
+- Payment link delivery
+- Agreement acceptance links
+- Onboarding invitations
+- Receipt delivery
 
-- Create tenant shell (minimal: name, phone, email, unit)
-- Update tenant details (name, phone, email, DOB, address, occupation, employer)
-- Upload tenant documents (ID, passport photo)
-- Approve tenant (landlord action)
-- Reject tenant with reason (landlord action)
-- Archive tenant (soft delete)
-- View tenant details
-- List all tenants for landlord
-- Landlord notes on tenant
+**Tenant Dashboard (Public)**
+- View rental agreement
+- View agreement PDF
+- View rent balance
+- View payment history
+- Download receipts
+- Track payment status
 
-**Tenant Workflow:**
+**Onboarding System**
+- Tenant invitation links
+- Profile completion workflow
+- KYC data collection
+- Guarantor information
+- 72-hour link expiration
+- Completion tracking
 
-1. Landlord creates tenant shell
-2. Tenant activated via token link
-3. Tenant completes profile (onboarding)
-4. Landlord reviews and approves/rejects
-5. Tenant can access dashboard
+**Tenant Account Activation**
+- Self-registration
+- Phone verification
+- Password setup
+- Account status tracking
 
-### ✅ Tenancy/Rental Agreements
-
-**Implemented:**
-
-- Generate tenancy agreement (PDF)
-- Save agreement drafts
-- Finalize agreement
-- Accept agreement by tenant
-- Refresh acceptance link (token expires in 7 days)
-- Generate agreement PDF for download
-- Template-based agreement with customizable terms
-
-**Features:**
-
-- Snapshots of parties (landlord, tenant, property, unit)
-- Rent details, payment terms
-- Renewal terms, increment percentage
-- Professional PDF generation
-- WhatsApp-friendly link sharing
-
-### ✅ Rent Payment Recording
-
-**Implemented:**
-
-- Record manual payment (bank transfer, cash, other)
-- Initialize gateway payment via Paystack
-- Payment verification via webhook
-- Payment history with filtering
-- Payment status tracking (pending, verified, reversed)
-- Payment date and payment method recording
-- Period coverage tracking (payment for which months)
-
-**Payment Methods:**
-
-- Bank transfer (with reference)
-- Cash (manual entry)
-- Online (via Paystack)
-- Other (with notes)
-
-### ✅ Receipt Generation
-
-**Implemented:**
-
-- Generate professional PDF receipts
-- Receipt numbering (REC-{paymentId first 8 chars})
-- Share receipt via WhatsApp link
-- Download receipt
-- Receipt templates with property/tenant/amount info
-- Date formatting for Nigerian locale
-- Receipt number storage in database
-
-**Receipt Data:**
-
-- Tenant name, property name, unit, amount paid
-- Payment date, receipt number
-- Formatted in NGN currency
-- WhatsApp-friendly links with message template
-
-### ✅ Payment Gateway Integration
-
-**Implemented:**
-
-- Paystack integration for online rent payments
-- Tenant payment links (public, no auth required)
-- Payment initialization with metadata
-- Payment verification via webhook
-- Subaccount setup for landlord payouts
-- Payment reference tracking
-- Idempotency keys to prevent duplicates
-
-**Features:**
-
-- Configurable Paystack fee (TENURO_GATEWAY_ADMIN_FEE_NAIRA)
-- Tenant payment URL vs landlord authorization URL
-- Payment context (tenancy, tenant, landlord, property)
-- Transaction metadata for reconciliation
-
-### ✅ Tenant Onboarding
-
-**Implemented:**
-
-- Generate onboarding link (token expires in 72 hours)
-- Tenant profile completion form
-- Document upload (ID, passport)
-- Guarantor information capture
-- Profile status tracking (invited, profile_complete, approved, rejected)
-- Rejection reason storage
-
-**Onboarding Steps:**
-
-1. Landlord invites tenant (generates link)
-2. Tenant clicks link, activates account
-3. Tenant completes profile (name, DOB, address, occupation)
-4. Tenant uploads documents
-5. Tenant provides guarantor info
-6. Landlord reviews and approves/rejects
-7. Approved tenant can sign agreement
-
-### ✅ Tenant Account Activation
-
-**Implemented:**
-
-- Generate activation link (token-based, 72-hour expiry)
-- Tenant sets password via activation page
-- Account becomes active after password set
-- Phone number verified during activation
-- Secure token handling
-
-### ✅ Dashboard & Overview
-
-**Implemented:**
-
-- Landlord overview page with key stats
-- Rent collected this year (stat card)
-- Total units and occupancy
-- Total tenants count
-- Vacant units indicator
-- Upcoming renewals (placeholder - 0)
-- Primary action guidance (first setup)
-
-**Stats Calculated:**
-
-- rentCollectedThisYear (filtered by date)
-- totalProperties, totalUnits, occupiedUnits, vacantUnits
-- totalTenants, upcomingRenewals
-
-### ✅ Settings Page
-
-**Implemented:**
-
-- Bank account setup form
-- Landlord profile settings (form structure present)
-- Paystack account configuration (if applicable)
-- Payment method configuration
-
-### ✅ Notifications System
-
-**Implemented:**
-
-- Notification queuing system
-- WhatsApp message support
-- Notification types: onboarding_invite, rent_due, overdue, receipt, renewal_notice, etc.
-- Notification channels: WhatsApp, SMS, email, in-app
-- Notification tracking and status
-
-### ✅ File Management
-
-**Implemented:**
-
-- Upload tenant documents (ID, passport)
-- Generate and store PDFs (receipts, agreements)
-- Secure file storage via Supabase Storage
-- Signed URLs for secure downloads
-- File path organization by landlord/tenant/tenancy
+**Overview Dashboard**
+- At-a-glance statistics
+- Vacant units tracking
+- Outstanding balance
+- First-time setup guidance
 
 ---
 
-## 6. In-Progress / Partial Features
+## 6. Partial/In-Progress Features
 
-### 🔄 Renewals Management
-
-**Current State:** Stub implementation only
-
-- Page exists at `/renewals` but shows placeholder
-- `renewals.service.ts` is empty
-- Renewal table structure exists in database
-- `renewal.jobs.ts` exists but not integrated
-
-**Needed:**
-
-- Renewal reminder notifications
-- Automatic renewal creation when tenancy expires
-- Rent increment handling
-- Agreement renewal process
-- Renewal status tracking
-
-### 🔄 Caretakers Management
-
-**Current State:** Stub implementation only
-
-- Page exists at `/caretakers` but shows placeholder
-- UI components likely not built
-- Database structure for caretakers exists
-- Limited functionality
-
-**Needed:**
-
-- Caretaker CRUD operations
-- Permission model for caretaker actions
-- Rent collection tracking by caretaker
-- Communication channels
-
-### 🔄 Reports
-
-**Current State:** Stub implementation only
-
-- Page exists at `/reports` but shows placeholder
-- No reporting logic implemented
-
-**Needed:**
-
-- Income reports (yearly, monthly)
-- Tenant list reports
-- Payment history reports
-- Occupancy reports
-- PDF export functionality
-
-### 🔄 App Fee Payment Integration
-
-**Implemented:**
-
-- App fee payment initialization
-- App fee verification endpoint
-- App fee action created (`app-fee-payment.actions.ts`)
-- App fee repository exists
-
-**Incomplete:**
-
-- App fee calculation logic
-- App fee UI integration with payment flow
-- Complete payment workflow
-
-### 🔄 Ledger/Accounting
-
-**Current State:** Partial
-
-- Ledger repository exists (`ledger.repository.ts`)
-- Ledger service exists (`ledger.service.ts`)
-- Audit service exists (`audit.service.ts`)
-- Not fully integrated into UI
-
-### 🔄 Inngest Background Jobs
-
-**Current State:** Scaffolded but inactive
-
-- Inngest client configured
-- Job definitions exist (payment, receipt, notification, renewal jobs)
-- Route handler returns "scaffolded" message
-- Jobs not actively running
-
-**Setup Needed:**
-
-- Inngest backend activation
-- Job scheduling configuration
-- Error handling and retries
-- Job monitoring
-
-### 🔄 SMS Notifications
-
-**Current State:** Partially implemented
-
-- SMS notification type defined
-- Notification channel supports SMS
-- No SMS provider integrated yet (only WhatsApp via Paystack)
-
-### 🔄 Email Notifications
-
-**Current State:** Partially implemented
-
-- Resend package installed
-- Email notification type defined
-- Limited integration with actual email sending
+**Renewals Management** - Service empty, not fully implemented
+**Reports & Analytics** - Basic stats only, no advanced filtering/export
+**Background Jobs (Inngest)** - Configured but not actively triggered
+**Caretaker Features** - Minimal implementation, permission scoping incomplete
 
 ---
 
 ## 7. Core Reusable Patterns
 
-### Component Composition Patterns
-
-**UI Component Pattern:**
-
+### Form Submission Pattern
 ```typescript
-// Presentational, reusable UI component
-type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  children: ReactNode;
-  variant?: "primary" | "secondary" | "danger" | "ghost";
-  size?: "sm" | "md" | "lg";
-  fullWidth?: boolean;
-  isLoading?: boolean;
-};
-
-export function Button({ variant = "primary", size = "md", ...props }) {
-  return <button className={cn(variants[variant], sizes[size])} {...props} />;
-}
-```
-
-**Form Container Pattern:**
-
-```typescript
-// Server action + form component
-export async function createTenantShellAction(
-  _previousState: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  // ... validation, service, return result
-}
-
 "use client";
-export function CreateTenantForm() {
-  const [state, formAction] = useActionState(
-    createTenantShellAction,
-    initialActionState,
-  );
-  return (
-    <form action={formAction}>
-      <Input label="Name" name="fullName" error={state.fieldErrors?.fullName?.[0]} />
-      <Button type="submit">Save</Button>
-      <ActionResultToast ok={state.ok} message={state.message} />
-    </form>
-  );
-}
-```
-
-**Page + Server Component Pattern:**
-
-```typescript
-export default async function PropertyDetailPage({ params }) {
-  const property = await getPropertyForCurrentLandlord(params.propertyId);
-  return (
-    <div>
-      <PageHeader title={property.property_name} />
-      <PropertyForm property={property} />
-    </div>
-  );
-}
-```
-
-### Hook Patterns
-
-**useActionState Hook:**
-
-```typescript
-// Standard form state hook
-const [state, formAction, isPending] = useActionState(
-  serverAction,
-  initialState,
+const [state, formAction, isPending] = useActionState(featureAction, initialState);
+return (
+  <form action={formAction}>
+    <Input error={state.fieldErrors?.field?.[0]} />
+    <Button isLoading={isPending}>Submit</Button>
+  </form>
 );
 ```
 
-**useToast Hook:**
-
+### Server Action Pattern
 ```typescript
-// Custom hook for showing toasts
-const { showToast } = useToast();
-showToast({
-  title: "Success",
-  description: "Tenant created",
-  tone: "success", // or "error"
-});
-```
-
-### Utility/Helper Patterns
-
-**Money Formatting:**
-
-```typescript
-formatNaira(100000); // "₦100,000.00"
-formatNairaCompact(100000); // "₦100,000"
-convertNairaToKobo(1000); // 100000
-convertKoboToNaira(100000); // 1000
-```
-
-**Phone Normalization:**
-
-```typescript
-normalisePhoneNumber("+234 801 234 5678");
-// Returns E.164 format: +2348012345678
-```
-
-**Date Handling:**
-
-```typescript
-// Parse and format dates consistently
-const dateSchema = z.coerce.date();
-const date = new Date("2024-01-15");
-date.toISOString(); // "2024-01-15T00:00:00.000Z"
-```
-
-**Token Generation:**
-
-```typescript
-const token = generateSecureToken(); // Random secure token
-const tokenHash = sha256Hex(token); // Hash for storage
-const expiresAt = getExpiryDateFromNow(72); // 72 hours from now
-```
-
-### Service Abstraction Patterns
-
-**Service → Repository → Supabase Pattern:**
-
-```typescript
-// Service: Orchestrates, checks auth
-export async function createPropertyForCurrentLandlord(input) {
-  const landlord = await requireLandlord();
-  const supabase = await createSupabaseServerClient();
-  return createProperty(supabase, landlord.id, input);
-}
-
-// Repository: Pure data access
-export async function createProperty(supabase, landlordId, input) {
-  const { data, error } = await supabase
-    .from("properties")
-    .insert({ landlord_id: landlordId, ...input })
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
-}
-```
-
-**Authorization Check Pattern:**
-
-```typescript
-export async function getCurrentLandlordProperty(propertyId: string) {
-  const landlord = await requireLandlord();
-  const supabase = await createSupabaseServerClient();
-  const property = await getPropertyById(supabase, propertyId);
-
-  if (property.landlord_id !== landlord.id) {
-    throw new AppError(
-      "FORBIDDEN",
-      "You do not have permission to view this property.",
-      403,
-    );
-  }
-  return property;
-}
-```
-
-### Form Handling Patterns
-
-**Server Action Form Pattern:**
-
-```typescript
-// 1. Define Zod schema for validation
-const createPropertySchema = z.object({
-  propertyName: z.string().trim().min(2).max(120),
-  address: z.string().trim().min(5).max(300),
-  // ...
-});
-
-// 2. Create server action
-export async function createPropertyAction(_prev, formData) {
+export async function featureAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   try {
-    const parsed = createPropertySchema.parse(
-      Object.fromEntries(formData),
-    );
-    await createPropertyForCurrentLandlord(parsed);
-    revalidatePath("/properties");
-    return { ok: true, message: "Property created" };
+    const input = featureSchema.parse(Object.fromEntries(formData));
+    const landlord = await requireLandlord();
+    const result = await featureService.processInput(input);
+    revalidatePath("/relevant/path");
+    return { ok: true, message: "Success" };
   } catch (error) {
-    return toActionError(error);
+    return { ok: false, message: "Error occurred", fieldErrors: getFieldErrors(error) };
   }
 }
-
-// 3. Use in form
-<form action={createPropertyAction}>
-  <Input label="Name" name="propertyName" error={state.fieldErrors?.propertyName?.[0]} />
-  <Button type="submit" isLoading={isPending}>Create</Button>
-</form>
 ```
 
-**FormData Parsing Pattern:**
-
+### Service Layer Pattern
 ```typescript
-// Extract from FormData and parse
-const parsed = someSchema.parse({
-  unitId: formData.get("unitId"),
-  fullName: formData.get("fullName"),
-  phoneNumber: formData.get("phoneNumber"),
-  // ...
-});
+export async function performAction(input: ValidatedInput) {
+  const user = await requireLandlord();
+  const supabase = await createSupabaseServerClient();
+  
+  const entity = await repository.get(supabase, input.id);
+  if (entity.landlord_id !== user.id) throw new AppError("FORBIDDEN", "Unauthorized", 403);
+  
+  const result = await repository.update(supabase, input);
+  
+  await writeAuditLog({
+    landlordId: user.id,
+    eventType: AUDIT_EVENT_TYPES.entityUpdated,
+    entityType: AUDIT_ENTITY_TYPES.entity,
+    entityId: result.id,
+    metadata: { /* details */ }
+  });
+  
+  return result;
+}
 ```
 
-### Table/List Rendering Patterns
-
-**List Rendering from Array:**
-
+### Authorization Pattern
 ```typescript
-{items.length === 0 ? (
-  <EmptyState title="No items" icon={SomeIcon} />
-) : (
-  <div className="grid gap-5">
-    {items.map((item) => (
-      <ItemCard key={item.id} item={item} />
-    ))}
-  </div>
-)}
+const landlord = await requireLandlord();  // Enforce role
+if (entity.landlord_id !== landlord.id) { // Check ownership
+  throw new AppError("FORBIDDEN", "Not authorized", 403);
+}
 ```
 
-### Modal/Dialog Patterns
+### Payment Processing Pattern
+- Form submission → Payment intent creation → Paystack redirect/link
+- Webhook verification → Payment status update → Receipt generation
+- Idempotency key prevents duplicate processing
 
-**No built-in modal library used** - Components use layout changes and page navigation for complex flows
+### PDF Generation Pattern
+- React component rendered to PDF buffer
+- Stored in Supabase Storage
+- Signed download URL (24h expiry)
+- Shared via WhatsApp
 
-### Offline/Queue/Sync Patterns
-
-**Payment Idempotency Pattern:**
-
-```typescript
-// Prevent duplicate payments via idempotency key
-const parsed = recordManualPaymentSchema.parse({
-  // ...
-  idempotencyKey: formData.get("idempotencyKey"),
-});
-
-// Repository checks for existing payment with same key
-// and returns existing result if found
-```
-
-**Notification Queue Pattern:**
-
-```typescript
-// Create notification for async processing
-await createNotification(supabase, {
-  landlordId,
-  tenantId,
-  channel: "whatsapp",
-  notificationType: "onboarding_invite",
-  messageBody,
-});
-
-// Inngest job picks it up and sends
-```
+### Notification Pattern
+- Create notification record
+- Send via Paystack (WhatsApp) or Resend (email)
+- Track status (pending/sent/failed)
+- Retry on failure
 
 ---
 
 ## 8. Styling / Design System Rules
 
-### Theme Philosophy
-
-**"Professional, Clear, Nigerian-Focused"**
-
-- Clean, modern design
-- High contrast for readability
-- Consistent spacing and alignment
-- Trust-building through clarity
-- Mobile-first responsive design
-
-### Color Usage
-
-**Primary Palette:**
-
-- `primary: #1B4FD8` (Main brand blue)
-- `primary-hover: #153FB0` (Darker on hover)
-- `primary-soft: #EAF0FF` (Light background)
-
-**Secondary/Status Colors:**
-
-- `gold: #F6B73C` (Accent, highlights)
-- `gold-deep: #D97706` (Darker gold)
-- `gold-soft: #FFF4D8` (Light gold background)
-- `success: #16A34A` (Positive actions)
-- `success-soft: #EAF7EE` (Success background)
-- `warning: #D97706` (Caution, same as gold-deep)
-- `warning-soft: #FFF3DF` (Warning background)
-- `danger: #DC2626` (Errors, destructive)
-- `danger-soft: #FDECEC` (Error background)
-
-**Neutral Colors:**
-
-- `background: #F8F7F4` (Page background)
-- `surface: #FFFFFF` (Card, input background)
-- `text-strong: #111827` (Primary text, headings)
-- `text-normal: #374151` (Body text)
-- `text-muted: #6B7280` (Secondary text, placeholders)
-- `border-soft: #E7E5DF` (Dividers, borders)
-
-**Color Usage Rules:**
-
-- Primary blue for: main actions, links, focus states, active nav
-- Gold for: stats, highlights, secondary actions
-- Success green for: confirmations, approved status
-- Danger red for: errors, rejections, destructive actions
-- Neutral grays for: text, backgrounds, borders
-
-### Typography Rules
-
-**Font Family:**
-
-- `Plus Jakarta Sans` (Google Font) for all text
-- System sans-serif as fallback
-
-**Type Hierarchy:**
-
-- `h1/h2`: Large headings - "text-4xl md:text-5xl font-extrabold"
-- `h3`: Medium headings - "text-2xl font-extrabold"
-- `body`: "text-base leading-6" for readable body
-- `small`: "text-sm" for secondary information
-- `label`: "text-sm font-semibold" for form labels
-- `input`: "text-base" for user input
-
-**Font Weight Usage:**
-
-- `font-extrabold (800)`: Page titles, stat numbers
-- `font-bold (700)`: Section headings, nav items, buttons
-- `font-semibold (600)`: Form labels, card titles, emphasis
-- `font-normal (400)`: Body text, form values
-
-### Spacing Conventions
-
-**Tailwind spacing scale used throughout:**
-
-- `px-4, px-6, px-8`: Horizontal padding
-- `py-3, py-5, py-8`: Vertical padding
-- `gap-3, gap-5, gap-6`: Component spacing
-- `mt-6, mb-8`: Vertical rhythm
-- `max-w-7xl`: Page max width
-- `w-72`: Sidebar width (lg devices)
-
-**Spacing Rules:**
-
-- Page sections: `gap-6` or `gap-10`
-- Component sections: `gap-5` or `gap-8`
-- Form fields: `space-y-2` (label + input)
-- Form layout: `space-y-6` (between fields)
-- Cards: `p-5` or `p-6`
-
-### Layout/Grid Rules
-
-**Container Layout:**
-
-```typescript
-// Standard page container
-<section className="mx-auto max-w-7xl px-4 py-8 md:px-8">
-
-// With sidebar (landlord layout)
-<main className="px-4 pb-24 pt-6 md:px-8 lg:ml-72 lg:pb-10">
-```
-
-**Responsive Grid:**
-
-```typescript
-// Stats cards: responsive columns
-<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-
-// Two-column with sidebar: lg breakpoint
-<div className="grid gap-6 xl:grid-cols-[1fr_420px]">
-```
-
-**Breakpoints Used:**
-
-- `sm`: 640px (small phones)
-- `md`: 768px (tablets)
-- `lg`: 1024px (desktops - sidebar appears here)
-- `xl`: 1280px (wide screens)
-
-### Card/Button/Input Styles
-
-**Card Style:**
-
-```typescript
-className = "rounded-card border border-border-soft bg-surface p-5 shadow-card";
-// rounded-card: 1rem radius
-// shadow-card: 0 12px 30px rgba(17, 24, 39, 0.06)
-```
-
-**Button Style:**
-
-```typescript
-// Primary button
-"bg-primary text-white shadow-soft hover:bg-primary-hover";
-
-// Secondary button
-"bg-surface text-text-strong shadow-soft ring-1 ring-border-soft";
-
-// Danger button
-"bg-danger text-white shadow-soft";
-
-// All buttons
-"rounded-button font-semibold transition focus-visible:ring-2";
-// rounded-button: 0.75rem
-```
-
-**Input Style:**
-
-```typescript
-// Consistent input
-"min-h-12 w-full rounded-button border border-border-soft bg-white px-4 py-3";
-"focus:border-primary focus:ring-2 focus:ring-primary-soft";
-"disabled:bg-background disabled:text-text-muted";
-```
-
-**Badge/Pill Style:**
-
-```typescript
-// Status badge
-"inline-flex items-center gap-1 rounded-button px-3 py-1.5 text-xs font-bold";
-
-// Variants: primary, success, warning, danger, gold
-```
-
-### Responsive Design Approach
-
-**Mobile-First Philosophy:**
-
-- Default styles optimized for mobile
-- `lg:` prefix for desktop-specific changes
-- Sidebar hidden on mobile (appears at `lg` breakpoint)
-- Bottom navigation on mobile
-- Stack layouts on mobile, side-by-side on desktop
-
-**Responsive Patterns:**
-
-```typescript
-// Hidden on small screens, visible on desktop
-<div className="hidden lg:block">Sidebar</div>
-
-// Full width on mobile, max-width on desktop
-className="max-w-7xl mx-auto px-4 md:px-8"
-
-// Responsive grid
-className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
-
-// Responsive text size
-className="text-lg md:text-2xl"
-
-// Sticky positioning (desktop only)
-className="lg:sticky lg:top-28 lg:self-start"
-```
-
-### Animation/Motion Conventions
-
-**Tailwind Motion Defaults:**
-
-- Transitions: `transition duration-200`
-- Hover effects: Subtle scale/opacity changes
-- Loading spinner: `animate-spin` (rotating border)
-- No heavy animations - focus on smoothness
-
-**Hover States:**
-
-```typescript
-// Button hover
-"hover:bg-primary-hover";
-
-// Card hover (optional)
-"hover:-translate-y-0.5";
-
-// Link hover
-"hover:text-primary-hover";
-
-// Interactive hover
-"transition hover:bg-primary-soft";
-```
-
-**Focus States:**
-
-```typescript
-// Focus visible (keyboard nav)
-"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
-```
-
-### Shadow System
-
-**Card Shadow:**
-
-- `shadow-card: 0 12px 30px rgba(17, 24, 39, 0.06)` (primary shadow)
-
-**Soft Shadow:**
-
-- `shadow-soft: 0 8px 20px rgba(17, 24, 39, 0.05)` (buttons, badges)
+### Color System
+- **Primary:** #1B4FD8 (blue) - buttons, active states
+- **Primary Hover:** #153FB0 | **Soft:** #EAF0FF
+- **Gold:** #F6B73C (accent) | **Deep:** #D97706 | **Soft:** #FFF4D8
+- **Success:** #16A34A (green) | **Soft:** #EAF7EE
+- **Danger:** #DC2626 (red) | **Soft:** #FDECEC  
+- **Warning:** #D97706 (orange) | **Soft:** #FFF3DF
+- **Text Strong:** #111827 | **Normal:** #374151 | **Muted:** #6B7280
+- **Background:** #F8F7F4 | **Surface:** #FFFFFF | **Border:** #E7E5DF
+
+### Typography
+- **Font:** Plus Jakarta Sans (Google Font)
+- **H1:** 32px, font-extrabold | **H2:** 24px, font-bold
+- **H3:** 18px, font-bold | **Body:** 16px, normal
+- **Line Height:** Headings 1.2, Body 1.6
+
+### Spacing (Tailwind 4px scale)
+- Card padding: 1.25rem (20px) mobile, 1.5rem (24px) desktop
+- Form gaps: 1rem (16px)
+- Section gaps: 1.5rem (24px) mobile, 2rem (32px) desktop
+- Button/input height: min-h-11 (44px) to min-h-12 (48px)
+
+### Layout
+- Max-width container: 1280px (xl)
+- Responsive grid: 1 col mobile → 2-5 cols desktop
+- Sidebar width: 288px (fixed on lg+, hidden on mobile)
+- Gap between items: 1.25rem (20px)
+
+### Components
+- **Button:** PrimaryBlue, Secondary, Danger, Ghost variants | sm/md/lg sizes
+- **Input:** 48px height, blue focus, error state support
+- **Card:** 1rem border-radius, shadow, white background
+- **Status Pill:** Colored bg, rounded, 12px font
+
+### Responsive
+- Breakpoints: sm 640px, md 768px, lg 1024px, xl 1280px
+- Mobile-first approach
+- Touch targets min 44px x 44px
+- 8px spacing between interactive elements
 
 ---
 
 ## 9. Naming Conventions
 
-### File Naming Conventions
+**Files:**
+- Components: `PropertyForm.tsx` (PascalCase)
+- Actions: `properties.actions.ts` (kebab-case, plural)
+- Services: `properties.service.ts` (kebab-case, plural)
+- Repositories: `properties.repository.ts` (kebab-case, plural)
+- Validators: `property.schema.ts` (kebab-case, singular)
+- Types: `auth.types.ts` (kebab-case, singular)
 
-**Components:**
+**Code:**
+- Components: PascalCase (`LoginForm`, `PropertyCard`)
+- Variables: camelCase (`propertyId`, `isLoading`)
+- Constants: UPPER_SNAKE_CASE (`AUDIT_EVENT_TYPES`)
+- Booleans: prefix with `is/has/should` (`isActive`, `hasError`)
+- Functions: camelCase verb-first (`createProperty`, `updatePayment`)
 
-- Kebab-case for file names: `tenant-card.tsx`, `payment-form.tsx`
-- PascalCase for exported component: `export function TenantCard`
-- One component per file (usually)
-
-**Actions:**
-
-- Kebab-case: `auth.actions.ts`, `payments.actions.ts`
-- State files: `auth.state.ts` (paired with actions file)
-
-**Services:**
-
-- Kebab-case: `auth.service.ts`, `payments.service.ts`, `gateway-payment.service.ts`
-- Suffix with `.service.ts`
-- PDF services use `.service.tsx` (React component)
-
-**Repositories:**
-
-- Kebab-case: `tenants.repository.ts`, `payments.repository.ts`
-- Suffix with `.repository.ts`
-
-**Validators:**
-
-- Kebab-case: `auth.schema.ts`, `tenant.schema.ts`
-- Suffix with `.schema.ts`
-- Group related schemas in one file
-
-**Utilities:**
-
-- Kebab-case: `money.ts`, `phone.ts`, `crypto.ts`
-- Group related utilities by domain
-
-**Types:**
-
-- Kebab-case: `auth.types.ts`, `payment.types.ts`
-- Suffix with `.types.ts`
-
-**Pages:**
-
-- `page.tsx` for route pages
-- `[id]` for dynamic routes
-- `(groupName)` for layout groups (no URL segment)
-
-### Component Naming Conventions
-
-**Naming Pattern:**
-
-- PascalCase for all components
-- Descriptive, specific names
-- Examples: `TenantCard`, `PaymentForm`, `PropertyDetailPage`, `ManualPaymentForm`
-
-**Naming Prefixes:**
-
-- Page components: `{Feature}Page` (e.g., `TenantsPage`, `PaymentDetailPage`)
-- Form components: `{Entity}Form` (e.g., `TenantForm`, `PropertyForm`)
-- Card/list components: `{Entity}Card` (e.g., `TenantCard`, `PropertyCard`)
-- Dialog/modal: `{Action}Dialog` or `{Entity}Modal`
-- Provider/wrapper: `{Feature}Provider` or `{Feature}Shell`
-
-### Hook Naming Conventions
-
-**Standard Hooks:**
-
-- `useActionState` (React built-in)
-- `useToast` (custom hook)
-- `useRouter` (Next.js)
-- `usePathname` (Next.js)
-- `useSearchParams` (Next.js)
-
-**Custom Hooks:**
-
-- Start with `use`
-- `use{Feature}` pattern: `useToast`
-- Located in components or `lib/` folder
-
-### Variable/Function Naming Rules
-
-**Variables:**
-
-- camelCase for all variables
-- Descriptive, not single letters (except loop indices)
-- Boolean prefixes: `is`, `has`, `can`, `should`, `will`
-  - `isLoading`, `hasError`, `canSubmit`, `shouldShow`
-
-**Functions:**
-
-- camelCase for regular functions
-- Verb-first naming: `get`, `create`, `update`, `delete`, `format`, `fetch`
-- Examples:
-  - `getTenantById()` (read)
-  - `createProperty()` (create)
-  - `updateTenant()` (update)
-  - `archiveTenant()` (delete/archive)
-  - `formatNaira()` (transform)
-  - `normalisePhoneNumber()` (normalize)
-
-**Server Actions:**
-
-- Suffix with `Action`: `createTenantShellAction`, `approveTenantsAction`
-- Always async functions
-
-**Services:**
-
-- Start with noun/domain: `auth.service.ts`, `payments.service.ts`
-- Functions describe operation: `requireLandlord()`, `createProperty()`
-
-**Repositories:**
-
-- Start with domain/table: `tenants.repository.ts`
-- CRUD operations: `create`, `update`, `delete`, `getById`, `get{Multiple}For{Context}`
-- Examples: `getTenantById()`, `getTenantsForLandlord()`, `createProperty()`
-
-### Database/Table Naming Rules
-
-**Table Names:**
-
-- Snake_case, plural: `tenants`, `properties`, `units`, `payments`, `tenancies`
-
-**Column Names:**
-
-- Snake_case: `landlord_id`, `full_name`, `phone_number`, `created_at`, `updated_at`
-- Status columns: `status` (enum values)
-- Timestamps: `created_at`, `updated_at`, `deleted_at`, `archived_at`, `approved_at`
-- Foreign keys: `{table}_id` (e.g., `landlord_id`, `property_id`)
-
-**Naming Conventions in Database:**
-
-- All lowercase
-- Snake_case for multi-word columns
-- No abbreviations
-- Clear, self-documenting names
+**Database:**
+- Tables: snake_case plural (`properties`, `rent_payments`)
+- Columns: snake_case (`full_name`, `phone_number`)
+- ForeignKeys: `{table_singular}_id` (`property_id`, `tenant_id`)
+- Timestamps: `created_at`, `updated_at` (ISO 8601)
 
 ---
 
 ## 10. Data Models / Schemas
 
-### Core Entities & Relationships
+**Core Entities:**
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                         PROFILES                             │
-│  id (PK) | role | full_name | phone_number | email          │
-│  (extends Supabase auth.users)                              │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-        ┌────────────┼────────────┐
-        │            │            │
-    LANDLORD    TENANT       CARETAKER
-        │
-        ├─────────────────────────┐
-        │                         │
-        ▼                         ▼
-   PROPERTIES               TENANTS
-   (multiple per            (assigned to
-    landlord)               one unit)
-        │
-        ├─────────────┐
-        │             │
-        ▼             ▼
-      UNITS      GUARANTORS
-   (rooms,      (tenant
-    flats)       guarantors)
-        │
-        └──────────┬──────────┐
-                   │          │
-                   ▼          ▼
-              TENANCIES  TENANCY_AGREEMENTS
-            (active)    (signed)
-                │
-                ├──────────────────┐
-                │                  │
-                ▼                  ▼
-            PAYMENTS          RECEIPTS
-         (per payment)    (PDF + WhatsApp)
-                │
-                ▼
-           LEDGER
-        (accounting)
-```
+**Profiles (Users)** → id (UUID), role, full_name, phone_number, email, created_at
 
-### Data Models
+**Properties** → id, landlord_id (FK), property_name, address, state, lga, property_type, is_archived
 
-#### PROFILES (Supabase Auth Extension)
+**Units** → id, property_id (FK), unit_identifier, unit_type, is_occupied
 
-```typescript
-id: string (UUID, PK, from auth.users)
-role: "landlord" | "tenant" | "caretaker"
-full_name: string
-phone_number: string
-email: string | null
-created_at: timestamp
-updated_at: timestamp
-```
+**Tenants** → id, landlord_id (FK), unit_id (FK), full_name, phone_number, email, status, kyc_data
 
-#### PROPERTIES
+**Tenancies** → id, landlord_id (FK), tenant_id (FK), unit_id (FK), start_date, end_date, payment_frequency, rent_amount, opening_balance, status
 
-```typescript
-id: string (UUID, PK)
-landlord_id: string (UUID, FK → profiles)
-property_name: string (max 120)
-address: string (max 300)
-state: string (e.g., "Lagos")
-lga: string (Local Government Area)
-property_type: "residential" | "mixed_use" | "flat_complex"
-country_code: string (default "NG")
-currency_code: string (default "NGN")
-created_at: timestamp
-updated_at: timestamp
-deleted_at: timestamp | null (soft delete)
-archived_at: timestamp | null
-```
+**Tenancy Agreements** → id, tenancy_id (FK), agreement_body, status, acceptance_token_hash, pdf_path, tenant_snapshot, property_snapshot
 
-#### UNITS
+**Payments** → id, tenancy_id (FK), landlord_id (FK), tenant_id (FK), amount_paid, payment_method, status, balance_after, period_start, period_end
 
-```typescript
-id: string (UUID, PK)
-property_id: string (UUID, FK → properties)
-block_id: string | null (for complex properties)
-building_name: string | null (e.g., "Block A")
-unit_identifier: string (e.g., "Apt 201")
-unit_type: "single_room" | "self_contain" | "room_and_parlour" | ... (8 types)
-bedrooms: integer
-bathrooms: integer
-monthly_rent: decimal | null
-annual_rent: decimal | null
-currency_code: string (default "NGN")
-status: "vacant" | "occupied" | "under_renovation" | "hold" | "pending_vacancy" | "archived"
-created_at: timestamp
-```
+**Receipts** → id, payment_id (FK), receipt_number, pdf_path, status
 
-#### TENANTS
+**Gateway Payment Intents** → id, reference, payment_id (FK), landlord_id (FK), tenant_id (FK), tenancy_id (FK), amount_kobo, status, metadata
 
-```typescript
-id: string (UUID, PK)
-profile_id: string | null (FK → profiles, null until activated)
-landlord_id: string (UUID, FK → profiles)
-unit_id: string (UUID, FK → units)
-full_name: string
-phone_number: string
-email: string | null
-date_of_birth: date | null
-home_address: string | null (max 300)
-occupation: string | null
-employer: string | null
-id_type: "nin" | "passport" | "drivers_license" | "voters_card" | null
-id_document_path: string | null (file path in storage)
-passport_photo_path: string | null
-onboarding_status: "invited" | "profile_complete" | "approved" | "rejected" | "token_expired"
-landlord_notes: string | null (max 2000)
-rejected_reason: string | null
-approved_at: timestamp | null
-approved_by: string | null (FK → profiles)
-created_at: timestamp
-```
+**Audit Logs** → id, landlord_id (FK), tenant_id (FK), tenancy_id (FK), actor_profile_id (FK), actor_role, event_type, entity_type, entity_id, description, metadata, created_at
 
-#### GUARANTORS
+**Notifications** → id, landlord_id (FK), tenant_id (FK), notification_type, channel, status, payload
 
-```typescript
-id: string (UUID, PK)
-tenant_id: string (UUID, FK → tenants)
-full_name: string
-relationship: string (e.g., "Father", "Employer")
-phone_number: string
-email: string | null
-address: string | null
-is_active: boolean (only one active per tenant)
-created_at: timestamp
-```
-
-#### TENANCIES (Active Rental Agreements)
-
-```typescript
-id: string (UUID, PK)
-landlord_id: string (UUID, FK → profiles)
-tenant_id: string (UUID, FK → tenants)
-unit_id: string (UUID, FK → units)
-property_id: string (UUID, FK → properties)
-rent_amount: decimal
-rent_frequency: "monthly" | "annual"
-payment_method: string[] (e.g., ["bank_transfer", "cash"])
-start_date: date
-end_date: date | null (null if ongoing)
-status: "active" | "pending" | "completed" | "terminated"
-termination_reason: string | null
-created_at: timestamp
-updated_at: timestamp
-```
-
-#### TENANCY_AGREEMENTS
-
-```typescript
-id: string (UUID, PK)
-tenancy_id: string (UUID, FK → tenancies)
-landlord_id: string (UUID, FK → profiles)
-tenant_id: string (UUID, FK → tenants)
-status: "draft" | "finalized" | "accepted" | "signed"
-template_version: string
-agreement_snapshot: jsonb (full agreement data)
-landlord_snapshot: jsonb (landlord at time of agreement)
-tenant_snapshot: jsonb (tenant at time of agreement)
-property_snapshot: jsonb (property at time of agreement)
-unit_snapshot: jsonb (unit at time of agreement)
-acceptance_token_hash: string | null
-acceptance_token_expires_at: timestamp | null
-acceptance_url: string | null
-accepted_at: timestamp | null
-accepted_by: string | null
-pdf_path: string | null
-created_at: timestamp
-updated_at: timestamp
-```
-
-#### PAYMENTS (Rent Payments)
-
-```typescript
-id: string (UUID, PK)
-tenancy_id: string (UUID, FK → tenancies)
-tenant_id: string (UUID, FK → tenants)
-landlord_id: string (UUID, FK → profiles)
-amount_paid: decimal
-payment_method: "bank_transfer" | "cash" | "online" | "other"
-payment_reference: string | null
-payment_date: date
-payment_verified_at: timestamp | null
-verified_by: string (source, e.g., "manual", "paystack")
-status: "pending" | "verified" | "reversed"
-period_start: date | null (rent for which period)
-period_end: date | null
-notes: string | null
-receipt_number: string | null
-receipt_pdf_path: string | null
-gateway_payment_id: string | null (FK → gateway_payments)
-idempotency_key: string (for deduplication)
-created_at: timestamp
-```
-
-#### GATEWAY_PAYMENTS (Paystack Integration)
-
-```typescript
-id: string (UUID, PK)
-landlord_id: string (UUID, FK → profiles)
-reference: string (unique Paystack reference)
-tenant_id: string (UUID, FK → tenants)
-tenancy_id: string (UUID, FK → tenancies)
-status: "pending" | "success" | "failed"
-amount_naira: decimal (rent amount)
-tenuro_fee_naira: decimal (app fee)
-total_amount_kobo: integer (for Paystack)
-metadata: jsonb (Paystack metadata)
-paystack_response: jsonb | null
-error_message: string | null
-idempotency_key: string
-created_at: timestamp
-updated_at: timestamp
-```
-
-#### RECEIPTS
-
-```typescript
-id: string (UUID, PK)
-payment_id: string (UUID, FK → payments)
-landlord_id: string (UUID, FK → profiles)
-receipt_number: string
-pdf_path: string
-download_url: string | null
-whatsapp_sent_at: timestamp | null
-email_sent_at: timestamp | null
-created_at: timestamp
-```
-
-#### NOTIFICATIONS
-
-```typescript
-id: string (UUID, PK)
-landlord_id: string (UUID, FK → profiles)
-tenant_id: string | null (FK → tenants)
-channel: "whatsapp" | "sms" | "email" | "in_app"
-notification_type: string (e.g., "onboarding_invite", "receipt", "overdue")
-message_body: string
-status: "queued" | "sent" | "failed"
-sent_at: timestamp | null
-error_message: string | null
-created_at: timestamp
-```
-
-#### ONBOARDING_TOKENS
-
-```typescript
-id: string (UUID, PK)
-tenant_id: string (UUID, FK → tenants)
-token_hash: string (hashed token)
-expires_at: timestamp
-created_at: timestamp
-```
-
-#### TENANT_ACTIVATION_TOKENS
-
-```typescript
-id: string (UUID, PK)
-tenant_id: string (UUID, FK → tenants)
-token_hash: string
-expires_at: timestamp
-created_at: timestamp
-```
-
-#### LEDGER (Accounting)
-
-```typescript
-id: string (UUID, PK)
-landlord_id: string (UUID, FK → profiles)
-entry_type: "credit" | "debit"
-amount: decimal
-description: string
-reference_id: string (payment/receipt ID)
-reference_type: string (payment/fee/etc)
-created_at: timestamp
-```
-
-#### CARETAKERS
-
-```typescript
-id: string (UUID, PK)
-landlord_id: string (UUID, FK → profiles)
-property_id: string | null (FK → properties, null if managing all)
-full_name: string
-phone_number: string
-email: string | null
-permissions: jsonb (array of permission strings)
-is_active: boolean
-created_at: timestamp
-```
+**Relationships:**
+- Profile → has many Properties, Tenants, Tenancies, Payments, Audit Logs
+- Property → has many Units → has many Tenancies → has many Payments
+- Tenant → has Tenancy (current) → has many Payments
+- Payment → has Receipt, Gateway Payment Intent
 
 ---
 
 ## 11. Important Constraints / Non-Negotiables
 
-### Architecture Constraints
-
-1. **Server-First Architecture**
-   - All business logic must be server-side ("use server")
-   - Client components only for interactivity and forms
-   - Never expose business logic to client
-   - Supabase client used only in server context
-
-2. **Form Handling Pattern**
-   - All forms must use Server Actions with `useActionState`
-   - No React form libraries (Formik, React Hook Form, etc.)
-   - HTML forms with standard input elements
-   - Zod validation for all form inputs
-   - Field errors returned as `fieldErrors` in action result
-
-3. **Authorization Enforcement**
-   - All services must check user role via `requireLandlord()` or `requireTenant()`
-   - All services must check resource ownership (landlord_id match)
-   - Never trust client-provided IDs - always verify ownership
-   - AppError("FORBIDDEN") for unauthorized access
-
-4. **Type Safety**
-   - Strict TypeScript mode enabled
-   - All database rows must have Row types
-   - All inputs must have input types (CreateInput, UpdateInput)
-   - All inputs validated with Zod schemas
-   - No `any` types
-
-5. **No Global State Management Library**
-   - No Redux, Zustand, Context API for app state
-   - Form state via useActionState only
-   - Server-side data fetching in components
-   - Each component fetches its own data
-
-### Data Model Constraints
-
-1. **Soft Deletes**
-   - Use `deleted_at` timestamp for soft deletes
-   - All queries must filter `deleted_at IS NULL`
-   - Never hard delete data
-
-2. **Audit Trails**
-   - All tables must have `created_at` and `updated_at` timestamps
-   - Important actions logged in audit_log table
-   - Timestamp recorded for approvals, rejections, payments
-
-3. **Immutable Snapshots**
-   - Agreement snapshots are immutable (no updates after creation)
-   - Store full copies of tenant/property data in snapshots
-   - Never reference foreign keys for historical data
-
-4. **Idempotency Keys**
-   - All payment operations must have unique idempotency keys
-   - Check key existence before creating duplicate payments
-   - Prevent double-charging via gateway
-
-### UI/UX Constraints
-
-1. **Tailwind CSS Only**
-   - No CSS-in-JS libraries
-   - No shadcn/ui or external component libraries
-   - All components custom-built with Tailwind
-   - Use clsx + tailwind-merge for className merging
-
-2. **Consistent Component API**
-   - All form inputs: label, error, helperText props
-   - All buttons: variant, size, fullWidth, isLoading props
-   - All cards: title, description props
-   - No inconsistent prop interfaces
-
-3. **Responsive Design**
-   - Mobile-first default
-   - lg: breakpoint for desktop navigation
-   - No sm: or md: breakpoint usage except for specific cases
-   - Test on both mobile and desktop
-
-### Authentication Constraints
-
-1. **Supabase Auth Required**
-   - All user authentication via Supabase
-   - JWT stored in HTTP-only cookies
-   - No custom authentication logic
-   - Session validated via `requireUser()` service
-
-2. **Role-Based Access**
-   - Only three roles: landlord, tenant, caretaker
-   - Enforced at service layer
-   - No permission matrix (roles are binary)
-
-### Integration Constraints
-
-1. **Paystack for Payments**
-   - All online payments must go through Paystack
-   - Use Paystack subaccounts for landlord payouts
-   - Webhook validation required for payment verification
-   - Idempotency keys prevent duplicate transactions
-
-2. **Supabase for Database & Auth**
-   - Only database provider allowed
-   - No other services for user management
-   - Use Supabase Storage for files
-   - RPC calls for complex operations
-
-3. **No API Polling**
-   - Use Supabase realtime subscriptions for live updates
-   - Prefer server-side data fetching
-   - No setInterval/setTimeout for polling
-
-### Performance Constraints
-
-1. **Revalidation Strategy**
-   - Use `revalidatePath()` after mutations
-   - Only revalidate affected pages
-   - No blanket `revalidateTag()` calls
-   - Cache strategies: ISR where applicable
-
-2. **Image Optimization**
-   - No large unoptimized images
-   - Use appropriate formats (WEBP when possible)
-   - Resize images server-side before storage
-
-### Deployment Constraints
-
-1. **Vercel Deployment**
-   - Build must succeed with `next build`
-   - No uninstalled dependencies
-   - Environment variables must be set in Vercel
-   - Database migrations must be applied before deploy
-
-2. **Environment Variables Required**
-   - NEXT_PUBLIC_SUPABASE_URL
-   - NEXT_PUBLIC_SUPABASE_ANON_KEY
-   - NEXT_PUBLIC_APP_URL
-   - SUPABASE_SERVICE_ROLE_KEY (admin)
-   - PAYSTACK_SECRET_KEY
-   - PAYSTACK_PUBLIC_KEY
-   - TENURO_GATEWAY_ADMIN_FEE_NAIRA
-   - RESEND_API_KEY
+1. **Server-First Architecture** - All business logic on server, no client-side secrets
+2. **Validation Always Server-Side** - Zod validation before service layer, field errors mapped back
+3. **Role-Based Access Control** - requireLandlord(), requireTenant(), ownership checks, audit everything
+4. **Audit Logging Mandatory** - Every meaningful change logged with actor, action, context, metadata
+5. **Next.js App Router** - Use redirect() and revalidatePath(), no custom routing
+6. **Server Actions for Forms** - No fetch() calls, use useActionState hook
+7. **Database is Source of Truth** - No client caching layer, revalidatePath() for invalidation
+8. **Nigerian Context First-Class** - Always include country/state/LGA, Nigerian phone/currency/WhatsApp
+9. **Security Practices** - No logging of secrets, hash tokens, 32+ byte randomness, HTTPS, env vars
+10. **Error Handling Consistency** - AppError with code/message/status, user-friendly messages
 
 ---
 
 ## 12. Known Technical Debt / Caveats
 
-### Incomplete Features
+**Empty Implementations:**
+- renewals.service.ts (empty file)
+- receipt.jobs.ts (empty file)
 
-1. **Renewals System**
-   - Service exists but logic not implemented
-   - No renewal reminder notifications
-   - No automatic renewal creation
-   - No rent increment handling
-   - Status shows 0 upcomingRenewals always
+**Not Fully Implemented:**
+- Inngest background jobs (configured, not triggered)
+- Caretaker features (minimal, incomplete permission scoping)
+- Reports & Analytics (basic stats only, no export)
 
-2. **Reports Dashboard**
-   - Page is stub only
-   - No reporting logic implemented
-   - No PDF export functionality
-   - Would require significant work
+**Workarounds:**
+- No transactions in repositories (idempotency key pattern used instead)
+- Limited real-time features (no active subscriptions)
+- Phone validation Nigeria-only (no libphonenumber)
+- Currency NGN only (no multi-currency)
+- No offline support
 
-3. **Caretakers Feature**
-   - Basic page exists but no functionality
-   - No caretaker CRUD operations
-   - No permission model for caretaker actions
-   - Needs full implementation
-
-4. **Inngest Background Jobs**
-   - Configured but currently inactive
-   - Route returns "scaffolded" message
-   - Job files exist but not wired up
-   - Needs backend activation and integration
-
-### Potential Issues
-
-1. **SMS Notifications Not Integrated**
-   - SMS channel defined but no provider integrated
-   - Only WhatsApp working (via Paystack)
-   - Would need Twilio or similar integration
-
-2. **Email Service Partially Integrated**
-   - Resend package installed but not fully used
-   - Email notifications not sent in most flows
-   - Would need full integration with notification system
-
-3. **No Offline Mode**
-   - All operations require active internet
-   - No service worker or offline caching
-   - No sync queue for offline-first operations
-
-4. **Limited Error Recovery**
-   - Network errors sometimes not handled gracefully
-   - Failed Inngest jobs would need monitoring
-   - No automatic retry logic for failed webhooks
-
-### Workarounds & Temporary Solutions
-
-1. **Payment Verification**
-   - Relies on Paystack webhook for verification
-   - If webhook fails, payment stays "pending"
-   - Manual verification would need to be added
-
-2. **PDF Generation**
-   - Uses @react-pdf/renderer (heavy, slow)
-   - Could be optimized with server-side PDF library
-   - No streaming or progressive generation
-
-3. **WhatsApp Integration**
-   - Uses Paystack's WhatsApp feature
-   - Limited customization of messages
-   - No proper WhatsApp Business API integration
-
-### Code Quality Concerns
-
-1. **No Comprehensive Error Logging**
-   - Errors logged to console in development
-   - No centralized error tracking (no Sentry/similar)
-   - Production errors not monitored
-
-2. **Limited Test Coverage**
-   - No unit tests written
-   - No integration tests
-   - No E2E tests
-   - All testing manual currently
-
-3. **Database Migrations Not Tracked**
-   - `supabase/migrations/` folder is empty
-   - SQL schema exists but not versioned
-   - No migration history
-   - Hard to track schema changes
-
-4. **Validation Duplication**
-   - Some validation logic exists in multiple places
-   - Could be consolidated into reusable validators
-   - Zod schemas are good but could use shared validation utils
-
-### Performance Considerations
-
-1. **PDF Generation Blocking**
-   - Receipt/agreement PDF generation is synchronous
-   - Large PDFs could timeout on Vercel
-   - Should be moved to background job (Inngest)
-
-2. **Large Data Sets**
-   - No pagination on tenant/payment lists
-   - Could be slow with thousands of records
-   - Would benefit from cursor-based pagination
-
-3. **N+1 Query Problem**
-   - Some repository queries might be inefficient
-   - Should audit Supabase queries for optimization
-   - Could use batch loading for related data
-
-### Security Considerations
-
-1. **No Rate Limiting**
-   - No rate limiting on auth endpoints
-   - Could be abused for brute force
-   - Should add rate limiting middleware
-
-2. **No CSRF Protection**
-   - Forms rely on same-site cookies only
-   - Next.js provides some protection but could be explicit
-
-3. **Limited Input Sanitization**
-   - Zod validates format but not all XSS vectors
-   - User-provided content displayed without sanitization
-   - Should use DOMPurify or similar if rendering user HTML
+**Should Refactor:**
+- Error handling centralization
+- Validation schema deduplication
+- Split oversized services
+- Standardize repository queries
+- Extract spacing constants
 
 ---
 
 ## 13. Pending Roadmap
 
-### Recommended Implementation Order
+**Phase 1: Complete Core (Weeks 1-2)**
+- Implement renewals service
+- Complete reports & analytics
+- Activate Inngest jobs
+- Add payment reminders
 
-**Phase 1: Core Fixes (High Priority)**
+**Phase 2: Enhanced Payments (Weeks 3-4)**
+- Add Stripe gateway
+- Payment plans/installments
+- Reconciliation reports
+- Refund workflow
 
-1. Enable and integrate Inngest background jobs
-   - Receipt generation should be async
-   - Payment verification should have retry logic
-   - Notification sending should be queued
+**Phase 3: Caretakers (Weeks 5-6)**
+- Complete caretaker role
+- Caretaker dashboards
+- Activity logging
 
-2. Add database migration tracking
-   - Document current schema in migrations folder
-   - Set up proper migration workflow
-   - Version all schema changes
+**Phase 4: Tenant App (Weeks 7-8)**
+- Mobile app (React Native)
+- Push notifications
+- Export functionality
 
-3. Implement comprehensive error logging
-   - Integrate Sentry or similar
-   - Log errors with context
-   - Set up error alerts
+**Phase 5: Advanced Features (Weeks 9-10)**
+- Multi-language
+- Dark mode
+- Maintenance requests
+- Utility tracking
 
-**Phase 2: Critical Features (Medium Priority)**
+**Phase 6: Compliance (Weeks 11-12)**
+- PostgreSQL RLS policies
+- 2FA support
+- GDPR data export
+- Compliance reports
 
-1. Complete Renewals System
-   - Implement renewal logic (end date → new tenancy)
-   - Add renewal reminders
-   - Handle rent increment
-   - Track renewal status
-
-2. Add Test Coverage
-   - Write unit tests for services
-   - Add integration tests for payment flow
-   - Create E2E tests for critical paths
-
-3. Implement Caretakers Feature
-   - Full CRUD for caretakers
-   - Permission model for actions
-   - Caretaker dashboard
-   - Caretaker rent collection tracking
-
-**Phase 3: Enhancements (Lower Priority)**
-
-1. Complete Reports System
-   - Income reports (monthly, yearly)
-   - Tenant roster reports
-   - Payment history reports
-   - Occupancy reports
-   - PDF export functionality
-
-2. Add SMS Notifications
-   - Integrate Twilio or Africastalking
-   - Send SMS for important events
-   - Track SMS delivery status
-
-3. Email Integration
-   - Complete Resend integration
-   - Send receipts via email
-   - Send agreement links via email
-   - Notification subscriptions
-
-4. Improve Performance
-   - Add pagination to lists
-   - Optimize database queries
-   - Implement caching strategy
-   - Add image optimization
-
-5. Offline Support
-   - Add service worker
-   - Implement offline queue
-   - Sync queued actions when online
-   - Work offline for read operations
-
-6. Better Paystack Integration
-   - Proper webhook error handling
-   - Payment reversal/refund handling
-   - Better fee calculation
-   - Reconciliation reports
-
-**Phase 4: Nice-to-Haves (Enhancement)**
-
-1. Advanced Reporting
-   - Financial reports with charts
-   - Tax reporting
-   - Payment forecasting
-   - Tenant analytics
-
-2. Automation Features
-   - Automatic rent reminders
-   - Automatic agreement generation
-   - Automatic renewal creation
-   - Late payment notifications
-
-3. Mobile App
-   - React Native version
-   - Offline-first sync
-   - Push notifications
-   - Camera for document upload
-
-4. Multi-Language Support
-   - Yoruba, Hausa, Igbo translations
-   - RTL support if needed
-   - Localized number/date formatting
+**Phase 7: Scale (Week 13+)**
+- Database optimization
+- Redis caching
+- CDN
+- Elasticsearch/Meilisearch
 
 ---
 
 ## 14. Continuation Instructions For Next AI
 
-### What to Preserve
+### Critical Rules
 
-1. **Architecture Pattern**
-   - Keep server-first, server actions pattern
-   - Do not introduce global state management
-   - Keep authorization checks in services
+1. **Maintain Patterns** - New features follow established patterns, no exceptions
+2. **Server-First** - Business logic on server, UI on client only
+3. **Audit Everything** - Every important state change logged
+4. **Validate Everything** - Zod schema, validation before service, field errors mapped
+5. **Check Authorization** - requireLandlord, ownership checks, AppError on forbidden
+6. **Nigerian Context** - State/LGA, phone format, NGN currency, WhatsApp
+7. **Test Before Commit** - Happy path, errors, validation, authorization, audit logs
+8. **Use App Router** - redirect() and revalidatePath() only
 
-2. **Code Organization**
-   - Maintain folder structure and naming
-   - Keep actions, services, repositories separated
-   - One component per file (mostly)
+### Code Quality
 
-3. **Design System**
-   - Use exact color codes from tailwind.config.ts
-   - Follow spacing and typography rules
-   - Maintain responsive breakpoints (lg: primary)
+- TypeScript strict mode, no any types
+- Functional components only, all props typed
+- Tailwind classes only, no inline styles
+- Single responsibility functions (50-line max)
+- Clear error handling, no console.log
+- Database queries optimized
 
-4. **Database Approach**
-   - Use Supabase as primary DB
-   - Keep soft deletes pattern
-   - Maintain type safety with Row and Input types
-   - Use RPC for complex operations
+### Before Committing
 
-5. **Validation Strategy**
-   - All inputs validated with Zod
-   - Field errors returned as fieldErrors
-   - Business logic errors throw AppError
+- TypeScript clean
+- No commented code
+- Tests pass
+- Naming conventions followed
+- Database optimized
+- Error handling comprehensive
+- Audit logs included
+- Mobile responsive
+- Accessibility checked
 
-### What to Avoid Changing
+### Adding New Features
 
-1. **Don't introduce new libraries**
-   - No form libraries (Formik, React Hook Form)
-   - No state management (Redux, Zustand)
-   - No UI component libraries (shadcn, Chakra)
-   - No animation libraries (Framer Motion, react-spring)
+1. Understand requirement fully
+2. Create database schema
+3. Create Zod validators
+4. Create repository functions
+5. Create service functions
+6. Create Server Action(s)
+7. Create component(s)
+8. Create page/route
+9. Add audit logging
+10. Error handling
+11. Manual testing (all cases)
+12. Mobile responsive check
+13. Code quality review
+14. Commit with clear message
 
-2. **Don't change the folder structure**
-   - Don't move services to different location
-   - Don't reorganize repository files
-   - Don't flatten actions folder
+### Refactoring Philosophy
 
-3. **Don't change authentication approach**
-   - Keep using Supabase Auth
-   - Don't add alternative auth providers
-   - Don't implement custom session logic
+**When:** Services > 300 lines, 3+ repeated patterns, unclear names, complex logic, performance issues
 
-4. **Don't refactor without necessity**
-   - Code duplication okay if avoids tight coupling
-   - Keep patterns consistent even if repetitive
-   - Don't over-engineer solutions
+**How:** Extract to utility, create service method, simplify composition, move logic to service
 
-### Coding Standards to Maintain
+**Never:** During bug fixes, without tests, core auth, without understanding impact
 
-1. **TypeScript Strict Mode**
-   - No `any` types
-   - All functions must have return types
-   - All parameters should be typed
+### Common Pitfalls
 
-2. **Error Handling**
-   - Use AppError for business logic errors
-   - Return ActionResult objects from actions
-   - Always provide user-friendly error messages
+❌ DON'T: Mix logic in components, skip validation, hardcode values, large components, forget revalidatePath, use client state instead of server
 
-3. **Authorization**
-   - Always require user/landlord/tenant at start of service function
-   - Always check resource ownership before modifying
-   - Throw AppError("FORBIDDEN") for unauthorized access
+✅ DO: Keep components dumb, write validation first, use constants, break into pieces, revalidatePath, server state
 
-4. **Naming Consistency**
-   - camelCase for variables and functions
-   - PascalCase for components and types
-   - Kebab-case for files and routes
-   - Descriptive, not abbreviated names
+### Environment Variables Required
 
-5. **Zod Validation**
-   - Validate all FormData inputs
-   - Provide helpful error messages
-   - Reuse common schemas from common.schema.ts
-   - Export Zod inferred types
+```
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+PAYSTACK_SECRET_KEY=
+PAYSTACK_PUBLIC_KEY=
+RESEND_API_KEY=
+INNGEST_API_KEY=
+NEXT_PUBLIC_APP_URL=
+TENURO_GATEWAY_ADMIN_FEE_NAIRA=50
+```
 
-### Refactor Philosophy
+### Key Files to Understand First
 
-**Only refactor when:**
-
-- Adding new similar functionality (consolidate patterns)
-- Fixing bugs in implementation
-- Improving performance with measurable impact
-- Reducing security vulnerabilities
-
-**Never refactor for:**
-
-- Personal style preferences
-- Simplification that changes patterns
-- Experimental library adoption
-- "Code cleanliness" without functionality benefit
-
-### Error Prevention Requirements
-
-1. **Authorization**
-   - Every service that modifies data must check landlord_id
-   - Every page must call requireLandlord() or requireTenant()
-   - Never trust client-provided IDs
-
-2. **Data Validation**
-   - All FormData must parse through Zod
-   - All RPC calls must validate response
-   - All user input must be type-checked
-
-3. **State Consistency**
-   - Always revalidatePath() after mutations
-   - Always verify related data exists before creating references
-   - Maintain referential integrity
-
-4. **Payment Safety**
-   - All payments must have idempotency keys
-   - Check for existing payment before processing
-   - Log all payment attempts
-   - Use transactions for complex operations
-
-5. **User Experience**
-   - All errors must show user-friendly messages
-   - All forms must show field-specific errors
-   - Loading states for async operations
-   - Toast notifications for confirmations
-
-### Testing Requirements Before Release
-
-1. **Critical Path Testing**
-   - Login flow (all methods)
-   - Property creation flow
-   - Tenant creation and approval flow
-   - Payment recording (manual and gateway)
-   - Receipt generation and sharing
-
-2. **Security Testing**
-   - Try to access landlord data as different landlord
-   - Try to modify unit you don't own
-   - Try to approve tenant not assigned to your property
-
-3. **Error Case Testing**
-   - Invalid form inputs
-   - Network failures during payment
-   - Webhook failure scenarios
-   - Database constraint violations
-
-4. **Mobile Testing**
-   - Responsive layout on 375px width
-   - Touch-friendly buttons and forms
-   - Bottom navigation on mobile
-   - Sidebar hidden/shown appropriately
-
-### Common Pitfalls to Avoid
-
-1. **Don't fetch data in client components**
-   - Keep data fetching in server components
-   - Pass data as props to client components
-
-2. **Don't use fetch in server components**
-   - Use Supabase client directly
-   - Import database directly in server components
-
-3. **Don't expose secrets to client**
-   - API keys must be NEXT*PUBLIC* or server-only
-   - Check env variable prefixes
-
-4. **Don't trust client data**
-   - Always validate FormData
-   - Always check resource ownership
-   - Never assume user role
-
-5. **Don't skip authorization checks**
-   - Even if UI doesn't show option, API should check
-   - Assume users will try to hack
-   - Default to deny, explicitly allow
-
-### Documentation to Update
-
-When making changes:
-
-1. Update this handoff document with any architectural changes
-2. Add comments to complex business logic
-3. Document any new environment variables
-4. Record any new database schema changes in migration comments
-5. Update README if adding major features
-
-### Communication Standards
-
-For future developers:
-
-- Use clear, descriptive commit messages
-- Include issue numbers if available
-- Document breaking changes
-- Add migration instructions for data changes
-- Keep this handoff current
+1. `src/server/services/auth.service.ts` - User context
+2. `src/actions/properties.actions.ts` - Server Action pattern
+3. `src/server/repositories/profiles.repository.ts` - Repository pattern
+4. `src/server/validators/property.schema.ts` - Validation
+5. `src/components/property/property-form.tsx` - Form component
+6. `src/server/errors/result.ts` - Error handling
+7. `src/server/services/audit-log.service.ts` - Audit logging
+8. `tailwind.config.ts` - Design system
 
 ---
 
-## Conclusion
+## APPENDIX A: User Operational Flows & Journey Maps
 
-This Tenuro project follows a clean, server-first architecture with a focus on data validation, authorization, and user experience. The codebase is organized into clear layers (actions → services → repositories → database) with strong type safety throughout.
+### User Roles & Their Complete Journeys
 
-Any continuation work should maintain these architectural patterns, preserve the design system consistency, and prioritize security and data integrity. The pending features (Renewals, Reports, Caretakers, Inngest jobs) represent the next logical development steps.
+#### **ROLE 1: Landlord** (Primary User)
 
-**Key principle for continuation:** "Preserve the patterns, extend the functionality."
+**Initial Setup Journey:**
+1. **Registration** → Phone/email + password → Profile creation → Redirect to /overview
+2. **First-Time Onboarding** (on /overview if no properties)
+   - See guided welcome card: "Start by adding your first property"
+   - Click "Add First Property"
+   - Enter property details (name, address, state, LGA, type)
+   - Property created → Redirect to property detail page
+3. **Add First Unit**
+   - On property page, click "Add Unit"
+   - Enter unit identifier (e.g., "Room 1", "Flat 2A")
+   - Unit created and linked to property
+4. **Add First Tenant**
+   - Click "Add Tenant" from /tenants page or property page
+   - Fill tenant form: name, phone, email, landlord notes
+   - Tenant created in "pending" status → Can manage KYC from property page
+5. **Create Rental Agreement**
+   - From property page, select tenant + unit
+   - Click "Create Agreement"
+   - Enter agreement details: rent amount, payment frequency, start date
+   - Agreement generated from template
+   - Can edit/finalize agreement
+   - Generate acceptance link for tenant
+6. **Send Agreement to Tenant**
+   - Click "Send to Tenant" on agreement
+   - System generates secure token + hashed link
+   - WhatsApp link sent to tenant phone
+   - Landlord can resend or refresh link if needed
+7. **Record First Payment**
+   - When tenant pays rent, click "Record Payment"
+   - Select payment method (bank transfer, cash, online)
+   - Enter amount, date, reference
+   - Payment recorded in "pending" status
+   - After verification, status changes to "posted"
+8. **Generate & Send Receipt**
+   - After payment posted, click "Generate Receipt"
+   - PDF receipt created and stored
+   - WhatsApp link sent to tenant with receipt
+   - Tenant can download from their dashboard
+
+**Ongoing Operations:**
+```
+Daily/Weekly:
+└─ Check /overview for outstanding balances
+   └─ View tenants with overdue rent
+   └─ Send payment reminders
+
+Monthly:
+└─ Go to /payments
+   └─ Record all rent payments for period
+   └─ Generate receipts for all payments
+   └─ Review payment history
+
+Quarterly:
+└─ Check /renewals for upcoming renewals
+   └─ Initiate renewal process 30 days before end date
+   └─ Update terms if needed
+   └─ Generate new agreement
+
+As-Needed:
+└─ /properties → Manage units, tenants
+└─ /tenants → Update tenant info, approve/reject tenants
+└─ /settings → Update bank account for payouts
+└─ /reports → View payment collection reports
+```
+
+**Property Lifecycle:**
+1. Create property (name, address, state, LGA, type)
+2. Add units to property
+3. Add tenants to units
+4. Create tenancies (rental agreements)
+5. Record rent payments
+6. Generate receipts
+7. Renew tenancies when period ends
+8. Archive property when ready (soft delete)
+
+**Payment Processing Flow:**
+1. **Manual Payment:**
+   - /payments → "Record Payment" button
+   - Select tenancy, enter amount, method, date
+   - Submit form (Server Action validates)
+   - Payment created in "pending" status
+   - Landlord confirms payment → status → "posted"
+   - Receipt auto-generates
+   - WhatsApp sent to tenant
+
+2. **Online Payment (Paystack):**
+   - /payments → Click "Send Payment Link"
+   - System creates Paystack payment intent
+   - Tenant receives WhatsApp with payment link
+   - Tenant clicks link → /t/pay/{reference}
+   - Tenant sees payment form (amount, property, unit)
+   - Tenant redirected to Paystack
+   - Tenant completes payment
+   - Paystack webhook fires → payment verified
+   - Payment status → "posted"
+   - Receipt auto-generated
+   - Tenant receives WhatsApp with receipt
+
+**Agreement Workflow:**
+1. Landlord creates agreement from tenancy
+2. System generates from template with dynamic data
+3. Landlord can edit agreement body
+4. Landlord finalizes agreement
+5. System generates secure acceptance token
+6. Landlord sends to tenant via WhatsApp
+7. Tenant clicks link → /t/agreement/{token}
+8. Tenant views agreement, clicks "Accept"
+9. Agreement marked as "accepted"
+10. Landlord gets notification
+11. Audit log created with tenant IP, timestamp
+
+**Caretaker Delegation (Partial):**
+1. Landlord goes to /caretakers
+2. Click "Add Caretaker"
+3. Enter caretaker phone + name
+4. Assign to specific properties
+5. Caretaker receives onboarding link
+6. Caretaker can view assigned properties only
+7. Caretaker cannot create new properties
+
+---
+
+#### **ROLE 2: Tenant** (Secondary User)
+
+**Account Activation Journey:**
+1. **Landlord Invites Tenant**
+   - Landlord creates tenant record in system
+   - Landlord clicks "Send Onboarding Link"
+   - System generates secure token (72-hour expiry)
+   - WhatsApp sent: "Complete your tenant profile for {property/unit}"
+2. **Tenant Completes Profile**
+   - Tenant clicks WhatsApp link → /t/onboarding/{token}
+   - Form appears: full name, phone, email, date of birth, address, occupation, employer
+   - KYC data collected
+   - Optional: Guarantor information
+   - Tenant submits
+   - Audit log created (IP, timestamp, data)
+   - Profile marked "kyc_submitted"
+3. **Landlord Approves Tenant**
+   - Landlord sees pending tenant in /tenants
+   - Can view submitted KYC data
+   - Click "Approve" or "Reject"
+   - If approved: tenant status → "approved"
+   - If rejected: tenant status → "rejected" + reason shown
+
+**After Approval - Account Activation:**
+1. Tenant status must be "approved" to activate account
+2. Landlord creates tenancy (rental agreement)
+3. System sends agreement acceptance link to tenant
+4. Tenant clicks link → /t/agreement/{token}
+5. Tenant views agreement, clicks "Accept"
+6. Tenant account → "active"
+7. Tenant can now access /tenant dashboard
+
+**Tenant Dashboard Operations:**
+```
+/tenant (Private - requires active tenancy)
+├─ View current rental agreement
+│  └─ Download agreement PDF
+├─ View rent balance
+│  └─ Shows opening balance + all posted payments = current outstanding
+├─ View payment history
+│  └─ Date, amount, method, status
+│  └─ Download receipt for each payment
+├─ View property & unit details
+│  └─ Property name, address
+│  └─ Unit identifier
+└─ Download receipts
+   └─ Secure signed URL (24h expiry)
+   └─ Via download button or WhatsApp link
+```
+
+**Payment as Tenant:**
+1. **Online Payment:**
+   - Landlord sends payment link via WhatsApp
+   - Tenant clicks → /t/pay/{reference}
+   - Sees: Property, Unit, Rent Amount, Balance
+   - Clicks "Pay Now"
+   - Redirected to Paystack gateway
+   - Completes payment
+   - Redirected to success page
+   - Receives WhatsApp with receipt
+   - Can download receipt from /tenant dashboard
+
+2. **Manual Payment:**
+   - Tenant transfers via bank or pays cash
+   - Tenant provides proof to landlord
+   - Landlord records in system: amount, method, date, reference
+   - Tenant receives WhatsApp with receipt
+
+**Agreement Acceptance:**
+1. Landlord creates & finalizes agreement
+2. Landlord sends acceptance link via WhatsApp
+3. Tenant clicks → /t/agreement/{token}
+4. Agreement content displayed (readonly)
+5. "I Agree" button at bottom
+6. Tenant clicks → agreement accepted
+7. IP address, timestamp recorded
+8. Audit log created
+9. Landlord notified
+10. Tenant sees "Agreement Accepted" on dashboard
+
+---
+
+#### **ROLE 3: Caretaker** (Property Manager)
+
+**Setup Journey:**
+1. Landlord goes to /caretakers
+2. Clicks "Add Caretaker"
+3. Enters caretaker phone + name
+4. Selects which properties caretaker manages
+5. Caretaker onboarding link sent
+6. Caretaker completes profile
+7. Account activated
+
+**Caretaker Dashboard (Partial Implementation):**
+- View assigned properties only
+- View units and current tenants in those properties
+- Cannot create new properties or tenants
+- Cannot access landlord settings
+- View-only access to payments (limited)
+
+---
+
+### Key Operational Workflows
+
+#### **Workflow 1: Complete Rent Collection Process (Start to Finish)**
+
+```
+MONTH 1 - January 1st (Rent Due)
+│
+├─ 1. Landlord checks /overview
+│  └─ Sees "Outstanding Rent Balance" stat
+│  └─ Finds tenant "John Doe" owes ₦500,000
+│
+├─ 2. Landlord sends payment link
+│  └─ Goes to /payments
+│  └─ Clicks "Send Payment Link"
+│  └─ Selects John's tenancy
+│  └─ System creates Paystack payment intent
+│  └─ Sends WhatsApp: "Your rent payment link: https://app.tenuro.com/t/pay/{ref}"
+│
+├─ 3. Tenant receives link
+│  └─ Clicks /t/pay/{reference}
+│  └─ Sees: Property "Lekki Apartment", Unit "Flat 2A", Amount "₦500,000"
+│  └─ Clicks "Continue to Payment"
+│
+├─ 4. Tenant pays on Paystack
+│  └─ Redirected to Paystack.co
+│  └─ Enters card/bank details
+│  └─ Payment processed by Paystack
+│  └─ Success page shown
+│
+├─ 5. Webhook received
+│  └─ /api/webhooks/paystack receives confirmation
+│  └─ Verifies Paystack signature
+│  └─ Updates payment status → "posted"
+│  └─ Creates receipt PDF
+│  └─ Stores in Supabase Storage
+│
+├─ 6. Audit log created
+│  └─ Records: who paid, when, how much, method, status
+│  └─ Metadata includes tenant ID, property ID, amount
+│
+├─ 7. Receipt generated & sent
+│  └─ PDF created: "REC-{paymentId}"
+│  └─ Includes: amount, date, property, unit, tenant name, landlord name
+│  └─ WhatsApp sent to tenant: "Your receipt is ready: https://app.tenuro.com/receipts/{id}"
+│  └─ Tenant can download from /tenant or click link
+│
+├─ 8. Landlord sees update
+│  └─ Goes to /payments
+│  └─ Payment now shows "Posted" status
+│  └─ Balance updated: ₦500,000 - ₦500,000 = ₦0
+│  └─ Receipt available to download
+│
+└─ 9. Audit trail complete
+   └─ Shows: payment created, verified, receipt generated
+   └─ Used for disputes, reconciliation, compliance
+```
+
+#### **Workflow 2: Tenant Onboarding to Agreement Acceptance**
+
+```
+PHASE 1: LANDLORD CREATES TENANT
+│
+├─ Landlord goes to /properties/{propertyId}
+├─ Selects unit or clicks "Add Tenant"
+├─ Fills form: name, phone, email, notes
+└─ Clicks "Create Tenant"
+   └─ Tenant created in "pending" status
+   └─ Stored in database with landlord_id, unit_id
+
+
+PHASE 2: LANDLORD SENDS ONBOARDING LINK
+│
+├─ Landlord goes to /tenants or /properties/{propertyId}
+├─ Finds new tenant, clicks "Send Onboarding Link"
+├─ System:
+│  ├─ Generates random secure token (32 bytes)
+│  ├─ Hashes token with SHA256
+│  ├─ Stores hash + expiry (72 hours) in database
+│  ├─ Creates WhatsApp message
+│  └─ Sends: "Hello [Tenant], [Landlord] invited you to complete your profile: https://app.tenuro.com/t/onboarding/{rawToken}"
+└─ Landlord sees confirmation: "Onboarding link sent"
+
+
+PHASE 3: TENANT COMPLETES PROFILE
+│
+├─ Tenant receives WhatsApp, clicks link
+├─ Redirected to /t/onboarding/{rawToken}
+├─ System:
+│  ├─ Hashes received token
+│  ├─ Finds matching onboarding record
+│  ├─ Checks expiry (still valid)
+│  └─ Shows onboarding form
+├─ Tenant fills:
+│  ├─ Full name
+│  ├─ Phone number
+│  ├─ Email
+│  ├─ Date of birth
+│  ├─ Home address
+│  ├─ Occupation
+│  ├─ Employer
+│  └─ Optional: Guarantor info
+├─ Clicks "Complete Profile"
+└─ System:
+   ├─ Validates all fields (Zod schema)
+   ├─ Stores KYC data as JSON in database
+   ├─ Sets status → "kyc_submitted"
+   └─ Creates audit log: "KYC submitted from {IP}, {user agent}"
+
+
+PHASE 4: LANDLORD APPROVES/REJECTS
+│
+├─ Landlord sees notification or checks /tenants
+├─ Finds tenant in "kyc_submitted" status
+├─ Views submitted KYC data
+├─ Clicks "Approve" OR "Reject"
+│
+├─ If APPROVE:
+│  ├─ Status → "approved"
+│  ├─ Audit log: "Tenant approved by landlord"
+│  └─ Tenant can now be added to tenancy
+│
+└─ If REJECT:
+   ├─ Status → "rejected"
+   ├─ Optional rejection reason stored
+   ├─ Audit log: "Tenant rejected: {reason}"
+   └─ Landlord can invite again
+
+
+PHASE 5: CREATE TENANCY & SEND AGREEMENT
+│
+├─ Landlord creates tenancy for approved tenant
+│  └─ Links: tenant + unit + rent amount + start date + frequency
+├─ System generates agreement from template
+├─ Landlord reviews & finalizes agreement
+├─ Landlord clicks "Send to Tenant"
+├─ System:
+│  ├─ Generates new token (for agreement acceptance)
+│  ├─ Creates WhatsApp link
+│  ├─ Sends: "Hello {Tenant}, {Landlord} sent your tenancy agreement for {Unit}. Review and accept here: https://app.tenuro.com/t/agreement/{token}"
+│  └─ Audit log: "Agreement acceptance link sent"
+└─ Agreement status → "finalized"
+
+
+PHASE 6: TENANT ACCEPTS AGREEMENT
+│
+├─ Tenant receives WhatsApp, clicks link
+├─ Redirected to /t/agreement/{token}
+├─ System validates token + expiry
+├─ Shows agreement content (readonly)
+├─ Tenant reviews, clicks "I Agree & Accept"
+├─ System:
+│  ├─ Records acceptance
+│  ├─ Captures: IP address, timestamp, user agent
+│  ├─ Status → "accepted"
+│  ├─ Activates tenant account
+│  ├─ Audit log: "Agreement accepted by tenant from {IP}"
+│  └─ Sends WhatsApp to landlord: "Tenant accepted agreement"
+└─ Tenant can now access /tenant dashboard
+
+
+PHASE 7: READY FOR PAYMENTS
+│
+└─ Tenant sees on /tenant:
+   ├─ Agreement (downloadable PDF)
+   ├─ Rent amount
+   ├─ Payment due dates
+   └─ Payment history (when payments come in)
+```
+
+#### **Workflow 3: Receipt Distribution**
+
+```
+PAYMENT POSTED (Online or Manual)
+│
+├─ Supabase DB: payment.status = "posted"
+├─ Audit log created
+│
+├─ Receipt Generation Job triggered
+│  ├─ Renders receipt PDF using @react-pdf/renderer
+│  ├─ Includes: receipt number, date, amount, property, unit, tenant name, landlord name
+│  ├─ Uploads PDF to Supabase Storage at: /{landlordId}/{tenantId}/{tenancyId}/{paymentId}.pdf
+│  └─ Creates signed download URL (24-hour expiry)
+│
+├─ Notification Job triggered
+│  ├─ WhatsApp sent via Paystack API
+│  ├─ Message: "Your rent receipt REC-{id} is ready. Download: {downloadUrl}"
+│  └─ Notification record status → "sent"
+│
+├─ Landlord sees on /payments
+│  ├─ Payment shows "Posted" status
+│  ├─ "Download Receipt" button available
+│  └─ Can resend receipt via WhatsApp
+│
+└─ Tenant sees on /tenant
+   ├─ Payment appears in history
+   ├─ "Download Receipt" button
+   ├─ Or downloads from WhatsApp link
+   └─ Stores copy for record
+```
+
+#### **Workflow 4: Monthly/Annual Reporting**
+
+```
+End of Period (Month/Quarter/Year)
+│
+├─ Landlord goes to /reports
+├─ Selects:
+│  ├─ Date range
+│  ├─ Specific property (optional)
+│  └─ Specific tenant (optional)
+│
+├─ System generates:
+│  ├─ Total rent collected
+│  ├─ Number of payments received
+│  ├─ Outstanding balance by tenant
+│  ├─ Payment history (detailed)
+│  ├─ Payment status breakdown (posted/pending/failed)
+│  └─ Collection rate %
+│
+└─ Landlord can:
+   ├─ View on screen
+   ├─ Export to PDF
+   ├─ Export to Excel (future)
+   └─ Share with accountant/tax advisor
+```
+
+---
+
+### System Attributes & Operational Characteristics
+
+#### **Data & Storage**
+- **Database:** PostgreSQL (Supabase)
+- **File Storage:** Supabase Storage (PDFs, agreements, receipts)
+- **Audit Logs:** Immutable records of all important actions
+- **Soft Deletes:** Properties/tenancies archived, not deleted
+
+#### **Security & Compliance**
+- **Authentication:** Supabase Auth (JWT in cookies)
+- **Authorization:** Role-based (landlord/tenant/caretaker)
+- **Validation:** Zod schemas (all inputs validated server-side)
+- **Encryption:** Tokens hashed with SHA256
+- **Audit Trail:** Every action logged with actor, context, metadata
+- **Data Privacy:** Personal data encrypted, GDPR compliant deletion possible
+
+#### **Payment Processing**
+- **Gateway:** Paystack (Nigeria-specific)
+- **Methods:** Online (Paystack), Bank Transfer, Cash
+- **Idempotency:** Duplicate prevention via UUID keys
+- **Reconciliation:** Payment ledger with running balance
+- **Receipt:** Automatic PDF generation + WhatsApp delivery
+
+#### **Notifications**
+- **Primary Channel:** WhatsApp (via Paystack)
+- **Secondary:** Email (via Resend)
+- **Events Triggered:**
+  - Onboarding invitations
+  - Agreement acceptance requests
+  - Payment links
+  - Receipt delivery
+  - Renewal reminders (future)
+  - Payment status updates
+
+#### **Scalability Characteristics**
+- **Multi-tenant:** Completely tenant-isolated (landlord → properties/tenants)
+- **Performance:** Server Components + revalidation for cache efficiency
+- **Database Indexing:** On landlord_id, tenant_id, tenancy_id for queries
+- **Concurrent Users:** Stateless architecture supports horizontal scaling
+
+#### **Integrations**
+- **Paystack API:** Payment processing, webhooks
+- **Resend API:** Email delivery
+- **Supabase:** PostgreSQL, Auth, Storage, Realtime (optional)
+- **WhatsApp:** Via Paystack API for notifications
+
+#### **Reporting & Analytics**
+- **Built-in Reports:** Payment collection, outstanding rent, tenant status
+- **Audit Logs:** Full audit trail for compliance
+- **Export Capability:** Reports exportable for accounting/tax
+
+#### **Error Handling & Resilience**
+- **Graceful Degradation:** Notifications fail silently, payment proceeds
+- **Retry Logic:** Payment verification retries on webhook failure
+- **User-Friendly Errors:** All errors converted to readable messages
+- **Idempotent Operations:** Duplicate requests return same result
+
+---
+
+**Document Version:** 1.0  
+**Last Updated:** May 4, 2026  
+**Project Stage:** MVP Complete, Feature Development  
+**Status:** Ready for seamless handoff with zero context loss
