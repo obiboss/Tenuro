@@ -213,7 +213,7 @@ export async function activateTenantAccount(input: ActivateTenantAccountInput) {
   await writeAuditLog({
     landlordId: tenant.landlord_id,
     tenantId: tenant.id,
-    unitId: tenant.unit_id,
+    unitId: tenant.units?.id ?? null,
     propertyId: tenant.units?.properties?.id ?? null,
     actorProfileId: data.user.id,
     actorRole: AUDIT_ACTOR_ROLES.tenant,
