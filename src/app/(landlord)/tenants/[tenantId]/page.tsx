@@ -7,6 +7,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { RentPaymentModal } from "@/components/payment/rent-payment-modal";
+import { QuitNoticeIssueCard } from "@/components/quit-notices/quit-notice-issue-card";
 import { OnboardingInviteCard } from "@/components/tenant/onboarding-invite-card";
 import { TenantActivationInviteCard } from "@/components/tenant/tenant-activation-invite-card";
 import { TenantReviewCard } from "@/components/tenant/tenant-review-card";
@@ -84,6 +85,10 @@ export default async function TenantDetailPage({
   );
 
   const canCreateTenancyRecord = isTenantApproved && !activeTenancy;
+
+  const canIssueQuitNotice = Boolean(
+    activeTenancy && activeTenancy.status === "active",
+  );
 
   const shouldShowOnboardingCard =
     tenant.onboarding_status === "invited" ||
@@ -274,6 +279,18 @@ export default async function TenantDetailPage({
                 defaultAmount={outstandingBalance}
                 periodStart={activeTenancy.start_date}
                 periodEnd={activeTenancy.end_date}
+              />
+            </SectionCard>
+          ) : null}
+
+          {canIssueQuitNotice && activeTenancy ? (
+            <SectionCard
+              title="Issue Quit Notice"
+              description="Prepare a formal quit notice PDF and WhatsApp draft for this tenant. This does not end the tenancy or make the unit vacant."
+            >
+              <QuitNoticeIssueCard
+                tenantId={tenant.id}
+                tenancyId={activeTenancy.id}
               />
             </SectionCard>
           ) : null}
