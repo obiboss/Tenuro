@@ -16,15 +16,35 @@ type TenantMoveOutNoticeCardProps = {
   moveOutNotice: TenantDashboardMoveOutNoticeRow | null;
 };
 
-function formatDate(value: string | null) {
+function parseDate(value: string | null) {
   if (!value) {
+    return null;
+  }
+
+  const normalizedValue = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? `${value}T00:00:00.000Z`
+    : value;
+
+  const date = new Date(normalizedValue);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date;
+}
+
+function formatDate(value: string | null) {
+  const date = parseDate(value);
+
+  if (!date) {
     return "Not available";
   }
 
   return new Intl.DateTimeFormat("en-NG", {
     dateStyle: "medium",
     timeZone: "Africa/Lagos",
-  }).format(new Date(`${value}T00:00:00.000Z`));
+  }).format(date);
 }
 
 export function TenantMoveOutNoticeCard({
