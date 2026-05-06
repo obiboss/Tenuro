@@ -20,6 +20,11 @@ import {
   findPaymentByIdempotencyKey,
   recordGatewayRentPaymentViaRpc,
 } from "@/server/repositories/payments.repository";
+import { getTenancyPaymentContext } from "@/server/repositories/payment-context.repository";
+import {
+  getUnitById,
+  markUnitOccupied,
+} from "@/server/repositories/units.repository";
 import { writeSystemAuditLog } from "@/server/services/audit-log.service";
 import {
   convertKoboToNaira,
@@ -85,6 +90,85 @@ function mapPaystackStatusToIntentStatus(status: string) {
   return "failed" as const;
 }
 
+function isFirstRentPaymentIntent(metadata: Record<string, unknown>) {
+  return (
+    metadata.payment_purpose === "new_tenant_first_rent" ||
+    metadata.automatic_after_agreement === true
+  );
+}
+
+async function markUnitOccupiedAfterFirstRentPayment(params: {
+  tenancyId: string;
+  paymentId: string;
+  paystackReference: string;
+}) {
+  const supabase = createSupabaseAdminClient();
+  const tenancy = await getTenancyPaymentContext(supabase, params.tenancyId);
+  const unit = await getUnitById(supabase, tenancy.unit_id);
+
+  if (unit.status === "occupied") {
+    return;
+  }
+
+  if (unit.status !== "reserved" && unit.status !== "vacant") {
+    await writeSystemAuditLog({
+      landlordId: tenancy.landlord_id,
+      tenantId: tenancy.tenant_id,
+      tenancyId: tenancy.id,
+      unitId: tenancy.unit_id,
+      eventType: AUDIT_EVENT_TYPES.unitStatusChanged,
+      entityType: AUDIT_ENTITY_TYPES.unit,
+      entityId: tenancy.unit_id,
+      description:
+        "First rent payment confirmed, but unit status was not changed because the unit is not in a reservable state.",
+      metadata: {
+        payment_id: params.paymentId,
+        paystack_reference: params.paystackReference,
+        current_unit_status: unit.status,
+        expected_statuses: ["reserved", "vacant"],
+        reason: "first_rent_payment_unit_status_not_transitionable",
+      },
+    });
+
+    return;
+  }
+
+  const occupiedUnit = await markUnitOccupied(supabase, tenancy.unit_id);
+
+  await writeSystemAuditLog({
+    landlordId: tenancy.landlord_id,
+    tenantId: tenancy.tenant_id,
+    tenancyId: tenancy.id,
+    unitId: tenancy.unit_id,
+    eventType: AUDIT_EVENT_TYPES.unitStatusChanged,
+    entityType: AUDIT_ENTITY_TYPES.unit,
+    entityId: tenancy.unit_id,
+    description: `${occupiedUnit.unit_identifier} was marked occupied after first rent payment.`,
+    metadata: {
+      payment_id: params.paymentId,
+      paystack_reference: params.paystackReference,
+      previous_unit_status: unit.status,
+      new_unit_status: occupiedUnit.status,
+      reason: "first_rent_payment_confirmed",
+    },
+  });
+}
+
+async function markUnitOccupiedAfterFirstRentPaymentSafely(params: {
+  tenancyId: string;
+  paymentId: string;
+  paystackReference: string;
+}) {
+  try {
+    await markUnitOccupiedAfterFirstRentPayment(params);
+  } catch (error) {
+    console.error(
+      "Failed to mark unit occupied after first rent payment:",
+      error,
+    );
+  }
+}
+
 async function generateReceiptSafely(paymentId: string) {
   try {
     await generateRentReceiptSystem(paymentId);
@@ -110,6 +194,14 @@ export async function processVerifiedGatewayPaymentReference(
 
   if (intent.status === "paid" && intent.processed_payment_id) {
     await generateReceiptSafely(intent.processed_payment_id);
+
+    if (isFirstRentPaymentIntent(intent.metadata)) {
+      await markUnitOccupiedAfterFirstRentPaymentSafely({
+        tenancyId: intent.tenancy_id,
+        paymentId: intent.processed_payment_id,
+        paystackReference: intent.paystack_reference,
+      });
+    }
 
     return {
       status: "duplicate",
@@ -202,6 +294,14 @@ export async function processVerifiedGatewayPaymentReference(
     paidAt: verifiedTransaction.paid_at ?? new Date().toISOString(),
     verifiedPayload,
   });
+
+  if (isFirstRentPaymentIntent(intent.metadata)) {
+    await markUnitOccupiedAfterFirstRentPaymentSafely({
+      tenancyId: intent.tenancy_id,
+      paymentId,
+      paystackReference: intent.paystack_reference,
+    });
+  }
 
   await writeSystemAuditLog({
     landlordId: intent.landlord_id,
