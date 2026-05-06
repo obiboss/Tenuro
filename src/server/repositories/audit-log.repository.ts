@@ -4,6 +4,7 @@ import type {
   AuditEntityType,
   AuditEventType,
 } from "@/server/constants/audit-events";
+import { AUDIT_EVENT_TYPES } from "@/server/constants/audit-events";
 
 export type AuditLogInsert = {
   landlordId?: string | null;
@@ -41,6 +42,31 @@ export type LandlordAuditLogRecord = {
   createdAt: string;
 };
 
+export type RenewalReminderAuditRecord = {
+  id: string;
+  landlordId: string | null;
+  tenantId: string | null;
+  tenancyId: string | null;
+  unitId: string | null;
+  propertyId: string | null;
+  description: string;
+  createdAt: string;
+  reminderMarker: string | null;
+  reminderChannel: string | null;
+  deliveryStatus: string | null;
+  runDate: string | null;
+  daysUntilRenewal: number | null;
+  renewalDate: string | null;
+  tenantName: string | null;
+  tenantPhoneNumber: string | null;
+  propertyName: string | null;
+  unitIdentifier: string | null;
+  rentAmount: number | null;
+  currencyCode: string | null;
+  whatsappMessage: string | null;
+  whatsappUrl: string | null;
+};
+
 type AuditLogRow = {
   id: string;
   landlord_id: string | null;
@@ -60,6 +86,34 @@ type AuditLogRow = {
   created_at: string;
 };
 
+function readMetadataText(
+  metadata: Record<string, unknown>,
+  key: string,
+): string | null {
+  const value = metadata[key];
+
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function readMetadataNumber(
+  metadata: Record<string, unknown>,
+  key: string,
+): number | null {
+  const value = metadata[key];
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsedValue = Number(value);
+
+    return Number.isFinite(parsedValue) ? parsedValue : null;
+  }
+
+  return null;
+}
+
 function mapAuditLogRow(row: AuditLogRow): LandlordAuditLogRecord {
   return {
     id: row.id,
@@ -78,6 +132,37 @@ function mapAuditLogRow(row: AuditLogRow): LandlordAuditLogRecord {
     ipAddress: row.ip_address,
     userAgent: row.user_agent,
     createdAt: row.created_at,
+  };
+}
+
+function mapRenewalReminderAuditRow(
+  row: AuditLogRow,
+): RenewalReminderAuditRecord {
+  const metadata = row.metadata ?? {};
+
+  return {
+    id: row.id,
+    landlordId: row.landlord_id,
+    tenantId: row.tenant_id,
+    tenancyId: row.tenancy_id,
+    unitId: row.unit_id,
+    propertyId: row.property_id,
+    description: row.description,
+    createdAt: row.created_at,
+    reminderMarker: readMetadataText(metadata, "reminder_marker"),
+    reminderChannel: readMetadataText(metadata, "reminder_channel"),
+    deliveryStatus: readMetadataText(metadata, "delivery_status"),
+    runDate: readMetadataText(metadata, "run_date"),
+    daysUntilRenewal: readMetadataNumber(metadata, "days_until_renewal"),
+    renewalDate: readMetadataText(metadata, "renewal_date"),
+    tenantName: readMetadataText(metadata, "tenant_name"),
+    tenantPhoneNumber: readMetadataText(metadata, "tenant_phone_number"),
+    propertyName: readMetadataText(metadata, "property_name"),
+    unitIdentifier: readMetadataText(metadata, "unit_identifier"),
+    rentAmount: readMetadataNumber(metadata, "rent_amount"),
+    currencyCode: readMetadataText(metadata, "currency_code"),
+    whatsappMessage: readMetadataText(metadata, "whatsapp_message"),
+    whatsappUrl: readMetadataText(metadata, "whatsapp_url"),
   };
 }
 
@@ -146,4 +231,46 @@ export async function listAuditLogsForLandlord(
   }
 
   return (data ?? []).map(mapAuditLogRow);
+}
+
+export async function listRenewalReminderAuditLogsForLandlord(
+  supabase: SupabaseClient,
+  landlordId: string,
+  limit = 200,
+): Promise<RenewalReminderAuditRecord[]> {
+  const safeLimit = Math.min(Math.max(limit, 1), 500);
+
+  const { data, error } = await supabase
+    .from("audit_logs")
+    .select(
+      [
+        "id",
+        "landlord_id",
+        "tenant_id",
+        "tenancy_id",
+        "unit_id",
+        "property_id",
+        "actor_profile_id",
+        "actor_role",
+        "event_type",
+        "entity_type",
+        "entity_id",
+        "description",
+        "metadata",
+        "ip_address",
+        "user_agent",
+        "created_at",
+      ].join(","),
+    )
+    .eq("landlord_id", landlordId)
+    .eq("event_type", AUDIT_EVENT_TYPES.renewalReminderPrepared)
+    .order("created_at", { ascending: false })
+    .limit(safeLimit)
+    .returns<AuditLogRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []).map(mapRenewalReminderAuditRow);
 }

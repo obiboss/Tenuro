@@ -3,10 +3,14 @@ import {
   AlertTriangle,
   CalendarClock,
   Clock3,
+  ExternalLink,
   Home,
+  MessageCircle,
   RefreshCcw,
   WalletCards,
 } from "lucide-react";
+import type { RenewalReminderAuditRecord } from "@/server/repositories/audit-log.repository";
+import { getCurrentLandlordRenewalReminderAuditLogs } from "@/server/services/audit-log.service";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
@@ -71,6 +75,18 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
+function formatDateTime(value: string | null) {
+  if (!value) {
+    return "Not set";
+  }
+
+  return new Intl.DateTimeFormat("en-NG", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Africa/Lagos",
+  }).format(new Date(value));
+}
+
 function getDaysText(daysUntilDue: number | null) {
   if (daysUntilDue === null) {
     return "No date";
@@ -89,7 +105,98 @@ function getDaysText(daysUntilDue: number | null) {
   return `${daysUntilDue} day${daysUntilDue === 1 ? "" : "s"} left`;
 }
 
-function RenewalCard({ item }: { item: LandlordRenewalOverviewItem }) {
+function getLatestReminderForTenancy(
+  remindersByTenancyId: Map<string, RenewalReminderAuditRecord[]>,
+  tenancyId: string,
+) {
+  return remindersByTenancyId.get(tenancyId)?.[0] ?? null;
+}
+
+function RenewalReminderPanel({
+  reminder,
+}: {
+  reminder: RenewalReminderAuditRecord | null;
+}) {
+  if (!reminder) {
+    return (
+      <div className="mt-5 rounded-button bg-background p-4">
+        <div className="flex items-start gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-primary">
+            <MessageCircle aria-hidden="true" size={19} strokeWidth={2.6} />
+          </div>
+
+          <div>
+            <p className="text-sm font-extrabold text-text-strong">
+              No prepared reminder yet
+            </p>
+            <p className="mt-1 text-sm leading-6 text-text-muted">
+              The renewal reminder cron prepares WhatsApp draft links exactly at
+              the 90, 60, and 30-day renewal windows.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-5 rounded-button bg-primary-soft p-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone="primary">Reminder Prepared</Badge>
+            {reminder.daysUntilRenewal ? (
+              <Badge tone="neutral">{reminder.daysUntilRenewal} days</Badge>
+            ) : null}
+          </div>
+
+          <p className="mt-3 text-sm font-extrabold text-text-strong">
+            Latest reminder prepared on {formatDateTime(reminder.createdAt)}
+          </p>
+
+          <p className="mt-1 text-sm leading-6 text-text-muted">
+            Delivery status:{" "}
+            <span className="font-bold">
+              {reminder.deliveryStatus ?? "prepared_not_sent"}
+            </span>
+          </p>
+        </div>
+
+        {reminder.whatsappUrl ? (
+          <a
+            href={reminder.whatsappUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-button bg-primary px-4 py-2 text-sm font-extrabold text-white shadow-soft hover:bg-primary-hover"
+          >
+            <MessageCircle aria-hidden="true" size={18} strokeWidth={2.6} />
+            Open WhatsApp Draft
+            <ExternalLink aria-hidden="true" size={15} strokeWidth={2.6} />
+          </a>
+        ) : null}
+      </div>
+
+      {reminder.whatsappMessage ? (
+        <div className="mt-4 rounded-button bg-white p-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+            Prepared message
+          </p>
+          <pre className="mt-2 whitespace-pre-wrap wrap-break-word text-sm font-semibold leading-6 text-text-normal">
+            {reminder.whatsappMessage}
+          </pre>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function RenewalCard({
+  item,
+  reminder,
+}: {
+  item: LandlordRenewalOverviewItem;
+  reminder: RenewalReminderAuditRecord | null;
+}) {
   const tenancy = item.tenancy;
   const tenant = tenancy.tenants;
   const unit = tenancy.units;
@@ -184,11 +291,12 @@ function RenewalCard({ item }: { item: LandlordRenewalOverviewItem }) {
         </div>
       </div>
 
+      <RenewalReminderPanel reminder={reminder} />
+
       <div className="mt-5 rounded-button bg-background p-4">
         <p className="text-sm leading-6 text-text-muted">
-          This page is for landlord renewal visibility only. Tenant renewal
-          payment will be handled from the tenant side when the renewal payment
-          flow is implemented.
+          This page is for landlord renewal visibility only. WhatsApp reminders
+          are prepared as drafts; Tenuro does not send them automatically.
         </p>
       </div>
 
@@ -204,18 +312,41 @@ function RenewalCard({ item }: { item: LandlordRenewalOverviewItem }) {
   );
 }
 
+function groupRemindersByTenancyId(reminders: RenewalReminderAuditRecord[]) {
+  const groupedReminders = new Map<string, RenewalReminderAuditRecord[]>();
+
+  for (const reminder of reminders) {
+    if (!reminder.tenancyId) {
+      continue;
+    }
+
+    const existingReminders = groupedReminders.get(reminder.tenancyId) ?? [];
+
+    existingReminders.push(reminder);
+    groupedReminders.set(reminder.tenancyId, existingReminders);
+  }
+
+  return groupedReminders;
+}
+
 export default async function RenewalsPage() {
-  const renewalOverview = await getCurrentLandlordRenewalOverview();
+  const [renewalOverview, renewalReminderLogs] = await Promise.all([
+    getCurrentLandlordRenewalOverview(),
+    getCurrentLandlordRenewalReminderAuditLogs(),
+  ]);
+
+  const remindersByTenancyId = groupRemindersByTenancyId(renewalReminderLogs);
+  const preparedReminderCount = renewalReminderLogs.length;
 
   return (
     <div>
       <PageHeader
         title="Renewals"
-        description="Track tenant rent calendars, renewal dates, and upcoming rent charge windows."
+        description="Track tenant rent calendars, renewal dates, and prepared renewal reminder drafts."
         action={<Badge tone="primary">Live Tracking</Badge>}
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         <StatCard
           title="Overdue"
           value={String(renewalOverview.summary.overdue)}
@@ -255,6 +386,14 @@ export default async function RenewalsPage() {
           tone="primary"
           icon={<Home size={22} strokeWidth={2.6} />}
         />
+
+        <StatCard
+          title="Prepared"
+          value={String(preparedReminderCount)}
+          description="Reminder drafts"
+          tone="success"
+          icon={<MessageCircle size={22} strokeWidth={2.6} />}
+        />
       </div>
 
       <div className="mt-6">
@@ -273,7 +412,14 @@ export default async function RenewalsPage() {
           ) : (
             <div className="space-y-4">
               {renewalOverview.items.map((item) => (
-                <RenewalCard key={item.tenancy.id} item={item} />
+                <RenewalCard
+                  key={item.tenancy.id}
+                  item={item}
+                  reminder={getLatestReminderForTenancy(
+                    remindersByTenancyId,
+                    item.tenancy.id,
+                  )}
+                />
               ))}
             </div>
           )}

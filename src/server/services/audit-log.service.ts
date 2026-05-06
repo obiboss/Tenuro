@@ -5,6 +5,7 @@ import { AUDIT_ACTOR_ROLES } from "@/server/constants/audit-events";
 import {
   insertAuditLog,
   listAuditLogsForLandlord,
+  listRenewalReminderAuditLogsForLandlord,
   type AuditLogInsert,
 } from "@/server/repositories/audit-log.repository";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
@@ -60,4 +61,11 @@ export async function getCurrentLandlordAuditLogs() {
   const supabase = await createSupabaseServerClient();
 
   return listAuditLogsForLandlord(supabase, landlord.id);
+}
+
+export async function getCurrentLandlordRenewalReminderAuditLogs() {
+  const landlord = await requireLandlord();
+  const supabase = await createSupabaseServerClient();
+
+  return listRenewalReminderAuditLogsForLandlord(supabase, landlord.id);
 }
