@@ -207,3 +207,21 @@ export async function getLatestGatewayPaymentIntentForTenancyPurpose(
 
   return data;
 }
+
+export async function getGatewayPaymentIntentsForTenant(
+  supabase: SupabaseClient,
+  tenantId: string,
+) {
+  const { data, error } = await supabase
+    .from("gateway_payment_intents")
+    .select(GATEWAY_PAYMENT_INTENT_SELECT)
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: false })
+    .returns<GatewayPaymentIntent[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}

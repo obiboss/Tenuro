@@ -1,14 +1,21 @@
 import "server-only";
 
+import {
+  AUDIT_ACTOR_ROLES,
+  AUDIT_ENTITY_TYPES,
+  AUDIT_EVENT_TYPES,
+} from "@/server/constants/audit-events";
 import { AppError } from "@/server/errors/app-error";
-import { getTenantById } from "@/server/repositories/tenants.repository";
+import { getGatewayPaymentIntentsForTenant } from "@/server/repositories/gateway-payment.repository";
+import { upsertProfile } from "@/server/repositories/profiles.repository";
 import {
   getTenantActivationTokenByHash,
   linkTenantToProfile,
   markTenantActivationTokenUsed,
   saveTenantActivationToken,
 } from "@/server/repositories/tenant-activation.repository";
-import { upsertProfile } from "@/server/repositories/profiles.repository";
+import { getTenantById } from "@/server/repositories/tenants.repository";
+import { writeAuditLog } from "@/server/services/audit-log.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { sha256Hex } from "@/server/utils/crypto";
@@ -19,12 +26,6 @@ import {
 } from "@/server/utils/tokens";
 import type { ActivateTenantAccountInput } from "@/server/validators/tenant-activation.schema";
 import { requireLandlord } from "./auth.service";
-import {
-  AUDIT_ACTOR_ROLES,
-  AUDIT_ENTITY_TYPES,
-  AUDIT_EVENT_TYPES,
-} from "@/server/constants/audit-events";
-import { writeAuditLog } from "@/server/services/audit-log.service";
 
 function getAppBaseUrl() {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
@@ -52,6 +53,34 @@ function buildActivationMessage(params: {
     "",
     "This link expires automatically.",
   ].join("\n");
+}
+
+function isPaidFirstRentIntent(metadata: Record<string, unknown>) {
+  return (
+    metadata.payment_purpose === "new_tenant_first_rent" ||
+    metadata.automatic_after_agreement === true
+  );
+}
+
+async function assertFirstRentPaymentCompleted(tenantId: string) {
+  const supabase = createSupabaseAdminClient();
+  const intents = await getGatewayPaymentIntentsForTenant(supabase, tenantId);
+
+  const hasPaidFirstRent = intents.some((intent) => {
+    if (intent.status !== "paid") {
+      return false;
+    }
+
+    return isPaidFirstRentIntent(intent.metadata);
+  });
+
+  if (!hasPaidFirstRent) {
+    throw new AppError(
+      "FIRST_RENT_PAYMENT_REQUIRED",
+      "Tenant account activation is available after the first rent payment is confirmed.",
+      400,
+    );
+  }
 }
 
 export async function generateTenantActivationLink(tenantId: string) {
@@ -83,6 +112,8 @@ export async function generateTenantActivationLink(tenantId: string) {
       400,
     );
   }
+
+  await assertFirstRentPaymentCompleted(tenantId);
 
   const tenantPhone = normalisePhoneNumber(tenant.phone_number);
   const rawToken = generateSecureToken();
@@ -249,6 +280,8 @@ export async function generateTenantActivationLinkSystem(tenantId: string) {
   if (tenant.profile_id) {
     return null;
   }
+
+  await assertFirstRentPaymentCompleted(tenantId);
 
   const tenantPhone = normalisePhoneNumber(tenant.phone_number);
   const rawToken = generateSecureToken();
