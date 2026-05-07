@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   CreatePropertyRuleInput,
+  PropertyRuleCode,
   UpdatePropertyRuleInput,
 } from "@/server/validators/property-rule.schema";
 
@@ -27,6 +28,12 @@ export type PropertyRuleAppliesTo =
 
 export type PropertyRuleStatus = "active" | "inactive" | "archived";
 
+export type PropertyRuleMetadata = {
+  rule_code?: PropertyRuleCode;
+  config?: Record<string, unknown>;
+  source?: "guided_preset" | "custom_house_rule";
+};
+
 export type PropertyRuleRow = {
   id: string;
   landlord_id: string;
@@ -40,7 +47,7 @@ export type PropertyRuleRow = {
   status: PropertyRuleStatus;
   requires_tenant_acknowledgement: boolean;
   sort_order: number;
-  metadata: Record<string, unknown>;
+  metadata: PropertyRuleMetadata;
   created_by: string | null;
   archived_at: string | null;
   deleted_at: string | null;
@@ -121,6 +128,15 @@ export async function createPropertyRule(
     createdBy: string;
   },
 ) {
+  const metadata: PropertyRuleMetadata = {
+    rule_code: params.input.ruleCode,
+    config: params.input.config,
+    source:
+      params.input.ruleCode === "other_house_rule"
+        ? "custom_house_rule"
+        : "guided_preset",
+  };
+
   const { data, error } = await supabase
     .from("property_rules")
     .insert({
@@ -135,7 +151,7 @@ export async function createPropertyRule(
       requires_tenant_acknowledgement:
         params.input.requiresTenantAcknowledgement,
       sort_order: params.input.sortOrder,
-      metadata: {},
+      metadata,
       created_by: params.createdBy,
     })
     .select(PROPERTY_RULE_DETAIL_SELECT)
@@ -165,6 +181,7 @@ export async function updatePropertyRule(
     status: "active" | "inactive";
     requires_tenant_acknowledgement: boolean;
     sort_order: number;
+    metadata: PropertyRuleMetadata;
   }> = {};
 
   if (params.input.unitId !== undefined) {
@@ -202,6 +219,12 @@ export async function updatePropertyRule(
 
   if (params.input.sortOrder !== undefined) {
     updatePayload.sort_order = params.input.sortOrder;
+  }
+
+  if (params.input.config !== undefined) {
+    updatePayload.metadata = {
+      config: params.input.config,
+    };
   }
 
   const { data, error } = await supabase

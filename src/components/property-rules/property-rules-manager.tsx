@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useMemo, useState, useActionState } from "react";
 import {
   archivePropertyRuleAction,
   createPropertyRuleAction,
@@ -18,10 +18,19 @@ import { ToastProvider } from "@/components/ui/toast-provider";
 import { TrustNotice } from "@/components/ui/trust-notice";
 import {
   Archive,
+  Baby,
+  BriefcaseBusiness,
+  Car,
+  CircleDollarSign,
   ClipboardCheck,
+  Dog,
   FileWarning,
   Home,
+  Hotel,
+  PackageCheck,
   ShieldCheck,
+  UsersRound,
+  Wind,
 } from "lucide-react";
 
 type PropertyRulesManagerProps = {
@@ -34,54 +43,175 @@ type PropertyRulesManagerProps = {
   }[];
 };
 
-const categoryOptions = [
-  { label: "Occupancy", value: "occupancy" },
-  { label: "Pets", value: "pets" },
-  { label: "Payment", value: "payment" },
-  { label: "Noise", value: "noise" },
-  { label: "Business use", value: "business_use" },
-  { label: "Maintenance", value: "maintenance" },
-  { label: "Safety", value: "safety" },
-  { label: "Documentation", value: "documentation" },
-  { label: "Other", value: "other" },
-];
+type PresetGroup = "tenant_requirement" | "house_rule";
 
-const enforcementOptions = [
-  { label: "Information only", value: "information_only" },
-  { label: "Landlord review required", value: "landlord_review" },
-  { label: "Blocks onboarding", value: "blocks_onboarding" },
-];
-
-const appliesToOptions = [
-  { label: "New tenants", value: "new_tenants" },
-  { label: "All tenants", value: "all_tenants" },
-  { label: "Renewing tenants", value: "renewing_tenants" },
-];
-
-const enforcementCopy: Record<
-  PropertyRuleDetailRow["enforcement"],
-  {
+type RulePreset = {
+  code: string;
+  title: string;
+  description: string;
+  group: PresetGroup;
+  icon: React.ReactNode;
+  requiresNumber?: {
+    fieldName: string;
     label: string;
-    tone: "primary" | "success" | "warning" | "danger" | "neutral";
-    description: string;
-  }
-> = {
-  information_only: {
-    label: "Information only",
-    tone: "success",
-    description: "Shown to tenants for awareness.",
-  },
-  landlord_review: {
-    label: "Review required",
-    tone: "warning",
-    description: "Landlord should review before approval.",
-  },
-  blocks_onboarding: {
-    label: "Blocks onboarding",
-    tone: "danger",
-    description: "Later batches will prevent onboarding if this rule fails.",
-  },
+    helperText: string;
+  };
 };
+
+const rulePresets: RulePreset[] = [
+  {
+    code: "pets_not_allowed",
+    title: "No pets",
+    description: "Auto-decline if tenant declares pets.",
+    group: "tenant_requirement",
+    icon: <Dog aria-hidden="true" size={20} strokeWidth={2.6} />,
+  },
+  {
+    code: "maximum_occupants",
+    title: "Maximum occupants",
+    description: "Auto-decline if declared occupants exceed the limit.",
+    group: "tenant_requirement",
+    icon: <UsersRound aria-hidden="true" size={20} strokeWidth={2.6} />,
+    requiresNumber: {
+      fieldName: "maximumOccupants",
+      label: "Maximum occupants",
+      helperText: "Example: 4",
+    },
+  },
+  {
+    code: "residential_only",
+    title: "Residential only",
+    description: "Auto-decline if tenant wants commercial use.",
+    group: "tenant_requirement",
+    icon: <Home aria-hidden="true" size={20} strokeWidth={2.6} />,
+  },
+  {
+    code: "children_under_5_not_allowed",
+    title: "No children under 5",
+    description: "Auto-decline if children under 5 will live in the unit.",
+    group: "tenant_requirement",
+    icon: <Baby aria-hidden="true" size={20} strokeWidth={2.6} />,
+  },
+  {
+    code: "minimum_monthly_income",
+    title: "Minimum income",
+    description: "Flag for landlord review if tenant income is below this.",
+    group: "tenant_requirement",
+    icon: <CircleDollarSign aria-hidden="true" size={20} strokeWidth={2.6} />,
+    requiresNumber: {
+      fieldName: "minimumMonthlyIncome",
+      label: "Minimum monthly income",
+      helperText: "Enter amount in naira, for example 250000.",
+    },
+  },
+  {
+    code: "guarantor_required",
+    title: "Guarantor required",
+    description: "KYC asks only if tenant can provide one if approved.",
+    group: "tenant_requirement",
+    icon: <ShieldCheck aria-hidden="true" size={20} strokeWidth={2.6} />,
+  },
+  {
+    code: "shortlet_not_allowed",
+    title: "No short-let / Airbnb",
+    description: "Auto-decline if tenant wants short-let or daily rental use.",
+    group: "tenant_requirement",
+    icon: <Hotel aria-hidden="true" size={20} strokeWidth={2.6} />,
+  },
+  {
+    code: "subletting_not_allowed",
+    title: "No subletting",
+    description: "Auto-decline if tenant intends to sublet.",
+    group: "tenant_requirement",
+    icon: <PackageCheck aria-hidden="true" size={20} strokeWidth={2.6} />,
+  },
+  {
+    code: "customer_facing_business_not_allowed",
+    title: "No customer-facing business",
+    description: "Auto-decline if business brings customers or staff.",
+    group: "tenant_requirement",
+    icon: <BriefcaseBusiness aria-hidden="true" size={20} strokeWidth={2.6} />,
+  },
+  {
+    code: "heavy_generator_or_equipment_not_allowed",
+    title: "No heavy generator/equipment",
+    description: "Auto-decline if heavy equipment will be used.",
+    group: "tenant_requirement",
+    icon: <Wind aria-hidden="true" size={20} strokeWidth={2.6} />,
+  },
+  {
+    code: "large_gatherings_not_allowed",
+    title: "No regular large gatherings",
+    description:
+      "Auto-decline if tenant plans regular events or group gatherings.",
+    group: "tenant_requirement",
+    icon: <UsersRound aria-hidden="true" size={20} strokeWidth={2.6} />,
+  },
+  {
+    code: "smoking_not_allowed",
+    title: "No smoking",
+    description: "House rule only. Does not auto-decline during KYC.",
+    group: "house_rule",
+    icon: <ShieldCheck aria-hidden="true" size={20} strokeWidth={2.6} />,
+  },
+  {
+    code: "parking_rules",
+    title: "Parking rules",
+    description: "House rule for parking arrangement.",
+    group: "house_rule",
+    icon: <Car aria-hidden="true" size={20} strokeWidth={2.6} />,
+  },
+  {
+    code: "waste_disposal_rules",
+    title: "Waste disposal",
+    description: "House rule for waste disposal.",
+    group: "house_rule",
+    icon: <PackageCheck aria-hidden="true" size={20} strokeWidth={2.6} />,
+  },
+  {
+    code: "quiet_hours",
+    title: "Quiet hours",
+    description: "House rule for noise control.",
+    group: "house_rule",
+    icon: <ShieldCheck aria-hidden="true" size={20} strokeWidth={2.6} />,
+  },
+  {
+    code: "visitor_rules",
+    title: "Visitors policy",
+    description: "House rule for visitor expectations.",
+    group: "house_rule",
+    icon: <UsersRound aria-hidden="true" size={20} strokeWidth={2.6} />,
+  },
+  {
+    code: "maintenance_reporting",
+    title: "Maintenance reporting",
+    description: "House rule for how tenants report repairs.",
+    group: "house_rule",
+    icon: <ClipboardCheck aria-hidden="true" size={20} strokeWidth={2.6} />,
+  },
+  {
+    code: "no_structural_changes",
+    title: "No structural changes",
+    description: "House rule requiring approval before alterations.",
+    group: "house_rule",
+    icon: <Home aria-hidden="true" size={20} strokeWidth={2.6} />,
+  },
+  {
+    code: "other_house_rule",
+    title: "Other house rule",
+    description: "Information-only custom rule. Not used for auto-decline.",
+    group: "house_rule",
+    icon: <FileWarning aria-hidden="true" size={20} strokeWidth={2.6} />,
+  },
+];
+
+const unitOptions = (units: PropertyRulesManagerProps["units"]) =>
+  units.map((unit) => ({
+    label: unit.building_name
+      ? `${unit.unit_identifier} · ${unit.building_name}`
+      : unit.unit_identifier,
+    value: unit.id,
+  }));
 
 const statusCopy: Record<
   PropertyRuleDetailRow["status"],
@@ -104,43 +234,124 @@ const statusCopy: Record<
   },
 };
 
-function formatCategory(value: PropertyRuleDetailRow["category"]) {
-  return value.replaceAll("_", " ");
+const enforcementCopy: Record<
+  PropertyRuleDetailRow["enforcement"],
+  {
+    label: string;
+    tone: "primary" | "success" | "warning" | "danger" | "neutral";
+    description: string;
+  }
+> = {
+  information_only: {
+    label: "House rule",
+    tone: "primary",
+    description: "This will not auto-decline a tenant.",
+  },
+  landlord_review: {
+    label: "Review",
+    tone: "warning",
+    description: "This will flag the tenant for landlord review.",
+  },
+  blocks_onboarding: {
+    label: "Auto-decline",
+    tone: "danger",
+    description: "This may auto-decline the tenant if their KYC answer fails.",
+  },
+};
+
+function getRuleCode(rule: PropertyRuleDetailRow) {
+  return rule.metadata?.rule_code ?? "other_house_rule";
 }
 
-function formatAppliesTo(value: PropertyRuleDetailRow["applies_to"]) {
-  if (value === "new_tenants") {
-    return "New tenants";
+function isPresetAlreadyAdded(rules: PropertyRuleDetailRow[], code: string) {
+  if (code === "other_house_rule") {
+    return false;
   }
 
-  if (value === "renewing_tenants") {
-    return "Renewing tenants";
-  }
-
-  return "All tenants";
+  return rules.some(
+    (rule) => rule.status !== "archived" && rule.metadata?.rule_code === code,
+  );
 }
 
-function PropertyRuleCreateForm({
+function getConfigNumber(rule: PropertyRuleDetailRow, key: string) {
+  const value = rule.metadata?.config?.[key];
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+function RulePresetButton({
+  preset,
+  isSelected,
+  isDisabled,
+  onSelect,
+}: {
+  preset: RulePreset;
+  isSelected: boolean;
+  isDisabled: boolean;
+  onSelect: (preset: RulePreset) => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={isDisabled}
+      onClick={() => onSelect(preset)}
+      className="flex min-h-24 w-full items-start gap-3 rounded-card border border-border-soft bg-white p-4 text-left shadow-card transition hover:border-primary hover:bg-primary-soft disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-primary">
+        {preset.icon}
+      </span>
+
+      <span>
+        <span className="block text-sm font-extrabold text-text-strong">
+          {preset.title}
+        </span>
+        <span className="mt-1 block text-sm leading-6 text-text-muted">
+          {isDisabled ? "Already added." : preset.description}
+        </span>
+        {isSelected ? (
+          <span className="mt-2 inline-flex rounded-full bg-primary px-2.5 py-1 text-xs font-bold text-white">
+            Selected
+          </span>
+        ) : null}
+      </span>
+    </button>
+  );
+}
+
+function GuidedRuleCreateForm({
   propertyId,
   units,
+  rules,
 }: {
   propertyId: string;
   units: PropertyRulesManagerProps["units"];
+  rules: PropertyRuleDetailRow[];
 }) {
+  const [selectedPreset, setSelectedPreset] = useState<RulePreset | null>(null);
   const [state, formAction, isPending] = useActionState(
     createPropertyRuleAction,
     initialPropertyRuleActionState,
   );
 
-  const unitOptions = units.map((unit) => ({
-    label: unit.building_name
-      ? `${unit.unit_identifier} · ${unit.building_name}`
-      : unit.unit_identifier,
-    value: unit.id,
-  }));
+  const tenantRequirementPresets = rulePresets.filter(
+    (preset) => preset.group === "tenant_requirement",
+  );
+  const houseRulePresets = rulePresets.filter(
+    (preset) => preset.group === "house_rule",
+  );
 
   return (
-    <form action={formAction} className="space-y-5">
+    <div className="space-y-6">
       <ActionResultToast
         ok={state.ok}
         message={state.message}
@@ -148,101 +359,156 @@ function PropertyRuleCreateForm({
         errorTitle="Rule failed"
       />
 
-      <input type="hidden" name="propertyId" value={propertyId} />
-
       <TrustNotice
-        title="Simple rules for this property"
-        description="Add only the rules tenants must understand before moving in. Keep the wording clear and short."
+        title="Only selected rules affect tenant KYC"
+        description="Tenant KYC stays short. Tenuro will only ask questions for tenant requirements you add here. House rules are saved for acknowledgement and agreements later."
         icon={<ClipboardCheck aria-hidden="true" size={22} strokeWidth={2.6} />}
       />
 
-      <Input
-        label="Rule title"
-        name="title"
-        placeholder="Example: No pets without landlord approval"
-        required
-        error={state.fieldErrors?.title?.[0]}
-      />
+      <div>
+        <h3 className="text-base font-extrabold text-text-strong">
+          Tenant Requirements
+        </h3>
+        <p className="mt-1 text-sm leading-6 text-text-muted">
+          These may create KYC questions and can auto-decline or flag for
+          review.
+        </p>
 
-      <Textarea
-        label="Rule description"
-        name="description"
-        placeholder="Explain the rule in simple language."
-        required
-        error={state.fieldErrors?.description?.[0]}
-      />
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <Select
-          label="Category"
-          name="category"
-          options={categoryOptions}
-          defaultValue="other"
-          required
-          error={state.fieldErrors?.category?.[0]}
-        />
-
-        <Select
-          label="Applies to"
-          name="appliesTo"
-          options={appliesToOptions}
-          defaultValue="new_tenants"
-          required
-          error={state.fieldErrors?.appliesTo?.[0]}
-        />
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {tenantRequirementPresets.map((preset) => (
+            <RulePresetButton
+              key={preset.code}
+              preset={preset}
+              isSelected={selectedPreset?.code === preset.code}
+              isDisabled={isPresetAlreadyAdded(rules, preset.code)}
+              onSelect={setSelectedPreset}
+            />
+          ))}
+        </div>
       </div>
 
-      <Select
-        label="Rule strength"
-        name="enforcement"
-        options={enforcementOptions}
-        defaultValue="information_only"
-        helperText="Use 'Blocks onboarding' only for important rules that must be satisfied before tenant approval."
-        required
-        error={state.fieldErrors?.enforcement?.[0]}
-      />
+      <div>
+        <h3 className="text-base font-extrabold text-text-strong">
+          House Rules
+        </h3>
+        <p className="mt-1 text-sm leading-6 text-text-muted">
+          These do not auto-decline tenants. They are for acknowledgement and
+          agreements.
+        </p>
 
-      <Select
-        label="Specific unit"
-        name="unitId"
-        options={unitOptions}
-        placeholder="All units in this property"
-        helperText="Leave this empty if the rule applies to the whole property."
-        error={state.fieldErrors?.unitId?.[0]}
-      />
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {houseRulePresets.map((preset) => (
+            <RulePresetButton
+              key={preset.code}
+              preset={preset}
+              isSelected={selectedPreset?.code === preset.code}
+              isDisabled={isPresetAlreadyAdded(rules, preset.code)}
+              onSelect={setSelectedPreset}
+            />
+          ))}
+        </div>
+      </div>
 
-      <Input
-        label="Display order"
-        name="sortOrder"
-        type="number"
-        min={0}
-        defaultValue={0}
-        helperText="Lower numbers appear first."
-        error={state.fieldErrors?.sortOrder?.[0]}
-      />
+      {selectedPreset ? (
+        <form
+          action={formAction}
+          className="space-y-5 rounded-card bg-background p-5"
+        >
+          <input type="hidden" name="propertyId" value={propertyId} />
+          <input type="hidden" name="ruleCode" value={selectedPreset.code} />
 
-      <label className="flex items-start gap-3 rounded-button bg-background p-4">
-        <input
-          type="checkbox"
-          name="requiresTenantAcknowledgement"
-          defaultChecked
-          className="mt-1 size-4 rounded border-border-soft text-primary focus:ring-primary"
-        />
+          <div>
+            <p className="text-sm font-bold text-text-muted">Selected rule</p>
+            <p className="mt-1 text-lg font-extrabold text-text-strong">
+              {selectedPreset.title}
+            </p>
+            <p className="mt-1 text-sm leading-6 text-text-muted">
+              {selectedPreset.description}
+            </p>
+          </div>
 
-        <span>
-          <span className="block text-sm font-extrabold text-text-strong">
-            Tenant should acknowledge this rule
-          </span>
-          <span className="mt-1 block text-sm leading-6 text-text-muted">
-            Later onboarding batches will use this for tenant confirmation.
-          </span>
-        </span>
-      </label>
+          <Select
+            label="Specific unit"
+            name="unitId"
+            options={unitOptions(units)}
+            placeholder="All units in this property"
+            helperText="Leave empty if this rule applies to the whole property."
+            error={state.fieldErrors?.unitId?.[0]}
+          />
 
-      <Button type="submit" isLoading={isPending} fullWidth>
-        Save Property Rule
-      </Button>
-    </form>
+          {selectedPreset.requiresNumber ? (
+            <Input
+              label={selectedPreset.requiresNumber.label}
+              name={selectedPreset.requiresNumber.fieldName}
+              type="number"
+              min={1}
+              required
+              helperText={selectedPreset.requiresNumber.helperText}
+            />
+          ) : null}
+
+          {selectedPreset.code === "other_house_rule" ? (
+            <>
+              <Input
+                label="Rule title"
+                name="title"
+                required
+                placeholder="Example: Gate closes by 10pm"
+                error={state.fieldErrors?.title?.[0]}
+              />
+
+              <Textarea
+                label="Rule description"
+                name="description"
+                required
+                placeholder="Explain the rule simply."
+                error={state.fieldErrors?.description?.[0]}
+              />
+
+              <label className="flex items-start gap-3 rounded-button bg-white p-4">
+                <input
+                  type="checkbox"
+                  name="requiresTenantAcknowledgement"
+                  defaultChecked
+                  className="mt-1 size-4 rounded border-border-soft text-primary focus:ring-primary"
+                />
+
+                <span>
+                  <span className="block text-sm font-extrabold text-text-strong">
+                    Tenant should acknowledge this rule
+                  </span>
+                  <span className="mt-1 block text-sm leading-6 text-text-muted">
+                    This remains information-only and will not auto-decline.
+                  </span>
+                </span>
+              </label>
+            </>
+          ) : (
+            <Textarea
+              label="Optional wording adjustment"
+              name="description"
+              placeholder={selectedPreset.description}
+              helperText="Leave this empty to use the standard wording."
+              error={state.fieldErrors?.description?.[0]}
+            />
+          )}
+
+          <Input
+            label="Display order"
+            name="sortOrder"
+            type="number"
+            min={0}
+            defaultValue={0}
+            helperText="Lower numbers appear first."
+            error={state.fieldErrors?.sortOrder?.[0]}
+          />
+
+          <Button type="submit" isLoading={isPending} fullWidth>
+            Add Selected Rule
+          </Button>
+        </form>
+      ) : null}
+    </div>
   );
 }
 
@@ -258,8 +524,11 @@ function PropertyRuleCard({
     initialPropertyRuleActionState,
   );
 
-  const enforcement = enforcementCopy[rule.enforcement];
   const status = statusCopy[rule.status];
+  const enforcement = enforcementCopy[rule.enforcement];
+  const code = getRuleCode(rule);
+  const maximumOccupants = getConfigNumber(rule, "maximumOccupants");
+  const minimumMonthlyIncome = getConfigNumber(rule, "minimumMonthlyIncome");
 
   return (
     <article className="rounded-card border border-border-soft bg-white p-5 shadow-card">
@@ -275,7 +544,9 @@ function PropertyRuleCard({
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={status.tone}>{status.label}</Badge>
             <Badge tone={enforcement.tone}>{enforcement.label}</Badge>
-            <Badge tone="neutral">{formatCategory(rule.category)}</Badge>
+            <Badge tone="neutral">
+              {rule.units?.unit_identifier ?? "Whole property"}
+            </Badge>
           </div>
 
           <h3 className="mt-3 text-base font-extrabold text-text-strong">
@@ -308,44 +579,50 @@ function PropertyRuleCard({
       <div className="mt-4 grid gap-3 md:grid-cols-3">
         <div className="rounded-button bg-background p-4">
           <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+            KYC impact
+          </p>
+          <p className="mt-2 text-sm font-extrabold text-text-strong">
+            {rule.enforcement === "information_only"
+              ? "No KYC question"
+              : "KYC question if selected"}
+          </p>
+        </div>
+
+        <div className="rounded-button bg-background p-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
             Applies to
           </p>
           <p className="mt-2 text-sm font-extrabold text-text-strong">
-            {formatAppliesTo(rule.applies_to)}
+            {rule.applies_to.replaceAll("_", " ")}
           </p>
         </div>
 
         <div className="rounded-button bg-background p-4">
           <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
-            Scope
+            Rule code
           </p>
-          <p className="mt-2 text-sm font-extrabold text-text-strong">
-            {rule.units?.unit_identifier ?? "Whole property"}
-          </p>
-        </div>
-
-        <div className="rounded-button bg-background p-4">
-          <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
-            Tenant acknowledgement
-          </p>
-          <p className="mt-2 text-sm font-extrabold text-text-strong">
-            {rule.requires_tenant_acknowledgement ? "Required" : "Not required"}
+          <p className="mt-2 wrap-break-word text-sm font-extrabold text-text-strong">
+            {code.replaceAll("_", " ")}
           </p>
         </div>
       </div>
 
-      <div className="mt-4 rounded-button bg-primary-soft p-4">
-        <div className="flex items-start gap-3">
-          <ShieldCheck
-            aria-hidden="true"
-            size={19}
-            strokeWidth={2.6}
-            className="mt-0.5 shrink-0 text-primary"
-          />
-          <p className="text-sm font-semibold leading-6 text-text-normal">
-            {enforcement.description}
+      {maximumOccupants || minimumMonthlyIncome ? (
+        <div className="mt-4 rounded-button bg-primary-soft p-4">
+          <p className="text-sm font-extrabold text-text-strong">
+            {maximumOccupants
+              ? `Maximum occupants: ${maximumOccupants}`
+              : `Minimum monthly income: ₦${Number(
+                  minimumMonthlyIncome,
+                ).toLocaleString("en-NG")}`}
           </p>
         </div>
+      ) : null}
+
+      <div className="mt-4 rounded-button bg-background p-4">
+        <p className="text-sm font-semibold leading-6 text-text-muted">
+          {enforcement.description}
+        </p>
       </div>
     </article>
   );
@@ -361,8 +638,8 @@ function PropertyRulesList({
   if (rules.length === 0) {
     return (
       <EmptyState
-        title="No property rules yet"
-        description="Add simple house rules such as pets, noise, payment expectations, or occupancy limits."
+        title="No selected rules yet"
+        description="Choose from the preset tenant requirements or house rules. Only selected tenant requirements will appear in KYC later."
         icon={<FileWarning aria-hidden="true" size={24} strokeWidth={2.6} />}
       />
     );
@@ -382,44 +659,53 @@ export function PropertyRulesManager({
   rules,
   units,
 }: PropertyRulesManagerProps) {
-  const activeRules = rules.filter((rule) => rule.status === "active");
-  const inactiveRules = rules.filter((rule) => rule.status === "inactive");
+  const visibleRules = useMemo(
+    () => rules.filter((rule) => rule.status !== "archived"),
+    [rules],
+  );
+
+  const tenantRequirementRules = visibleRules.filter(
+    (rule) => rule.enforcement !== "information_only",
+  );
+
+  const houseRules = visibleRules.filter(
+    (rule) => rule.enforcement === "information_only",
+  );
 
   return (
     <ToastProvider>
-      <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
-        <div className="space-y-6">
+      <div className="space-y-6">
+        <GuidedRuleCreateForm
+          propertyId={propertyId}
+          units={units}
+          rules={rules}
+        />
+
+        <div className="grid gap-6 xl:grid-cols-2">
           <div>
             <div className="mb-4 flex items-center gap-2">
-              <Home aria-hidden="true" size={20} strokeWidth={2.6} />
               <h3 className="text-base font-extrabold text-text-strong">
-                Active Rules
+                Selected Tenant Requirements
               </h3>
-              <Badge tone="success">{activeRules.length}</Badge>
+              <Badge tone="warning">{tenantRequirementRules.length}</Badge>
             </div>
 
-            <PropertyRulesList propertyId={propertyId} rules={activeRules} />
+            <PropertyRulesList
+              propertyId={propertyId}
+              rules={tenantRequirementRules}
+            />
           </div>
 
-          {inactiveRules.length > 0 ? (
-            <div>
-              <div className="mb-4 flex items-center gap-2">
-                <h3 className="text-base font-extrabold text-text-strong">
-                  Inactive Rules
-                </h3>
-                <Badge tone="neutral">{inactiveRules.length}</Badge>
-              </div>
-
-              <PropertyRulesList
-                propertyId={propertyId}
-                rules={inactiveRules}
-              />
+          <div>
+            <div className="mb-4 flex items-center gap-2">
+              <h3 className="text-base font-extrabold text-text-strong">
+                Selected House Rules
+              </h3>
+              <Badge tone="primary">{houseRules.length}</Badge>
             </div>
-          ) : null}
-        </div>
 
-        <div className="xl:sticky xl:top-28 xl:self-start">
-          <PropertyRuleCreateForm propertyId={propertyId} units={units} />
+            <PropertyRulesList propertyId={propertyId} rules={houseRules} />
+          </div>
         </div>
       </div>
     </ToastProvider>
