@@ -11,6 +11,10 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { TrustNotice } from "@/components/ui/trust-notice";
+import type {
+  PropertyRuleDetailRow,
+  PropertyRuleMetadata,
+} from "@/server/repositories/property-rules.repository";
 
 type TenantOnboardingFormProps = {
   token: string;
@@ -18,6 +22,7 @@ type TenantOnboardingFormProps = {
   phoneNumber: string;
   email: string | null;
   isSubmitted: boolean;
+  propertyRules: PropertyRuleDetailRow[];
 };
 
 const idTypeOptions = [
@@ -39,12 +44,218 @@ const idTypeOptions = [
   },
 ];
 
+const yesNoOptions = [
+  {
+    label: "Yes",
+    value: "yes",
+  },
+  {
+    label: "No",
+    value: "no",
+  },
+];
+
+const propertyUseOptions = [
+  {
+    label: "I will live there",
+    value: "residential",
+  },
+  {
+    label: "I want to use it for business",
+    value: "commercial",
+  },
+];
+
+const monthlyIncomeRangeOptions = [
+  {
+    label: "Below ₦100,000",
+    value: "below_100000",
+  },
+  {
+    label: "₦100,000 - ₦249,999",
+    value: "100000_249999",
+  },
+  {
+    label: "₦250,000 - ₦499,999",
+    value: "250000_499999",
+  },
+  {
+    label: "₦500,000 - ₦999,999",
+    value: "500000_999999",
+  },
+  {
+    label: "₦1,000,000 - ₦1,999,999",
+    value: "1000000_1999999",
+  },
+  {
+    label: "₦2,000,000 and above",
+    value: "2000000_and_above",
+  },
+];
+
+function getRuleCode(rule: PropertyRuleDetailRow) {
+  const metadata = rule.metadata as PropertyRuleMetadata | null;
+
+  return metadata?.rule_code ?? null;
+}
+
+function hasRule(rules: PropertyRuleDetailRow[], ruleCode: string) {
+  return rules.some(
+    (rule) =>
+      rule.status === "active" &&
+      rule.enforcement !== "information_only" &&
+      getRuleCode(rule) === ruleCode,
+  );
+}
+
+function DynamicKycChecks({
+  rules,
+  fieldErrors,
+}: {
+  rules: PropertyRuleDetailRow[];
+  fieldErrors?: Record<string, string[]>;
+}) {
+  const hasAnyCheck = rules.some(
+    (rule) =>
+      rule.status === "active" && rule.enforcement !== "information_only",
+  );
+
+  if (!hasAnyCheck) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-5 rounded-card bg-background p-5">
+      <TrustNotice
+        title="A few questions from the landlord"
+        description="Only answer the questions shown here. These are based on what the landlord selected for this apartment."
+      />
+
+      <div className="grid gap-4 md:grid-cols-2">
+        {hasRule(rules, "pets_not_allowed") ? (
+          <Select
+            label="Do you have pets?"
+            name="hasPets"
+            options={yesNoOptions}
+            error={fieldErrors?.hasPets?.[0]}
+            required
+          />
+        ) : null}
+
+        {hasRule(rules, "maximum_occupants") ? (
+          <Input
+            label="How many people will live here?"
+            name="occupantCount"
+            type="number"
+            min={1}
+            placeholder="Example: 4"
+            error={fieldErrors?.occupantCount?.[0]}
+            required
+          />
+        ) : null}
+
+        {hasRule(rules, "residential_only") ? (
+          <Select
+            label="How will you use this property?"
+            name="propertyUse"
+            options={propertyUseOptions}
+            error={fieldErrors?.propertyUse?.[0]}
+            required
+          />
+        ) : null}
+
+        {hasRule(rules, "children_under_5_not_allowed") ? (
+          <Select
+            label="Will children under 5 live here?"
+            name="hasChildrenUnderFive"
+            options={yesNoOptions}
+            error={fieldErrors?.hasChildrenUnderFive?.[0]}
+            required
+          />
+        ) : null}
+
+        {hasRule(rules, "minimum_monthly_income") ? (
+          <Select
+            label="What is your monthly income or regular cashflow?"
+            name="monthlyIncomeRange"
+            options={monthlyIncomeRangeOptions}
+            error={fieldErrors?.monthlyIncomeRange?.[0]}
+            required
+          />
+        ) : null}
+
+        {hasRule(rules, "guarantor_required") ? (
+          <Select
+            label="Can you provide a guarantor if approved?"
+            name="canProvideGuarantor"
+            options={yesNoOptions}
+            helperText="You do not need to fill guarantor details now."
+            error={fieldErrors?.canProvideGuarantor?.[0]}
+            required
+          />
+        ) : null}
+
+        {hasRule(rules, "shortlet_not_allowed") ? (
+          <Select
+            label="Will you use this place for short-let or Airbnb?"
+            name="willUseShortlet"
+            options={yesNoOptions}
+            error={fieldErrors?.willUseShortlet?.[0]}
+            required
+          />
+        ) : null}
+
+        {hasRule(rules, "subletting_not_allowed") ? (
+          <Select
+            label="Will you rent it out to someone else?"
+            name="willSublet"
+            options={yesNoOptions}
+            error={fieldErrors?.willSublet?.[0]}
+            required
+          />
+        ) : null}
+
+        {hasRule(rules, "customer_facing_business_not_allowed") ? (
+          <Select
+            label="Will your business bring customers, staff, or many visitors?"
+            name="willRunCustomerFacingBusiness"
+            options={yesNoOptions}
+            error={fieldErrors?.willRunCustomerFacingBusiness?.[0]}
+            required
+          />
+        ) : null}
+
+        {hasRule(rules, "heavy_generator_or_equipment_not_allowed") ? (
+          <Select
+            label="Will you use heavy generator, machines, or large equipment?"
+            name="willUseHeavyGeneratorOrEquipment"
+            options={yesNoOptions}
+            error={fieldErrors?.willUseHeavyGeneratorOrEquipment?.[0]}
+            required
+          />
+        ) : null}
+
+        {hasRule(rules, "large_gatherings_not_allowed") ? (
+          <Select
+            label="Will you hold regular parties or large gatherings?"
+            name="willHostLargeGatherings"
+            options={yesNoOptions}
+            error={fieldErrors?.willHostLargeGatherings?.[0]}
+            required
+          />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function TenantOnboardingForm({
   token,
   fullName,
   phoneNumber,
   email,
   isSubmitted,
+  propertyRules,
 }: TenantOnboardingFormProps) {
   const [state, formAction, isPending] = useActionState(
     submitTenantOnboardingAction,
@@ -197,62 +408,9 @@ export function TenantOnboardingForm({
             />
           </div>
 
-          <div className="rounded-button bg-background p-4">
-            <p className="font-extrabold text-text-strong">
-              Guarantor Information
-            </p>
-            <p className="mt-1 text-sm leading-6 text-text-muted">
-              Provide someone the landlord can contact as your guarantor.
-            </p>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <Input
-              label="Guarantor full name"
-              name="guarantorFullName"
-              error={state.fieldErrors?.guarantorFullName?.[0]}
-              required
-            />
-
-            <Input
-              label="Guarantor phone number"
-              name="guarantorPhoneNumber"
-              error={state.fieldErrors?.guarantorPhoneNumber?.[0]}
-              required
-            />
-          </div>
-
-          <Input
-            label="Guarantor email"
-            name="guarantorEmail"
-            type="email"
-            placeholder="Optional"
-            error={state.fieldErrors?.guarantorEmail?.[0]}
-          />
-
-          <Input
-            label="Relationship to you"
-            name="guarantorRelationshipToTenant"
-            placeholder="Example: Brother, Employer, Pastor"
-            error={state.fieldErrors?.guarantorRelationshipToTenant?.[0]}
-            required
-          />
-
-          <Textarea
-            label="Guarantor address"
-            name="guarantorAddress"
-            placeholder="Enter guarantor address"
-            error={state.fieldErrors?.guarantorAddress?.[0]}
-            required
-          />
-
-          <TenantKycFileUpload
-            token={token}
-            documentType="guarantor_id_document"
-            label="Guarantor ID document"
-            name="guarantorIdDocumentPath"
-            helperText="Optional for now. Upload if available."
-            error={state.fieldErrors?.guarantorIdDocumentPath?.[0]}
+          <DynamicKycChecks
+            rules={propertyRules}
+            fieldErrors={state.fieldErrors}
           />
         </CardContent>
 

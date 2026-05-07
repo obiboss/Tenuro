@@ -29,6 +29,8 @@ export type TenantRow = {
   onboarding_status: TenantOnboardingStatus;
   landlord_notes: string | null;
   rejected_reason: string | null;
+  kyc_answers: Record<string, unknown>;
+  kyc_review_flags: Record<string, unknown>[];
   approved_at: string | null;
   approved_by: string | null;
   created_at: string;
@@ -70,6 +72,8 @@ const TENANT_SELECT = `
   onboarding_status,
   landlord_notes,
   rejected_reason,
+  kyc_answers,
+  kyc_review_flags,
   approved_at,
   approved_by,
   created_at,
@@ -108,6 +112,8 @@ const TENANT_BASE_SELECT = `
   onboarding_status,
   landlord_notes,
   rejected_reason,
+  kyc_answers,
+  kyc_review_flags,
   approved_at,
   approved_by,
   created_at

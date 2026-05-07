@@ -6,6 +6,43 @@ import {
   uuidSchema,
 } from "./common.schema";
 
+const yesNoSchema = z.enum(["yes", "no"]);
+
+export const monthlyIncomeRangeSchema = z.enum([
+  "below_100000",
+  "100000_249999",
+  "250000_499999",
+  "500000_999999",
+  "1000000_1999999",
+  "2000000_and_above",
+]);
+
+export const propertyUseSchema = z.enum(["residential", "commercial"]);
+
+function emptyToUndefined(value: unknown) {
+  return value === null || value === "" ? undefined : value;
+}
+
+const optionalYesNoSchema = z.preprocess(
+  emptyToUndefined,
+  yesNoSchema.optional(),
+);
+
+const optionalPropertyUseSchema = z.preprocess(
+  emptyToUndefined,
+  propertyUseSchema.optional(),
+);
+
+const optionalMonthlyIncomeRangeSchema = z.preprocess(
+  emptyToUndefined,
+  monthlyIncomeRangeSchema.optional(),
+);
+
+const optionalPositiveIntegerSchema = z.preprocess(
+  emptyToUndefined,
+  z.coerce.number().int().min(1).optional(),
+);
+
 export const generateOnboardingLinkSchema = z.object({
   tenantId: uuidSchema,
 });
@@ -71,20 +108,17 @@ export const tenantOnboardingSubmissionSchema = z.object({
   idDocumentPath: z.string().trim().min(5, "Upload your ID document."),
   passportPhotoPath: z.string().trim().min(5, "Upload your passport photo."),
 
-  guarantorFullName: z.string().trim().min(2, "Enter guarantor name.").max(120),
-  guarantorPhoneNumber: phoneSchema,
-  guarantorEmail: optionalEmailSchema,
-  guarantorAddress: z
-    .string()
-    .trim()
-    .min(5, "Enter guarantor address.")
-    .max(300),
-  guarantorRelationshipToTenant: z
-    .string()
-    .trim()
-    .min(2, "Enter the relationship.")
-    .max(80),
-  guarantorIdDocumentPath: z.string().trim().optional().or(z.literal("")),
+  hasPets: optionalYesNoSchema,
+  occupantCount: optionalPositiveIntegerSchema,
+  propertyUse: optionalPropertyUseSchema,
+  hasChildrenUnderFive: optionalYesNoSchema,
+  monthlyIncomeRange: optionalMonthlyIncomeRangeSchema,
+  canProvideGuarantor: optionalYesNoSchema,
+  willUseShortlet: optionalYesNoSchema,
+  willSublet: optionalYesNoSchema,
+  willRunCustomerFacingBusiness: optionalYesNoSchema,
+  willUseHeavyGeneratorOrEquipment: optionalYesNoSchema,
+  willHostLargeGatherings: optionalYesNoSchema,
 });
 
 export const openingBalanceConfirmationSchema = z.object({
@@ -100,19 +134,27 @@ export const invalidateOnboardingTokenSchema = z.object({
 export type GenerateOnboardingLinkInput = z.infer<
   typeof generateOnboardingLinkSchema
 >;
+
 export type ResolveOnboardingTokenInput = z.infer<
   typeof resolveOnboardingTokenSchema
 >;
+
 export type OnboardingPersonalDetailsInput = z.infer<
   typeof onboardingPersonalDetailsSchema
 >;
+
 export type OnboardingDocumentsInput = z.infer<
   typeof onboardingDocumentsSchema
 >;
+
 export type GuarantorDetailsInput = z.infer<typeof guarantorDetailsSchema>;
+
 export type TenantOnboardingSubmissionInput = z.infer<
   typeof tenantOnboardingSubmissionSchema
 >;
+
 export type OpeningBalanceConfirmationInput = z.infer<
   typeof openingBalanceConfirmationSchema
 >;
+
+export type MonthlyIncomeRange = z.infer<typeof monthlyIncomeRangeSchema>;

@@ -241,7 +241,7 @@ export default async function TenantOnboardingPage({
 
               <SectionCard
                 title="Tenant KYC Form"
-                description="Complete your personal details, ID document, passport photo, and guarantor information for landlord review."
+                description="Complete your personal details, ID document, and passport photo for landlord review."
               >
                 <TenantOnboardingForm
                   token={token}
@@ -249,6 +249,7 @@ export default async function TenantOnboardingPage({
                   phoneNumber={tenant.phone_number}
                   email={tenant.email}
                   isSubmitted={isSubmitted}
+                  propertyRules={tenant.property_rules}
                 />
               </SectionCard>
             </div>

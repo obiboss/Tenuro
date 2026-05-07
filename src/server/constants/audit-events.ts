@@ -23,6 +23,8 @@ export const AUDIT_EVENT_TYPES = {
   tenantCreated: "tenant.created",
   onboardingLinkSent: "tenant.onboarding_link_sent",
   tenantKycSubmitted: "tenant.kyc_submitted",
+  tenantAutoDeclined: "tenant.auto_declined",
+  tenantKycFlaggedForReview: "tenant.kyc_flagged_for_review",
   tenantApproved: "tenant.approved",
   tenantRejected: "tenant.rejected",
   tenantUpdated: "tenant.updated",

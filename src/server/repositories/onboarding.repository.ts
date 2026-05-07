@@ -16,6 +16,9 @@ export type TenantOnboardingContext = {
     | "token_expired";
   onboarding_token_hash: string | null;
   onboarding_token_expires_at: string | null;
+  kyc_answers: Record<string, unknown>;
+  kyc_review_flags: Record<string, unknown>[];
+  rejected_reason: string | null;
   units: {
     id: string;
     unit_identifier: string;
@@ -50,6 +53,10 @@ type TenantOnboardingUpdateInput = Pick<
   | "passportPhotoPath"
 > & {
   idNumberCiphertext: string | null;
+  onboardingStatus: "profile_complete" | "rejected";
+  rejectedReason: string | null;
+  kycAnswers: Record<string, unknown>;
+  kycReviewFlags: Record<string, unknown>[];
 };
 
 const TENANT_ONBOARDING_CONTEXT_SELECT = `
@@ -62,6 +69,9 @@ const TENANT_ONBOARDING_CONTEXT_SELECT = `
   onboarding_status,
   onboarding_token_hash,
   onboarding_token_expires_at,
+  kyc_answers,
+  kyc_review_flags,
+  rejected_reason,
   units (
     id,
     unit_identifier,
@@ -97,6 +107,7 @@ export async function saveTenantOnboardingToken(
       onboarding_token_expires_at: params.expiresAt,
       onboarding_token_used_at: null,
       onboarding_status: "invited",
+      rejected_reason: null,
     })
     .eq("id", params.tenantId)
     .is("deleted_at", null)
@@ -172,18 +183,26 @@ export async function completeTenantOnboardingProfile(
       id_number_ciphertext: params.input.idNumberCiphertext,
       id_document_path: params.input.idDocumentPath,
       passport_photo_path: params.input.passportPhotoPath,
-      onboarding_status: "profile_complete",
+      onboarding_status: params.input.onboardingStatus,
+      rejected_reason: params.input.rejectedReason,
+      kyc_answers: params.input.kycAnswers,
+      kyc_review_flags: params.input.kycReviewFlags,
       onboarding_token_used_at: new Date().toISOString(),
     })
     .eq("id", params.tenantId)
     .is("deleted_at", null)
-    .select("id, full_name, phone_number, email, onboarding_status")
+    .select(
+      "id, full_name, phone_number, email, onboarding_status, rejected_reason, kyc_answers, kyc_review_flags",
+    )
     .single<{
       id: string;
       full_name: string;
       phone_number: string;
       email: string | null;
       onboarding_status: string;
+      rejected_reason: string | null;
+      kyc_answers: Record<string, unknown>;
+      kyc_review_flags: Record<string, unknown>[];
     }>();
 
   if (error) {

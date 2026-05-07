@@ -79,14 +79,21 @@ export async function submitTenantOnboardingAction(
       idNumber: formData.get("idNumber"),
       idDocumentPath: formData.get("idDocumentPath"),
       passportPhotoPath: formData.get("passportPhotoPath"),
-      guarantorFullName: formData.get("guarantorFullName"),
-      guarantorPhoneNumber: formData.get("guarantorPhoneNumber"),
-      guarantorEmail: formData.get("guarantorEmail"),
-      guarantorAddress: formData.get("guarantorAddress"),
-      guarantorRelationshipToTenant: formData.get(
-        "guarantorRelationshipToTenant",
+      hasPets: formData.get("hasPets"),
+      occupantCount: formData.get("occupantCount"),
+      propertyUse: formData.get("propertyUse"),
+      hasChildrenUnderFive: formData.get("hasChildrenUnderFive"),
+      monthlyIncomeRange: formData.get("monthlyIncomeRange"),
+      canProvideGuarantor: formData.get("canProvideGuarantor"),
+      willUseShortlet: formData.get("willUseShortlet"),
+      willSublet: formData.get("willSublet"),
+      willRunCustomerFacingBusiness: formData.get(
+        "willRunCustomerFacingBusiness",
       ),
-      guarantorIdDocumentPath: formData.get("guarantorIdDocumentPath"),
+      willUseHeavyGeneratorOrEquipment: formData.get(
+        "willUseHeavyGeneratorOrEquipment",
+      ),
+      willHostLargeGatherings: formData.get("willHostLargeGatherings"),
     });
 
     const result = await submitTenantOnboardingProfile(parsed);
