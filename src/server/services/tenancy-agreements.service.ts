@@ -44,6 +44,8 @@ import type {
 } from "@/server/validators/tenancy-agreement.schema";
 import { requireLandlord } from "./auth.service";
 import { buildTenancyAgreementTemplate } from "./tenancy-agreement-template.service";
+import { getActiveGuarantorForTenant } from "@/server/repositories/guarantors.repository";
+import { getActivePropertyRulesForOnboarding } from "@/server/repositories/property-rules.repository";
 
 function getSnapshotTextValue(
   snapshot: Record<string, unknown>,
@@ -130,6 +132,46 @@ function createAcceptanceToken() {
     expiresAt: getExpiryDateFromNow(168),
     acceptanceUrl: buildAgreementUrl(rawToken),
   };
+}
+
+function getRuleCodeFromMetadata(metadata: Record<string, unknown>) {
+  const value = metadata.rule_code;
+
+  return typeof value === "string" ? value : null;
+}
+
+async function getAgreementPropertyRules(params: {
+  propertyId: string | null;
+  unitId: string | null;
+}) {
+  if (!params.propertyId) {
+    return [];
+  }
+
+  const supabase = createSupabaseAdminClient();
+
+  return getActivePropertyRulesForOnboarding(supabase, {
+    propertyId: params.propertyId,
+    unitId: params.unitId,
+  });
+}
+
+async function isGuarantorRequiredForAgreement(params: {
+  propertyId: string | null;
+  unitId: string | null;
+}) {
+  const rules = await getAgreementPropertyRules(params);
+
+  return rules.some(
+    (rule) => getRuleCodeFromMetadata(rule.metadata) === "guarantor_required",
+  );
+}
+
+async function hasCompletedGuarantorDetails(tenantId: string) {
+  const supabase = createSupabaseAdminClient();
+  const guarantor = await getActiveGuarantorForTenant(supabase, tenantId);
+
+  return Boolean(guarantor);
 }
 
 function buildSnapshots(params: {
@@ -238,9 +280,15 @@ export async function generateTenancyAgreementForCurrentLandlord(
     tenancy,
   });
 
+  const propertyRules = await getAgreementPropertyRules({
+    propertyId: tenancy.units?.properties?.id ?? null,
+    unitId: tenancy.unit_id,
+  });
+
   const agreementBody = buildTenancyAgreementTemplate({
     landlord,
     tenancy,
+    propertyRules,
   });
 
   const agreement = await createTenancyAgreementDraft(supabase, {
@@ -501,15 +549,33 @@ export async function acceptTenancyAgreementFromTenant(
       agreement.pdf_path,
     );
 
+    const tenancy = await getTenancyById(
+      createSupabaseAdminClient(),
+      agreement.tenancy_id,
+    );
+
+    const guarantorRequired = await isGuarantorRequiredForAgreement({
+      propertyId: tenancy.units?.properties?.id ?? null,
+      unitId: tenancy.unit_id,
+    });
+
+    const guarantorCompleted = await hasCompletedGuarantorDetails(
+      agreement.tenant_id,
+    );
+
     const firstPayment =
-      await initializeFirstRentPaymentAfterAgreementAcceptance({
-        tenancyId: agreement.tenancy_id,
-      });
+      guarantorRequired && !guarantorCompleted
+        ? null
+        : await initializeFirstRentPaymentAfterAgreementAcceptance({
+            tenancyId: agreement.tenancy_id,
+          });
 
     return {
       agreement,
       pdfDownloadUrl,
       firstPayment,
+      guarantorRequired,
+      guarantorCompleted,
     };
   }
 
@@ -557,16 +623,30 @@ export async function acceptTenancyAgreementFromTenant(
     userAgent: input.userAgent,
   });
 
-  const firstPayment = await initializeFirstRentPaymentAfterAgreementAcceptance(
-    {
-      tenancyId: agreementWithPdf.tenancy_id,
-    },
+  const tenancy = await getTenancyById(supabase, agreementWithPdf.tenancy_id);
+
+  const guarantorRequired = await isGuarantorRequiredForAgreement({
+    propertyId: tenancy.units?.properties?.id ?? null,
+    unitId: tenancy.unit_id,
+  });
+
+  const guarantorCompleted = await hasCompletedGuarantorDetails(
+    agreementWithPdf.tenant_id,
   );
+
+  const firstPayment =
+    guarantorRequired && !guarantorCompleted
+      ? null
+      : await initializeFirstRentPaymentAfterAgreementAcceptance({
+          tenancyId: agreementWithPdf.tenancy_id,
+        });
 
   return {
     agreement: agreementWithPdf,
     pdfDownloadUrl,
     firstPayment,
+    guarantorRequired,
+    guarantorCompleted,
   };
 }
 

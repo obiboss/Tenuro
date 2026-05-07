@@ -39,6 +39,7 @@ export function TenantAgreementAcceptanceForm({
 
   const downloadUrl = state.pdfDownloadUrl || pdfDownloadUrl;
   const paymentUrl = state.tenantPaymentUrl;
+  const needsGuarantor = state.needsGuarantor;
 
   if (alreadyAccepted || state.ok) {
     return (
@@ -59,6 +60,13 @@ export function TenantAgreementAcceptanceForm({
               >
                 Download Agreement PDF
               </a>
+            ) : null}
+
+            {needsGuarantor ? (
+              <TrustNotice
+                title="Guarantor details required"
+                description="Your agreement has been accepted. Please complete your guarantor details before the rent payment link is shown."
+              />
             ) : null}
 
             {paymentUrl ? (
@@ -125,7 +133,7 @@ export function TenantAgreementAcceptanceForm({
 
           <TrustNotice
             title="Digital acceptance"
-            description="By clicking accept, you confirm that you have read and accepted this tenancy agreement. Your first rent payment checkout will appear immediately after acceptance."
+            description="By clicking accept, you confirm that you have read and accepted this tenancy agreement. If guarantor details are required, you will complete them before rent payment."
           />
         </CardContent>
 

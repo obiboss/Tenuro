@@ -31,6 +31,8 @@ export type TenancyAgreementActionState = {
   tenantPaymentUrl?: string;
   paymentReference?: string;
   paymentExpiresAt?: string | null;
+  needsGuarantor?: boolean;
+  guarantorCompleted?: boolean;
   fieldErrors?: Record<string, string[]>;
 };
 
@@ -193,15 +195,21 @@ export async function acceptTenancyAgreementAction(
     revalidatePath("/tenants");
     revalidatePath(`/tenants/${result.agreement.tenant_id}`);
 
+    const needsGuarantor =
+      Boolean(result.guarantorRequired) && !result.guarantorCompleted;
+
     return {
       ok: true,
-      message:
-        "Agreement accepted successfully. Your rent payment checkout is ready.",
+      message: needsGuarantor
+        ? "Agreement accepted. Please complete the guarantor form before rent payment."
+        : "Agreement accepted successfully. Your rent payment checkout is ready.",
       agreementId: result.agreement.id,
       pdfDownloadUrl: result.pdfDownloadUrl,
       tenantPaymentUrl: result.firstPayment?.tenantPaymentUrl,
       paymentReference: result.firstPayment?.reference,
       paymentExpiresAt: result.firstPayment?.expiresAt,
+      needsGuarantor,
+      guarantorCompleted: result.guarantorCompleted,
     };
   } catch (error) {
     console.error("acceptTenancyAgreementAction failed:", error);
