@@ -13,14 +13,12 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { ToastProvider } from "@/components/ui/toast-provider";
 import { TrustNotice } from "@/components/ui/trust-notice";
 import {
   Archive,
   Baby,
   BriefcaseBusiness,
-  Car,
   CircleDollarSign,
   ClipboardCheck,
   Dog,
@@ -47,160 +45,75 @@ type RulePreset = {
   code: string;
   title: string;
   description: string;
-  group: "tenant_requirement" | "house_rule";
   icon: React.ReactNode;
-  needsNumber?: {
-    fieldName: string;
-    label: string;
-    helperText: string;
-  };
-  needsOtherText?: boolean;
 };
 
 const rulePresets: RulePreset[] = [
   {
     code: "pets_not_allowed",
-    title: "Pets",
-    description: "I do not want tenants with pets.",
-    group: "tenant_requirement",
+    title: "No pets",
+    description: "Do not accept tenants with pets.",
     icon: <Dog aria-hidden="true" size={20} strokeWidth={2.6} />,
   },
   {
     code: "maximum_occupants",
-    title: "Too many people",
-    description: "I want to set the highest number of people allowed.",
-    group: "tenant_requirement",
+    title: "Maximum number of people allowed",
+    description: "Set the highest number of people allowed to live there.",
     icon: <UsersRound aria-hidden="true" size={20} strokeWidth={2.6} />,
-    needsNumber: {
-      fieldName: "maximumOccupants",
-      label: "Maximum number of people allowed",
-      helperText: "Example: 4",
-    },
   },
   {
     code: "residential_only",
-    title: "Business use",
-    description: "I only want people who will live there, not run a business.",
-    group: "tenant_requirement",
+    title: "Residential use only",
+    description: "Do not accept tenants who want to run a business there.",
     icon: <Home aria-hidden="true" size={20} strokeWidth={2.6} />,
   },
   {
     code: "children_under_5_not_allowed",
-    title: "Children under 5",
-    description: "I do not want children under 5 living there.",
-    group: "tenant_requirement",
+    title: "No children under 5",
+    description: "Do not accept tenants with children under 5.",
     icon: <Baby aria-hidden="true" size={20} strokeWidth={2.6} />,
   },
   {
     code: "minimum_monthly_income",
-    title: "Low income",
-    description: "I want to review tenants below a monthly income amount.",
-    group: "tenant_requirement",
+    title: "Can they keep paying the rent?",
+    description: "Set the lowest monthly income or cashflow you accept.",
     icon: <CircleDollarSign aria-hidden="true" size={20} strokeWidth={2.6} />,
-    needsNumber: {
-      fieldName: "minimumMonthlyIncome",
-      label: "Minimum monthly income",
-      helperText: "Enter amount in naira, for example 250000.",
-    },
   },
   {
     code: "guarantor_required",
-    title: "No guarantor",
-    description: "I want tenants who can provide a guarantor if approved.",
-    group: "tenant_requirement",
+    title: "Guarantor needed",
+    description: "Ask if the tenant can provide a guarantor if approved.",
     icon: <ShieldCheck aria-hidden="true" size={20} strokeWidth={2.6} />,
   },
   {
     code: "shortlet_not_allowed",
-    title: "Short-let or Airbnb",
-    description: "I do not want the property used for short-let or Airbnb.",
-    group: "tenant_requirement",
+    title: "No short-let or Airbnb",
+    description: "Do not accept tenants who want short-let or Airbnb use.",
     icon: <Hotel aria-hidden="true" size={20} strokeWidth={2.6} />,
   },
   {
     code: "subletting_not_allowed",
-    title: "Subletting",
-    description: "I do not want tenants who will rent it out to someone else.",
-    group: "tenant_requirement",
+    title: "No subletting",
+    description: "Do not accept tenants who want to rent it to someone else.",
     icon: <PackageCheck aria-hidden="true" size={20} strokeWidth={2.6} />,
   },
   {
     code: "customer_facing_business_not_allowed",
-    title: "Business with many visitors",
-    description: "I do not want business that brings customers or staff.",
-    group: "tenant_requirement",
+    title: "No business with many visitors",
+    description: "Do not accept business use that brings customers or staff.",
     icon: <BriefcaseBusiness aria-hidden="true" size={20} strokeWidth={2.6} />,
   },
   {
     code: "heavy_generator_or_equipment_not_allowed",
-    title: "Heavy generator or equipment",
-    description: "I do not want heavy machines or large equipment.",
-    group: "tenant_requirement",
+    title: "No heavy generator or equipment",
+    description: "Do not accept heavy machines or large equipment.",
     icon: <Wind aria-hidden="true" size={20} strokeWidth={2.6} />,
   },
   {
     code: "large_gatherings_not_allowed",
-    title: "Parties or large gatherings",
-    description: "I do not want regular parties or large gatherings.",
-    group: "tenant_requirement",
+    title: "No regular parties or large gatherings",
+    description: "Do not accept regular parties, events, or large gatherings.",
     icon: <UsersRound aria-hidden="true" size={20} strokeWidth={2.6} />,
-  },
-  {
-    code: "smoking_not_allowed",
-    title: "Smoking",
-    description: "No smoking in the property.",
-    group: "house_rule",
-    icon: <ShieldCheck aria-hidden="true" size={20} strokeWidth={2.6} />,
-  },
-  {
-    code: "parking_rules",
-    title: "Parking",
-    description: "Tenant must follow parking rules.",
-    group: "house_rule",
-    icon: <Car aria-hidden="true" size={20} strokeWidth={2.6} />,
-  },
-  {
-    code: "waste_disposal_rules",
-    title: "Waste disposal",
-    description: "Tenant must dispose waste properly.",
-    group: "house_rule",
-    icon: <PackageCheck aria-hidden="true" size={20} strokeWidth={2.6} />,
-  },
-  {
-    code: "quiet_hours",
-    title: "Noise",
-    description: "Tenant must avoid loud noise at night.",
-    group: "house_rule",
-    icon: <ShieldCheck aria-hidden="true" size={20} strokeWidth={2.6} />,
-  },
-  {
-    code: "visitor_rules",
-    title: "Visitors",
-    description: "Tenant must follow visitor rules.",
-    group: "house_rule",
-    icon: <UsersRound aria-hidden="true" size={20} strokeWidth={2.6} />,
-  },
-  {
-    code: "maintenance_reporting",
-    title: "Repairs",
-    description: "Tenant must report repairs properly.",
-    group: "house_rule",
-    icon: <ClipboardCheck aria-hidden="true" size={20} strokeWidth={2.6} />,
-  },
-  {
-    code: "no_structural_changes",
-    title: "Changing the building",
-    description: "Tenant must not change the building without approval.",
-    group: "house_rule",
-    icon: <Home aria-hidden="true" size={20} strokeWidth={2.6} />,
-  },
-  {
-    code: "other_house_rule",
-    title: "Other",
-    description: "Add another simple house rule.",
-    group: "house_rule",
-    icon: <FileWarning aria-hidden="true" size={20} strokeWidth={2.6} />,
-    needsOtherText: true,
   },
 ];
 
@@ -213,7 +126,7 @@ const enforcementCopy: Record<
   }
 > = {
   information_only: {
-    label: "House rule",
+    label: "Info",
     tone: "primary",
     description: "This will not reject anyone automatically.",
   },
@@ -250,15 +163,7 @@ const statusCopy: Record<
   },
 };
 
-function getRuleCode(rule: PropertyRuleDetailRow) {
-  return rule.metadata?.rule_code ?? "other_house_rule";
-}
-
 function isPresetAlreadyAdded(rules: PropertyRuleDetailRow[], code: string) {
-  if (code === "other_house_rule") {
-    return false;
-  }
-
   return rules.some(
     (rule) => rule.status !== "archived" && rule.metadata?.rule_code === code,
   );
@@ -360,7 +265,6 @@ function GuidedRuleCreateForm({
   const selectedNeedsMinimumIncome = selectedCodes.includes(
     "minimum_monthly_income",
   );
-  const selectedNeedsOtherRule = selectedCodes.includes("other_house_rule");
 
   function updateSelectedCode(code: string, checked: boolean) {
     setSelectedCodes((currentCodes) => {
@@ -404,21 +308,19 @@ function GuidedRuleCreateForm({
           Things you do not want
         </h3>
         <p className="mt-1 text-sm leading-6 text-text-muted">
-          Tick everything that applies.
+          Tick everything you want Tenuro to check before a tenant is approved.
         </p>
 
         <div className="mt-4 grid gap-3 md:grid-cols-2">
-          {rulePresets
-            .filter((preset) => preset.group === "tenant_requirement")
-            .map((preset) => (
-              <RuleCheckboxCard
-                key={preset.code}
-                preset={preset}
-                checked={selectedCodes.includes(preset.code)}
-                disabled={isPresetAlreadyAdded(rules, preset.code)}
-                onChange={updateSelectedCode}
-              />
-            ))}
+          {rulePresets.map((preset) => (
+            <RuleCheckboxCard
+              key={preset.code}
+              preset={preset}
+              checked={selectedCodes.includes(preset.code)}
+              disabled={isPresetAlreadyAdded(rules, preset.code)}
+              onChange={updateSelectedCode}
+            />
+          ))}
         </div>
       </section>
 
@@ -432,79 +334,21 @@ function GuidedRuleCreateForm({
               min={1}
               required
               placeholder="Example: 4"
+              helperText="If a tenant enters more than this, Tenuro will reject the application."
             />
           ) : null}
 
           {selectedNeedsMinimumIncome ? (
             <Input
-              label="Minimum monthly income"
+              label="Lowest monthly income or cashflow allowed"
               name="minimumMonthlyIncome"
               type="number"
               min={1}
               required
               placeholder="Example: 250000"
+              helperText="If a tenant enters less than this, Tenuro will reject the application."
             />
           ) : null}
-        </div>
-      ) : null}
-
-      <section>
-        <h3 className="text-base font-extrabold text-text-strong">
-          House rules
-        </h3>
-        <p className="mt-1 text-sm leading-6 text-text-muted">
-          These are rules tenants should know. They will not reject anyone by
-          themselves.
-        </p>
-
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          {rulePresets
-            .filter((preset) => preset.group === "house_rule")
-            .map((preset) => (
-              <RuleCheckboxCard
-                key={preset.code}
-                preset={preset}
-                checked={selectedCodes.includes(preset.code)}
-                disabled={isPresetAlreadyAdded(rules, preset.code)}
-                onChange={updateSelectedCode}
-              />
-            ))}
-        </div>
-      </section>
-
-      {selectedNeedsOtherRule ? (
-        <div className="space-y-4 rounded-card bg-background p-5">
-          <Input
-            label="Other rule title"
-            name="otherRuleTitle"
-            required
-            placeholder="Example: Gate closes by 10pm"
-          />
-
-          <Textarea
-            label="Explain the rule"
-            name="otherRuleDescription"
-            required
-            placeholder="Write it in simple words."
-          />
-
-          <label className="flex items-start gap-3 rounded-button bg-white p-4">
-            <input
-              type="checkbox"
-              name="requiresTenantAcknowledgement"
-              defaultChecked
-              className="mt-1 size-4 rounded border-border-soft text-primary focus:ring-primary"
-            />
-
-            <span>
-              <span className="block text-sm font-extrabold text-text-strong">
-                Tenant should agree to this rule
-              </span>
-              <span className="mt-1 block text-sm leading-6 text-text-muted">
-                This will not reject anyone automatically.
-              </span>
-            </span>
-          </label>
         </div>
       ) : null}
 
@@ -527,7 +371,7 @@ function GuidedRuleCreateForm({
       />
 
       <Button type="submit" isLoading={isPending} fullWidth>
-        Save Selected Rules
+        Save Selected Checks
       </Button>
     </form>
   );
@@ -601,7 +445,7 @@ function PropertyRuleCard({
           <p className="text-sm font-extrabold text-text-strong">
             {maximumOccupants
               ? `Maximum people allowed: ${maximumOccupants}`
-              : `Minimum monthly income: ₦${Number(
+              : `Lowest monthly income or cashflow allowed: ₦${Number(
                   minimumMonthlyIncome,
                 ).toLocaleString("en-NG")}`}
           </p>
@@ -627,7 +471,7 @@ function PropertyRulesList({
   if (rules.length === 0) {
     return (
       <EmptyState
-        title="No rule selected yet"
+        title="No check selected yet"
         description="Choose what you do not want, then save."
         icon={<FileWarning aria-hidden="true" size={24} strokeWidth={2.6} />}
       />
@@ -653,14 +497,6 @@ export function PropertyRulesManager({
     [rules],
   );
 
-  const tenantRequirementRules = visibleRules.filter(
-    (rule) => rule.enforcement !== "information_only",
-  );
-
-  const houseRules = visibleRules.filter(
-    (rule) => rule.enforcement === "information_only",
-  );
-
   return (
     <ToastProvider>
       <div className="space-y-6">
@@ -670,31 +506,15 @@ export function PropertyRulesManager({
           rules={rules}
         />
 
-        <div className="grid gap-6 xl:grid-cols-2">
-          <div>
-            <div className="mb-4 flex items-center gap-2">
-              <h3 className="text-base font-extrabold text-text-strong">
-                Things you are filtering
-              </h3>
-              <Badge tone="warning">{tenantRequirementRules.length}</Badge>
-            </div>
-
-            <PropertyRulesList
-              propertyId={propertyId}
-              rules={tenantRequirementRules}
-            />
+        <div>
+          <div className="mb-4 flex items-center gap-2">
+            <h3 className="text-base font-extrabold text-text-strong">
+              Current checks
+            </h3>
+            <Badge tone="warning">{visibleRules.length}</Badge>
           </div>
 
-          <div>
-            <div className="mb-4 flex items-center gap-2">
-              <h3 className="text-base font-extrabold text-text-strong">
-                House rules
-              </h3>
-              <Badge tone="primary">{houseRules.length}</Badge>
-            </div>
-
-            <PropertyRulesList propertyId={propertyId} rules={houseRules} />
-          </div>
+          <PropertyRulesList propertyId={propertyId} rules={visibleRules} />
         </div>
       </div>
     </ToastProvider>
