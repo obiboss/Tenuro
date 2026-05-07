@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { ArrowLeft, Home } from "lucide-react";
+import { PropertyRulesManager } from "@/components/property-rules/property-rules-manager";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { UnitForm } from "@/components/property/unit-form";
 import { UnitCard } from "@/components/property/unit-card";
 import { getCurrentLandlordProperty } from "@/server/services/properties.service";
+import { getCurrentLandlordPropertyRules } from "@/server/services/property-rules.service";
 import { getPropertyUnitsForCurrentLandlord } from "@/server/services/units.service";
 
 type PropertyDetailPageProps = {
@@ -19,9 +21,10 @@ export default async function PropertyDetailPage({
 }: PropertyDetailPageProps) {
   const { propertyId } = await params;
 
-  const [property, units] = await Promise.all([
+  const [property, units, propertyRules] = await Promise.all([
     getCurrentLandlordProperty(propertyId),
     getPropertyUnitsForCurrentLandlord(propertyId),
+    getCurrentLandlordPropertyRules(propertyId),
   ]);
 
   return (
@@ -67,6 +70,19 @@ export default async function PropertyDetailPage({
             <UnitForm propertyId={property.id} />
           </SectionCard>
         </div>
+      </div>
+
+      <div className="mt-6">
+        <SectionCard
+          title="Property Rules"
+          description="Set simple house rules for tenant onboarding, property use, payments, and safety."
+        >
+          <PropertyRulesManager
+            propertyId={property.id}
+            rules={propertyRules}
+            units={units}
+          />
+        </SectionCard>
       </div>
     </div>
   );
