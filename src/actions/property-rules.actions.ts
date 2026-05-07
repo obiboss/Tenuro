@@ -31,15 +31,16 @@ type GuidedRulePreset = {
   requiresTenantAcknowledgement: boolean;
   configField?: {
     key: string;
-    type: "number" | "text";
+    formKey: string;
+    label: string;
   };
 };
 
 const GUIDED_RULE_PRESETS: Record<PropertyRuleCode, GuidedRulePreset> = {
   pets_not_allowed: {
     ruleCode: "pets_not_allowed",
-    title: "No pets allowed",
-    description: "This property does not permit tenants to keep pets.",
+    title: "No pets",
+    description: "Tenants with pets should not apply for this property.",
     category: "pets",
     enforcement: "blocks_onboarding",
     appliesTo: "new_tenants",
@@ -47,21 +48,24 @@ const GUIDED_RULE_PRESETS: Record<PropertyRuleCode, GuidedRulePreset> = {
   },
   maximum_occupants: {
     ruleCode: "maximum_occupants",
-    title: "Maximum occupants",
-    description: "This unit has a maximum number of allowed occupants.",
+    title: "Limit number of people",
+    description:
+      "Only tenants within the allowed number of people should apply.",
     category: "occupancy",
     enforcement: "blocks_onboarding",
     appliesTo: "new_tenants",
     requiresTenantAcknowledgement: true,
     configField: {
       key: "maximumOccupants",
-      type: "number",
+      formKey: "maximumOccupants",
+      label: "Maximum number of people",
     },
   },
   residential_only: {
     ruleCode: "residential_only",
     title: "Residential use only",
-    description: "This property is for residential living only.",
+    description:
+      "Tenants who want to use the property for business should not apply.",
     category: "business_use",
     enforcement: "blocks_onboarding",
     appliesTo: "new_tenants",
@@ -69,8 +73,8 @@ const GUIDED_RULE_PRESETS: Record<PropertyRuleCode, GuidedRulePreset> = {
   },
   commercial_permitted: {
     ruleCode: "commercial_permitted",
-    title: "Commercial use permitted",
-    description: "This property may be used for approved commercial purposes.",
+    title: "Business use allowed",
+    description: "The property can be used for approved business purposes.",
     category: "business_use",
     enforcement: "information_only",
     appliesTo: "new_tenants",
@@ -80,7 +84,7 @@ const GUIDED_RULE_PRESETS: Record<PropertyRuleCode, GuidedRulePreset> = {
     ruleCode: "children_under_5_not_allowed",
     title: "No children under 5",
     description:
-      "This property does not permit children under age 5 to live in the unit.",
+      "Tenants with children under 5 should not apply for this property.",
     category: "occupancy",
     enforcement: "blocks_onboarding",
     appliesTo: "new_tenants",
@@ -90,20 +94,22 @@ const GUIDED_RULE_PRESETS: Record<PropertyRuleCode, GuidedRulePreset> = {
     ruleCode: "minimum_monthly_income",
     title: "Minimum monthly income",
     description:
-      "Tenant should meet the minimum monthly income requirement or be reviewed by the landlord.",
+      "Tenants below this income will be shown to you for review before approval.",
     category: "payment",
     enforcement: "landlord_review",
     appliesTo: "new_tenants",
     requiresTenantAcknowledgement: false,
     configField: {
       key: "minimumMonthlyIncome",
-      type: "number",
+      formKey: "minimumMonthlyIncome",
+      label: "Minimum monthly income",
     },
   },
   guarantor_required: {
     ruleCode: "guarantor_required",
-    title: "Guarantor required",
-    description: "Tenant must be able to provide a guarantor if approved.",
+    title: "Guarantor needed",
+    description:
+      "Tenant will only be asked if they can provide a guarantor if approved.",
     category: "documentation",
     enforcement: "landlord_review",
     appliesTo: "new_tenants",
@@ -113,7 +119,7 @@ const GUIDED_RULE_PRESETS: Record<PropertyRuleCode, GuidedRulePreset> = {
     ruleCode: "shortlet_not_allowed",
     title: "No short-let or Airbnb",
     description:
-      "This property cannot be used for short-let, Airbnb, daily rental, or similar use.",
+      "Tenants who want short-let, Airbnb, or daily rental should not apply.",
     category: "business_use",
     enforcement: "blocks_onboarding",
     appliesTo: "new_tenants",
@@ -122,7 +128,8 @@ const GUIDED_RULE_PRESETS: Record<PropertyRuleCode, GuidedRulePreset> = {
   subletting_not_allowed: {
     ruleCode: "subletting_not_allowed",
     title: "No subletting",
-    description: "Tenant cannot sublet the unit or any part of it.",
+    description:
+      "Tenants who want to rent the property out to someone else should not apply.",
     category: "occupancy",
     enforcement: "blocks_onboarding",
     appliesTo: "new_tenants",
@@ -130,9 +137,9 @@ const GUIDED_RULE_PRESETS: Record<PropertyRuleCode, GuidedRulePreset> = {
   },
   customer_facing_business_not_allowed: {
     ruleCode: "customer_facing_business_not_allowed",
-    title: "No customer-facing business",
+    title: "No business with many visitors",
     description:
-      "Businesses that bring regular customers, staff, or visitors to the property are not allowed.",
+      "Tenants whose business will bring customers, staff, or many visitors should not apply.",
     category: "business_use",
     enforcement: "blocks_onboarding",
     appliesTo: "new_tenants",
@@ -142,7 +149,7 @@ const GUIDED_RULE_PRESETS: Record<PropertyRuleCode, GuidedRulePreset> = {
     ruleCode: "heavy_generator_or_equipment_not_allowed",
     title: "No heavy generator or equipment",
     description:
-      "Heavy generators, machinery, or commercial equipment are not permitted.",
+      "Tenants who want to use heavy generator, machines, or large equipment should not apply.",
     category: "safety",
     enforcement: "blocks_onboarding",
     appliesTo: "new_tenants",
@@ -150,9 +157,9 @@ const GUIDED_RULE_PRESETS: Record<PropertyRuleCode, GuidedRulePreset> = {
   },
   large_gatherings_not_allowed: {
     ruleCode: "large_gatherings_not_allowed",
-    title: "No regular large gatherings",
+    title: "No regular parties or large gatherings",
     description:
-      "Regular parties, events, meetings, or group gatherings are not permitted.",
+      "Tenants who plan to hold regular parties, meetings, or large gatherings should not apply.",
     category: "noise",
     enforcement: "blocks_onboarding",
     appliesTo: "new_tenants",
@@ -161,8 +168,7 @@ const GUIDED_RULE_PRESETS: Record<PropertyRuleCode, GuidedRulePreset> = {
   smoking_not_allowed: {
     ruleCode: "smoking_not_allowed",
     title: "No smoking",
-    description:
-      "Smoking is not permitted inside the unit or restricted areas of the property.",
+    description: "Smoking is not allowed inside the property.",
     category: "safety",
     enforcement: "information_only",
     appliesTo: "all_tenants",
@@ -171,7 +177,8 @@ const GUIDED_RULE_PRESETS: Record<PropertyRuleCode, GuidedRulePreset> = {
   parking_rules: {
     ruleCode: "parking_rules",
     title: "Parking rules",
-    description: "Tenant must follow the property parking arrangement.",
+    description:
+      "Tenant must follow the parking arrangement for this property.",
     category: "other",
     enforcement: "information_only",
     appliesTo: "all_tenants",
@@ -180,7 +187,8 @@ const GUIDED_RULE_PRESETS: Record<PropertyRuleCode, GuidedRulePreset> = {
   waste_disposal_rules: {
     ruleCode: "waste_disposal_rules",
     title: "Waste disposal rules",
-    description: "Tenant must follow the property waste disposal rules.",
+    description:
+      "Tenant must follow the waste disposal rules for this property.",
     category: "maintenance",
     enforcement: "information_only",
     appliesTo: "all_tenants",
@@ -189,7 +197,7 @@ const GUIDED_RULE_PRESETS: Record<PropertyRuleCode, GuidedRulePreset> = {
   quiet_hours: {
     ruleCode: "quiet_hours",
     title: "Quiet hours",
-    description: "Tenant must avoid excessive noise during quiet hours.",
+    description: "Tenant must avoid loud noise during quiet hours.",
     category: "noise",
     enforcement: "information_only",
     appliesTo: "all_tenants",
@@ -197,8 +205,8 @@ const GUIDED_RULE_PRESETS: Record<PropertyRuleCode, GuidedRulePreset> = {
   },
   visitor_rules: {
     ruleCode: "visitor_rules",
-    title: "Visitors policy",
-    description: "Tenant must follow the property visitor policy.",
+    title: "Visitors rules",
+    description: "Tenant must follow the visitor rules for this property.",
     category: "occupancy",
     enforcement: "information_only",
     appliesTo: "all_tenants",
@@ -206,9 +214,8 @@ const GUIDED_RULE_PRESETS: Record<PropertyRuleCode, GuidedRulePreset> = {
   },
   maintenance_reporting: {
     ruleCode: "maintenance_reporting",
-    title: "Maintenance reporting",
-    description:
-      "Tenant should report maintenance issues through the approved process.",
+    title: "Report repairs properly",
+    description: "Tenant must report repairs through the right process.",
     category: "maintenance",
     enforcement: "information_only",
     appliesTo: "all_tenants",
@@ -216,9 +223,9 @@ const GUIDED_RULE_PRESETS: Record<PropertyRuleCode, GuidedRulePreset> = {
   },
   no_structural_changes: {
     ruleCode: "no_structural_changes",
-    title: "No structural changes",
+    title: "No changes to the building",
     description:
-      "Tenant must not make structural changes without landlord approval.",
+      "Tenant must not break, rebuild, or change the property without approval.",
     category: "maintenance",
     enforcement: "information_only",
     appliesTo: "all_tenants",
@@ -227,7 +234,7 @@ const GUIDED_RULE_PRESETS: Record<PropertyRuleCode, GuidedRulePreset> = {
   other_house_rule: {
     ruleCode: "other_house_rule",
     title: "Other house rule",
-    description: "Additional property rule added by the landlord.",
+    description: "Other house rule added by the landlord.",
     category: "other",
     enforcement: "information_only",
     appliesTo: "all_tenants",
@@ -274,6 +281,13 @@ function getFriendlyErrorMessage(error: unknown, fallbackMessage: string) {
   return error instanceof Error ? error.message : fallbackMessage;
 }
 
+function readSelectedRuleCodes(formData: FormData) {
+  return formData
+    .getAll("ruleCodes")
+    .map((value) => String(value).trim())
+    .filter(Boolean) as PropertyRuleCode[];
+}
+
 function readRuleConfig(params: {
   formData: FormData;
   preset: GuidedRulePreset;
@@ -284,23 +298,18 @@ function readRuleConfig(params: {
 
   const rawValue = readRequiredString(
     params.formData,
-    params.preset.configField.key,
+    params.preset.configField.formKey,
   );
+  const parsedValue = Number(rawValue);
 
-  if (params.preset.configField.type === "number") {
-    const parsedValue = Number(rawValue);
-
-    if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
-      throw new Error("Enter a valid number for this rule.");
-    }
-
-    return {
-      [params.preset.configField.key]: parsedValue,
-    };
+  if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
+    throw new Error(
+      `Enter a valid value for ${params.preset.configField.label}.`,
+    );
   }
 
   return {
-    [params.preset.configField.key]: rawValue,
+    [params.preset.configField.key]: parsedValue,
   };
 }
 
@@ -311,51 +320,61 @@ export async function createPropertyRuleAction(
   const propertyId = readRequiredString(formData, "propertyId");
 
   try {
-    const ruleCode = readRequiredString(
-      formData,
-      "ruleCode",
-    ) as PropertyRuleCode;
-    const preset = GUIDED_RULE_PRESETS[ruleCode];
+    const selectedRuleCodes = readSelectedRuleCodes(formData);
 
-    if (!preset) {
-      throw new Error("Selected property rule is not supported.");
+    if (selectedRuleCodes.length === 0) {
+      throw new Error("Choose at least one thing you do not want.");
     }
 
-    const customTitle =
-      ruleCode === "other_house_rule"
-        ? readRequiredString(formData, "title")
-        : preset.title;
+    const unitId = readOptionalString(formData, "unitId");
+    let createdCount = 0;
 
-    const customDescription =
-      ruleCode === "other_house_rule"
-        ? readRequiredString(formData, "description")
-        : (readOptionalString(formData, "description") ?? preset.description);
+    for (const ruleCode of selectedRuleCodes) {
+      const preset = GUIDED_RULE_PRESETS[ruleCode];
 
-    const parsed = createPropertyRuleSchema.parse({
-      propertyId,
-      unitId: readOptionalString(formData, "unitId"),
-      ruleCode: preset.ruleCode,
-      title: customTitle,
-      description: customDescription,
-      category: preset.category,
-      enforcement: preset.enforcement,
-      appliesTo: preset.appliesTo,
-      requiresTenantAcknowledgement:
+      if (!preset) {
+        throw new Error("One selected rule is not supported.");
+      }
+
+      const customTitle =
         ruleCode === "other_house_rule"
-          ? readBoolean(formData, "requiresTenantAcknowledgement")
-          : preset.requiresTenantAcknowledgement,
-      sortOrder: readSortOrder(formData),
-      config: readRuleConfig({
-        formData,
-        preset,
-      }),
-    });
+          ? readRequiredString(formData, "otherRuleTitle")
+          : preset.title;
 
-    await createPropertyRuleForCurrentLandlord(parsed);
+      const customDescription =
+        ruleCode === "other_house_rule"
+          ? readRequiredString(formData, "otherRuleDescription")
+          : preset.description;
+
+      const parsed = createPropertyRuleSchema.parse({
+        propertyId,
+        unitId,
+        ruleCode: preset.ruleCode,
+        title: customTitle,
+        description: customDescription,
+        category: preset.category,
+        enforcement: preset.enforcement,
+        appliesTo: preset.appliesTo,
+        requiresTenantAcknowledgement:
+          ruleCode === "other_house_rule"
+            ? readBoolean(formData, "requiresTenantAcknowledgement")
+            : preset.requiresTenantAcknowledgement,
+        sortOrder: readSortOrder(formData) + createdCount,
+        config: readRuleConfig({
+          formData,
+          preset,
+        }),
+      });
+
+      await createPropertyRuleForCurrentLandlord(parsed);
+      createdCount += 1;
+    }
 
     revalidatePath(`/properties/${propertyId}`);
 
-    return successResult("Property rule saved.");
+    return successResult(
+      createdCount === 1 ? "Rule saved." : `${createdCount} rules saved.`,
+    );
   } catch (error) {
     console.error("createPropertyRuleAction failed:", error);
 
@@ -382,7 +401,7 @@ export async function archivePropertyRuleAction(
 
     revalidatePath(`/properties/${propertyId}`);
 
-    return successResult("Property rule archived.");
+    return successResult("Rule removed.");
   } catch (error) {
     console.error("archivePropertyRuleAction failed:", error);
 
