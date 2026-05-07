@@ -8,6 +8,11 @@ import {
 import { getAppBaseUrl } from "@/server/constants/routes";
 import { AppError } from "@/server/errors/app-error";
 import {
+  getActiveGuarantorForTenant,
+  replaceTenantGuarantor,
+} from "@/server/repositories/guarantors.repository";
+import { getActivePropertyRulesForOnboarding } from "@/server/repositories/property-rules.repository";
+import {
   acceptTenancyAgreement,
   createTenancyAgreementDraft,
   finalizeTenancyAgreement,
@@ -41,11 +46,10 @@ import type {
   GenerateTenancyAgreementPdfInput,
   RefreshTenancyAgreementAcceptanceLinkInput,
   SaveTenancyAgreementDraftInput,
+  SubmitAgreementGuarantorInput,
 } from "@/server/validators/tenancy-agreement.schema";
 import { requireLandlord } from "./auth.service";
 import { buildTenancyAgreementTemplate } from "./tenancy-agreement-template.service";
-import { getActiveGuarantorForTenant } from "@/server/repositories/guarantors.repository";
-import { getActivePropertyRulesForOnboarding } from "@/server/repositories/property-rules.repository";
 
 function getSnapshotTextValue(
   snapshot: Record<string, unknown>,
@@ -55,6 +59,46 @@ function getSnapshotTextValue(
   const value = snapshot[key];
 
   return typeof value === "string" && value.trim() ? value : fallback;
+}
+
+function getRuleCodeFromMetadata(metadata: Record<string, unknown>) {
+  const value = metadata.rule_code;
+
+  return typeof value === "string" ? value : null;
+}
+
+async function getAgreementPropertyRules(params: {
+  propertyId: string | null;
+  unitId: string | null;
+}) {
+  if (!params.propertyId) {
+    return [];
+  }
+
+  const supabase = createSupabaseAdminClient();
+
+  return getActivePropertyRulesForOnboarding(supabase, {
+    propertyId: params.propertyId,
+    unitId: params.unitId,
+  });
+}
+
+async function isGuarantorRequiredForAgreement(params: {
+  propertyId: string | null;
+  unitId: string | null;
+}) {
+  const rules = await getAgreementPropertyRules(params);
+
+  return rules.some(
+    (rule) => getRuleCodeFromMetadata(rule.metadata) === "guarantor_required",
+  );
+}
+
+async function hasCompletedGuarantorDetails(tenantId: string) {
+  const supabase = createSupabaseAdminClient();
+  const guarantor = await getActiveGuarantorForTenant(supabase, tenantId);
+
+  return Boolean(guarantor);
 }
 
 function buildAgreementWhatsAppMessage(params: {
@@ -134,46 +178,6 @@ function createAcceptanceToken() {
   };
 }
 
-function getRuleCodeFromMetadata(metadata: Record<string, unknown>) {
-  const value = metadata.rule_code;
-
-  return typeof value === "string" ? value : null;
-}
-
-async function getAgreementPropertyRules(params: {
-  propertyId: string | null;
-  unitId: string | null;
-}) {
-  if (!params.propertyId) {
-    return [];
-  }
-
-  const supabase = createSupabaseAdminClient();
-
-  return getActivePropertyRulesForOnboarding(supabase, {
-    propertyId: params.propertyId,
-    unitId: params.unitId,
-  });
-}
-
-async function isGuarantorRequiredForAgreement(params: {
-  propertyId: string | null;
-  unitId: string | null;
-}) {
-  const rules = await getAgreementPropertyRules(params);
-
-  return rules.some(
-    (rule) => getRuleCodeFromMetadata(rule.metadata) === "guarantor_required",
-  );
-}
-
-async function hasCompletedGuarantorDetails(tenantId: string) {
-  const supabase = createSupabaseAdminClient();
-  const guarantor = await getActiveGuarantorForTenant(supabase, tenantId);
-
-  return Boolean(guarantor);
-}
-
 function buildSnapshots(params: {
   landlord: {
     id: string;
@@ -222,6 +226,35 @@ function buildSnapshots(params: {
       openingBalance: params.tenancy.opening_balance,
       openingBalanceNote: params.tenancy.opening_balance_note,
     },
+  };
+}
+
+async function prepareFirstPaymentAfterAgreement(params: {
+  agreement: TenancyAgreementDocumentRow;
+}) {
+  const supabase = createSupabaseAdminClient();
+  const tenancy = await getTenancyById(supabase, params.agreement.tenancy_id);
+
+  const guarantorRequired = await isGuarantorRequiredForAgreement({
+    propertyId: tenancy.units?.properties?.id ?? null,
+    unitId: tenancy.unit_id,
+  });
+
+  const guarantorCompleted = await hasCompletedGuarantorDetails(
+    params.agreement.tenant_id,
+  );
+
+  const firstPayment =
+    guarantorRequired && !guarantorCompleted
+      ? null
+      : await initializeFirstRentPaymentAfterAgreementAcceptance({
+          tenancyId: params.agreement.tenancy_id,
+        });
+
+  return {
+    firstPayment,
+    guarantorRequired,
+    guarantorCompleted,
   };
 }
 
@@ -549,33 +582,14 @@ export async function acceptTenancyAgreementFromTenant(
       agreement.pdf_path,
     );
 
-    const tenancy = await getTenancyById(
-      createSupabaseAdminClient(),
-      agreement.tenancy_id,
-    );
-
-    const guarantorRequired = await isGuarantorRequiredForAgreement({
-      propertyId: tenancy.units?.properties?.id ?? null,
-      unitId: tenancy.unit_id,
+    const paymentStatus = await prepareFirstPaymentAfterAgreement({
+      agreement,
     });
-
-    const guarantorCompleted = await hasCompletedGuarantorDetails(
-      agreement.tenant_id,
-    );
-
-    const firstPayment =
-      guarantorRequired && !guarantorCompleted
-        ? null
-        : await initializeFirstRentPaymentAfterAgreementAcceptance({
-            tenancyId: agreement.tenancy_id,
-          });
 
     return {
       agreement,
       pdfDownloadUrl,
-      firstPayment,
-      guarantorRequired,
-      guarantorCompleted,
+      ...paymentStatus,
     };
   }
 
@@ -623,7 +637,22 @@ export async function acceptTenancyAgreementFromTenant(
     userAgent: input.userAgent,
   });
 
-  const tenancy = await getTenancyById(supabase, agreementWithPdf.tenancy_id);
+  const paymentStatus = await prepareFirstPaymentAfterAgreement({
+    agreement: agreementWithPdf,
+  });
+
+  return {
+    agreement: agreementWithPdf,
+    pdfDownloadUrl,
+    ...paymentStatus,
+  };
+}
+
+export async function getTenantAgreementAcceptanceStatus(token: string) {
+  const agreement = await resolveTenancyAgreementAcceptanceToken(token);
+  const supabase = createSupabaseAdminClient();
+
+  const tenancy = await getTenancyById(supabase, agreement.tenancy_id);
 
   const guarantorRequired = await isGuarantorRequiredForAgreement({
     propertyId: tenancy.units?.properties?.id ?? null,
@@ -631,22 +660,93 @@ export async function acceptTenancyAgreementFromTenant(
   });
 
   const guarantorCompleted = await hasCompletedGuarantorDetails(
-    agreementWithPdf.tenant_id,
+    agreement.tenant_id,
   );
 
-  const firstPayment =
-    guarantorRequired && !guarantorCompleted
-      ? null
-      : await initializeFirstRentPaymentAfterAgreementAcceptance({
-          tenancyId: agreementWithPdf.tenancy_id,
-        });
+  const pdfDownloadUrl =
+    agreement.document_status === "accepted"
+      ? await createSignedTenancyAgreementPdfUrl(agreement.pdf_path)
+      : null;
 
   return {
-    agreement: agreementWithPdf,
+    agreement,
+    pdfDownloadUrl,
+    guarantorRequired,
+    guarantorCompleted,
+  };
+}
+
+export async function submitAgreementGuarantorAndPreparePayment(
+  input: SubmitAgreementGuarantorInput,
+) {
+  const agreement = await resolveTenancyAgreementAcceptanceToken(input.token);
+
+  if (agreement.document_status !== "accepted") {
+    throw new AppError(
+      "AGREEMENT_NOT_ACCEPTED",
+      "Accept the tenancy agreement before completing guarantor details.",
+      400,
+    );
+  }
+
+  const supabase = createSupabaseAdminClient();
+  const tenancy = await getTenancyById(supabase, agreement.tenancy_id);
+
+  const guarantorRequired = await isGuarantorRequiredForAgreement({
+    propertyId: tenancy.units?.properties?.id ?? null,
+    unitId: tenancy.unit_id,
+  });
+
+  if (!guarantorRequired) {
+    throw new AppError(
+      "GUARANTOR_NOT_REQUIRED",
+      "Guarantor details are not required for this agreement.",
+      400,
+    );
+  }
+
+  await replaceTenantGuarantor(supabase, {
+    tenantId: agreement.tenant_id,
+    fullName: input.fullName,
+    phoneNumber: input.phoneNumber,
+    email: input.email ?? null,
+    address: input.address,
+    relationshipToTenant: input.relationshipToTenant,
+    idDocumentPath: null,
+  });
+
+  await writeSystemAuditLog({
+    landlordId: agreement.landlord_id,
+    tenantId: agreement.tenant_id,
+    tenancyId: agreement.tenancy_id,
+    eventType: AUDIT_EVENT_TYPES.tenantUpdated,
+    entityType: AUDIT_ENTITY_TYPES.tenant,
+    entityId: agreement.tenant_id,
+    description:
+      "Tenant guarantor details submitted after agreement acceptance.",
+    metadata: {
+      agreement_id: agreement.id,
+      guarantor_name: input.fullName,
+      relationship_to_tenant: input.relationshipToTenant,
+    },
+  });
+
+  const firstPayment = await initializeFirstRentPaymentAfterAgreementAcceptance(
+    {
+      tenancyId: agreement.tenancy_id,
+    },
+  );
+
+  const pdfDownloadUrl = await createSignedTenancyAgreementPdfUrl(
+    agreement.pdf_path,
+  );
+
+  return {
+    agreement,
     pdfDownloadUrl,
     firstPayment,
     guarantorRequired,
-    guarantorCompleted,
+    guarantorCompleted: true,
   };
 }
 
