@@ -84,9 +84,9 @@ const GUIDED_RULE_PRESETS: Partial<Record<PropertyRuleCode, GuidedRulePreset>> =
     },
     minimum_monthly_income: {
       ruleCode: "minimum_monthly_income",
-      title: "Can they keep paying the rent?",
+      title: "Minimum monthly income",
       description:
-        "Tenants below the required monthly income or regular cashflow should not apply.",
+        "Tenants below this monthly income or cashflow should not apply.",
       category: "payment",
       enforcement: "blocks_onboarding",
       appliesTo: "new_tenants",
@@ -94,7 +94,7 @@ const GUIDED_RULE_PRESETS: Partial<Record<PropertyRuleCode, GuidedRulePreset>> =
       configField: {
         key: "minimumMonthlyIncome",
         formKey: "minimumMonthlyIncome",
-        label: "Lowest monthly income or cashflow allowed",
+        label: "Minimum monthly income",
       },
     },
     guarantor_required: {
@@ -274,7 +274,7 @@ export async function createPropertyRuleAction(
     revalidatePath(`/properties/${propertyId}`);
 
     return successResult(
-      createdCount === 1 ? "Rule saved." : `${createdCount} rules saved.`,
+      createdCount === 1 ? "Check saved." : `${createdCount} checks saved.`,
     );
   } catch (error) {
     console.error("createPropertyRuleAction failed:", error);
@@ -302,7 +302,7 @@ export async function archivePropertyRuleAction(
 
     revalidatePath(`/properties/${propertyId}`);
 
-    return successResult("Rule removed.");
+    return successResult("Check removed.");
   } catch (error) {
     console.error("archivePropertyRuleAction failed:", error);
 

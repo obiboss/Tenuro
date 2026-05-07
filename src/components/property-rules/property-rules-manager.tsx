@@ -75,7 +75,7 @@ const rulePresets: RulePreset[] = [
   },
   {
     code: "minimum_monthly_income",
-    title: "Can they keep paying the rent?",
+    title: "Minimum monthly income",
     description: "Set the lowest monthly income or cashflow you accept.",
     icon: <CircleDollarSign aria-hidden="true" size={20} strokeWidth={2.6} />,
   },
@@ -205,38 +205,72 @@ function RuleCheckboxCard({
   disabled: boolean;
   onChange: (code: string, checked: boolean) => void;
 }) {
+  const shouldShowPeopleInput = checked && preset.code === "maximum_occupants";
+  const shouldShowIncomeInput =
+    checked && preset.code === "minimum_monthly_income";
+
   return (
     <label
       className={[
-        "flex min-h-24 cursor-pointer items-start gap-3 rounded-card border p-4 shadow-card transition",
+        "block cursor-pointer rounded-card border p-4 shadow-card transition",
         checked
           ? "border-primary bg-primary-soft"
           : "border-border-soft bg-white hover:border-primary",
         disabled ? "cursor-not-allowed opacity-50" : "",
       ].join(" ")}
     >
-      <input
-        type="checkbox"
-        name="ruleCodes"
-        value={preset.code}
-        checked={checked}
-        disabled={disabled}
-        onChange={(event) => onChange(preset.code, event.target.checked)}
-        className="mt-1 size-4 rounded border-border-soft text-primary focus:ring-primary"
-      />
+      <span className="flex items-start gap-3">
+        <input
+          type="checkbox"
+          name="ruleCodes"
+          value={preset.code}
+          checked={checked}
+          disabled={disabled}
+          onChange={(event) => onChange(preset.code, event.target.checked)}
+          className="mt-1 size-4 rounded border-border-soft text-primary focus:ring-primary"
+        />
 
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white text-primary">
-        {preset.icon}
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white text-primary">
+          {preset.icon}
+        </span>
+
+        <span>
+          <span className="block text-sm font-extrabold text-text-strong">
+            {preset.title}
+          </span>
+          <span className="mt-1 block text-sm leading-6 text-text-muted">
+            {disabled ? "Already added." : preset.description}
+          </span>
+        </span>
       </span>
 
-      <span>
-        <span className="block text-sm font-extrabold text-text-strong">
-          {preset.title}
+      {shouldShowPeopleInput ? (
+        <span className="mt-4 block rounded-button bg-white p-4">
+          <Input
+            label="Maximum number of people allowed"
+            name="maximumOccupants"
+            type="number"
+            min={1}
+            required
+            placeholder="Example: 4"
+            helperText="If a tenant enters more than this, Tenuro will reject the application."
+          />
         </span>
-        <span className="mt-1 block text-sm leading-6 text-text-muted">
-          {disabled ? "Already added." : preset.description}
+      ) : null}
+
+      {shouldShowIncomeInput ? (
+        <span className="mt-4 block rounded-button bg-white p-4">
+          <Input
+            label="Minimum monthly income"
+            name="minimumMonthlyIncome"
+            type="number"
+            min={1}
+            required
+            placeholder="Example: 250000"
+            helperText="If a tenant enters less than this, Tenuro will reject the application."
+          />
         </span>
-      </span>
+      ) : null}
     </label>
   );
 }
@@ -258,12 +292,6 @@ function GuidedRuleCreateForm({
 
   const selectedPresets = rulePresets.filter((preset) =>
     selectedCodes.includes(preset.code),
-  );
-
-  const selectedNeedsMaximumOccupants =
-    selectedCodes.includes("maximum_occupants");
-  const selectedNeedsMinimumIncome = selectedCodes.includes(
-    "minimum_monthly_income",
   );
 
   function updateSelectedCode(code: string, checked: boolean) {
@@ -323,34 +351,6 @@ function GuidedRuleCreateForm({
           ))}
         </div>
       </section>
-
-      {selectedNeedsMaximumOccupants || selectedNeedsMinimumIncome ? (
-        <div className="grid gap-4 md:grid-cols-2">
-          {selectedNeedsMaximumOccupants ? (
-            <Input
-              label="Maximum number of people allowed"
-              name="maximumOccupants"
-              type="number"
-              min={1}
-              required
-              placeholder="Example: 4"
-              helperText="If a tenant enters more than this, Tenuro will reject the application."
-            />
-          ) : null}
-
-          {selectedNeedsMinimumIncome ? (
-            <Input
-              label="Lowest monthly income or cashflow allowed"
-              name="minimumMonthlyIncome"
-              type="number"
-              min={1}
-              required
-              placeholder="Example: 250000"
-              helperText="If a tenant enters less than this, Tenuro will reject the application."
-            />
-          ) : null}
-        </div>
-      ) : null}
 
       {selectedPresets.length > 0 ? (
         <div className="rounded-button bg-primary-soft p-4">
@@ -445,7 +445,7 @@ function PropertyRuleCard({
           <p className="text-sm font-extrabold text-text-strong">
             {maximumOccupants
               ? `Maximum people allowed: ${maximumOccupants}`
-              : `Lowest monthly income or cashflow allowed: ₦${Number(
+              : `Minimum monthly income: ₦${Number(
                   minimumMonthlyIncome,
                 ).toLocaleString("en-NG")}`}
           </p>
