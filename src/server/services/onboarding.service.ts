@@ -326,10 +326,10 @@ function evaluateSelectedKycRules(params: {
       );
 
       if (canProvideGuarantor === "no") {
-        reviewItems.push({
+        autoDeclineItems.push({
           ruleCode,
           ruleTitle: rule.title,
-          reason: "Tenant said they cannot provide a guarantor if approved.",
+          reason: "This property requires a guarantor.",
           tenantAnswer: "Cannot provide guarantor",
           expectedValue: "Can provide guarantor",
         });
