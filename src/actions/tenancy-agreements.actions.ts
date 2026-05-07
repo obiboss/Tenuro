@@ -10,6 +10,7 @@ import {
   generateTenancyAgreementPdfForCurrentLandlord,
   refreshTenancyAgreementAcceptanceLinkForCurrentLandlord,
   saveTenancyAgreementDraftForCurrentLandlord,
+  submitAgreementGuarantorAndPreparePayment,
 } from "@/server/services/tenancy-agreements.service";
 import {
   acceptTenancyAgreementSchema,
@@ -18,6 +19,7 @@ import {
   generateTenancyAgreementSchema,
   refreshTenancyAgreementAcceptanceLinkSchema,
   saveTenancyAgreementDraftSchema,
+  submitAgreementGuarantorSchema,
 } from "@/server/validators/tenancy-agreement.schema";
 
 export type TenancyAgreementActionState = {
@@ -213,6 +215,49 @@ export async function acceptTenancyAgreementAction(
     };
   } catch (error) {
     console.error("acceptTenancyAgreementAction failed:", error);
+
+    const result = errorResult(error);
+
+    return {
+      ok: false,
+      message: result.message,
+      fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
+    };
+  }
+}
+
+export async function submitAgreementGuarantorAction(
+  _previousState: TenancyAgreementActionState,
+  formData: FormData,
+): Promise<TenancyAgreementActionState> {
+  try {
+    const parsed = submitAgreementGuarantorSchema.parse({
+      token: formData.get("token"),
+      fullName: formData.get("fullName"),
+      phoneNumber: formData.get("phoneNumber"),
+      email: formData.get("email"),
+      address: formData.get("address"),
+      relationshipToTenant: formData.get("relationshipToTenant"),
+    });
+
+    const result = await submitAgreementGuarantorAndPreparePayment(parsed);
+
+    revalidatePath("/tenants");
+    revalidatePath(`/tenants/${result.agreement.tenant_id}`);
+
+    return {
+      ok: true,
+      message: "Guarantor details saved. Your rent payment checkout is ready.",
+      agreementId: result.agreement.id,
+      pdfDownloadUrl: result.pdfDownloadUrl,
+      tenantPaymentUrl: result.firstPayment.tenantPaymentUrl,
+      paymentReference: result.firstPayment.reference,
+      paymentExpiresAt: result.firstPayment.expiresAt,
+      needsGuarantor: false,
+      guarantorCompleted: true,
+    };
+  } catch (error) {
+    console.error("submitAgreementGuarantorAction failed:", error);
 
     const result = errorResult(error);
 

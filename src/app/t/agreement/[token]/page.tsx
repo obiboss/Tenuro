@@ -7,7 +7,7 @@ import { SectionCard } from "@/components/ui/section-card";
 import { ToastProvider } from "@/components/ui/toast-provider";
 import { TrustNotice } from "@/components/ui/trust-notice";
 import {
-  getTenantAgreementPdfDownloadUrlFromToken,
+  getTenantAgreementAcceptanceStatus,
   resolveTenancyAgreementAcceptanceToken,
 } from "@/server/services/tenancy-agreements.service";
 
@@ -106,10 +106,9 @@ export default async function TenantAgreementPage({
 
   const agreement = resolution.agreement;
   const alreadyAccepted = agreement.document_status === "accepted";
-
-  const pdfDownloadUrl = alreadyAccepted
-    ? await getTenantAgreementPdfDownloadUrlFromToken(token)
-    : null;
+  const acceptanceStatus = await getTenantAgreementAcceptanceStatus(token);
+  const needsGuarantor =
+    acceptanceStatus.guarantorRequired && !acceptanceStatus.guarantorCompleted;
 
   return (
     <ToastProvider>
@@ -148,7 +147,9 @@ export default async function TenantAgreementPage({
               <TenantAgreementAcceptanceForm
                 token={token}
                 alreadyAccepted={alreadyAccepted}
-                pdfDownloadUrl={pdfDownloadUrl}
+                pdfDownloadUrl={acceptanceStatus.pdfDownloadUrl}
+                needsGuarantor={needsGuarantor}
+                guarantorCompleted={acceptanceStatus.guarantorCompleted}
               />
             </div>
           </div>
