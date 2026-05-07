@@ -9,6 +9,7 @@ export const AUDIT_ENTITY_TYPES = {
   tenancy: "tenancy",
   unit: "unit",
   property: "property",
+  propertyRule: "property_rule",
   payment: "payment",
   agreement: "agreement",
   receipt: "receipt",
@@ -54,6 +55,10 @@ export const AUDIT_EVENT_TYPES = {
   propertyCreated: "property.created",
   propertyUpdated: "property.updated",
   propertyArchived: "property.archived",
+
+  propertyRuleCreated: "property_rule.created",
+  propertyRuleUpdated: "property_rule.updated",
+  propertyRuleArchived: "property_rule.archived",
 
   unitCreated: "unit.created",
   unitUpdated: "unit.updated",
