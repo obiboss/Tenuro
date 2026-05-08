@@ -99,6 +99,10 @@ const stateOptions = Object.keys(stateLgaMap).map((state) => ({
   value: state,
 }));
 
+function moneyDefaultValue(value: number | null) {
+  return value === null ? "" : String(value);
+}
+
 export function PublicLandlordVerificationForm({
   token,
   listing,
@@ -282,7 +286,7 @@ export function PublicLandlordVerificationForm({
                   name="bedrooms"
                   type="number"
                   min={0}
-                  defaultValue={listing.bedrooms}
+                  defaultValue={String(listing.bedrooms)}
                   error={state.fieldErrors?.bedrooms?.[0]}
                 />
 
@@ -291,7 +295,7 @@ export function PublicLandlordVerificationForm({
                   name="bathrooms"
                   type="number"
                   min={0}
-                  defaultValue={listing.bathrooms}
+                  defaultValue={String(listing.bathrooms)}
                   error={state.fieldErrors?.bathrooms?.[0]}
                 />
               </div>
@@ -299,7 +303,7 @@ export function PublicLandlordVerificationForm({
               <CurrencyInput
                 label="Annual rent"
                 name="annualRent"
-                defaultValue={listing.annual_rent ?? ""}
+                defaultValue={moneyDefaultValue(listing.annual_rent)}
                 error={state.fieldErrors?.annualRent?.[0]}
                 helperText="Most Nigerian landlords collect rent yearly, so this is the main rent amount."
               />
@@ -307,7 +311,7 @@ export function PublicLandlordVerificationForm({
               <CurrencyInput
                 label="Monthly rent"
                 name="monthlyRent"
-                defaultValue={listing.monthly_rent ?? ""}
+                defaultValue={moneyDefaultValue(listing.monthly_rent)}
                 error={state.fieldErrors?.monthlyRent?.[0]}
                 helperText="Use only if this unit is rented monthly."
               />
