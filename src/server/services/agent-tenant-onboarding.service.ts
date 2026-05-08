@@ -41,7 +41,7 @@ function getAppBaseUrl() {
 }
 
 function buildTenantOnboardingUrl(token: string) {
-  return `${getAppBaseUrl()}/onboarding/${encodeURIComponent(token)}`;
+  return `${getAppBaseUrl()}/t/onboarding/${encodeURIComponent(token)}`;
 }
 
 function buildWhatsAppUrl(params: {
