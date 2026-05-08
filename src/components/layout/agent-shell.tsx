@@ -2,14 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  BadgeCheck,
-  Building2,
-  CreditCard,
-  Home,
-  LogOut,
-  Send,
-} from "lucide-react";
+import { BadgeCheck, Building2, CreditCard, Home, Send } from "lucide-react";
 import { LogoutButton } from "@/components/auth/logout-button";
 import { Badge } from "@/components/ui/badge";
 import { ToastProvider } from "@/components/ui/toast-provider";
@@ -113,13 +106,8 @@ export function AgentShell({ children, agentName }: AgentShellProps) {
 
               <div className="flex items-center gap-3">
                 <Badge tone="primary">Agent</Badge>
-                <div className="hidden lg:block">
+                <div>
                   <LogoutButton />
-                </div>
-                <div className="lg:hidden">
-                  <LogoutButton>
-                    <LogOut aria-hidden="true" size={18} strokeWidth={2.6} />
-                  </LogoutButton>
                 </div>
               </div>
             </div>
