@@ -20,6 +20,7 @@ import {
   findPaymentByIdempotencyKey,
   recordGatewayRentPaymentViaRpc,
 } from "@/server/repositories/payments.repository";
+import { markPaymentAllocationsPaidForIntent } from "@/server/repositories/payment-allocations.repository";
 import { getTenancyPaymentContext } from "@/server/repositories/payment-context.repository";
 import {
   getUnitById,
@@ -177,6 +178,20 @@ async function generateReceiptSafely(paymentId: string) {
   }
 }
 
+async function markPaymentAllocationsPaidSafely(params: {
+  gatewayPaymentIntentId: string;
+  rentPaymentId: string;
+}) {
+  try {
+    await markPaymentAllocationsPaidForIntent(createSupabaseAdminClient(), {
+      gatewayPaymentIntentId: params.gatewayPaymentIntentId,
+      rentPaymentId: params.rentPaymentId,
+    });
+  } catch (error) {
+    console.error("Failed to mark payment allocations as paid:", error);
+  }
+}
+
 export async function processVerifiedGatewayPaymentReference(
   reference: string,
 ): Promise<GatewayPaymentWebhookResult> {
@@ -193,6 +208,11 @@ export async function processVerifiedGatewayPaymentReference(
   }
 
   if (intent.status === "paid" && intent.processed_payment_id) {
+    await markPaymentAllocationsPaidSafely({
+      gatewayPaymentIntentId: intent.id,
+      rentPaymentId: intent.processed_payment_id,
+    });
+
     await generateReceiptSafely(intent.processed_payment_id);
 
     if (isFirstRentPaymentIntent(intent.metadata)) {
@@ -255,6 +275,8 @@ export async function processVerifiedGatewayPaymentReference(
         paystack_status: verifiedTransaction.status,
         expected_total_amount: intent.total_amount,
         verified_amount_kobo: verifiedTransaction.amount,
+        agent_deal: intent.metadata.agent_deal ?? null,
+        allocations: intent.metadata.allocations ?? null,
       },
     });
 
@@ -295,6 +317,11 @@ export async function processVerifiedGatewayPaymentReference(
     verifiedPayload,
   });
 
+  await markPaymentAllocationsPaidSafely({
+    gatewayPaymentIntentId: intent.id,
+    rentPaymentId: paymentId,
+  });
+
   if (isFirstRentPaymentIntent(intent.metadata)) {
     await markUnitOccupiedAfterFirstRentPaymentSafely({
       tenancyId: intent.tenancy_id,
@@ -321,6 +348,8 @@ export async function processVerifiedGatewayPaymentReference(
       paid_at: verifiedTransaction.paid_at,
       period_start: intent.period_start,
       period_end: intent.period_end,
+      agent_deal: intent.metadata.agent_deal ?? null,
+      allocations: intent.metadata.allocations ?? null,
     },
   });
 
@@ -404,6 +433,8 @@ export async function processGatewayPaystackWebhook(params: {
           gateway_payment_event_id: registeredEvent.event.id,
           paystack_reference: webhook.data.reference,
           webhook_event: webhook.event,
+          agent_deal: ignoredIntent?.metadata.agent_deal ?? null,
+          allocations: ignoredIntent?.metadata.allocations ?? null,
         },
       });
 
@@ -465,6 +496,8 @@ export async function processGatewayPaystackWebhook(params: {
         paystack_reference: webhook.data.reference,
         webhook_event: webhook.event,
         failure_reason: message,
+        agent_deal: failedIntent?.metadata.agent_deal ?? null,
+        allocations: failedIntent?.metadata.allocations ?? null,
       },
     });
 
