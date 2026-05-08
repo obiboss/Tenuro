@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { AlertTriangle, Building2, ShieldCheck } from "lucide-react";
-import { TenantOnboardingForm } from "@/components/tenant/tenant-onboarding-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SectionCard } from "@/components/ui/section-card";
@@ -110,6 +109,7 @@ export default async function TenantOnboardingPage({
   const propertyName =
     state.tenant.units?.properties?.property_name ?? "Property";
   const unitName = state.tenant.units?.unit_identifier ?? "Unit";
+  const buildingName = state.tenant.units?.building_name;
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 md:px-6">
@@ -125,7 +125,7 @@ export default async function TenantOnboardingPage({
             <div>
               <Badge tone="primary">Tenant onboarding</Badge>
               <h1 className="mt-4 text-3xl font-black tracking-tight text-text-strong">
-                Complete your tenant profile
+                Tenant invitation received
               </h1>
               <p className="mt-3 text-sm leading-6 text-text-muted">
                 You have been invited to complete your tenant profile for{" "}
@@ -142,18 +142,47 @@ export default async function TenantOnboardingPage({
           <div className="mt-6">
             <SectionCard
               title={`${propertyName} — ${unitName}`}
-              description="Complete the form carefully. The landlord will review your details before the next step."
+              description="Your tenant onboarding link is valid. The full KYC submission form will be connected in the next patch."
             >
-              <TenantOnboardingForm
-                token={token}
-                fullName={state.tenant.full_name}
-                phoneNumber={state.tenant.phone_number}
-                email={state.tenant.email}
-                isSubmitted={
-                  state.tenant.onboarding_status === "profile_complete"
-                }
-                propertyRules={[]}
-              />
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-button bg-background p-4">
+                  <p className="text-sm font-bold text-text-muted">
+                    Tenant name
+                  </p>
+                  <p className="mt-1 font-extrabold text-text-strong">
+                    {state.tenant.full_name}
+                  </p>
+                </div>
+
+                <div className="rounded-button bg-background p-4">
+                  <p className="text-sm font-bold text-text-muted">
+                    Phone number
+                  </p>
+                  <p className="mt-1 font-extrabold text-text-strong">
+                    {state.tenant.phone_number}
+                  </p>
+                </div>
+
+                <div className="rounded-button bg-background p-4">
+                  <p className="text-sm font-bold text-text-muted">Property</p>
+                  <p className="mt-1 font-extrabold text-text-strong">
+                    {propertyName}
+                  </p>
+                </div>
+
+                <div className="rounded-button bg-background p-4">
+                  <p className="text-sm font-bold text-text-muted">Unit</p>
+                  <p className="mt-1 font-extrabold text-text-strong">
+                    {buildingName ? `${buildingName} — ${unitName}` : unitName}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 rounded-button bg-primary-soft px-4 py-3 text-sm font-semibold leading-6 text-primary">
+                Your invitation has been opened successfully. Please contact the
+                agent or landlord for the next onboarding step while the full
+                tenant KYC submission form is being connected.
+              </div>
             </SectionCard>
           </div>
         </div>
