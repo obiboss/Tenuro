@@ -26,8 +26,6 @@ import { requireAgent } from "./auth.service";
 
 const LANDLORD_VERIFICATION_TOKEN_BYTES = 32;
 const LANDLORD_VERIFICATION_TOKEN_DAYS = 7;
-const LANDLORD_CLAIM_TOKEN_BYTES = 32;
-const LANDLORD_CLAIM_TOKEN_DAYS = 7;
 
 function createSecureToken(byteLength: number) {
   return crypto.randomBytes(byteLength).toString("base64url");
@@ -320,7 +318,10 @@ export async function getPublicLandlordVerificationListing(token: string) {
     );
   }
 
-  if (listing.status !== "landlord_verification_sent") {
+  if (
+    listing.status !== "landlord_verification_sent" &&
+    listing.status !== "landlord_verified"
+  ) {
     throw new AppError(
       "INVALID_VERIFICATION_STATUS",
       "This property listing cannot be verified from this link.",
@@ -355,6 +356,17 @@ export async function approveAgentPropertyListingByLandlordReview(params: {
   input: AgentPropertyListingInput;
 }) {
   const listing = await getPublicLandlordVerificationListing(params.token);
+
+  if (listing.status === "landlord_verified") {
+    return {
+      listing,
+      existingLandlordFound: Boolean(listing.matched_landlord_id),
+      claimUrl: listing.matched_landlord_id
+        ? null
+        : buildLandlordClaimUrl(params.token),
+    };
+  }
+
   const supabase = createSupabaseAdminClient();
 
   const normalizedLandlordPhone = normalisePhoneNumber(
@@ -370,9 +382,7 @@ export async function approveAgentPropertyListingByLandlordReview(params: {
     finalInput.landlordPhoneNumber,
   );
 
-  const claimToken = matchedLandlord
-    ? null
-    : createSecureToken(LANDLORD_CLAIM_TOKEN_BYTES);
+  const claimToken = matchedLandlord ? null : params.token;
 
   const approvedListing = await approveAgentPropertyListingByLandlord(
     supabase,
@@ -382,9 +392,7 @@ export async function approveAgentPropertyListingByLandlordReview(params: {
       matchedLandlordId: matchedLandlord?.id ?? null,
       claimTokenHash: claimToken ? hashToken(claimToken) : null,
       claimTokenExpiresAt: claimToken
-        ? new Date(
-            Date.now() + LANDLORD_CLAIM_TOKEN_DAYS * 24 * 60 * 60 * 1000,
-          ).toISOString()
+        ? listing.landlord_verification_token_expires_at
         : null,
     },
   );

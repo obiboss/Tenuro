@@ -114,11 +114,13 @@ export async function createAgentPropertyListing(
     .insert({
       agent_id: params.agentId,
       agent_profile_id: params.agentProfileId,
+
       landlord_full_name: params.input.landlordFullName,
       landlord_phone_number: params.input.landlordPhoneNumber,
       landlord_email: params.input.landlordEmail?.trim()
         ? params.input.landlordEmail.trim().toLowerCase()
         : null,
+
       property_name: params.input.propertyName,
       address: params.input.address,
       state: params.input.state,
@@ -126,6 +128,7 @@ export async function createAgentPropertyListing(
       property_type: params.input.propertyType,
       country_code: params.input.countryCode,
       currency_code: params.input.currencyCode,
+
       building_name: params.input.buildingName?.trim()
         ? params.input.buildingName.trim()
         : null,
@@ -135,6 +138,7 @@ export async function createAgentPropertyListing(
       bathrooms: params.input.bathrooms,
       annual_rent: params.input.annualRent ?? null,
       monthly_rent: params.input.monthlyRent ?? null,
+
       status: "submitted",
       notes: params.input.notes?.trim() ? params.input.notes.trim() : null,
     })
@@ -270,6 +274,7 @@ export async function approveAgentPropertyListingByLandlord(
       landlord_email: params.input.landlordEmail?.trim()
         ? params.input.landlordEmail.trim().toLowerCase()
         : null,
+
       property_name: params.input.propertyName,
       address: params.input.address,
       state: params.input.state,
@@ -277,6 +282,7 @@ export async function approveAgentPropertyListingByLandlord(
       property_type: params.input.propertyType,
       country_code: params.input.countryCode,
       currency_code: params.input.currencyCode,
+
       building_name: params.input.buildingName?.trim()
         ? params.input.buildingName.trim()
         : null,
@@ -286,14 +292,15 @@ export async function approveAgentPropertyListingByLandlord(
       bathrooms: params.input.bathrooms,
       annual_rent: params.input.annualRent ?? null,
       monthly_rent: params.input.monthlyRent ?? null,
+
       notes: params.input.notes?.trim() ? params.input.notes.trim() : null,
+
       matched_landlord_id: params.matchedLandlordId,
       landlord_claim_token_hash: params.claimTokenHash,
       landlord_claim_token_expires_at: params.claimTokenExpiresAt,
+
       status: "landlord_verified",
       landlord_verified_at: verifiedAt,
-      landlord_verification_token_hash: null,
-      landlord_verification_token_expires_at: null,
       updated_at: verifiedAt,
     })
     .eq("id", params.listingId)
@@ -327,6 +334,8 @@ export async function markAgentPropertyListingClaimedAndConverted(
       converted_property_id: params.propertyId,
       converted_unit_id: params.unitId,
       status: "converted",
+      landlord_verification_token_hash: null,
+      landlord_verification_token_expires_at: null,
       landlord_claim_token_hash: null,
       landlord_claim_token_expires_at: null,
       landlord_claim_token_used_at: usedAt,
