@@ -180,3 +180,78 @@ export async function getAgentPropertyListingById(
 
   return data;
 }
+
+export async function updateAgentPropertyListingVerificationToken(
+  supabase: SupabaseClient,
+  params: {
+    listingId: string;
+    tokenHash: string;
+    expiresAt: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("agent_property_listings")
+    .update({
+      landlord_verification_token_hash: params.tokenHash,
+      landlord_verification_token_expires_at: params.expiresAt,
+      status: "landlord_verification_sent",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", params.listingId)
+    .in("status", ["submitted", "landlord_verification_sent"])
+    .is("archived_at", null)
+    .select(AGENT_PROPERTY_LISTING_SELECT)
+    .single<AgentPropertyListingRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getAgentPropertyListingByVerificationTokenHash(
+  supabase: SupabaseClient,
+  tokenHash: string,
+) {
+  const { data, error } = await supabase
+    .from("agent_property_listings")
+    .select(AGENT_PROPERTY_LISTING_SELECT)
+    .eq("landlord_verification_token_hash", tokenHash)
+    .is("archived_at", null)
+    .maybeSingle<AgentPropertyListingRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function markAgentPropertyListingLandlordVerified(
+  supabase: SupabaseClient,
+  listingId: string,
+) {
+  const verifiedAt = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("agent_property_listings")
+    .update({
+      status: "landlord_verified",
+      landlord_verified_at: verifiedAt,
+      landlord_verification_token_hash: null,
+      landlord_verification_token_expires_at: null,
+      updated_at: verifiedAt,
+    })
+    .eq("id", listingId)
+    .eq("status", "landlord_verification_sent")
+    .is("archived_at", null)
+    .select(AGENT_PROPERTY_LISTING_SELECT)
+    .single<AgentPropertyListingRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}

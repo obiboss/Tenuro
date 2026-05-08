@@ -1,10 +1,23 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { type AgentPropertyListingActionState } from "@/actions/agent-property-listings.state";
+import {
+  type AgentLandlordVerificationActionState,
+  type AgentPropertyListingActionState,
+  type PublicLandlordVerificationActionState,
+} from "@/actions/agent-property-listings.state";
 import { errorResult } from "@/server/errors/result";
-import { createPropertyListingForCurrentAgent } from "@/server/services/agent-property-listings.service";
+import {
+  createLandlordVerificationLinkForCurrentAgent,
+  createPropertyListingForCurrentAgent,
+  verifyAgentPropertyListingByLandlord,
+} from "@/server/services/agent-property-listings.service";
 import { agentPropertyListingSchema } from "@/server/validators/agent-property-listing.schema";
+import { z } from "zod";
+
+const listingIdSchema = z.string().uuid();
+
+const verificationTokenSchema = z.string().trim().min(20);
 
 function nullableMoney(value: FormDataEntryValue | null) {
   if (value === null || value === "") {
@@ -59,6 +72,62 @@ export async function createAgentPropertyListingAction(
       ok: false,
       message: result.message,
       fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
+    };
+  }
+}
+
+export async function createLandlordVerificationLinkAction(
+  _previousState: AgentLandlordVerificationActionState,
+  formData: FormData,
+): Promise<AgentLandlordVerificationActionState> {
+  try {
+    const listingId = listingIdSchema.parse(formData.get("listingId"));
+
+    const result =
+      await createLandlordVerificationLinkForCurrentAgent(listingId);
+
+    revalidatePath("/agent/listings");
+    revalidatePath("/agent/overview");
+
+    return {
+      ok: true,
+      message: "Landlord verification link is ready.",
+      verificationUrl: result.verificationUrl,
+      whatsappUrl: result.whatsappUrl,
+    };
+  } catch (error) {
+    const result = errorResult(error);
+
+    return {
+      ok: false,
+      message: result.message,
+      fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
+    };
+  }
+}
+
+export async function verifyLandlordPropertyListingAction(
+  _previousState: PublicLandlordVerificationActionState,
+  formData: FormData,
+): Promise<PublicLandlordVerificationActionState> {
+  try {
+    const token = verificationTokenSchema.parse(formData.get("token"));
+
+    await verifyAgentPropertyListingByLandlord(token);
+
+    revalidatePath("/agent/listings");
+
+    return {
+      ok: true,
+      message:
+        "Property verified successfully. The agent can now continue the onboarding workflow.",
+    };
+  } catch (error) {
+    const result = errorResult(error);
+
+    return {
+      ok: false,
+      message: result.message,
     };
   }
 }

@@ -1,10 +1,14 @@
 import { Building2, CreditCard, Send } from "lucide-react";
 import { AgentPropertyListingForm } from "@/components/agent/agent-property-listing-form";
+import { LandlordVerificationLinkForm } from "@/components/agent/landlord-verification-link-form";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
-import { getCurrentAgentListingsWorkspace } from "@/server/services/agent-property-listings.service";
+import {
+  getCurrentAgentListingsWorkspace,
+  getListingVerificationStatusCopy,
+} from "@/server/services/agent-property-listings.service";
 
 function formatMoney(amount: number | null, currencyCode: string) {
   if (!amount) {
@@ -30,6 +34,10 @@ function getStatusTone(status: string) {
   return "warning" as const;
 }
 
+function canCreateVerificationLink(status: string) {
+  return status === "submitted" || status === "landlord_verification_sent";
+}
+
 export default async function AgentListingsPage() {
   const { profile, paystackAccount, listings } =
     await getCurrentAgentListingsWorkspace();
@@ -40,7 +48,7 @@ export default async function AgentListingsPage() {
     <div>
       <PageHeader
         title="Agent listings"
-        description="Submit landlord properties for verification before tenant onboarding starts."
+        description="Submit landlord properties and send landlord verification links before tenant onboarding starts."
       />
 
       <div className="mb-6 grid gap-4 md:grid-cols-3">
@@ -112,7 +120,7 @@ export default async function AgentListingsPage() {
                           {listing.property_name}
                         </h2>
                         <Badge tone={getStatusTone(listing.status)}>
-                          {listing.status.replaceAll("_", " ")}
+                          {getListingVerificationStatusCopy(listing)}
                         </Badge>
                       </div>
 
@@ -163,6 +171,20 @@ export default async function AgentListingsPage() {
                         )}
                       </p>
                     </div>
+                  </div>
+
+                  <div className="mt-4 rounded-button bg-white p-3">
+                    {listing.status === "landlord_verified" ? (
+                      <p className="text-sm font-semibold leading-6 text-success">
+                        This listing has been verified by the landlord and is
+                        ready for the next agent workflow.
+                      </p>
+                    ) : (
+                      <LandlordVerificationLinkForm
+                        listingId={listing.id}
+                        disabled={!canCreateVerificationLink(listing.status)}
+                      />
+                    )}
                   </div>
                 </article>
               ))}
