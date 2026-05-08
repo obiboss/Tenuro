@@ -33,6 +33,8 @@ export type TenantRow = {
   kyc_review_flags: Record<string, unknown>[];
   approved_at: string | null;
   approved_by: string | null;
+  agent_property_listing_id: string | null;
+  invited_by_agent_id: string | null;
   created_at: string;
 };
 
@@ -76,6 +78,8 @@ const TENANT_SELECT = `
   kyc_review_flags,
   approved_at,
   approved_by,
+  agent_property_listing_id,
+  invited_by_agent_id,
   created_at,
   units (
     id,
@@ -116,6 +120,8 @@ const TENANT_BASE_SELECT = `
   kyc_review_flags,
   approved_at,
   approved_by,
+  agent_property_listing_id,
+  invited_by_agent_id,
   created_at
 `;
 

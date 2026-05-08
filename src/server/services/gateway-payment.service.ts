@@ -37,6 +37,9 @@ import {
   initializePaystackTransaction,
 } from "./paystack.service";
 import { getTenantRentReceiptDownloadUrlByGatewayReference } from "./receipts.service";
+import { getActiveAgentPaystackAccount } from "@/server/repositories/agent-paystack.repository";
+import { getAgentPropertyListingById } from "@/server/repositories/agent-property-listings.repository";
+import { createPaymentAllocations } from "@/server/repositories/payment-allocations.repository";
 
 const PAYMENT_LINK_EXPIRY_HOURS = 24;
 const PAYMENT_PURPOSE_NEW_TENANT_FIRST_RENT = "new_tenant_first_rent";
@@ -303,6 +306,74 @@ async function resolveReusablePaymentIntent(params: {
   });
 }
 
+async function resolveAgentDealPaymentAllocation(params: {
+  agentPropertyListingId: string | null;
+  invitedByAgentId: string | null;
+  rentAmount: number;
+}) {
+  if (!params.agentPropertyListingId || !params.invitedByAgentId) {
+    return null;
+  }
+
+  const supabase = createSupabaseAdminClient();
+
+  const listing = await getAgentPropertyListingById(
+    supabase,
+    params.agentPropertyListingId,
+  );
+
+  if (listing.status !== "converted") {
+    return null;
+  }
+
+  if (listing.agent_id !== params.invitedByAgentId) {
+    return null;
+  }
+
+  const commissionAmount = Number(listing.agent_commission_amount ?? 0);
+
+  if (!Number.isFinite(commissionAmount) || commissionAmount <= 0) {
+    return {
+      listing,
+      agentPaystackAccount: null,
+      commissionAmount: 0,
+      landlordRentShare: params.rentAmount,
+      isAgentDeal: true,
+      isAgentCommissionPayable: false,
+    };
+  }
+
+  if (commissionAmount >= params.rentAmount) {
+    throw new AppError(
+      "AGENT_COMMISSION_INVALID",
+      "Agent commission cannot be equal to or higher than the rent amount.",
+      400,
+    );
+  }
+
+  const agentPaystackAccount = await getActiveAgentPaystackAccount(
+    supabase,
+    listing.agent_id,
+  );
+
+  if (!agentPaystackAccount) {
+    throw new AppError(
+      "AGENT_BANK_ACCOUNT_REQUIRED",
+      "The agent payout account is not ready for commission split.",
+      400,
+    );
+  }
+
+  return {
+    listing,
+    agentPaystackAccount,
+    commissionAmount,
+    landlordRentShare: params.rentAmount - commissionAmount,
+    isAgentDeal: true,
+    isAgentCommissionPayable: true,
+  };
+}
+
 async function initializeGatewayPaymentForTenancy(params: {
   tenancyId: string;
   amount: number;
@@ -431,6 +502,12 @@ async function initializeGatewayPaymentForTenancy(params: {
   const tenuroFeeAmount = getTenuroGatewayAdminFee();
   const totalAmount = rentAmount + tenuroFeeAmount;
   const expiresAt = createPaymentLinkExpiry();
+
+  const agentDealAllocation = await resolveAgentDealPaymentAllocation({
+    agentPropertyListingId: tenancy.tenants.agent_property_listing_id,
+    invitedByAgentId: tenancy.tenants.invited_by_agent_id,
+    rentAmount,
+  });
 
   assertGatewayAmountStructure({
     rentAmount,

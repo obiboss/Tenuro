@@ -44,6 +44,8 @@ export type AgentPropertyListingRow = {
   bathrooms: number;
   annual_rent: number | null;
   monthly_rent: number | null;
+  agent_commission_amount: number;
+  agent_commission_note: string | null;
 
   status: AgentPropertyListingStatus;
   landlord_verification_token_hash: string | null;
@@ -84,6 +86,8 @@ const AGENT_PROPERTY_LISTING_SELECT = `
   bathrooms,
   annual_rent,
   monthly_rent,
+  agent_commission_amount,
+  agent_commission_note,
   status,
   landlord_verification_token_hash,
   landlord_verification_token_expires_at,

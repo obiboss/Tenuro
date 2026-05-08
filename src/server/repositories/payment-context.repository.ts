@@ -13,6 +13,8 @@ export type TenancyPaymentContext = {
     full_name: string;
     phone_number: string;
     email: string | null;
+    agent_property_listing_id: string | null;
+    invited_by_agent_id: string | null;
   } | null;
   units: {
     id: string;
@@ -43,7 +45,9 @@ export async function getTenancyPaymentContext(
         id,
         full_name,
         phone_number,
-        email
+        email,
+        agent_property_listing_id,
+        invited_by_agent_id
       ),
       units (
         id,
