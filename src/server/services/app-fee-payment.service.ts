@@ -60,7 +60,7 @@ function createAppFeeReference() {
 
 function getLandlordPaymentEmail(params: {
   email: string | null;
-  phoneNumber: string;
+  phoneNumber: string | null;
 }) {
   const email = params.email?.trim().toLowerCase();
 
