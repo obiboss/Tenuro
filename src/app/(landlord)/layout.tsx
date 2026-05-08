@@ -1,5 +1,5 @@
 import { LandlordShell } from "@/components/layout/landlord-shell";
-import { requireUser } from "@/server/services/auth.service";
+import { requireLandlord } from "@/server/services/auth.service";
 
 type LandlordLayoutProps = {
   children: React.ReactNode;
@@ -8,7 +8,9 @@ type LandlordLayoutProps = {
 export default async function LandlordLayout({
   children,
 }: LandlordLayoutProps) {
-  const user = await requireUser();
+  const landlord = await requireLandlord();
 
-  return <LandlordShell landlordName={user.fullName}>{children}</LandlordShell>;
+  return (
+    <LandlordShell landlordName={landlord.fullName}>{children}</LandlordShell>
+  );
 }

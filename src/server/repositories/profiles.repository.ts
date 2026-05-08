@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { UserRole } from "@/server/types/auth.types";
 
-export type ProfileRole = "landlord" | "tenant" | "caretaker";
+export type ProfileRole = UserRole;
 
 export type ProfileRow = {
   id: string;

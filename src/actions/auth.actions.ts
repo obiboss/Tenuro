@@ -36,6 +36,14 @@ function getPostLoginRedirect(role: ProfileRole) {
     return "/tenant";
   }
 
+  if (role === "agent") {
+    return "/agent/overview";
+  }
+
+  if (role === "caretaker") {
+    return "/overview";
+  }
+
   return "/overview";
 }
 

@@ -1,0 +1,183 @@
+import "server-only";
+
+import { AppError } from "@/server/errors/app-error";
+import type { UserRole } from "@/server/types/auth.types";
+
+export const APP_PERMISSIONS = {
+  LANDLORD_DASHBOARD_VIEW: "landlord.dashboard.view",
+
+  PROPERTY_CREATE: "property.create",
+  PROPERTY_READ: "property.read",
+  PROPERTY_UPDATE: "property.update",
+  PROPERTY_ARCHIVE: "property.archive",
+
+  UNIT_CREATE: "unit.create",
+  UNIT_READ: "unit.read",
+  UNIT_UPDATE: "unit.update",
+  UNIT_ARCHIVE: "unit.archive",
+
+  TENANT_INVITE: "tenant.invite",
+  TENANT_READ: "tenant.read",
+  TENANT_APPROVE: "tenant.approve",
+  TENANT_REJECT: "tenant.reject",
+  TENANT_ARCHIVE: "tenant.archive",
+
+  TENANCY_CREATE: "tenancy.create",
+  TENANCY_READ: "tenancy.read",
+  TENANCY_UPDATE: "tenancy.update",
+  TENANCY_TERMINATE: "tenancy.terminate",
+  TENANCY_RENEW: "tenancy.renew",
+
+  AGREEMENT_GENERATE: "agreement.generate",
+  AGREEMENT_SEND: "agreement.send",
+  AGREEMENT_READ: "agreement.read",
+
+  PAYMENT_READ: "payment.read",
+  PAYMENT_RECORD_OFFLINE: "payment.record_offline",
+  PAYMENT_INITIALIZE_GATEWAY: "payment.initialize_gateway",
+  PAYMENT_REVERSE: "payment.reverse",
+
+  RECEIPT_GENERATE: "receipt.generate",
+  RECEIPT_SEND: "receipt.send",
+  RECEIPT_READ: "receipt.read",
+
+  REPORT_READ: "report.read",
+  REPORT_EXPORT: "report.export",
+
+  NOTIFICATION_READ: "notification.read",
+  NOTIFICATION_SEND: "notification.send",
+
+  AUDIT_LOG_READ: "audit_log.read",
+
+  AGENT_PROFILE_MANAGE: "agent.profile.manage",
+  AGENT_PROPERTY_SUBMIT: "agent.property.submit",
+  AGENT_LANDLORD_VERIFICATION_SEND: "agent.landlord_verification.send",
+  AGENT_TENANT_ONBOARDING_SEND: "agent.tenant_onboarding.send",
+  AGENT_DASHBOARD_VIEW: "agent.dashboard.view",
+
+  ADMIN_SUPPORT_VIEW: "admin.support.view",
+} as const;
+
+export type AppPermission =
+  (typeof APP_PERMISSIONS)[keyof typeof APP_PERMISSIONS];
+
+const LANDLORD_PERMISSIONS: readonly AppPermission[] = [
+  APP_PERMISSIONS.LANDLORD_DASHBOARD_VIEW,
+
+  APP_PERMISSIONS.PROPERTY_CREATE,
+  APP_PERMISSIONS.PROPERTY_READ,
+  APP_PERMISSIONS.PROPERTY_UPDATE,
+  APP_PERMISSIONS.PROPERTY_ARCHIVE,
+
+  APP_PERMISSIONS.UNIT_CREATE,
+  APP_PERMISSIONS.UNIT_READ,
+  APP_PERMISSIONS.UNIT_UPDATE,
+  APP_PERMISSIONS.UNIT_ARCHIVE,
+
+  APP_PERMISSIONS.TENANT_INVITE,
+  APP_PERMISSIONS.TENANT_READ,
+  APP_PERMISSIONS.TENANT_APPROVE,
+  APP_PERMISSIONS.TENANT_REJECT,
+  APP_PERMISSIONS.TENANT_ARCHIVE,
+
+  APP_PERMISSIONS.TENANCY_CREATE,
+  APP_PERMISSIONS.TENANCY_READ,
+  APP_PERMISSIONS.TENANCY_UPDATE,
+  APP_PERMISSIONS.TENANCY_TERMINATE,
+  APP_PERMISSIONS.TENANCY_RENEW,
+
+  APP_PERMISSIONS.AGREEMENT_GENERATE,
+  APP_PERMISSIONS.AGREEMENT_SEND,
+  APP_PERMISSIONS.AGREEMENT_READ,
+
+  APP_PERMISSIONS.PAYMENT_READ,
+  APP_PERMISSIONS.PAYMENT_RECORD_OFFLINE,
+  APP_PERMISSIONS.PAYMENT_INITIALIZE_GATEWAY,
+  APP_PERMISSIONS.PAYMENT_REVERSE,
+
+  APP_PERMISSIONS.RECEIPT_GENERATE,
+  APP_PERMISSIONS.RECEIPT_SEND,
+  APP_PERMISSIONS.RECEIPT_READ,
+
+  APP_PERMISSIONS.REPORT_READ,
+  APP_PERMISSIONS.REPORT_EXPORT,
+
+  APP_PERMISSIONS.NOTIFICATION_READ,
+  APP_PERMISSIONS.NOTIFICATION_SEND,
+
+  APP_PERMISSIONS.AUDIT_LOG_READ,
+];
+
+const TENANT_PERMISSIONS: readonly AppPermission[] = [
+  APP_PERMISSIONS.AGREEMENT_READ,
+  APP_PERMISSIONS.PAYMENT_INITIALIZE_GATEWAY,
+  APP_PERMISSIONS.RECEIPT_READ,
+];
+
+const CARETAKER_PERMISSIONS: readonly AppPermission[] = [
+  APP_PERMISSIONS.PROPERTY_READ,
+  APP_PERMISSIONS.UNIT_READ,
+  APP_PERMISSIONS.TENANT_READ,
+  APP_PERMISSIONS.TENANCY_READ,
+  APP_PERMISSIONS.PAYMENT_READ,
+  APP_PERMISSIONS.PAYMENT_RECORD_OFFLINE,
+  APP_PERMISSIONS.RECEIPT_READ,
+];
+
+const AGENT_PERMISSIONS: readonly AppPermission[] = [
+  APP_PERMISSIONS.AGENT_DASHBOARD_VIEW,
+  APP_PERMISSIONS.AGENT_PROFILE_MANAGE,
+  APP_PERMISSIONS.AGENT_PROPERTY_SUBMIT,
+  APP_PERMISSIONS.AGENT_LANDLORD_VERIFICATION_SEND,
+  APP_PERMISSIONS.AGENT_TENANT_ONBOARDING_SEND,
+
+  APP_PERMISSIONS.PROPERTY_CREATE,
+  APP_PERMISSIONS.PROPERTY_READ,
+  APP_PERMISSIONS.UNIT_CREATE,
+  APP_PERMISSIONS.UNIT_READ,
+
+  APP_PERMISSIONS.TENANT_INVITE,
+  APP_PERMISSIONS.TENANT_READ,
+
+  APP_PERMISSIONS.AGREEMENT_GENERATE,
+  APP_PERMISSIONS.AGREEMENT_SEND,
+  APP_PERMISSIONS.AGREEMENT_READ,
+
+  APP_PERMISSIONS.PAYMENT_INITIALIZE_GATEWAY,
+  APP_PERMISSIONS.RECEIPT_READ,
+];
+
+export const ROLE_PERMISSIONS: Record<UserRole, readonly AppPermission[]> = {
+  landlord: LANDLORD_PERMISSIONS,
+  tenant: TENANT_PERMISSIONS,
+  caretaker: CARETAKER_PERMISSIONS,
+  agent: AGENT_PERMISSIONS,
+};
+
+export function hasPermission(role: UserRole, permission: AppPermission) {
+  return ROLE_PERMISSIONS[role].includes(permission);
+}
+
+export function assertPermission(role: UserRole, permission: AppPermission) {
+  if (!hasPermission(role, permission)) {
+    throw new AppError(
+      "FORBIDDEN",
+      "You do not have permission to perform this action.",
+      403,
+    );
+  }
+}
+
+export function assertRole(params: {
+  role: UserRole;
+  allowedRoles: readonly UserRole[];
+  message?: string;
+}) {
+  if (!params.allowedRoles.includes(params.role)) {
+    throw new AppError(
+      "FORBIDDEN",
+      params.message ?? "You do not have permission to view this page.",
+      403,
+    );
+  }
+}

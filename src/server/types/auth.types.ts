@@ -1,4 +1,4 @@
-export type UserRole = "landlord" | "tenant" | "caretaker";
+export type UserRole = "landlord" | "tenant" | "caretaker" | "agent";
 
 export type NormalizedPhoneNumber = {
   e164: string;
