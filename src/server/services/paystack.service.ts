@@ -100,6 +100,41 @@ async function paystackRequest<T>(params: {
   return payload.data;
 }
 
+function cleanOptionalContactValue(value: string | null | undefined) {
+  const cleaned = value?.trim();
+
+  return cleaned ? cleaned : undefined;
+}
+
+async function createPaystackSubaccount(params: {
+  businessName: string;
+  bankCode: string;
+  accountNumber: string;
+  description: string;
+  primaryContactName: string;
+  primaryContactPhone: string | null;
+  primaryContactEmail: string | null;
+}) {
+  return paystackRequest<PaystackSubaccount>({
+    path: "/subaccount",
+    method: "POST",
+    body: {
+      business_name: params.businessName,
+      bank_code: params.bankCode,
+      account_number: params.accountNumber,
+      percentage_charge: 0,
+      description: params.description,
+      primary_contact_name: params.primaryContactName,
+      primary_contact_phone: cleanOptionalContactValue(
+        params.primaryContactPhone,
+      ),
+      primary_contact_email: cleanOptionalContactValue(
+        params.primaryContactEmail,
+      ),
+    },
+  });
+}
+
 export async function getSupportedBanks() {
   return paystackRequest<PaystackBank[]>({
     path: "/bank?country=nigeria&perPage=100",
@@ -128,19 +163,33 @@ export async function createLandlordSubaccount(params: {
   landlordPhoneNumber: string;
   landlordEmail: string | null;
 }) {
-  return paystackRequest<PaystackSubaccount>({
-    path: "/subaccount",
-    method: "POST",
-    body: {
-      business_name: params.businessName,
-      bank_code: params.bankCode,
-      account_number: params.accountNumber,
-      percentage_charge: 0,
-      description: "Tenuro landlord rent collection subaccount",
-      primary_contact_name: params.landlordName,
-      primary_contact_phone: params.landlordPhoneNumber,
-      primary_contact_email: params.landlordEmail || undefined,
-    },
+  return createPaystackSubaccount({
+    businessName: params.businessName,
+    bankCode: params.bankCode,
+    accountNumber: params.accountNumber,
+    description: "Tenuro landlord rent collection subaccount",
+    primaryContactName: params.landlordName,
+    primaryContactPhone: params.landlordPhoneNumber,
+    primaryContactEmail: params.landlordEmail,
+  });
+}
+
+export async function createAgentSubaccount(params: {
+  businessName: string;
+  bankCode: string;
+  accountNumber: string;
+  agentName: string;
+  agentPhoneNumber: string | null;
+  agentEmail: string | null;
+}) {
+  return createPaystackSubaccount({
+    businessName: params.businessName,
+    bankCode: params.bankCode,
+    accountNumber: params.accountNumber,
+    description: "Tenuro agent commission payout subaccount",
+    primaryContactName: params.agentName,
+    primaryContactPhone: params.agentPhoneNumber,
+    primaryContactEmail: params.agentEmail,
   });
 }
 
