@@ -49,6 +49,10 @@ export type AgentPropertyListingRow = {
   landlord_verification_token_hash: string | null;
   landlord_verification_token_expires_at: string | null;
   landlord_verified_at: string | null;
+  landlord_claim_token_hash: string | null;
+  landlord_claim_token_expires_at: string | null;
+  landlord_claim_token_used_at: string | null;
+  matched_landlord_id: string | null;
   converted_property_id: string | null;
   converted_unit_id: string | null;
 
@@ -84,6 +88,10 @@ const AGENT_PROPERTY_LISTING_SELECT = `
   landlord_verification_token_hash,
   landlord_verification_token_expires_at,
   landlord_verified_at,
+  landlord_claim_token_hash,
+  landlord_claim_token_expires_at,
+  landlord_claim_token_used_at,
+  matched_landlord_id,
   converted_property_id,
   converted_unit_id,
   notes,
@@ -106,13 +114,11 @@ export async function createAgentPropertyListing(
     .insert({
       agent_id: params.agentId,
       agent_profile_id: params.agentProfileId,
-
       landlord_full_name: params.input.landlordFullName,
       landlord_phone_number: params.input.landlordPhoneNumber,
       landlord_email: params.input.landlordEmail?.trim()
         ? params.input.landlordEmail.trim().toLowerCase()
         : null,
-
       property_name: params.input.propertyName,
       address: params.input.address,
       state: params.input.state,
@@ -120,7 +126,6 @@ export async function createAgentPropertyListing(
       property_type: params.input.propertyType,
       country_code: params.input.countryCode,
       currency_code: params.input.currencyCode,
-
       building_name: params.input.buildingName?.trim()
         ? params.input.buildingName.trim()
         : null,
@@ -130,7 +135,6 @@ export async function createAgentPropertyListing(
       bathrooms: params.input.bathrooms,
       annual_rent: params.input.annualRent ?? null,
       monthly_rent: params.input.monthlyRent ?? null,
-
       status: "submitted",
       notes: params.input.notes?.trim() ? params.input.notes.trim() : null,
     })
@@ -228,11 +232,32 @@ export async function getAgentPropertyListingByVerificationTokenHash(
   return data;
 }
 
+export async function getAgentPropertyListingByClaimTokenHash(
+  supabase: SupabaseClient,
+  tokenHash: string,
+) {
+  const { data, error } = await supabase
+    .from("agent_property_listings")
+    .select(AGENT_PROPERTY_LISTING_SELECT)
+    .eq("landlord_claim_token_hash", tokenHash)
+    .is("archived_at", null)
+    .maybeSingle<AgentPropertyListingRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 export async function approveAgentPropertyListingByLandlord(
   supabase: SupabaseClient,
   params: {
     listingId: string;
     input: AgentPropertyListingInput;
+    matchedLandlordId: string | null;
+    claimTokenHash: string | null;
+    claimTokenExpiresAt: string | null;
   },
 ) {
   const verifiedAt = new Date().toISOString();
@@ -245,7 +270,6 @@ export async function approveAgentPropertyListingByLandlord(
       landlord_email: params.input.landlordEmail?.trim()
         ? params.input.landlordEmail.trim().toLowerCase()
         : null,
-
       property_name: params.input.propertyName,
       address: params.input.address,
       state: params.input.state,
@@ -253,7 +277,6 @@ export async function approveAgentPropertyListingByLandlord(
       property_type: params.input.propertyType,
       country_code: params.input.countryCode,
       currency_code: params.input.currencyCode,
-
       building_name: params.input.buildingName?.trim()
         ? params.input.buildingName.trim()
         : null,
@@ -263,9 +286,10 @@ export async function approveAgentPropertyListingByLandlord(
       bathrooms: params.input.bathrooms,
       annual_rent: params.input.annualRent ?? null,
       monthly_rent: params.input.monthlyRent ?? null,
-
       notes: params.input.notes?.trim() ? params.input.notes.trim() : null,
-
+      matched_landlord_id: params.matchedLandlordId,
+      landlord_claim_token_hash: params.claimTokenHash,
+      landlord_claim_token_expires_at: params.claimTokenExpiresAt,
       status: "landlord_verified",
       landlord_verified_at: verifiedAt,
       landlord_verification_token_hash: null,
@@ -274,6 +298,42 @@ export async function approveAgentPropertyListingByLandlord(
     })
     .eq("id", params.listingId)
     .eq("status", "landlord_verification_sent")
+    .is("archived_at", null)
+    .select(AGENT_PROPERTY_LISTING_SELECT)
+    .single<AgentPropertyListingRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function markAgentPropertyListingClaimedAndConverted(
+  supabase: SupabaseClient,
+  params: {
+    listingId: string;
+    landlordId: string;
+    propertyId: string;
+    unitId: string;
+  },
+) {
+  const usedAt = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("agent_property_listings")
+    .update({
+      matched_landlord_id: params.landlordId,
+      converted_property_id: params.propertyId,
+      converted_unit_id: params.unitId,
+      status: "converted",
+      landlord_claim_token_hash: null,
+      landlord_claim_token_expires_at: null,
+      landlord_claim_token_used_at: usedAt,
+      updated_at: usedAt,
+    })
+    .eq("id", params.listingId)
+    .eq("status", "landlord_verified")
     .is("archived_at", null)
     .select(AGENT_PROPERTY_LISTING_SELECT)
     .single<AgentPropertyListingRow>();

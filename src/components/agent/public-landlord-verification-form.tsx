@@ -136,15 +136,26 @@ export function PublicLandlordVerificationForm({
 
       {state.ok ? (
         <div className="space-y-4">
-          <Link href="/register">
-            <Button type="button" fullWidth>
-              Create Landlord Account
-            </Button>
-          </Link>
+          {state.nextAction === "sign_in" ? (
+            <Link href="/login">
+              <Button type="button" fullWidth>
+                Sign In To Continue
+              </Button>
+            </Link>
+          ) : null}
+
+          {state.nextAction === "add_units" && state.claimUrl ? (
+            <Link href={state.claimUrl}>
+              <Button type="button" fullWidth>
+                Add More Units
+              </Button>
+            </Link>
+          ) : null}
 
           <p className="text-center text-sm leading-6 text-text-muted">
-            After signup, you will be able to add more units, approve tenants,
-            generate agreements, and track rent payments.
+            {state.nextAction === "sign_in"
+              ? "Your landlord account already exists. Sign in to continue managing your property."
+              : "Create your password next, then continue adding more flats, rooms, shops, or units."}
           </p>
         </div>
       ) : (

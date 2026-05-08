@@ -5,14 +5,19 @@ import { AppError } from "@/server/errors/app-error";
 import {
   approveAgentPropertyListingByLandlord,
   createAgentPropertyListing,
+  getAgentPropertyListingByClaimTokenHash,
   getAgentPropertyListingById,
   getAgentPropertyListingByVerificationTokenHash,
   getAgentPropertyListings,
-  updateAgentPropertyListingVerificationToken,
+  markAgentPropertyListingClaimedAndConverted,
   type AgentPropertyListingRow,
+  updateAgentPropertyListingVerificationToken,
 } from "@/server/repositories/agent-property-listings.repository";
 import { getActiveAgentPaystackAccount } from "@/server/repositories/agent-paystack.repository";
 import { getAgentProfileByAgentId } from "@/server/repositories/agent-profile.repository";
+import { createProperty } from "@/server/repositories/properties.repository";
+import { upsertProfile } from "@/server/repositories/profiles.repository";
+import { createUnit } from "@/server/repositories/units.repository";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { normalisePhoneNumber } from "@/server/utils/phone";
@@ -21,14 +26,14 @@ import { requireAgent } from "./auth.service";
 
 const LANDLORD_VERIFICATION_TOKEN_BYTES = 32;
 const LANDLORD_VERIFICATION_TOKEN_DAYS = 7;
+const LANDLORD_CLAIM_TOKEN_BYTES = 32;
+const LANDLORD_CLAIM_TOKEN_DAYS = 7;
 
-function createVerificationToken() {
-  return crypto
-    .randomBytes(LANDLORD_VERIFICATION_TOKEN_BYTES)
-    .toString("base64url");
+function createSecureToken(byteLength: number) {
+  return crypto.randomBytes(byteLength).toString("base64url");
 }
 
-function hashVerificationToken(token: string) {
+function hashToken(token: string) {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
@@ -48,6 +53,12 @@ function buildLandlordVerificationUrl(token: string) {
   )}`;
 }
 
+function buildLandlordClaimUrl(token: string) {
+  return `${getAppBaseUrl()}/register/landlord/claim/${encodeURIComponent(
+    token,
+  )}`;
+}
+
 function buildWhatsAppUrl(params: {
   phoneNumber: string;
   landlordName: string;
@@ -62,7 +73,7 @@ function buildWhatsAppUrl(params: {
     "Please review the property details, correct anything that is wrong, and approve it using this secure link:",
     params.verificationUrl,
     "",
-    "After approval, you can create your landlord account to manage the property, add more units, approve tenants, and track rent.",
+    "After approval, you can add more flats, rooms, shops, or units so your property records are complete.",
     "",
     "Tenuro - Property records made simple.",
   ].join("\n");
@@ -125,6 +136,30 @@ async function writeSystemPropertyListingAuditLog(params: {
   if (error) {
     throw error;
   }
+}
+
+async function findLandlordProfileByPhoneNumber(phoneNumber: string) {
+  const supabase = createSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, role, full_name, phone_number, email")
+    .eq("phone_number", phoneNumber)
+    .eq("role", "landlord")
+    .eq("is_active", true)
+    .maybeSingle<{
+      id: string;
+      role: "landlord";
+      full_name: string;
+      phone_number: string;
+      email: string | null;
+    }>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
 }
 
 export async function getCurrentAgentListingsWorkspace() {
@@ -223,8 +258,8 @@ export async function createLandlordVerificationLinkForCurrentAgent(
     );
   }
 
-  const token = createVerificationToken();
-  const tokenHash = hashVerificationToken(token);
+  const token = createSecureToken(LANDLORD_VERIFICATION_TOKEN_BYTES);
+  const tokenHash = hashToken(token);
   const expiresAt = new Date(
     Date.now() + LANDLORD_VERIFICATION_TOKEN_DAYS * 24 * 60 * 60 * 1000,
   ).toISOString();
@@ -269,7 +304,7 @@ export async function createLandlordVerificationLinkForCurrentAgent(
 }
 
 export async function getPublicLandlordVerificationListing(token: string) {
-  const tokenHash = hashVerificationToken(token);
+  const tokenHash = hashToken(token);
   const supabase = createSupabaseAdminClient();
 
   const listing = await getAgentPropertyListingByVerificationTokenHash(
@@ -326,22 +361,43 @@ export async function approveAgentPropertyListingByLandlordReview(params: {
     params.input.landlordPhoneNumber,
   );
 
+  const finalInput = {
+    ...params.input,
+    landlordPhoneNumber: normalizedLandlordPhone.e164,
+  };
+
+  const matchedLandlord = await findLandlordProfileByPhoneNumber(
+    finalInput.landlordPhoneNumber,
+  );
+
+  const claimToken = matchedLandlord
+    ? null
+    : createSecureToken(LANDLORD_CLAIM_TOKEN_BYTES);
+
   const approvedListing = await approveAgentPropertyListingByLandlord(
     supabase,
     {
       listingId: listing.id,
-      input: {
-        ...params.input,
-        landlordPhoneNumber: normalizedLandlordPhone.e164,
-      },
+      input: finalInput,
+      matchedLandlordId: matchedLandlord?.id ?? null,
+      claimTokenHash: claimToken ? hashToken(claimToken) : null,
+      claimTokenExpiresAt: claimToken
+        ? new Date(
+            Date.now() + LANDLORD_CLAIM_TOKEN_DAYS * 24 * 60 * 60 * 1000,
+          ).toISOString()
+        : null,
     },
   );
+
+  const claimUrl = claimToken ? buildLandlordClaimUrl(claimToken) : null;
 
   await writeSystemPropertyListingAuditLog({
     listingId: approvedListing.id,
     eventType: "landlord_reviewed_and_approved_agent_property_listing",
     description: `Landlord reviewed and approved agent property listing: ${approvedListing.property_name}.`,
     metadata: {
+      matched_existing_landlord: Boolean(matchedLandlord),
+      claim_url_created: Boolean(claimUrl),
       previous: {
         landlord_full_name: listing.landlord_full_name,
         landlord_phone_number: listing.landlord_phone_number,
@@ -383,12 +439,184 @@ export async function approveAgentPropertyListingByLandlordReview(params: {
     },
   });
 
-  return approvedListing;
+  return {
+    listing: approvedListing,
+    existingLandlordFound: Boolean(matchedLandlord),
+    claimUrl,
+  };
+}
+
+export async function getPublicLandlordClaimListing(token: string) {
+  const tokenHash = hashToken(token);
+  const supabase = createSupabaseAdminClient();
+
+  const listing = await getAgentPropertyListingByClaimTokenHash(
+    supabase,
+    tokenHash,
+  );
+
+  if (!listing) {
+    throw new AppError(
+      "INVALID_CLAIM_LINK",
+      "This landlord account setup link is invalid or has already been used.",
+      404,
+    );
+  }
+
+  if (listing.status !== "landlord_verified") {
+    throw new AppError(
+      "INVALID_CLAIM_STATUS",
+      "This property is not ready for landlord account setup.",
+      400,
+    );
+  }
+
+  if (listing.matched_landlord_id) {
+    throw new AppError(
+      "LANDLORD_ALREADY_EXISTS",
+      "This landlord already has a Tenuro account. Please sign in to continue.",
+      400,
+    );
+  }
+
+  if (!listing.landlord_claim_token_expires_at) {
+    throw new AppError(
+      "INVALID_CLAIM_LINK",
+      "This landlord account setup link is invalid.",
+      400,
+    );
+  }
+
+  if (listing.landlord_claim_token_used_at) {
+    throw new AppError(
+      "CLAIM_LINK_USED",
+      "This landlord account setup link has already been used.",
+      400,
+    );
+  }
+
+  if (
+    new Date(listing.landlord_claim_token_expires_at).getTime() < Date.now()
+  ) {
+    throw new AppError(
+      "EXPIRED_CLAIM_LINK",
+      "This landlord account setup link has expired. Please ask the agent to resend the property review link.",
+      410,
+    );
+  }
+
+  return listing;
+}
+
+export async function completeLandlordClaimSignup(params: {
+  token: string;
+  password: string;
+}) {
+  const listing = await getPublicLandlordClaimListing(params.token);
+  const existingLandlord = await findLandlordProfileByPhoneNumber(
+    listing.landlord_phone_number,
+  );
+
+  if (existingLandlord) {
+    throw new AppError(
+      "LANDLORD_ALREADY_EXISTS",
+      "A landlord account already exists for this phone number. Please sign in to continue.",
+      409,
+    );
+  }
+
+  const adminSupabase = createSupabaseAdminClient();
+
+  const { data: createdUser, error: createUserError } =
+    await adminSupabase.auth.admin.createUser({
+      phone: listing.landlord_phone_number,
+      password: params.password,
+      phone_confirm: true,
+      user_metadata: {
+        full_name: listing.landlord_full_name,
+        role: "landlord",
+      },
+    });
+
+  if (createUserError || !createdUser.user) {
+    throw new AppError(
+      "LANDLORD_ACCOUNT_CREATE_FAILED",
+      createUserError?.message ?? "Landlord account could not be created.",
+      400,
+    );
+  }
+
+  await upsertProfile(adminSupabase, {
+    id: createdUser.user.id,
+    role: "landlord",
+    fullName: listing.landlord_full_name,
+    phoneNumber: listing.landlord_phone_number,
+    email: listing.landlord_email,
+  });
+
+  const property = await createProperty(adminSupabase, createdUser.user.id, {
+    propertyName: listing.property_name,
+    address: listing.address,
+    state: listing.state,
+    lga: listing.lga,
+    propertyType: listing.property_type,
+    countryCode: listing.country_code,
+    currencyCode: listing.currency_code,
+  });
+
+  const unit = await createUnit(adminSupabase, {
+    propertyId: property.id,
+    buildingName: listing.building_name ?? "",
+    unitIdentifier: listing.unit_identifier,
+    unitType: listing.unit_type,
+    bedrooms: listing.bedrooms,
+    bathrooms: listing.bathrooms,
+    monthlyRent: listing.monthly_rent,
+    annualRent: listing.annual_rent,
+    currencyCode: listing.currency_code,
+  });
+
+  await markAgentPropertyListingClaimedAndConverted(adminSupabase, {
+    listingId: listing.id,
+    landlordId: createdUser.user.id,
+    propertyId: property.id,
+    unitId: unit.id,
+  });
+
+  await writeSystemPropertyListingAuditLog({
+    listingId: listing.id,
+    eventType: "landlord_claimed_agent_property_listing",
+    description: `Landlord account created and property converted: ${listing.property_name}.`,
+    metadata: {
+      landlord_id: createdUser.user.id,
+      property_id: property.id,
+      unit_id: unit.id,
+      property_name: property.property_name,
+      unit_identifier: unit.unit_identifier,
+    },
+  });
+
+  const serverSupabase = await createSupabaseServerClient();
+
+  await serverSupabase.auth.signInWithPassword({
+    phone: listing.landlord_phone_number,
+    password: params.password,
+  });
+
+  return {
+    landlordId: createdUser.user.id,
+    propertyId: property.id,
+    unitId: unit.id,
+  };
 }
 
 export function getListingVerificationStatusCopy(
   listing: AgentPropertyListingRow,
 ) {
+  if (listing.status === "converted") {
+    return "Landlord onboarded";
+  }
+
   if (listing.status === "landlord_verified") {
     return "Approved by landlord";
   }
