@@ -3,15 +3,42 @@ import "server-only";
 import crypto from "node:crypto";
 import { AppError } from "@/server/errors/app-error";
 import {
+  getResolvedTenantByOnboardingTokenHash,
   getTenantByOnboardingTokenHash,
+  getTenantForOnboardingInvite,
   submitTenantOnboardingProfile,
+  updateTenantOnboardingToken,
 } from "@/server/repositories/onboarding.repository";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { normalisePhoneNumber } from "@/server/utils/phone";
 import type { SubmitTenantOnboardingInput } from "@/server/validators/onboarding.schema";
+import { requireLandlord } from "./auth.service";
+
+const TENANT_ONBOARDING_TOKEN_BYTES = 32;
+const TENANT_ONBOARDING_TOKEN_DAYS = 7;
+
+function createSecureToken() {
+  return crypto
+    .randomBytes(TENANT_ONBOARDING_TOKEN_BYTES)
+    .toString("base64url");
+}
 
 function hashToken(token: string) {
   return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+function getAppBaseUrl() {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+
+  if (!appUrl) {
+    throw new AppError("APP_URL_MISSING", "App URL is not configured.", 500);
+  }
+
+  return appUrl.replace(/\/$/, "");
+}
+
+function buildTenantOnboardingUrl(token: string) {
+  return `${getAppBaseUrl()}/t/onboarding/${encodeURIComponent(token)}`;
 }
 
 function protectIdNumber(value: string) {
@@ -121,6 +148,10 @@ async function writeTenantOnboardingAuditLog(params: {
   tenantId: string;
   landlordId: string;
   unitId: string;
+  actorRole: "landlord" | "tenant";
+  actorProfileId: string | null;
+  eventType: string;
+  description: string;
   metadata: Record<string, unknown>;
 }) {
   const supabase = createSupabaseAdminClient();
@@ -131,18 +162,137 @@ async function writeTenantOnboardingAuditLog(params: {
     tenancy_id: null,
     unit_id: params.unitId,
     property_id: null,
-    actor_profile_id: null,
-    actor_role: "tenant",
-    event_type: "tenant_onboarding_profile_submitted",
+    actor_profile_id: params.actorProfileId,
+    actor_role: params.actorRole,
+    event_type: params.eventType,
     entity_type: "tenant",
     entity_id: params.tenantId,
-    description: "Tenant submitted onboarding profile.",
+    description: params.description,
     metadata: params.metadata,
   });
 
   if (error) {
     throw error;
   }
+}
+
+export async function generateTenantOnboardingLink(tenantId: string) {
+  const landlord = await requireLandlord();
+  const supabase = createSupabaseAdminClient();
+
+  const tenant = await getTenantForOnboardingInvite(supabase, {
+    tenantId,
+    landlordId: landlord.id,
+  });
+
+  if (
+    tenant.onboarding_status !== "invited" &&
+    tenant.onboarding_status !== "profile_complete"
+  ) {
+    throw new AppError(
+      "TENANT_ONBOARDING_NOT_AVAILABLE",
+      "This tenant cannot receive an onboarding link in the current status.",
+      400,
+    );
+  }
+
+  const token = createSecureToken();
+  const tokenHash = hashToken(token);
+  const expiresAt = new Date(
+    Date.now() + TENANT_ONBOARDING_TOKEN_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString();
+
+  await updateTenantOnboardingToken(supabase, {
+    tenantId: tenant.id,
+    tokenHash,
+    expiresAt,
+  });
+
+  const onboardingUrl = buildTenantOnboardingUrl(token);
+  const propertyName =
+    tenant.units?.properties?.property_name ?? "the property";
+  const unitName = tenant.units?.unit_identifier ?? "your apartment";
+
+  const whatsappMessage = [
+    `Hello ${tenant.full_name},`,
+    "",
+    `You have been invited to complete your tenant profile for ${unitName} at ${propertyName} on Tenuro.`,
+    "Please use the secure link below to complete your onboarding:",
+    onboardingUrl,
+    "",
+    "Tenuro - Property records made simple.",
+  ].join("\n");
+
+  await writeTenantOnboardingAuditLog({
+    tenantId: tenant.id,
+    landlordId: tenant.landlord_id,
+    unitId: tenant.unit_id,
+    actorRole: "landlord",
+    actorProfileId: landlord.id,
+    eventType: "tenant_onboarding_link_generated",
+    description: `Tenant onboarding link generated for ${tenant.full_name}.`,
+    metadata: {
+      tenant_name: tenant.full_name,
+      tenant_phone_number: tenant.phone_number,
+      onboarding_token_expires_at: expiresAt,
+      property_name: propertyName,
+      unit_identifier: unitName,
+    },
+  });
+
+  return {
+    tenant,
+    onboardingUrl,
+    whatsappMessage,
+    tenantWhatsappNumber: tenant.phone_number,
+  };
+}
+
+export async function resolveTenantOnboardingToken(token: string) {
+  const supabase = createSupabaseAdminClient();
+  const tokenHash = hashToken(token);
+
+  const tenant = await getResolvedTenantByOnboardingTokenHash(
+    supabase,
+    tokenHash,
+  );
+
+  if (!tenant) {
+    throw new AppError(
+      "INVALID_TENANT_ONBOARDING_LINK",
+      "This tenant onboarding link is invalid or has already been used.",
+      404,
+    );
+  }
+
+  if (
+    tenant.onboarding_status !== "invited" &&
+    tenant.onboarding_status !== "profile_complete"
+  ) {
+    throw new AppError(
+      "TENANT_ONBOARDING_NOT_AVAILABLE",
+      "This tenant onboarding link is no longer available.",
+      400,
+    );
+  }
+
+  if (!tenant.onboarding_token_expires_at) {
+    throw new AppError(
+      "INVALID_TENANT_ONBOARDING_LINK",
+      "This tenant onboarding link is invalid.",
+      400,
+    );
+  }
+
+  if (new Date(tenant.onboarding_token_expires_at).getTime() < Date.now()) {
+    throw new AppError(
+      "EXPIRED_TENANT_ONBOARDING_LINK",
+      "This tenant onboarding link has expired. Please ask the landlord to send a new link.",
+      410,
+    );
+  }
+
+  return tenant;
 }
 
 export async function submitTenantOnboarding(
@@ -183,7 +333,7 @@ export async function submitTenantOnboarding(
   if (new Date(tenant.onboarding_token_expires_at).getTime() < Date.now()) {
     throw new AppError(
       "EXPIRED_TENANT_ONBOARDING_LINK",
-      "This tenant onboarding link has expired. Please ask the agent or landlord to send a new link.",
+      "This tenant onboarding link has expired. Please ask the landlord to send a new link.",
       410,
     );
   }
@@ -210,6 +360,10 @@ export async function submitTenantOnboarding(
     tenantId: tenant.id,
     landlordId: tenant.landlord_id,
     unitId: tenant.unit_id,
+    actorRole: "tenant",
+    actorProfileId: null,
+    eventType: "tenant_onboarding_profile_submitted",
+    description: "Tenant submitted onboarding profile.",
     metadata: {
       full_name: updatedTenant.full_name,
       phone_number: updatedTenant.phone_number,

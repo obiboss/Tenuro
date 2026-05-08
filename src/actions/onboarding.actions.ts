@@ -1,10 +1,49 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { type TenantOnboardingActionState } from "@/actions/onboarding.state";
+import {
+  type OnboardingInviteActionState,
+  type TenantOnboardingActionState,
+} from "@/actions/onboarding.state";
 import { errorResult } from "@/server/errors/result";
-import { submitTenantOnboarding } from "@/server/services/onboarding.service";
+import {
+  generateTenantOnboardingLink,
+  submitTenantOnboarding,
+} from "@/server/services/onboarding.service";
 import { submitTenantOnboardingSchema } from "@/server/validators/onboarding.schema";
+import { z } from "zod";
+
+const tenantIdSchema = z.string().uuid();
+
+export async function generateTenantOnboardingLinkAction(
+  _previousState: OnboardingInviteActionState,
+  formData: FormData,
+): Promise<OnboardingInviteActionState> {
+  try {
+    const tenantId = tenantIdSchema.parse(formData.get("tenantId"));
+
+    const result = await generateTenantOnboardingLink(tenantId);
+
+    revalidatePath(`/tenants/${tenantId}`);
+    revalidatePath("/tenants");
+
+    return {
+      ok: true,
+      message: "Opening WhatsApp with the tenant onboarding message.",
+      onboardingUrl: result.onboardingUrl,
+      whatsappMessage: result.whatsappMessage,
+      tenantWhatsappNumber: result.tenantWhatsappNumber,
+    };
+  } catch (error) {
+    const result = errorResult(error);
+
+    return {
+      ok: false,
+      message: result.message,
+      fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
+    };
+  }
+}
 
 export async function submitTenantOnboardingAction(
   _previousState: TenantOnboardingActionState,
@@ -42,6 +81,7 @@ export async function submitTenantOnboardingAction(
 
     const tenant = await submitTenantOnboarding(parsed);
 
+    revalidatePath(`/t/onboarding/${parsed.token}`);
     revalidatePath(`/onboarding/${parsed.token}`);
     revalidatePath("/tenants");
     revalidatePath(`/tenants/${tenant.id}`);
