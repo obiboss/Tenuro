@@ -68,7 +68,7 @@ function getLandlordPaymentEmail(params: {
     return email;
   }
 
-  const sanitizedPhone = params.phoneNumber.replace(/\D/g, "");
+  const sanitizedPhone = params.phoneNumber?.replace(/\D/g, "") ?? "";
 
   if (sanitizedPhone.length >= 7) {
     return `landlord-${sanitizedPhone}@tenuro.app`;
