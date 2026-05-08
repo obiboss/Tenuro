@@ -155,6 +155,17 @@ export async function createTenantOnboardingLinkForCurrentAgent(
 
   assertListingReadyForTenantOnboarding(listing);
 
+  const landlordId = listing.matched_landlord_id;
+  const unitId = listing.converted_unit_id;
+
+  if (!landlordId || !unitId) {
+    throw new AppError(
+      "LISTING_CONVERSION_REQUIRED",
+      "This listing must be connected to a landlord property and unit before tenant onboarding can be sent.",
+      400,
+    );
+  }
+
   const normalizedTenantPhone = normalisePhoneNumber(input.phoneNumber);
   const token = createSecureToken();
   const tokenHash = hashToken(token);
@@ -165,8 +176,8 @@ export async function createTenantOnboardingLinkForCurrentAgent(
   const adminSupabase = createSupabaseAdminClient();
 
   const tenant = await createAgentTenantOnboardingTenant(adminSupabase, {
-    landlordId: listing.matched_landlord_id,
-    unitId: listing.converted_unit_id,
+    landlordId,
+    unitId,
     agentPropertyListingId: listing.id,
     invitedByAgentId: agent.id,
     fullName: input.fullName,
@@ -190,8 +201,8 @@ export async function createTenantOnboardingLinkForCurrentAgent(
     agentId: agent.id,
     listingId: listing.id,
     tenantId: tenant.id,
-    landlordId: listing.matched_landlord_id,
-    unitId: listing.converted_unit_id,
+    landlordId,
+    unitId,
     description: `Agent sent tenant onboarding link to ${tenant.full_name}.`,
     metadata: {
       tenant_name: tenant.full_name,

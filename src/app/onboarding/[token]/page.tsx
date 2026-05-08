@@ -12,6 +12,16 @@ type TenantOnboardingPageProps = {
   }>;
 };
 
+type TenantOnboardingPageState =
+  | {
+      ok: true;
+      tenant: Awaited<ReturnType<typeof getPublicTenantOnboardingByToken>>;
+    }
+  | {
+      ok: false;
+      message: string;
+    };
+
 function getErrorMessage(error: unknown) {
   if (error instanceof Error && error.message.trim()) {
     return error.message;
@@ -39,64 +49,29 @@ function TenuroBrand() {
   );
 }
 
+async function getPageState(token: string): Promise<TenantOnboardingPageState> {
+  try {
+    const tenant = await getPublicTenantOnboardingByToken(token);
+
+    return {
+      ok: true,
+      tenant,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: getErrorMessage(error),
+    };
+  }
+}
+
 export default async function TenantOnboardingPage({
   params,
 }: TenantOnboardingPageProps) {
   const { token } = await params;
+  const state = await getPageState(token);
 
-  try {
-    const tenant = await getPublicTenantOnboardingByToken(token);
-    const propertyName = tenant.units?.properties?.property_name ?? "Property";
-    const unitName = tenant.units?.unit_identifier ?? "Unit";
-
-    return (
-      <main className="min-h-screen bg-background px-4 py-8 md:px-6">
-        <div className="mx-auto max-w-3xl">
-          <TenuroBrand />
-
-          <div className="mt-8 rounded-card bg-surface p-5 shadow-card md:p-8">
-            <div className="flex items-start gap-4">
-              <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-success-soft text-success">
-                <ShieldCheck aria-hidden="true" size={24} strokeWidth={2.6} />
-              </div>
-
-              <div>
-                <Badge tone="primary">Tenant onboarding</Badge>
-                <h1 className="mt-4 text-3xl font-black tracking-tight text-text-strong">
-                  Complete your tenant profile
-                </h1>
-                <p className="mt-3 text-sm leading-6 text-text-muted">
-                  You have been invited to complete your tenant profile for{" "}
-                  <span className="font-bold text-text-strong">{unitName}</span>{" "}
-                  at{" "}
-                  <span className="font-bold text-text-strong">
-                    {propertyName}
-                  </span>
-                  .
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-6">
-              <SectionCard
-                title={`${propertyName} — ${unitName}`}
-                description="Complete the form carefully. The landlord will review your details before the next step."
-              >
-                <TenantOnboardingForm
-                  token={token}
-                  fullName={tenant.full_name}
-                  phoneNumber={tenant.phone_number}
-                  email={tenant.email}
-                  isSubmitted={tenant.onboarding_status === "profile_complete"}
-                  propertyRules={[]}
-                />
-              </SectionCard>
-            </div>
-          </div>
-        </div>
-      </main>
-    );
-  } catch (error) {
+  if (!state.ok) {
     return (
       <main className="min-h-screen bg-background px-4 py-8 md:px-6">
         <div className="mx-auto max-w-2xl">
@@ -114,7 +89,7 @@ export default async function TenantOnboardingPage({
                   This link cannot be opened
                 </h1>
                 <p className="mt-3 text-sm leading-6 text-text-muted">
-                  {getErrorMessage(error)}
+                  {state.message}
                 </p>
               </div>
             </div>
@@ -131,4 +106,58 @@ export default async function TenantOnboardingPage({
       </main>
     );
   }
+
+  const propertyName =
+    state.tenant.units?.properties?.property_name ?? "Property";
+  const unitName = state.tenant.units?.unit_identifier ?? "Unit";
+
+  return (
+    <main className="min-h-screen bg-background px-4 py-8 md:px-6">
+      <div className="mx-auto max-w-3xl">
+        <TenuroBrand />
+
+        <div className="mt-8 rounded-card bg-surface p-5 shadow-card md:p-8">
+          <div className="flex items-start gap-4">
+            <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-success-soft text-success">
+              <ShieldCheck aria-hidden="true" size={24} strokeWidth={2.6} />
+            </div>
+
+            <div>
+              <Badge tone="primary">Tenant onboarding</Badge>
+              <h1 className="mt-4 text-3xl font-black tracking-tight text-text-strong">
+                Complete your tenant profile
+              </h1>
+              <p className="mt-3 text-sm leading-6 text-text-muted">
+                You have been invited to complete your tenant profile for{" "}
+                <span className="font-bold text-text-strong">{unitName}</span>{" "}
+                at{" "}
+                <span className="font-bold text-text-strong">
+                  {propertyName}
+                </span>
+                .
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <SectionCard
+              title={`${propertyName} — ${unitName}`}
+              description="Complete the form carefully. The landlord will review your details before the next step."
+            >
+              <TenantOnboardingForm
+                token={token}
+                fullName={state.tenant.full_name}
+                phoneNumber={state.tenant.phone_number}
+                email={state.tenant.email}
+                isSubmitted={
+                  state.tenant.onboarding_status === "profile_complete"
+                }
+                propertyRules={[]}
+              />
+            </SectionCard>
+          </div>
+        </div>
+      </div>
+    </main>
+  );
 }
