@@ -182,7 +182,7 @@ function buildSnapshots(params: {
   landlord: {
     id: string;
     fullName: string;
-    phoneNumber: string;
+    phoneNumber: string | null;
     email: string | null;
   };
   tenancy: Awaited<ReturnType<typeof getTenancyById>>;
@@ -195,7 +195,7 @@ function buildSnapshots(params: {
     landlordSnapshot: {
       id: params.landlord.id,
       fullName: params.landlord.fullName,
-      phoneNumber: params.landlord.phoneNumber,
+      phoneNumber: params.landlord.phoneNumber ?? "",
       email: params.landlord.email,
     },
     tenantSnapshot: {

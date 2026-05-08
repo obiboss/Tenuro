@@ -15,7 +15,7 @@ export type GuarantorRow = {
 export type ReplaceTenantGuarantorInput = {
   tenantId: string;
   fullName: string;
-  phoneNumber: string;
+  phoneNumber: string | null;
   email?: string | null;
   address: string;
   relationshipToTenant: string;

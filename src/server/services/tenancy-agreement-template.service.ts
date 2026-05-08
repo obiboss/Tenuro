@@ -148,7 +148,7 @@ function buildPropertyRequirementClauses(rules: PropertyRuleDetailRow[]) {
 export function buildTenancyAgreementTemplate(params: {
   landlord: {
     fullName: string;
-    phoneNumber: string;
+    phoneNumber: string | null;
     email: string | null;
   };
   tenancy: TenancyDetailRow;
