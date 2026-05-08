@@ -25,6 +25,13 @@ export default function RegisterPage() {
             Sign in
           </Link>
         </p>
+
+        <p className="text-center text-sm text-text-muted">
+          Registering as an agent?{" "}
+          <Link href="/agent/register" className="font-bold text-primary">
+            Create agent account
+          </Link>
+        </p>
       </div>
     </>
   );

@@ -26,12 +26,7 @@ export const passwordSchema = z
   .min(8, "Password must be at least 8 characters.")
   .max(72, "Password is too long.");
 
-export const phonePasswordLoginSchema = z.object({
-  phoneNumber: phoneNumberSchema,
-  password: passwordSchema,
-});
-
-export const registerLandlordSchema = z.object({
+const phonePasswordRegistrationSchema = z.object({
   fullName: z
     .string()
     .trim()
@@ -40,6 +35,15 @@ export const registerLandlordSchema = z.object({
   phoneNumber: phoneNumberSchema,
   password: passwordSchema,
 });
+
+export const phonePasswordLoginSchema = z.object({
+  phoneNumber: phoneNumberSchema,
+  password: passwordSchema,
+});
+
+export const registerLandlordSchema = phonePasswordRegistrationSchema;
+
+export const registerAgentSchema = phonePasswordRegistrationSchema;
 
 export const emailPasswordLoginSchema = z.object({
   email: z.string().trim().email("Enter a valid email address."),
@@ -84,6 +88,7 @@ export const magicLinkSchema = magicLinkRequestSchema;
 
 export type PhonePasswordLoginInput = z.infer<typeof phonePasswordLoginSchema>;
 export type RegisterLandlordInput = z.infer<typeof registerLandlordSchema>;
+export type RegisterAgentInput = z.infer<typeof registerAgentSchema>;
 export type EmailPasswordLoginInput = z.infer<typeof emailPasswordLoginSchema>;
 export type EmailPasswordRegisterInput = z.infer<
   typeof emailPasswordRegisterSchema

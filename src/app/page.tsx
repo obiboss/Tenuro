@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   ArrowRight,
+  BadgeCheck,
   Building2,
   FileCheck2,
   ReceiptText,
@@ -43,25 +44,31 @@ export default function HomePage() {
   return (
     <main className="min-h-screen bg-background">
       <section className="mx-auto flex max-w-7xl flex-col px-4 py-8 md:px-8 lg:py-10">
-        <header className="flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="flex size-11 items-center justify-center rounded-2xl bg-primary text-white shadow-soft">
+        <header className="flex items-center justify-between gap-4">
+          <Link href="/" className="flex min-w-0 items-center gap-3">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-white shadow-soft">
               <Building2 aria-hidden="true" size={23} strokeWidth={2.7} />
             </div>
 
-            <div>
-              <p className="text-lg font-extrabold tracking-tight text-text-strong">
+            <div className="min-w-0">
+              <p className="truncate text-lg font-extrabold tracking-tight text-text-strong">
                 Tenuro
               </p>
-              <p className="text-xs font-semibold text-text-muted">
+              <p className="truncate text-xs font-semibold text-text-muted">
                 Property records made simple
               </p>
             </div>
           </Link>
 
-          <Link href="/overview">
-            <Button>Open App</Button>
-          </Link>
+          <div className="flex shrink-0 items-center gap-2">
+            <Link href="/agent/login" className="hidden sm:block">
+              <Button variant="secondary">Agent Login</Button>
+            </Link>
+
+            <Link href="/login">
+              <Button>Login</Button>
+            </Link>
+          </div>
         </header>
 
         <div className="grid gap-10 py-16 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:py-24">
@@ -80,17 +87,30 @@ export default function HomePage() {
               on notebooks or scattered WhatsApp messages.
             </p>
 
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link href="/overview">
+            <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:max-w-2xl">
+              <Link href="/register">
                 <Button size="lg" fullWidth>
-                  Open App
+                  Register as Landlord
                   <ArrowRight aria-hidden="true" size={18} strokeWidth={2.6} />
                 </Button>
               </Link>
 
-              <Link href="/properties">
+              <Link href="/agent/register">
                 <Button size="lg" variant="secondary" fullWidth>
-                  View Properties
+                  Register as Agent
+                  <BadgeCheck aria-hidden="true" size={18} strokeWidth={2.6} />
+                </Button>
+              </Link>
+
+              <Link href="/login">
+                <Button size="lg" variant="ghost" fullWidth>
+                  Landlord Login
+                </Button>
+              </Link>
+
+              <Link href="/agent/login">
+                <Button size="lg" variant="ghost" fullWidth>
+                  Agent Login
                 </Button>
               </Link>
             </div>

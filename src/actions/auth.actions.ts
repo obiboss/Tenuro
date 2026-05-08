@@ -9,17 +9,18 @@ import {
 } from "@/server/repositories/profiles.repository";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
+import type { AuthActionState } from "@/server/types/auth.types";
+import { normalisePhoneNumber } from "@/server/utils/phone";
 import {
   emailPasswordLoginSchema,
   emailPasswordRegisterSchema,
   magicLinkRequestSchema,
   phonePasswordLoginSchema,
+  registerAgentSchema,
   registerLandlordSchema,
   requestOtpSchema,
   verifyOtpSchema,
 } from "@/server/validators/auth.schema";
-import { normalisePhoneNumber } from "@/server/utils/phone";
-import type { AuthActionState } from "@/server/types/auth.types";
 
 function toActionError(error: unknown): AuthActionState {
   const result = errorResult(error);
@@ -63,6 +64,47 @@ async function ensureProfileForUser(params: {
     phoneNumber: params.phoneNumber,
     email: params.email?.trim() ? params.email.trim() : null,
   });
+}
+
+async function registerPhonePasswordUser(params: {
+  role: Extract<ProfileRole, "landlord" | "agent">;
+  fullName: string;
+  phoneNumber: string;
+  password: string;
+}) {
+  const normalizedPhone = normalisePhoneNumber(params.phoneNumber);
+  const supabase = await createSupabaseServerClient();
+
+  const { data, error } = await supabase.auth.signUp({
+    phone: normalizedPhone.e164,
+    password: params.password,
+    options: {
+      data: {
+        full_name: params.fullName,
+        role: params.role,
+      },
+    },
+  });
+
+  if (error || !data.user) {
+    return {
+      ok: false,
+      message: error?.message ?? "Account could not be created.",
+    } satisfies AuthActionState;
+  }
+
+  await ensureProfileForUser({
+    userId: data.user.id,
+    role: params.role,
+    fullName: params.fullName,
+    phoneNumber: normalizedPhone.e164,
+    email: data.user.email?.trim() ? data.user.email.trim() : null,
+  });
+
+  return {
+    ok: true,
+    message: "Account created successfully.",
+  } satisfies AuthActionState;
 }
 
 export async function phonePasswordLoginAction(
@@ -133,34 +175,16 @@ export async function registerLandlordAction(
       password: formData.get("password"),
     });
 
-    const normalizedPhone = normalisePhoneNumber(parsed.phoneNumber);
-    const supabase = await createSupabaseServerClient();
-
-    const { data, error } = await supabase.auth.signUp({
-      phone: normalizedPhone.e164,
-      password: parsed.password,
-      options: {
-        data: {
-          full_name: parsed.fullName,
-          role: "landlord",
-        },
-      },
-    });
-
-    if (error || !data.user) {
-      return {
-        ok: false,
-        message: error?.message ?? "Account could not be created.",
-      };
-    }
-
-    await ensureProfileForUser({
-      userId: data.user.id,
+    const result = await registerPhonePasswordUser({
       role: "landlord",
       fullName: parsed.fullName,
-      phoneNumber: normalizedPhone.e164,
-      email: data.user.email?.trim() ? data.user.email.trim() : null,
+      phoneNumber: parsed.phoneNumber,
+      password: parsed.password,
     });
+
+    if (!result.ok) {
+      return result;
+    }
 
     shouldRedirect = true;
   } catch (error) {
@@ -175,6 +199,46 @@ export async function registerLandlordAction(
   return {
     ok: true,
     message: "Account created successfully.",
+  };
+}
+
+export async function registerAgentAction(
+  _previousState: AuthActionState,
+  formData: FormData,
+): Promise<AuthActionState> {
+  let shouldRedirect = false;
+
+  try {
+    const parsed = registerAgentSchema.parse({
+      fullName: formData.get("fullName"),
+      phoneNumber: formData.get("phoneNumber"),
+      password: formData.get("password"),
+    });
+
+    const result = await registerPhonePasswordUser({
+      role: "agent",
+      fullName: parsed.fullName,
+      phoneNumber: parsed.phoneNumber,
+      password: parsed.password,
+    });
+
+    if (!result.ok) {
+      return result;
+    }
+
+    shouldRedirect = true;
+  } catch (error) {
+    console.error("registerAgentAction failed:", error);
+    return toActionError(error);
+  }
+
+  if (shouldRedirect) {
+    redirect("/agent/overview");
+  }
+
+  return {
+    ok: true,
+    message: "Agent account created successfully.",
   };
 }
 

@@ -17,9 +17,16 @@ export default function LoginPage() {
         <EmailFallbackPanel />
 
         <p className="text-center text-sm text-text-muted">
-          New to Tenuro?{" "}
+          New landlord?{" "}
           <Link href="/register" className="font-bold text-primary">
-            Create account
+            Create landlord account
+          </Link>
+        </p>
+
+        <p className="text-center text-sm text-text-muted">
+          Are you an agent?{" "}
+          <Link href="/agent/login" className="font-bold text-primary">
+            Sign in or register as agent
           </Link>
         </p>
       </div>
