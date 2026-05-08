@@ -115,7 +115,7 @@ export async function approveTenantAction(
     revalidatePath(`/tenants/${parsed.tenantId}`);
 
     return successResult(
-      "Tenant approved. You can now prepare the tenancy record and agreement.",
+      "Tenant approved. Continue below to create the tenancy record and prepare the agreement.",
     );
   } catch (error) {
     console.error("approveTenantAction failed:", error);

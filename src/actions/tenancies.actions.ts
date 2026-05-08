@@ -44,7 +44,9 @@ export async function createTenancyAction(
     revalidatePath("/overview");
     revalidatePath("/renewals");
 
-    return successResult("Rental agreement created.");
+    return successResult(
+      "Tenancy record created. You can now generate and send the tenancy agreement.",
+    );
   } catch (error) {
     console.error("createTenancyAction failed:", error);
 

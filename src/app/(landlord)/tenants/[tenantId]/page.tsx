@@ -115,7 +115,7 @@ export default async function TenantDetailPage({
       : !isTenantApproved
         ? "Send the tenant onboarding link so they can complete their profile, ID document, and guarantor details."
         : !activeTenancy
-          ? "Create the tenancy record before sending agreement, payment, or account activation links."
+          ? "Create the tenancy record using the approved tenant and assigned unit. After that, prepare and send the tenancy agreement."
           : !agreementDocument
             ? "Generate the tenancy agreement draft before sending it to the tenant."
             : !isAgreementAccepted
@@ -210,14 +210,28 @@ export default async function TenantDetailPage({
 
           {canCreateTenancyRecord ? (
             <SectionCard
-              title="Create Tenancy Record"
-              description="Set the rent amount, payment frequency, dates, and opening balance."
+              title="Create Tenancy and Agreement Setup"
+              description="Confirm rent, tenancy dates, opening balance, and agreement notes. After this record is created, Tenuro will show the agreement draft step."
             >
-              <TenancyForm
-                tenantId={tenant.id}
-                unitId={tenant.unit_id}
-                defaultAnnualRent={tenant.units?.annual_rent ?? null}
+              <TrustNotice
+                title="Landlord confirmation required"
+                description="The tenant has been approved. Confirm the tenancy terms before the agreement is generated so the final document uses landlord-approved details."
+                icon={
+                  <FileSignature
+                    aria-hidden="true"
+                    size={22}
+                    strokeWidth={2.6}
+                  />
+                }
               />
+
+              <div className="mt-5">
+                <TenancyForm
+                  tenantId={tenant.id}
+                  unitId={tenant.unit_id}
+                  defaultAnnualRent={tenant.units?.annual_rent ?? null}
+                />
+              </div>
             </SectionCard>
           ) : null}
 
