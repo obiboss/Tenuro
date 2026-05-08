@@ -3,11 +3,11 @@ import "server-only";
 import crypto from "node:crypto";
 import { AppError } from "@/server/errors/app-error";
 import {
+  approveAgentPropertyListingByLandlord,
   createAgentPropertyListing,
   getAgentPropertyListingById,
   getAgentPropertyListingByVerificationTokenHash,
   getAgentPropertyListings,
-  markAgentPropertyListingLandlordVerified,
   updateAgentPropertyListingVerificationToken,
   type AgentPropertyListingRow,
 } from "@/server/repositories/agent-property-listings.repository";
@@ -59,8 +59,10 @@ function buildWhatsAppUrl(params: {
     `Hello ${params.landlordName},`,
     "",
     `Your property "${params.propertyName}" was submitted on Tenuro by an agent.`,
-    "Please verify that you own or authorised this property listing using the secure link below:",
+    "Please review the property details, correct anything that is wrong, and approve it using this secure link:",
     params.verificationUrl,
+    "",
+    "After approval, you can create your landlord account to manage the property, add more units, approve tenants, and track rent.",
     "",
     "Tenuro - Property records made simple.",
   ].join("\n");
@@ -247,8 +249,8 @@ export async function createLandlordVerificationLinkForCurrentAgent(
   await writeAgentPropertyListingAuditLog({
     agentId: agent.id,
     listingId: updatedListing.id,
-    eventType: "agent_landlord_verification_link_created",
-    description: `Landlord verification link created for ${updatedListing.property_name}.`,
+    eventType: "agent_landlord_verification_link_sent",
+    description: `Landlord verification link sent for ${updatedListing.property_name}.`,
     metadata: {
       property_name: updatedListing.property_name,
       landlord_full_name: updatedListing.landlord_full_name,
@@ -313,44 +315,90 @@ export async function getPublicLandlordVerificationListing(token: string) {
   return listing;
 }
 
-export async function verifyAgentPropertyListingByLandlord(token: string) {
-  const listing = await getPublicLandlordVerificationListing(token);
+export async function approveAgentPropertyListingByLandlordReview(params: {
+  token: string;
+  input: AgentPropertyListingInput;
+}) {
+  const listing = await getPublicLandlordVerificationListing(params.token);
   const supabase = createSupabaseAdminClient();
 
-  const verifiedListing = await markAgentPropertyListingLandlordVerified(
+  const normalizedLandlordPhone = normalisePhoneNumber(
+    params.input.landlordPhoneNumber,
+  );
+
+  const approvedListing = await approveAgentPropertyListingByLandlord(
     supabase,
-    listing.id,
+    {
+      listingId: listing.id,
+      input: {
+        ...params.input,
+        landlordPhoneNumber: normalizedLandlordPhone.e164,
+      },
+    },
   );
 
   await writeSystemPropertyListingAuditLog({
-    listingId: verifiedListing.id,
-    eventType: "landlord_verified_agent_property_listing",
-    description: `Landlord verified agent property listing: ${verifiedListing.property_name}.`,
+    listingId: approvedListing.id,
+    eventType: "landlord_reviewed_and_approved_agent_property_listing",
+    description: `Landlord reviewed and approved agent property listing: ${approvedListing.property_name}.`,
     metadata: {
-      property_name: verifiedListing.property_name,
-      landlord_full_name: verifiedListing.landlord_full_name,
-      landlord_phone_number: verifiedListing.landlord_phone_number,
-      status: verifiedListing.status,
-      verified_at: verifiedListing.landlord_verified_at,
+      previous: {
+        landlord_full_name: listing.landlord_full_name,
+        landlord_phone_number: listing.landlord_phone_number,
+        landlord_email: listing.landlord_email,
+        property_name: listing.property_name,
+        address: listing.address,
+        state: listing.state,
+        lga: listing.lga,
+        property_type: listing.property_type,
+        building_name: listing.building_name,
+        unit_identifier: listing.unit_identifier,
+        unit_type: listing.unit_type,
+        bedrooms: listing.bedrooms,
+        bathrooms: listing.bathrooms,
+        annual_rent: listing.annual_rent,
+        monthly_rent: listing.monthly_rent,
+        notes: listing.notes,
+      },
+      final: {
+        landlord_full_name: approvedListing.landlord_full_name,
+        landlord_phone_number: approvedListing.landlord_phone_number,
+        landlord_email: approvedListing.landlord_email,
+        property_name: approvedListing.property_name,
+        address: approvedListing.address,
+        state: approvedListing.state,
+        lga: approvedListing.lga,
+        property_type: approvedListing.property_type,
+        building_name: approvedListing.building_name,
+        unit_identifier: approvedListing.unit_identifier,
+        unit_type: approvedListing.unit_type,
+        bedrooms: approvedListing.bedrooms,
+        bathrooms: approvedListing.bathrooms,
+        annual_rent: approvedListing.annual_rent,
+        monthly_rent: approvedListing.monthly_rent,
+        notes: approvedListing.notes,
+      },
+      status: approvedListing.status,
+      verified_at: approvedListing.landlord_verified_at,
     },
   });
 
-  return verifiedListing;
+  return approvedListing;
 }
 
 export function getListingVerificationStatusCopy(
   listing: AgentPropertyListingRow,
 ) {
   if (listing.status === "landlord_verified") {
-    return "Verified by landlord";
+    return "Approved by landlord";
   }
 
   if (listing.status === "landlord_verification_sent") {
-    return "Verification sent";
+    return "Sent to landlord";
   }
 
   if (listing.status === "submitted") {
-    return "Ready to verify";
+    return "Ready to send";
   }
 
   return listing.status.replaceAll("_", " ");

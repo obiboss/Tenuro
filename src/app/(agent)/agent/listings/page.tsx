@@ -48,7 +48,7 @@ export default async function AgentListingsPage() {
     <div>
       <PageHeader
         title="Agent listings"
-        description="Submit landlord properties and send landlord verification links before tenant onboarding starts."
+        description="Submit landlord properties and send review links directly to landlords on WhatsApp."
       />
 
       <div className="mb-6 grid gap-4 md:grid-cols-3">
@@ -96,7 +96,7 @@ export default async function AgentListingsPage() {
       <div className="grid gap-6 xl:grid-cols-[1fr_460px]">
         <SectionCard
           title="Submitted listings"
-          description="These listings remain agent-submitted records until the landlord verifies ownership."
+          description="These listings remain agent-submitted records until the landlord reviews, corrects, and approves the final details."
         >
           {listings.length === 0 ? (
             <EmptyState
@@ -176,8 +176,9 @@ export default async function AgentListingsPage() {
                   <div className="mt-4 rounded-button bg-white p-3">
                     {listing.status === "landlord_verified" ? (
                       <p className="text-sm font-semibold leading-6 text-success">
-                        This listing has been verified by the landlord and is
-                        ready for the next agent workflow.
+                        This listing has been reviewed and approved by the
+                        landlord. The final approved details are now locked for
+                        the agent workflow.
                       </p>
                     ) : (
                       <LandlordVerificationLinkForm

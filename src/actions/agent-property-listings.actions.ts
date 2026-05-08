@@ -8,9 +8,9 @@ import {
 } from "@/actions/agent-property-listings.state";
 import { errorResult } from "@/server/errors/result";
 import {
+  approveAgentPropertyListingByLandlordReview,
   createLandlordVerificationLinkForCurrentAgent,
   createPropertyListingForCurrentAgent,
-  verifyAgentPropertyListingByLandlord,
 } from "@/server/services/agent-property-listings.service";
 import { agentPropertyListingSchema } from "@/server/validators/agent-property-listing.schema";
 import { z } from "zod";
@@ -27,34 +27,38 @@ function nullableMoney(value: FormDataEntryValue | null) {
   return value;
 }
 
+function parseAgentPropertyListingForm(formData: FormData) {
+  return agentPropertyListingSchema.parse({
+    landlordFullName: formData.get("landlordFullName"),
+    landlordPhoneNumber: formData.get("landlordPhoneNumber"),
+    landlordEmail: formData.get("landlordEmail"),
+
+    propertyName: formData.get("propertyName"),
+    address: formData.get("address"),
+    state: formData.get("state"),
+    lga: formData.get("lga"),
+    propertyType: formData.get("propertyType"),
+    countryCode: "NG",
+    currencyCode: "NGN",
+
+    buildingName: formData.get("buildingName"),
+    unitIdentifier: formData.get("unitIdentifier"),
+    unitType: formData.get("unitType"),
+    bedrooms: formData.get("bedrooms"),
+    bathrooms: formData.get("bathrooms"),
+    annualRent: nullableMoney(formData.get("annualRent")),
+    monthlyRent: nullableMoney(formData.get("monthlyRent")),
+
+    notes: formData.get("notes"),
+  });
+}
+
 export async function createAgentPropertyListingAction(
   _previousState: AgentPropertyListingActionState,
   formData: FormData,
 ): Promise<AgentPropertyListingActionState> {
   try {
-    const parsed = agentPropertyListingSchema.parse({
-      landlordFullName: formData.get("landlordFullName"),
-      landlordPhoneNumber: formData.get("landlordPhoneNumber"),
-      landlordEmail: formData.get("landlordEmail"),
-
-      propertyName: formData.get("propertyName"),
-      address: formData.get("address"),
-      state: formData.get("state"),
-      lga: formData.get("lga"),
-      propertyType: formData.get("propertyType"),
-      countryCode: "NG",
-      currencyCode: "NGN",
-
-      buildingName: formData.get("buildingName"),
-      unitIdentifier: formData.get("unitIdentifier"),
-      unitType: formData.get("unitType"),
-      bedrooms: formData.get("bedrooms"),
-      bathrooms: formData.get("bathrooms"),
-      annualRent: nullableMoney(formData.get("annualRent")),
-      monthlyRent: nullableMoney(formData.get("monthlyRent")),
-
-      notes: formData.get("notes"),
-    });
+    const parsed = parseAgentPropertyListingForm(formData);
 
     await createPropertyListingForCurrentAgent(parsed);
 
@@ -91,7 +95,7 @@ export async function createLandlordVerificationLinkAction(
 
     return {
       ok: true,
-      message: "Landlord verification link is ready.",
+      message: "Opening WhatsApp with the landlord verification message.",
       verificationUrl: result.verificationUrl,
       whatsappUrl: result.whatsappUrl,
     };
@@ -112,15 +116,19 @@ export async function verifyLandlordPropertyListingAction(
 ): Promise<PublicLandlordVerificationActionState> {
   try {
     const token = verificationTokenSchema.parse(formData.get("token"));
+    const parsed = parseAgentPropertyListingForm(formData);
 
-    await verifyAgentPropertyListingByLandlord(token);
+    await approveAgentPropertyListingByLandlordReview({
+      token,
+      input: parsed,
+    });
 
     revalidatePath("/agent/listings");
 
     return {
       ok: true,
       message:
-        "Property verified successfully. The agent can now continue the onboarding workflow.",
+        "Property approved successfully. Create your landlord account to manage this property and add more units.",
     };
   } catch (error) {
     const result = errorResult(error);
@@ -128,6 +136,7 @@ export async function verifyLandlordPropertyListingAction(
     return {
       ok: false,
       message: result.message,
+      fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
     };
   }
 }

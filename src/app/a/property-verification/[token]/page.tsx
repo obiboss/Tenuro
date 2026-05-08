@@ -12,18 +12,6 @@ type PropertyVerificationPageProps = {
   }>;
 };
 
-function formatMoney(amount: number | null, currencyCode: string) {
-  if (!amount) {
-    return "Not set";
-  }
-
-  return new Intl.NumberFormat("en-NG", {
-    style: "currency",
-    currency: currencyCode,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
-
 export default async function PropertyVerificationPage({
   params,
 }: PropertyVerificationPageProps) {
@@ -55,90 +43,24 @@ export default async function PropertyVerificationPage({
             </div>
 
             <div>
-              <Badge tone="primary">Landlord verification</Badge>
+              <Badge tone="primary">Landlord review</Badge>
               <h1 className="mt-4 text-3xl font-black tracking-tight text-text-strong">
-                Confirm this property listing
+                Review and approve this property
               </h1>
               <p className="mt-3 text-sm leading-6 text-text-muted">
-                An agent submitted this property on Tenuro. Please confirm only
-                if you own this property or authorised the agent to manage this
-                onboarding.
+                An agent submitted this property on Tenuro. Please correct any
+                wrong details before approval. Once approved, the final version
+                will be shown to the agent and cannot be changed by the agent.
               </p>
             </div>
           </div>
 
-          <div className="mt-6 grid gap-4">
+          <div className="mt-6">
             <SectionCard
-              title="Landlord details"
-              description="These details were submitted by the agent."
+              title="Final landlord approval"
+              description="Review the submitted property, correct mistakes, and approve the final details."
             >
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-button bg-background p-4">
-                  <p className="text-sm font-bold text-text-muted">Name</p>
-                  <p className="mt-1 font-extrabold text-text-strong">
-                    {listing.landlord_full_name}
-                  </p>
-                </div>
-
-                <div className="rounded-button bg-background p-4">
-                  <p className="text-sm font-bold text-text-muted">Phone</p>
-                  <p className="mt-1 font-extrabold text-text-strong">
-                    {listing.landlord_phone_number}
-                  </p>
-                </div>
-              </div>
-            </SectionCard>
-
-            <SectionCard
-              title="Property details"
-              description="Review the property before confirming."
-            >
-              <div className="space-y-3">
-                <div className="rounded-button bg-background p-4">
-                  <p className="text-sm font-bold text-text-muted">Property</p>
-                  <p className="mt-1 font-extrabold text-text-strong">
-                    {listing.property_name}
-                  </p>
-                  <p className="mt-1 text-sm leading-6 text-text-muted">
-                    {listing.address}, {listing.lga}, {listing.state}
-                  </p>
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-3">
-                  <div className="rounded-button bg-background p-4">
-                    <p className="text-sm font-bold text-text-muted">Unit</p>
-                    <p className="mt-1 font-extrabold text-text-strong">
-                      {listing.unit_identifier}
-                    </p>
-                  </div>
-
-                  <div className="rounded-button bg-background p-4">
-                    <p className="text-sm font-bold text-text-muted">
-                      Unit type
-                    </p>
-                    <p className="mt-1 font-extrabold text-text-strong">
-                      {listing.unit_type.replaceAll("_", " ")}
-                    </p>
-                  </div>
-
-                  <div className="rounded-button bg-background p-4">
-                    <p className="text-sm font-bold text-text-muted">Rent</p>
-                    <p className="mt-1 font-extrabold text-text-strong">
-                      {formatMoney(
-                        listing.annual_rent ?? listing.monthly_rent,
-                        listing.currency_code,
-                      )}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </SectionCard>
-
-            <SectionCard
-              title="Confirm authorisation"
-              description="After confirmation, the agent can continue the onboarding workflow."
-            >
-              <PublicLandlordVerificationForm token={token} />
+              <PublicLandlordVerificationForm token={token} listing={listing} />
 
               <div className="mt-4">
                 <Link href="/">

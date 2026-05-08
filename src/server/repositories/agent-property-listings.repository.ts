@@ -228,22 +228,51 @@ export async function getAgentPropertyListingByVerificationTokenHash(
   return data;
 }
 
-export async function markAgentPropertyListingLandlordVerified(
+export async function approveAgentPropertyListingByLandlord(
   supabase: SupabaseClient,
-  listingId: string,
+  params: {
+    listingId: string;
+    input: AgentPropertyListingInput;
+  },
 ) {
   const verifiedAt = new Date().toISOString();
 
   const { data, error } = await supabase
     .from("agent_property_listings")
     .update({
+      landlord_full_name: params.input.landlordFullName,
+      landlord_phone_number: params.input.landlordPhoneNumber,
+      landlord_email: params.input.landlordEmail?.trim()
+        ? params.input.landlordEmail.trim().toLowerCase()
+        : null,
+
+      property_name: params.input.propertyName,
+      address: params.input.address,
+      state: params.input.state,
+      lga: params.input.lga,
+      property_type: params.input.propertyType,
+      country_code: params.input.countryCode,
+      currency_code: params.input.currencyCode,
+
+      building_name: params.input.buildingName?.trim()
+        ? params.input.buildingName.trim()
+        : null,
+      unit_identifier: params.input.unitIdentifier,
+      unit_type: params.input.unitType,
+      bedrooms: params.input.bedrooms,
+      bathrooms: params.input.bathrooms,
+      annual_rent: params.input.annualRent ?? null,
+      monthly_rent: params.input.monthlyRent ?? null,
+
+      notes: params.input.notes?.trim() ? params.input.notes.trim() : null,
+
       status: "landlord_verified",
       landlord_verified_at: verifiedAt,
       landlord_verification_token_hash: null,
       landlord_verification_token_expires_at: null,
       updated_at: verifiedAt,
     })
-    .eq("id", listingId)
+    .eq("id", params.listingId)
     .eq("status", "landlord_verification_sent")
     .is("archived_at", null)
     .select(AGENT_PROPERTY_LISTING_SELECT)

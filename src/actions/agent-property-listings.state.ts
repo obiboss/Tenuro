@@ -27,6 +27,7 @@ export const initialAgentLandlordVerificationActionState: AgentLandlordVerificat
 export type PublicLandlordVerificationActionState = {
   ok: boolean;
   message: string;
+  fieldErrors?: Record<string, string[]>;
 };
 
 export const initialPublicLandlordVerificationActionState: PublicLandlordVerificationActionState =
