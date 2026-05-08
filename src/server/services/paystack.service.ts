@@ -199,6 +199,22 @@ export async function createTransactionSplit(params: {
   landlordShareKobo: number;
   currencyCode?: string;
 }) {
+  if (!params.landlordSubaccountCode.trim()) {
+    throw new AppError(
+      "PAYSTACK_SUBACCOUNT_REQUIRED",
+      "Landlord payout account is not ready for split payments.",
+      400,
+    );
+  }
+
+  if (params.landlordShareKobo <= 0) {
+    throw new AppError(
+      "PAYSTACK_SPLIT_SHARE_INVALID",
+      "Landlord split share must be greater than zero.",
+      400,
+    );
+  }
+
   return paystackRequest<PaystackTransactionSplit>({
     path: "/split",
     method: "POST",
@@ -211,6 +227,68 @@ export async function createTransactionSplit(params: {
         {
           subaccount: params.landlordSubaccountCode,
           share: params.landlordShareKobo,
+        },
+      ],
+    },
+  });
+}
+
+export async function createAgentDealTransactionSplit(params: {
+  name: string;
+  landlordSubaccountCode: string;
+  landlordShareKobo: number;
+  agentSubaccountCode: string;
+  agentShareKobo: number;
+  currencyCode?: string;
+}) {
+  if (!params.landlordSubaccountCode.trim()) {
+    throw new AppError(
+      "PAYSTACK_LANDLORD_SUBACCOUNT_REQUIRED",
+      "Landlord payout account is not ready for split payments.",
+      400,
+    );
+  }
+
+  if (!params.agentSubaccountCode.trim()) {
+    throw new AppError(
+      "PAYSTACK_AGENT_SUBACCOUNT_REQUIRED",
+      "Agent payout account is not ready for commission split.",
+      400,
+    );
+  }
+
+  if (params.landlordShareKobo <= 0) {
+    throw new AppError(
+      "PAYSTACK_LANDLORD_SHARE_INVALID",
+      "Landlord split share must be greater than zero.",
+      400,
+    );
+  }
+
+  if (params.agentShareKobo <= 0) {
+    throw new AppError(
+      "PAYSTACK_AGENT_SHARE_INVALID",
+      "Agent split share must be greater than zero.",
+      400,
+    );
+  }
+
+  return paystackRequest<PaystackTransactionSplit>({
+    path: "/split",
+    method: "POST",
+    body: {
+      name: params.name,
+      type: "flat",
+      currency: params.currencyCode ?? "NGN",
+      bearer_type: "account",
+      subaccounts: [
+        {
+          subaccount: params.landlordSubaccountCode,
+          share: params.landlordShareKobo,
+        },
+        {
+          subaccount: params.agentSubaccountCode,
+          share: params.agentShareKobo,
         },
       ],
     },
@@ -272,6 +350,42 @@ export function buildPaystackSplitTransactionPayload(params: {
   };
 }
 
+export function buildPaystackMultiSplitTransactionPayload(params: {
+  email: string;
+  amountKobo: number;
+  reference: string;
+  callbackUrl: string;
+  splitCode: string;
+  currencyCode: string;
+  metadata: Record<string, unknown>;
+}): PaystackInitializeTransactionPayload {
+  if (!params.splitCode.trim()) {
+    throw new AppError(
+      "PAYSTACK_SPLIT_CODE_REQUIRED",
+      "Payment split configuration is not ready.",
+      400,
+    );
+  }
+
+  if (params.amountKobo <= 0) {
+    throw new AppError(
+      "PAYSTACK_AMOUNT_INVALID",
+      "Payment amount is not valid.",
+      400,
+    );
+  }
+
+  return {
+    email: params.email,
+    amount: params.amountKobo,
+    reference: params.reference,
+    callback_url: params.callbackUrl,
+    currency: params.currencyCode,
+    split_code: params.splitCode,
+    metadata: params.metadata,
+  };
+}
+
 export async function initializePaystackTransaction(params: {
   email: string;
   amountKobo: number;
@@ -283,6 +397,24 @@ export async function initializePaystackTransaction(params: {
   metadata: Record<string, unknown>;
 }) {
   const payload = buildPaystackSplitTransactionPayload(params);
+
+  return paystackRequest<PaystackInitializedTransaction>({
+    path: "/transaction/initialize",
+    method: "POST",
+    body: payload,
+  });
+}
+
+export async function initializePaystackMultiSplitTransaction(params: {
+  email: string;
+  amountKobo: number;
+  reference: string;
+  callbackUrl: string;
+  splitCode: string;
+  currencyCode: string;
+  metadata: Record<string, unknown>;
+}) {
+  const payload = buildPaystackMultiSplitTransactionPayload(params);
 
   return paystackRequest<PaystackInitializedTransaction>({
     path: "/transaction/initialize",

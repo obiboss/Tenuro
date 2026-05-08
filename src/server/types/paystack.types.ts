@@ -43,9 +43,13 @@ export type PaystackInitializedTransaction = {
   reference: string;
 };
 
-export type PaystackChargeBearer = "account" | "subaccount";
+export type PaystackChargeBearer =
+  | "account"
+  | "subaccount"
+  | "all"
+  | "all-proportional";
 
-export type PaystackInitializeTransactionPayload = {
+export type PaystackSingleSubaccountTransactionPayload = {
   email: string;
   amount: number;
   reference: string;
@@ -53,9 +57,23 @@ export type PaystackInitializeTransactionPayload = {
   currency: string;
   subaccount: string;
   transaction_charge: number;
-  bearer: PaystackChargeBearer;
+  bearer: Extract<PaystackChargeBearer, "account" | "subaccount">;
   metadata: Record<string, unknown>;
 };
+
+export type PaystackMultiSplitTransactionPayload = {
+  email: string;
+  amount: number;
+  reference: string;
+  callback_url: string;
+  currency: string;
+  split_code: string;
+  metadata: Record<string, unknown>;
+};
+
+export type PaystackInitializeTransactionPayload =
+  | PaystackSingleSubaccountTransactionPayload
+  | PaystackMultiSplitTransactionPayload;
 
 export type LandlordPaystackAccount = {
   id: string;
