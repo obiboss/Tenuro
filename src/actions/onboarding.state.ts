@@ -1,11 +1,7 @@
-import type {
-  OnboardingInviteActionState,
-  TenantOnboardingActionState,
-} from "@/actions/onboarding.actions";
-
-export const initialOnboardingInviteActionState: OnboardingInviteActionState = {
-  ok: false,
-  message: "",
+export type TenantOnboardingActionState = {
+  ok: boolean;
+  message: string;
+  fieldErrors?: Record<string, string[]>;
 };
 
 export const initialTenantOnboardingActionState: TenantOnboardingActionState = {

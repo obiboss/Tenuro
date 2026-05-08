@@ -1,13 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { TenantOnboardingSubmissionInput } from "@/server/validators/onboarding.schema";
+import type { SubmitTenantOnboardingInput } from "@/server/validators/onboarding.schema";
 
-export type TenantOnboardingContext = {
+export type TenantOnboardingRecord = {
   id: string;
+  landlord_id: string;
+  unit_id: string;
   full_name: string;
   phone_number: string;
   email: string | null;
-  landlord_id: string;
-  unit_id: string;
   onboarding_status:
     | "invited"
     | "profile_complete"
@@ -16,127 +16,34 @@ export type TenantOnboardingContext = {
     | "token_expired";
   onboarding_token_hash: string | null;
   onboarding_token_expires_at: string | null;
-  kyc_answers: Record<string, unknown>;
-  kyc_review_flags: Record<string, unknown>[];
-  rejected_reason: string | null;
-  units: {
-    id: string;
-    unit_identifier: string;
-    building_name: string | null;
-    annual_rent: number | null;
-    currency_code: string;
-    properties: {
-      id: string;
-      property_name: string;
-      address: string;
-    } | null;
-  } | null;
-  profiles: {
-    id: string;
-    full_name: string;
-    phone_number: string;
-    email: string | null;
-  } | null;
+  onboarding_token_used_at: string | null;
+  created_at: string;
 };
 
-type TenantOnboardingUpdateInput = Pick<
-  TenantOnboardingSubmissionInput,
-  | "fullName"
-  | "phoneNumber"
-  | "email"
-  | "dateOfBirth"
-  | "homeAddress"
-  | "occupation"
-  | "employer"
-  | "idType"
-  | "idDocumentPath"
-  | "passportPhotoPath"
-> & {
-  idNumberCiphertext: string | null;
-  onboardingStatus: "profile_complete" | "rejected";
-  rejectedReason: string | null;
-  kycAnswers: Record<string, unknown>;
-  kycReviewFlags: Record<string, unknown>[];
-};
-
-const TENANT_ONBOARDING_CONTEXT_SELECT = `
+const TENANT_ONBOARDING_SELECT = `
   id,
+  landlord_id,
+  unit_id,
   full_name,
   phone_number,
   email,
-  landlord_id,
-  unit_id,
   onboarding_status,
   onboarding_token_hash,
   onboarding_token_expires_at,
-  kyc_answers,
-  kyc_review_flags,
-  rejected_reason,
-  units (
-    id,
-    unit_identifier,
-    building_name,
-    annual_rent,
-    currency_code,
-    properties (
-      id,
-      property_name,
-      address
-    )
-  ),
-  profiles:landlord_id (
-    id,
-    full_name,
-    phone_number,
-    email
-  )
+  onboarding_token_used_at,
+  created_at
 `;
 
-export async function saveTenantOnboardingToken(
-  supabase: SupabaseClient,
-  params: {
-    tenantId: string;
-    tokenHash: string;
-    expiresAt: string;
-  },
-) {
-  const { data, error } = await supabase
-    .from("tenants")
-    .update({
-      onboarding_token_hash: params.tokenHash,
-      onboarding_token_expires_at: params.expiresAt,
-      onboarding_token_used_at: null,
-      onboarding_status: "invited",
-      rejected_reason: null,
-    })
-    .eq("id", params.tenantId)
-    .is("deleted_at", null)
-    .select("id, full_name, phone_number, landlord_id, unit_id")
-    .single<{
-      id: string;
-      full_name: string;
-      phone_number: string;
-      landlord_id: string;
-      unit_id: string;
-    }>();
-
-  if (error) {
-    throw error;
-  }
-
-  return data;
-}
-
-export async function getTenantOnboardingContextByTokenHash(
+export async function getTenantByOnboardingTokenHash(
   supabase: SupabaseClient,
   tokenHash: string,
 ) {
   const { data, error } = await supabase
     .from("tenants")
-    .select(TENANT_ONBOARDING_CONTEXT_SELECT)
+    .select(TENANT_ONBOARDING_SELECT)
     .eq("onboarding_token_hash", tokenHash)
     .is("deleted_at", null)
-    .maybeSingle<TenantOnboardingContext>();
+    .maybeSingle<TenantOnboardingRecord>();
 
   if (error) {
     throw error;
@@ -145,28 +52,14 @@ export async function getTenantOnboardingContextByTokenHash(
   return data;
 }
 
-export async function markTenantOnboardingTokenExpired(
-  supabase: SupabaseClient,
-  tenantId: string,
-) {
-  const { error } = await supabase
-    .from("tenants")
-    .update({
-      onboarding_status: "token_expired",
-    })
-    .eq("id", tenantId)
-    .is("deleted_at", null);
-
-  if (error) {
-    throw error;
-  }
-}
-
-export async function completeTenantOnboardingProfile(
+export async function submitTenantOnboardingProfile(
   supabase: SupabaseClient,
   params: {
     tenantId: string;
-    input: TenantOnboardingUpdateInput;
+    input: SubmitTenantOnboardingInput;
+    idNumberCiphertext: string;
+    kycAnswers: Record<string, unknown>;
+    kycReviewFlags: Record<string, unknown>[];
   },
 ) {
   const { data, error } = await supabase
@@ -174,36 +67,29 @@ export async function completeTenantOnboardingProfile(
     .update({
       full_name: params.input.fullName,
       phone_number: params.input.phoneNumber,
-      email: params.input.email || null,
+      email: params.input.email?.trim() ? params.input.email.trim() : null,
       date_of_birth: params.input.dateOfBirth.toISOString().slice(0, 10),
       home_address: params.input.homeAddress,
       occupation: params.input.occupation,
-      employer: params.input.employer || null,
+      employer: params.input.employer?.trim()
+        ? params.input.employer.trim()
+        : null,
       id_type: params.input.idType,
-      id_number_ciphertext: params.input.idNumberCiphertext,
+      id_number_ciphertext: params.idNumberCiphertext,
       id_document_path: params.input.idDocumentPath,
       passport_photo_path: params.input.passportPhotoPath,
-      onboarding_status: params.input.onboardingStatus,
-      rejected_reason: params.input.rejectedReason,
-      kyc_answers: params.input.kycAnswers,
-      kyc_review_flags: params.input.kycReviewFlags,
+      kyc_answers: params.kycAnswers,
+      kyc_review_flags: params.kycReviewFlags,
+      onboarding_status: "profile_complete",
       onboarding_token_used_at: new Date().toISOString(),
+      rejected_reason: null,
+      updated_at: new Date().toISOString(),
     })
     .eq("id", params.tenantId)
+    .in("onboarding_status", ["invited", "profile_complete"])
     .is("deleted_at", null)
-    .select(
-      "id, full_name, phone_number, email, onboarding_status, rejected_reason, kyc_answers, kyc_review_flags",
-    )
-    .single<{
-      id: string;
-      full_name: string;
-      phone_number: string;
-      email: string | null;
-      onboarding_status: string;
-      rejected_reason: string | null;
-      kyc_answers: Record<string, unknown>;
-      kyc_review_flags: Record<string, unknown>[];
-    }>();
+    .select(TENANT_ONBOARDING_SELECT)
+    .single<TenantOnboardingRecord>();
 
   if (error) {
     throw error;
