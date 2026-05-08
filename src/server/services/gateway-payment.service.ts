@@ -7,6 +7,8 @@ import {
   AUDIT_EVENT_TYPES,
 } from "@/server/constants/audit-events";
 import { AppError } from "@/server/errors/app-error";
+import { getActiveAgentPaystackAccount } from "@/server/repositories/agent-paystack.repository";
+import { getAgentPropertyListingById } from "@/server/repositories/agent-property-listings.repository";
 import {
   createGatewayPaymentIntent,
   getGatewayPaymentIntentByIdempotencyKey,
@@ -15,6 +17,7 @@ import {
 } from "@/server/repositories/gateway-payment.repository";
 import { getTenancyBalanceSummary } from "@/server/repositories/ledger.repository";
 import { getActiveLandlordPaystackAccount } from "@/server/repositories/landlord-paystack.repository";
+import { createPaymentAllocations } from "@/server/repositories/payment-allocations.repository";
 import { getTenancyPaymentContext } from "@/server/repositories/payment-context.repository";
 import {
   getActiveTenantTenancy,
@@ -34,12 +37,11 @@ import { requireLandlord, requireTenant } from "./auth.service";
 import { processVerifiedGatewayPaymentReference } from "./gateway-payment-webhook.service";
 import {
   convertNairaToKobo,
+  createAgentDealTransactionSplit,
+  initializePaystackMultiSplitTransaction,
   initializePaystackTransaction,
 } from "./paystack.service";
 import { getTenantRentReceiptDownloadUrlByGatewayReference } from "./receipts.service";
-import { getActiveAgentPaystackAccount } from "@/server/repositories/agent-paystack.repository";
-import { getAgentPropertyListingById } from "@/server/repositories/agent-property-listings.repository";
-import { createPaymentAllocations } from "@/server/repositories/payment-allocations.repository";
 
 const PAYMENT_LINK_EXPIRY_HOURS = 24;
 const PAYMENT_PURPOSE_NEW_TENANT_FIRST_RENT = "new_tenant_first_rent";
@@ -503,21 +505,41 @@ async function initializeGatewayPaymentForTenancy(params: {
   const totalAmount = rentAmount + tenuroFeeAmount;
   const expiresAt = createPaymentLinkExpiry();
 
-  const agentDealAllocation = await resolveAgentDealPaymentAllocation({
-    agentPropertyListingId: tenancy.tenants.agent_property_listing_id,
-    invitedByAgentId: tenancy.tenants.invited_by_agent_id,
-    rentAmount,
-  });
-
   assertGatewayAmountStructure({
     rentAmount,
     tenuroFeeAmount,
     totalAmount,
   });
 
+  const agentDealAllocation = await resolveAgentDealPaymentAllocation({
+    agentPropertyListingId: tenancy.tenants.agent_property_listing_id,
+    invitedByAgentId: tenancy.tenants.invited_by_agent_id,
+    rentAmount,
+  });
+
   const tenuroFeeKobo = convertNairaToKobo(tenuroFeeAmount);
   const totalAmountKobo = convertNairaToKobo(totalAmount);
   const reference = createPaymentReference();
+
+  const shouldUseAgentMultiSplit =
+    agentDealAllocation?.isAgentCommissionPayable === true &&
+    agentDealAllocation.agentPaystackAccount !== null;
+
+  const agentDealSplit = shouldUseAgentMultiSplit
+    ? await createAgentDealTransactionSplit({
+        name: `Tenuro Agent Deal ${reference}`,
+        landlordSubaccountCode: paystackAccount.paystack_subaccount_code,
+        landlordShareKobo: convertNairaToKobo(
+          agentDealAllocation.landlordRentShare,
+        ),
+        agentSubaccountCode:
+          agentDealAllocation.agentPaystackAccount.paystack_subaccount_code,
+        agentShareKobo: convertNairaToKobo(
+          agentDealAllocation.commissionAmount,
+        ),
+        currencyCode: tenancy.currency_code,
+      })
+    : null;
 
   const metadata = {
     tenancy_id: tenancy.id,
@@ -536,27 +558,87 @@ async function initializeGatewayPaymentForTenancy(params: {
     payment_purpose: params.paymentPurpose,
     automatic_after_agreement:
       params.paymentPurpose === PAYMENT_PURPOSE_NEW_TENANT_FIRST_RENT,
-    paystack_split: {
-      mode: "subaccount_flat_fee",
-      subaccount: paystackAccount.paystack_subaccount_code,
-      transaction_charge_kobo: tenuroFeeKobo,
-      bearer: "subaccount",
+    agent_deal: agentDealAllocation
+      ? {
+          is_agent_deal: agentDealAllocation.isAgentDeal,
+          is_agent_commission_payable:
+            agentDealAllocation.isAgentCommissionPayable,
+          agent_id: agentDealAllocation.listing.agent_id,
+          agent_property_listing_id: agentDealAllocation.listing.id,
+          agent_commission_amount: agentDealAllocation.commissionAmount,
+          landlord_rent_share: agentDealAllocation.landlordRentShare,
+          agent_paystack_subaccount_code:
+            agentDealAllocation.agentPaystackAccount
+              ?.paystack_subaccount_code ?? null,
+        }
+      : null,
+    allocations: {
+      landlord: {
+        amount: agentDealAllocation
+          ? agentDealAllocation.landlordRentShare
+          : rentAmount,
+      },
+      agent: {
+        amount: agentDealAllocation?.commissionAmount ?? 0,
+        agent_id: agentDealAllocation?.listing.agent_id ?? null,
+        agent_property_listing_id: agentDealAllocation?.listing.id ?? null,
+      },
+      platform: {
+        amount: tenuroFeeAmount,
+      },
     },
+    paystack_split: agentDealSplit
+      ? {
+          mode: "agent_deal_flat_split",
+          split_code: agentDealSplit.split_code,
+          split_id: agentDealSplit.id,
+          landlord_subaccount: paystackAccount.paystack_subaccount_code,
+          landlord_share_kobo: convertNairaToKobo(
+            agentDealAllocation?.landlordRentShare ?? rentAmount,
+          ),
+          agent_subaccount:
+            agentDealAllocation?.agentPaystackAccount
+              ?.paystack_subaccount_code ?? null,
+          agent_share_kobo: convertNairaToKobo(
+            agentDealAllocation?.commissionAmount ?? 0,
+          ),
+          platform_remainder_kobo: tenuroFeeKobo,
+          bearer: "account",
+        }
+      : {
+          mode: "subaccount_flat_fee",
+          subaccount: paystackAccount.paystack_subaccount_code,
+          transaction_charge_kobo: tenuroFeeKobo,
+          bearer: "subaccount",
+        },
   };
 
-  const initializedTransaction = await initializePaystackTransaction({
-    email: getTenantPaymentEmail({
-      tenantEmail: tenancy.tenants.email,
-      tenantPhoneNumber: tenancy.tenants.phone_number,
-    }),
-    amountKobo: totalAmountKobo,
-    reference,
-    callbackUrl: getTenantPaymentVerifyUrl(reference),
-    subaccountCode: paystackAccount.paystack_subaccount_code,
-    transactionChargeKobo: tenuroFeeKobo,
-    currencyCode: tenancy.currency_code,
-    metadata,
-  });
+  const initializedTransaction = agentDealSplit
+    ? await initializePaystackMultiSplitTransaction({
+        email: getTenantPaymentEmail({
+          tenantEmail: tenancy.tenants.email,
+          tenantPhoneNumber: tenancy.tenants.phone_number,
+        }),
+        amountKobo: totalAmountKobo,
+        reference,
+        callbackUrl: getTenantPaymentVerifyUrl(reference),
+        splitCode: agentDealSplit.split_code,
+        currencyCode: tenancy.currency_code,
+        metadata,
+      })
+    : await initializePaystackTransaction({
+        email: getTenantPaymentEmail({
+          tenantEmail: tenancy.tenants.email,
+          tenantPhoneNumber: tenancy.tenants.phone_number,
+        }),
+        amountKobo: totalAmountKobo,
+        reference,
+        callbackUrl: getTenantPaymentVerifyUrl(reference),
+        subaccountCode: paystackAccount.paystack_subaccount_code,
+        transactionChargeKobo: tenuroFeeKobo,
+        currencyCode: tenancy.currency_code,
+        metadata,
+      });
 
   const intent = await createGatewayPaymentIntent(supabase, {
     landlordId: tenancy.landlord_id,
@@ -575,6 +657,64 @@ async function initializeGatewayPaymentForTenancy(params: {
     idempotencyKey: params.idempotencyKey,
     metadata,
   });
+
+  await createPaymentAllocations(supabase, [
+    {
+      gatewayPaymentIntentId: intent.id,
+      landlordId: tenancy.landlord_id,
+      tenantId: tenancy.tenant_id,
+      tenancyId: tenancy.id,
+      recipientType: "landlord",
+      recipientProfileId: tenancy.landlord_id,
+      agentPropertyListingId: agentDealAllocation?.listing.id ?? null,
+      amount: agentDealAllocation
+        ? agentDealAllocation.landlordRentShare
+        : rentAmount,
+      currencyCode: tenancy.currency_code,
+      metadata: {
+        source: "gateway_payment_intent_initialized",
+        payment_purpose: params.paymentPurpose,
+      },
+    },
+    ...(agentDealAllocation?.commissionAmount
+      ? [
+          {
+            gatewayPaymentIntentId: intent.id,
+            landlordId: tenancy.landlord_id,
+            tenantId: tenancy.tenant_id,
+            tenancyId: tenancy.id,
+            recipientType: "agent" as const,
+            recipientProfileId: agentDealAllocation.listing.agent_id,
+            agentPropertyListingId: agentDealAllocation.listing.id,
+            amount: agentDealAllocation.commissionAmount,
+            currencyCode: tenancy.currency_code,
+            metadata: {
+              source: "gateway_payment_intent_initialized",
+              payment_purpose: params.paymentPurpose,
+              agent_paystack_subaccount_code:
+                agentDealAllocation.agentPaystackAccount
+                  ?.paystack_subaccount_code ?? null,
+            },
+          },
+        ]
+      : []),
+    {
+      gatewayPaymentIntentId: intent.id,
+      landlordId: tenancy.landlord_id,
+      tenantId: tenancy.tenant_id,
+      tenancyId: tenancy.id,
+      recipientType: "platform",
+      recipientProfileId: null,
+      agentPropertyListingId: agentDealAllocation?.listing.id ?? null,
+      amount: tenuroFeeAmount,
+      currencyCode: tenancy.currency_code,
+      metadata: {
+        source: "gateway_payment_intent_initialized",
+        payment_purpose: params.paymentPurpose,
+        fee_type: "tenuro_gateway_admin_fee",
+      },
+    },
+  ]);
 
   const tenantPaymentUrl = getTenantPaymentUrl(intent.paystack_reference);
 
@@ -600,6 +740,9 @@ async function initializeGatewayPaymentForTenancy(params: {
       property_name: propertyName,
       unit_identifier: unitName,
       payment_purpose: params.paymentPurpose,
+      agent_deal: metadata.agent_deal,
+      allocations: metadata.allocations,
+      paystack_split: metadata.paystack_split,
     },
   });
 
