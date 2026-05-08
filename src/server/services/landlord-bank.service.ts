@@ -60,7 +60,7 @@ export async function setupLandlordBankAccount(
     bankCode: input.bankCode,
     accountNumber: input.accountNumber,
     landlordName: landlord.fullName,
-    landlordPhoneNumber: landlord.phoneNumber,
+    landlordPhoneNumber: landlord.phoneNumber ?? "",
     landlordEmail: landlord.email,
   });
 
