@@ -3,44 +3,86 @@ import {
   AlertTriangle,
   Building2,
   CalendarClock,
+  CreditCard,
   Home,
   Phone,
+  ShieldCheck,
   UserRound,
 } from "lucide-react";
 import { TenantOnboardingForm } from "@/components/tenant/tenant-onboarding-form";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { ToastProvider } from "@/components/ui/toast-provider";
 import { TrustNotice } from "@/components/ui/trust-notice";
+import {
+  resolveAgentTenantProcessingFeeForOnboarding,
+  verifyAgentTenantProcessingFeeReference,
+} from "@/server/services/agent-processing-fee.service";
 import { resolveTenantOnboardingToken } from "@/server/services/onboarding.service";
 
 type TenantOnboardingPageProps = {
   params: Promise<{
     token: string;
   }>;
+  searchParams?: Promise<{
+    verifyProcessingFee?: string;
+    reference?: string;
+  }>;
 };
 
-type OnboardingResolution =
+type TenantOnboardingPageState =
   | {
       ok: true;
       tenant: Awaited<ReturnType<typeof resolveTenantOnboardingToken>>;
+      processingFee: Awaited<
+        ReturnType<typeof resolveAgentTenantProcessingFeeForOnboarding>
+      >;
+      processingFeeNotice: string | null;
     }
   | {
       ok: false;
       message: string;
     };
 
-async function resolveOnboardingSafely(
-  token: string,
-): Promise<OnboardingResolution> {
+async function getTenantOnboardingPageState(params: {
+  token: string;
+  shouldVerifyProcessingFee: boolean;
+  processingFeeReference: string | undefined;
+}): Promise<TenantOnboardingPageState> {
   try {
-    const tenant = await resolveTenantOnboardingToken(token);
+    let processingFeeNotice: string | null = null;
+
+    if (params.shouldVerifyProcessingFee && params.processingFeeReference) {
+      try {
+        await verifyAgentTenantProcessingFeeReference(
+          params.processingFeeReference,
+        );
+
+        processingFeeNotice =
+          "Processing fee payment confirmed. You can now complete your KYC form.";
+      } catch (error) {
+        processingFeeNotice =
+          error instanceof Error
+            ? error.message
+            : "Processing fee payment could not be verified.";
+      }
+    }
+
+    const tenant = await resolveTenantOnboardingToken(params.token);
+
+    const processingFee = await resolveAgentTenantProcessingFeeForOnboarding({
+      tenant,
+      token: params.token,
+    });
 
     return {
       ok: true,
       tenant,
+      processingFee,
+      processingFeeNotice,
     };
   } catch (error) {
     return {
@@ -120,21 +162,98 @@ function OnboardingUnavailable({ message }: { message: string }) {
   );
 }
 
+function ProcessingFeeGate({
+  authorizationUrl,
+  processingFeeAmount,
+  agentShareAmount,
+  tenuroShareAmount,
+  currencyCode,
+  notice,
+}: {
+  authorizationUrl: string;
+  processingFeeAmount: number;
+  agentShareAmount: number;
+  tenuroShareAmount: number;
+  currencyCode: string;
+  notice: string | null;
+}) {
+  return (
+    <SectionCard
+      title="Pay tenant processing fee"
+      description="This apartment was introduced by an agent. Pay the processing fee first, then the KYC form will open automatically."
+    >
+      <div className="space-y-5">
+        {notice ? (
+          <div
+            role="alert"
+            className="rounded-button bg-warning-soft px-4 py-3 text-sm font-semibold leading-6 text-warning"
+          >
+            {notice}
+          </div>
+        ) : null}
+
+        <TrustNotice
+          title="Processing fee required before KYC"
+          description="This ₦15,000 processing fee is separate from your rent. The agent receives ₦10,000 and Tenuro receives ₦5,000."
+          icon={<ShieldCheck aria-hidden="true" size={22} strokeWidth={2.6} />}
+        />
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-button bg-background p-4">
+            <p className="text-sm font-bold text-text-muted">Total fee</p>
+            <p className="mt-2 font-extrabold text-text-strong">
+              {formatMoney(processingFeeAmount, currencyCode)}
+            </p>
+          </div>
+
+          <div className="rounded-button bg-background p-4">
+            <p className="text-sm font-bold text-text-muted">Agent receives</p>
+            <p className="mt-2 font-extrabold text-text-strong">
+              {formatMoney(agentShareAmount, currencyCode)}
+            </p>
+          </div>
+
+          <div className="rounded-button bg-background p-4">
+            <p className="text-sm font-bold text-text-muted">Tenuro receives</p>
+            <p className="mt-2 font-extrabold text-text-strong">
+              {formatMoney(tenuroShareAmount, currencyCode)}
+            </p>
+          </div>
+        </div>
+
+        <Link href={authorizationUrl}>
+          <Button type="button" fullWidth>
+            Pay Processing Fee
+          </Button>
+        </Link>
+      </div>
+    </SectionCard>
+  );
+}
+
 export default async function TenantOnboardingPage({
   params,
+  searchParams,
 }: TenantOnboardingPageProps) {
   const { token } = await params;
-  const resolution = await resolveOnboardingSafely(token);
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const state = await getTenantOnboardingPageState({
+    token,
+    shouldVerifyProcessingFee: resolvedSearchParams.verifyProcessingFee === "1",
+    processingFeeReference: resolvedSearchParams.reference,
+  });
 
-  if (!resolution.ok) {
-    return <OnboardingUnavailable message={resolution.message} />;
+  if (!state.ok) {
+    return <OnboardingUnavailable message={state.message} />;
   }
 
-  const tenant = resolution.tenant;
+  const tenant = state.tenant;
   const unit = tenant.units;
   const property = unit?.properties;
   const landlord = tenant.profiles;
   const isSubmitted = tenant.onboarding_status === "profile_complete";
+  const mustPayProcessingFee =
+    state.processingFee.required && state.processingFee.status !== "paid";
 
   return (
     <ToastProvider>
@@ -146,16 +265,32 @@ export default async function TenantOnboardingPage({
             title={
               isSubmitted
                 ? "Tenant profile submitted"
-                : "Complete your tenant profile"
+                : mustPayProcessingFee
+                  ? "Pay processing fee"
+                  : "Complete your tenant profile"
             }
             description={
               isSubmitted
                 ? "Your profile has been submitted for landlord review."
-                : "Review the rental details and complete your KYC information for the landlord’s approval."
+                : mustPayProcessingFee
+                  ? "Pay the agent processing fee to unlock your tenant KYC form."
+                  : "Review the rental details and complete your KYC information for the landlord’s approval."
             }
             action={
-              <Badge tone={isSubmitted ? "success" : "primary"}>
-                {isSubmitted ? "Submitted" : "Secure Link"}
+              <Badge
+                tone={
+                  isSubmitted
+                    ? "success"
+                    : mustPayProcessingFee
+                      ? "warning"
+                      : "primary"
+                }
+              >
+                {isSubmitted
+                  ? "Submitted"
+                  : mustPayProcessingFee
+                    ? "Payment Required"
+                    : "Secure Link"}
               </Badge>
             }
           />
@@ -239,26 +374,60 @@ export default async function TenantOnboardingPage({
                 </CardContent>
               </Card>
 
-              <SectionCard
-                title="Tenant KYC Form"
-                description="Complete your personal details, ID document, and passport photo for landlord review."
-              >
-                <TenantOnboardingForm
-                  token={token}
-                  fullName={tenant.full_name}
-                  phoneNumber={tenant.phone_number}
-                  email={tenant.email}
-                  isSubmitted={isSubmitted}
-                  propertyRules={tenant.property_rules}
+              {mustPayProcessingFee ? (
+                <ProcessingFeeGate
+                  authorizationUrl={state.processingFee.authorizationUrl ?? "#"}
+                  processingFeeAmount={state.processingFee.processingFeeAmount}
+                  agentShareAmount={state.processingFee.agentShareAmount}
+                  tenuroShareAmount={state.processingFee.tenuroShareAmount}
+                  currencyCode={state.processingFee.currencyCode}
+                  notice={state.processingFeeNotice}
                 />
-              </SectionCard>
+              ) : (
+                <SectionCard
+                  title="Tenant KYC Form"
+                  description="Complete your personal details, ID document, and passport photo for landlord review."
+                >
+                  {state.processingFeeNotice ? (
+                    <div
+                      role="alert"
+                      className="mb-4 rounded-button bg-success-soft px-4 py-3 text-sm font-semibold leading-6 text-success"
+                    >
+                      {state.processingFeeNotice}
+                    </div>
+                  ) : null}
+
+                  <TenantOnboardingForm
+                    token={token}
+                    fullName={tenant.full_name}
+                    phoneNumber={tenant.phone_number}
+                    email={tenant.email}
+                    isSubmitted={isSubmitted}
+                    propertyRules={tenant.property_rules}
+                  />
+                </SectionCard>
+              )}
             </div>
 
             <div className="space-y-6 lg:sticky lg:top-8 lg:self-start">
               <TrustNotice
                 title="Secure onboarding"
-                description="This link was created by your landlord and expires automatically. Do not share it with anyone else."
+                description="This link was created for you and expires automatically. Do not share it with anyone else."
               />
+
+              {state.processingFee.required ? (
+                <TrustNotice
+                  title="Agent processing fee"
+                  description="This fee is required before KYC because this apartment was introduced through an agent."
+                  icon={
+                    <CreditCard
+                      aria-hidden="true"
+                      size={22}
+                      strokeWidth={2.6}
+                    />
+                  }
+                />
+              ) : null}
 
               <Card>
                 <CardHeader>

@@ -9,6 +9,7 @@ import {
   submitTenantOnboardingProfile,
   updateTenantOnboardingToken,
 } from "@/server/repositories/onboarding.repository";
+import { hasPaidAgentTenantProcessingFee } from "@/server/services/agent-processing-fee.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { normalisePhoneNumber } from "@/server/utils/phone";
 import type { SubmitTenantOnboardingInput } from "@/server/validators/onboarding.schema";
@@ -144,6 +145,38 @@ function buildKycReviewFlags(input: SubmitTenantOnboardingInput) {
   return flags;
 }
 
+function isAgentSourcedTenant(params: {
+  agentPropertyListingId: string | null;
+  invitedByAgentId: string | null;
+}) {
+  return Boolean(params.agentPropertyListingId && params.invitedByAgentId);
+}
+
+async function assertAgentProcessingFeePaidBeforeKyc(params: {
+  tenantId: string;
+  agentPropertyListingId: string | null;
+  invitedByAgentId: string | null;
+}) {
+  if (
+    !isAgentSourcedTenant({
+      agentPropertyListingId: params.agentPropertyListingId,
+      invitedByAgentId: params.invitedByAgentId,
+    })
+  ) {
+    return;
+  }
+
+  const hasPaid = await hasPaidAgentTenantProcessingFee(params.tenantId);
+
+  if (!hasPaid) {
+    throw new AppError(
+      "AGENT_PROCESSING_FEE_REQUIRED",
+      "Please pay the tenant processing fee before submitting your KYC form.",
+      402,
+    );
+  }
+}
+
 async function writeTenantOnboardingAuditLog(params: {
   tenantId: string;
   landlordId: string;
@@ -237,6 +270,8 @@ export async function generateTenantOnboardingLink(tenantId: string) {
       onboarding_token_expires_at: expiresAt,
       property_name: propertyName,
       unit_identifier: unitName,
+      agent_property_listing_id: tenant.agent_property_listing_id,
+      invited_by_agent_id: tenant.invited_by_agent_id,
     },
   });
 
@@ -338,6 +373,12 @@ export async function submitTenantOnboarding(
     );
   }
 
+  await assertAgentProcessingFeePaidBeforeKyc({
+    tenantId: tenant.id,
+    agentPropertyListingId: tenant.agent_property_listing_id,
+    invitedByAgentId: tenant.invited_by_agent_id,
+  });
+
   const normalizedPhone = normalisePhoneNumber(input.phoneNumber);
   const normalizedInput: SubmitTenantOnboardingInput = {
     ...input,
@@ -372,6 +413,8 @@ export async function submitTenantOnboarding(
       id_document_uploaded: Boolean(normalizedInput.idDocumentPath),
       passport_photo_uploaded: Boolean(normalizedInput.passportPhotoPath),
       kyc_review_flags: kycReviewFlags,
+      agent_property_listing_id: tenant.agent_property_listing_id,
+      invited_by_agent_id: tenant.invited_by_agent_id,
     },
   });
 

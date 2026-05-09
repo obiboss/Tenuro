@@ -27,6 +27,7 @@ import {
   markUnitOccupied,
 } from "@/server/repositories/units.repository";
 import { writeSystemAuditLog } from "@/server/services/audit-log.service";
+import { verifyAgentTenantProcessingFeeReference } from "@/server/services/agent-processing-fee.service";
 import {
   convertKoboToNaira,
   convertNairaToKobo,
@@ -61,6 +62,10 @@ function getErrorMessage(error: unknown) {
   }
 
   return "Payment could not be processed.";
+}
+
+function isGatewayIntentNotFoundError(error: unknown) {
+  return isAppError(error) && error.code === "GATEWAY_INTENT_NOT_FOUND";
 }
 
 function assertAmountsMatch(params: {
@@ -366,6 +371,25 @@ export async function processVerifiedGatewayPaymentReference(
   };
 }
 
+async function processVerifiedPaystackReferenceWithFallback(reference: string) {
+  try {
+    return await processVerifiedGatewayPaymentReference(reference);
+  } catch (error) {
+    if (!isGatewayIntentNotFoundError(error)) {
+      throw error;
+    }
+
+    const processingFeeIntent =
+      await verifyAgentTenantProcessingFeeReference(reference);
+
+    return {
+      status: "processed" as const,
+      message: "Agent tenant processing fee confirmed.",
+      paymentId: processingFeeIntent.id,
+    };
+  }
+}
+
 export async function processGatewayPaystackWebhook(params: {
   rawBody: string;
   signature: string | null;
@@ -444,7 +468,7 @@ export async function processGatewayPaystackWebhook(params: {
       };
     }
 
-    const result = await processVerifiedGatewayPaymentReference(
+    const result = await processVerifiedPaystackReferenceWithFallback(
       webhook.data.reference,
     );
 
@@ -453,19 +477,11 @@ export async function processGatewayPaystackWebhook(params: {
       webhook.data.reference,
     );
 
-    if (!intent) {
-      throw new AppError(
-        "GATEWAY_INTENT_NOT_FOUND",
-        "Payment reference was not found in Tenuro.",
-        404,
-      );
-    }
-
     await markGatewayPaymentEventProcessed(supabase, {
       eventId: registeredEvent.event.id,
-      gatewayPaymentIntentId: intent.id,
-      processedPaymentId: result.paymentId ?? intent.processed_payment_id ?? "",
-      verifiedPayload: intent.verified_payload ?? {},
+      gatewayPaymentIntentId: intent?.id ?? null,
+      processedPaymentId: result.paymentId ?? "",
+      verifiedPayload: intent?.verified_payload ?? rawPayload,
     });
 
     return result;
