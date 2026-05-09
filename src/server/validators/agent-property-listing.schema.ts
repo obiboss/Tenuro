@@ -4,6 +4,10 @@ import { positiveMoneySchema } from "@/server/validators/common.schema";
 
 const optionalMoneySchema = z.union([positiveMoneySchema, z.null()]).optional();
 
+const optionalNonNegativeMoneySchema = z
+  .union([z.coerce.number().min(0), z.null()])
+  .optional();
+
 export const agentPropertyListingSchema = z
   .object({
     landlordFullName: z
@@ -51,6 +55,14 @@ export const agentPropertyListingSchema = z
     bathrooms: z.coerce.number().int().min(0).max(20),
     annualRent: optionalMoneySchema,
     monthlyRent: optionalMoneySchema,
+
+    agentCommissionAmount: optionalNonNegativeMoneySchema,
+    agentCommissionNote: z
+      .string()
+      .trim()
+      .max(500)
+      .optional()
+      .or(z.literal("")),
 
     notes: z.string().trim().max(1000).optional().or(z.literal("")),
   })

@@ -50,6 +50,8 @@ function parseAgentPropertyListingForm(formData: FormData) {
     bathrooms: formData.get("bathrooms"),
     annualRent: nullableMoney(formData.get("annualRent")),
     monthlyRent: nullableMoney(formData.get("monthlyRent")),
+    agentCommissionAmount: nullableMoney(formData.get("agentCommissionAmount")),
+    agentCommissionNote: formData.get("agentCommissionNote"),
     notes: formData.get("notes"),
   });
 }

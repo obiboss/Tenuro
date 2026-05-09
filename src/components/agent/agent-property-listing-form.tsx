@@ -204,7 +204,7 @@ export function AgentPropertyListingForm() {
 
       <TrustNotice
         title="Landlord verification comes next"
-        description="This listing is saved under your agent account first. It will only become a landlord property after landlord verification in the next workflow."
+        description="This listing is saved under your agent account first. The landlord can review, correct, and approve the final details including your proposed commission."
       />
 
       {state.message ? (
@@ -368,6 +368,34 @@ export function AgentPropertyListingForm() {
             placeholder="0.00"
             error={state.fieldErrors?.monthlyRent?.[0]}
             helperText="Use only if this unit is rented monthly."
+          />
+        </div>
+      </div>
+
+      <div className="rounded-card border border-border-soft bg-background p-4">
+        <p className="font-extrabold text-text-strong">
+          Agent commission proposal
+        </p>
+
+        <p className="mt-1 text-sm leading-6 text-text-muted">
+          Enter the commission you want to receive when the final rent payment
+          is made. The landlord can accept or edit this amount before approval.
+        </p>
+
+        <div className="mt-4 space-y-4">
+          <CurrencyInput
+            label="Proposed agent commission"
+            name="agentCommissionAmount"
+            placeholder="0.00"
+            error={state.fieldErrors?.agentCommissionAmount?.[0]}
+            helperText="This is separate from the ₦15,000 tenant processing fee."
+          />
+
+          <Textarea
+            label="Commission note"
+            name="agentCommissionNote"
+            placeholder="Optional note explaining the commission agreement"
+            error={state.fieldErrors?.agentCommissionNote?.[0]}
           />
         </div>
       </div>

@@ -105,6 +105,18 @@ const AGENT_PROPERTY_LISTING_SELECT = `
   updated_at
 `;
 
+function normaliseCommissionAmount(value: number | null | undefined) {
+  if (value === null || value === undefined) {
+    return 0;
+  }
+
+  return Number.isFinite(Number(value)) ? Number(value) : 0;
+}
+
+function normaliseOptionalText(value: string | null | undefined) {
+  return value?.trim() ? value.trim() : null;
+}
+
 export async function createAgentPropertyListing(
   supabase: SupabaseClient,
   params: {
@@ -133,18 +145,22 @@ export async function createAgentPropertyListing(
       country_code: params.input.countryCode,
       currency_code: params.input.currencyCode,
 
-      building_name: params.input.buildingName?.trim()
-        ? params.input.buildingName.trim()
-        : null,
+      building_name: normaliseOptionalText(params.input.buildingName),
       unit_identifier: params.input.unitIdentifier,
       unit_type: params.input.unitType,
       bedrooms: params.input.bedrooms,
       bathrooms: params.input.bathrooms,
       annual_rent: params.input.annualRent ?? null,
       monthly_rent: params.input.monthlyRent ?? null,
+      agent_commission_amount: normaliseCommissionAmount(
+        params.input.agentCommissionAmount,
+      ),
+      agent_commission_note: normaliseOptionalText(
+        params.input.agentCommissionNote,
+      ),
 
       status: "submitted",
-      notes: params.input.notes?.trim() ? params.input.notes.trim() : null,
+      notes: normaliseOptionalText(params.input.notes),
     })
     .select(AGENT_PROPERTY_LISTING_SELECT)
     .single<AgentPropertyListingRow>();
@@ -287,17 +303,21 @@ export async function approveAgentPropertyListingByLandlord(
       country_code: params.input.countryCode,
       currency_code: params.input.currencyCode,
 
-      building_name: params.input.buildingName?.trim()
-        ? params.input.buildingName.trim()
-        : null,
+      building_name: normaliseOptionalText(params.input.buildingName),
       unit_identifier: params.input.unitIdentifier,
       unit_type: params.input.unitType,
       bedrooms: params.input.bedrooms,
       bathrooms: params.input.bathrooms,
       annual_rent: params.input.annualRent ?? null,
       monthly_rent: params.input.monthlyRent ?? null,
+      agent_commission_amount: normaliseCommissionAmount(
+        params.input.agentCommissionAmount,
+      ),
+      agent_commission_note: normaliseOptionalText(
+        params.input.agentCommissionNote,
+      ),
 
-      notes: params.input.notes?.trim() ? params.input.notes.trim() : null,
+      notes: normaliseOptionalText(params.input.notes),
 
       matched_landlord_id: params.matchedLandlordId,
       landlord_claim_token_hash: params.claimTokenHash,

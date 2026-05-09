@@ -10,6 +10,7 @@ import { CurrencyInput } from "@/components/ui/currency-input";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { TrustNotice } from "@/components/ui/trust-notice";
 
 type PublicLandlordVerificationFormProps = {
   token: string;
@@ -314,6 +315,34 @@ export function PublicLandlordVerificationForm({
                 defaultValue={moneyDefaultValue(listing.monthly_rent)}
                 error={state.fieldErrors?.monthlyRent?.[0]}
                 helperText="Use only if this unit is rented monthly."
+              />
+            </div>
+          </div>
+
+          <div className="rounded-card border border-border-soft bg-background p-4">
+            <p className="font-extrabold text-text-strong">
+              Review agent commission
+            </p>
+
+            <TrustNotice
+              title="Landlord approval required"
+              description="The agent proposed this commission. You can accept it, reduce it, increase it, or set it to zero. The final approved amount is what Tenuro will use for split payment."
+            />
+
+            <div className="mt-4 space-y-4">
+              <CurrencyInput
+                label="Approved agent commission"
+                name="agentCommissionAmount"
+                defaultValue={String(listing.agent_commission_amount ?? 0)}
+                error={state.fieldErrors?.agentCommissionAmount?.[0]}
+                helperText="This amount is added to the tenant’s final payment and paid to the agent. It does not reduce landlord rent."
+              />
+
+              <Textarea
+                label="Commission note"
+                name="agentCommissionNote"
+                defaultValue={listing.agent_commission_note ?? ""}
+                error={state.fieldErrors?.agentCommissionNote?.[0]}
               />
             </div>
           </div>
