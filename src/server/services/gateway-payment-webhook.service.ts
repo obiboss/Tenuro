@@ -479,7 +479,8 @@ export async function processGatewayPaystackWebhook(params: {
 
     await markGatewayPaymentEventProcessed(supabase, {
       eventId: registeredEvent.event.id,
-      gatewayPaymentIntentId: intent?.id ?? null,
+      gatewayPaymentIntentId:
+        intent?.id ?? result.paymentId ?? registeredEvent.event.id,
       processedPaymentId: result.paymentId ?? "",
       verifiedPayload: intent?.verified_payload ?? rawPayload,
     });
