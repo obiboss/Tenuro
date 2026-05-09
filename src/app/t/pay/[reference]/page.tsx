@@ -30,6 +30,13 @@ type TenantPaymentPageProps = {
 
 type StatusTone = "success" | "danger" | "warning" | "primary";
 
+type ChargeDisplayItem = {
+  id: string;
+  label: string;
+  amount: number;
+  isRefundable: boolean;
+};
+
 function getSearchParamValue(value?: string | string[]) {
   if (Array.isArray(value)) {
     return value[0]?.trim() || undefined;
@@ -48,6 +55,49 @@ function formatDate(value: string | null | undefined) {
     timeStyle: "short",
     timeZone: "Africa/Lagos",
   }).format(new Date(value));
+}
+
+function getRecordString(
+  record: Record<string, unknown>,
+  key: string,
+  fallback: string,
+) {
+  const value = record[key];
+
+  return typeof value === "string" && value.trim() ? value : fallback;
+}
+
+function getRecordNumber(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  return 0;
+}
+
+function getRecordBoolean(record: Record<string, unknown>, key: string) {
+  return record[key] === true;
+}
+
+function getChargeDisplayItems(
+  charges: Record<string, unknown>[],
+): ChargeDisplayItem[] {
+  return charges
+    .map((charge, index) => ({
+      id: getRecordString(charge, "id", `charge-${index}`),
+      label: getRecordString(charge, "label", "Landlord charge"),
+      amount: getRecordNumber(charge, "amount"),
+      isRefundable: getRecordBoolean(charge, "is_refundable"),
+    }))
+    .filter((charge) => charge.amount > 0);
 }
 
 function getStatusCopy(params: { status: string; isExpired: boolean }): {
@@ -97,7 +147,7 @@ function getStatusCopy(params: { status: string; isExpired: boolean }): {
   return {
     title: "Review rent payment",
     description:
-      "Confirm the rent amount, Tenuro fee, and total before continuing to Paystack.",
+      "Confirm the rent amount, landlord charges, agent commission, Tenuro fee, and total before continuing to Paystack.",
     badge: "Awaiting Payment",
     tone: "primary",
     icon: <CreditCard aria-hidden="true" size={24} strokeWidth={2.6} />,
@@ -161,6 +211,11 @@ export default async function TenantPaymentPage({
     status: checkout.status,
     isExpired: checkout.isExpired,
   });
+
+  const landlordCharges = getChargeDisplayItems(checkout.landlordCharges);
+  const shouldShowLandlordCharges =
+    landlordCharges.length > 0 || checkout.landlordChargesAmount > 0;
+  const shouldShowAgentCommission = checkout.agentCommissionAmount > 0;
 
   const shouldAutoRefresh =
     shouldVerify &&
@@ -239,6 +294,71 @@ export default async function TenantPaymentPage({
                       {formatNaira(checkout.tenuroFeeAmount)}
                     </p>
                   </div>
+
+                  {shouldShowLandlordCharges ? (
+                    <div className="rounded-button bg-background p-4 md:col-span-2">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-sm font-bold text-text-muted">
+                            Landlord Charges
+                          </p>
+                          <p className="mt-1 text-xs font-semibold leading-5 text-text-muted">
+                            These charges are paid to the landlord.
+                          </p>
+                        </div>
+
+                        <p className="text-lg font-extrabold text-text-strong">
+                          {formatNaira(checkout.landlordChargesAmount)}
+                        </p>
+                      </div>
+
+                      {landlordCharges.length > 0 ? (
+                        <div className="mt-4 space-y-2 border-t border-border-soft pt-4">
+                          {landlordCharges.map((charge) => (
+                            <div
+                              key={charge.id}
+                              className="flex items-start justify-between gap-4 text-sm"
+                            >
+                              <div>
+                                <p className="font-bold text-text-strong">
+                                  {charge.label}
+                                </p>
+                                {charge.isRefundable ? (
+                                  <p className="mt-1 text-xs font-semibold text-text-muted">
+                                    Refundable
+                                  </p>
+                                ) : null}
+                              </div>
+
+                              <p className="font-black text-text-strong">
+                                {formatNaira(charge.amount)}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {shouldShowAgentCommission ? (
+                    <div className="rounded-button bg-background p-4 md:col-span-2">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-sm font-bold text-text-muted">
+                            Agent Commission
+                          </p>
+                          <p className="mt-1 text-xs font-semibold leading-5 text-text-muted">
+                            This approved commission is paid to the agent. It
+                            does not reduce the landlord’s rent.
+                          </p>
+                        </div>
+
+                        <p className="text-lg font-extrabold text-text-strong">
+                          {formatNaira(checkout.agentCommissionAmount)}
+                        </p>
+                      </div>
+                    </div>
+                  ) : null}
 
                   <div className="rounded-button bg-background p-4 md:col-span-2">
                     <p className="text-sm font-bold text-text-muted">
