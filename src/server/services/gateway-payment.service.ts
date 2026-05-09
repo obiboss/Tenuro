@@ -17,6 +17,10 @@ import {
 } from "@/server/repositories/gateway-payment.repository";
 import { getTenancyBalanceSummary } from "@/server/repositories/ledger.repository";
 import { getActiveLandlordPaystackAccount } from "@/server/repositories/landlord-paystack.repository";
+import {
+  getActiveLandlordTenancyCharges,
+  sumActiveLandlordChargeAmount,
+} from "@/server/repositories/landlord-tenancy-charges.repository";
 import { createPaymentAllocations } from "@/server/repositories/payment-allocations.repository";
 import { getTenancyPaymentContext } from "@/server/repositories/payment-context.repository";
 import {
@@ -85,6 +89,10 @@ function buildTenantPaymentMessage(params: {
   propertyName: string;
   unitName: string;
   rentAmount: number;
+  landlordChargesAmount: number;
+  agentCommissionAmount: number;
+  tenuroFeeAmount: number;
+  totalAmount: number;
   paymentUrl: string;
   expiresAt: string;
 }) {
@@ -94,12 +102,26 @@ function buildTenantPaymentMessage(params: {
     timeZone: "Africa/Lagos",
   }).format(new Date(params.expiresAt));
 
+  const chargeLines =
+    params.landlordChargesAmount > 0
+      ? [`Landlord charges: ${formatNairaAmount(params.landlordChargesAmount)}`]
+      : [];
+
+  const agentLines =
+    params.agentCommissionAmount > 0
+      ? [`Agent commission: ${formatNairaAmount(params.agentCommissionAmount)}`]
+      : [];
+
   return [
     `Hello ${params.tenantName},`,
     "",
     `${params.landlordName} has prepared your rent payment link for ${params.unitName} at ${params.propertyName}.`,
     "",
     `Rent amount: ${formatNairaAmount(params.rentAmount)}`,
+    ...chargeLines,
+    ...agentLines,
+    `Tenuro fee: ${formatNairaAmount(params.tenuroFeeAmount)}`,
+    `Total payable: ${formatNairaAmount(params.totalAmount)}`,
     `Link expires: ${expiryText}`,
     "",
     "Please use this secure link to review the amount and continue to Paystack:",
@@ -208,7 +230,10 @@ function getTenantPaymentEmail(params: {
 
 function assertGatewayAmountStructure(params: {
   rentAmount: number;
+  landlordChargesAmount: number;
+  agentCommissionAmount: number;
   tenuroFeeAmount: number;
+  landlordShareAmount: number;
   totalAmount: number;
 }) {
   if (params.rentAmount <= 0) {
@@ -216,6 +241,22 @@ function assertGatewayAmountStructure(params: {
       "RENT_AMOUNT_INVALID",
       "Rent amount must be greater than zero.",
       400,
+    );
+  }
+
+  if (params.landlordChargesAmount < 0) {
+    throw new AppError(
+      "LANDLORD_CHARGES_INVALID",
+      "Landlord charges cannot be negative.",
+      500,
+    );
+  }
+
+  if (params.agentCommissionAmount < 0) {
+    throw new AppError(
+      "AGENT_COMMISSION_INVALID",
+      "Agent commission cannot be negative.",
+      500,
     );
   }
 
@@ -227,10 +268,26 @@ function assertGatewayAmountStructure(params: {
     );
   }
 
-  if (params.totalAmount !== params.rentAmount + params.tenuroFeeAmount) {
+  if (
+    params.landlordShareAmount !==
+    params.rentAmount + params.landlordChargesAmount
+  ) {
+    throw new AppError(
+      "LANDLORD_SHARE_MISMATCH",
+      "Landlord share must equal rent plus landlord charges.",
+      500,
+    );
+  }
+
+  if (
+    params.totalAmount !==
+    params.landlordShareAmount +
+      params.agentCommissionAmount +
+      params.tenuroFeeAmount
+  ) {
     throw new AppError(
       "GATEWAY_TOTAL_MISMATCH",
-      "Payment total does not match rent plus gateway fee.",
+      "Payment total does not match landlord share, agent commission, and gateway fee.",
       500,
     );
   }
@@ -258,6 +315,38 @@ function readMetadataBoolean(
   key: string,
 ): boolean {
   return metadata[key] === true;
+}
+
+function readMetadataNumber(metadata: Record<string, unknown>, key: string) {
+  const value = metadata[key];
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  return 0;
+}
+
+function readMetadataArray(
+  metadata: Record<string, unknown>,
+  key: string,
+): Record<string, unknown>[] {
+  const value = metadata[key];
+
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter(
+    (item): item is Record<string, unknown> =>
+      typeof item === "object" && item !== null && !Array.isArray(item),
+  );
 }
 
 async function auditExpiredPaymentLinkOnce(params: {
@@ -311,7 +400,6 @@ async function resolveReusablePaymentIntent(params: {
 async function resolveAgentDealPaymentAllocation(params: {
   agentPropertyListingId: string | null;
   invitedByAgentId: string | null;
-  rentAmount: number;
 }) {
   if (!params.agentPropertyListingId || !params.invitedByAgentId) {
     return null;
@@ -339,18 +427,9 @@ async function resolveAgentDealPaymentAllocation(params: {
       listing,
       agentPaystackAccount: null,
       commissionAmount: 0,
-      landlordRentShare: params.rentAmount,
       isAgentDeal: true,
       isAgentCommissionPayable: false,
     };
-  }
-
-  if (commissionAmount >= params.rentAmount) {
-    throw new AppError(
-      "AGENT_COMMISSION_INVALID",
-      "Agent commission cannot be equal to or higher than the rent amount.",
-      400,
-    );
   }
 
   const agentPaystackAccount = await getActiveAgentPaystackAccount(
@@ -370,7 +449,6 @@ async function resolveAgentDealPaymentAllocation(params: {
     listing,
     agentPaystackAccount,
     commissionAmount,
-    landlordRentShare: params.rentAmount - commissionAmount,
     isAgentDeal: true,
     isAgentCommissionPayable: true,
   };
@@ -463,6 +541,7 @@ async function initializeGatewayPaymentForTenancy(params: {
       );
     }
 
+    const metadata = toRecord(reusableIntent.metadata);
     const tenantPaymentUrl = getTenantPaymentUrl(
       reusableIntent.paystack_reference,
     );
@@ -481,6 +560,16 @@ async function initializeGatewayPaymentForTenancy(params: {
         propertyName,
         unitName,
         rentAmount: Number(reusableIntent.rent_amount),
+        landlordChargesAmount: readMetadataNumber(
+          metadata,
+          "landlord_charges_amount",
+        ),
+        agentCommissionAmount: readMetadataNumber(
+          metadata,
+          "agent_commission_amount",
+        ),
+        tenuroFeeAmount: Number(reusableIntent.tenuro_fee_amount),
+        totalAmount: Number(reusableIntent.total_amount),
         paymentUrl: tenantPaymentUrl,
         expiresAt: reusableExpiry ?? reusableIntent.created_at,
       }),
@@ -500,21 +589,33 @@ async function initializeGatewayPaymentForTenancy(params: {
     );
   }
 
-  const rentAmount = params.amount;
-  const tenuroFeeAmount = getTenuroGatewayAdminFee();
-  const totalAmount = rentAmount + tenuroFeeAmount;
-  const expiresAt = createPaymentLinkExpiry();
-
-  assertGatewayAmountStructure({
-    rentAmount,
-    tenuroFeeAmount,
-    totalAmount,
+  const landlordCharges = await getActiveLandlordTenancyCharges(supabase, {
+    tenancyId: tenancy.id,
+    landlordId: tenancy.landlord_id,
   });
+
+  const rentAmount = params.amount;
+  const landlordChargesAmount = sumActiveLandlordChargeAmount(landlordCharges);
+  const tenuroFeeAmount = getTenuroGatewayAdminFee();
+  const expiresAt = createPaymentLinkExpiry();
 
   const agentDealAllocation = await resolveAgentDealPaymentAllocation({
     agentPropertyListingId: tenancy.tenants.agent_property_listing_id,
     invitedByAgentId: tenancy.tenants.invited_by_agent_id,
+  });
+
+  const agentCommissionAmount = agentDealAllocation?.commissionAmount ?? 0;
+  const landlordShareAmount = rentAmount + landlordChargesAmount;
+  const totalAmount =
+    landlordShareAmount + agentCommissionAmount + tenuroFeeAmount;
+
+  assertGatewayAmountStructure({
     rentAmount,
+    landlordChargesAmount,
+    agentCommissionAmount,
+    tenuroFeeAmount,
+    landlordShareAmount,
+    totalAmount,
   });
 
   const tenuroFeeKobo = convertNairaToKobo(tenuroFeeAmount);
@@ -529,24 +630,34 @@ async function initializeGatewayPaymentForTenancy(params: {
     ? await createAgentDealTransactionSplit({
         name: `Tenuro Agent Deal ${reference}`,
         landlordSubaccountCode: paystackAccount.paystack_subaccount_code,
-        landlordShareKobo: convertNairaToKobo(
-          agentDealAllocation.landlordRentShare,
-        ),
+        landlordShareKobo: convertNairaToKobo(landlordShareAmount),
         agentSubaccountCode:
           agentDealAllocation.agentPaystackAccount.paystack_subaccount_code,
-        agentShareKobo: convertNairaToKobo(
-          agentDealAllocation.commissionAmount,
-        ),
+        agentShareKobo: convertNairaToKobo(agentCommissionAmount),
         currencyCode: tenancy.currency_code,
       })
     : null;
+
+  const landlordChargesSummary = landlordCharges.map((charge) => ({
+    id: charge.id,
+    charge_type: charge.charge_type,
+    label: charge.label,
+    amount: Number(charge.amount),
+    currency_code: charge.currency_code,
+    is_refundable: charge.is_refundable,
+    is_required_before_move_in: charge.is_required_before_move_in,
+  }));
 
   const metadata = {
     tenancy_id: tenancy.id,
     tenant_id: tenancy.tenant_id,
     landlord_id: tenancy.landlord_id,
     expected_amount_naira: rentAmount,
+    rent_amount_naira: rentAmount,
+    landlord_charges_amount: landlordChargesAmount,
+    agent_commission_amount: agentCommissionAmount,
     tenuro_fee_naira: tenuroFeeAmount,
+    landlord_share_amount: landlordShareAmount,
     total_amount_naira: totalAmount,
     currency_code: tenancy.currency_code,
     period_start: params.periodStart,
@@ -558,6 +669,7 @@ async function initializeGatewayPaymentForTenancy(params: {
     payment_purpose: params.paymentPurpose,
     automatic_after_agreement:
       params.paymentPurpose === PAYMENT_PURPOSE_NEW_TENANT_FIRST_RENT,
+    landlord_charges: landlordChargesSummary,
     agent_deal: agentDealAllocation
       ? {
           is_agent_deal: agentDealAllocation.isAgentDeal,
@@ -565,8 +677,7 @@ async function initializeGatewayPaymentForTenancy(params: {
             agentDealAllocation.isAgentCommissionPayable,
           agent_id: agentDealAllocation.listing.agent_id,
           agent_property_listing_id: agentDealAllocation.listing.id,
-          agent_commission_amount: agentDealAllocation.commissionAmount,
-          landlord_rent_share: agentDealAllocation.landlordRentShare,
+          agent_commission_amount: agentCommissionAmount,
           agent_paystack_subaccount_code:
             agentDealAllocation.agentPaystackAccount
               ?.paystack_subaccount_code ?? null,
@@ -574,12 +685,12 @@ async function initializeGatewayPaymentForTenancy(params: {
       : null,
     allocations: {
       landlord: {
-        amount: agentDealAllocation
-          ? agentDealAllocation.landlordRentShare
-          : rentAmount,
+        amount: landlordShareAmount,
+        rent_amount: rentAmount,
+        landlord_charges_amount: landlordChargesAmount,
       },
       agent: {
-        amount: agentDealAllocation?.commissionAmount ?? 0,
+        amount: agentCommissionAmount,
         agent_id: agentDealAllocation?.listing.agent_id ?? null,
         agent_property_listing_id: agentDealAllocation?.listing.id ?? null,
       },
@@ -593,15 +704,11 @@ async function initializeGatewayPaymentForTenancy(params: {
           split_code: agentDealSplit.split_code,
           split_id: agentDealSplit.id,
           landlord_subaccount: paystackAccount.paystack_subaccount_code,
-          landlord_share_kobo: convertNairaToKobo(
-            agentDealAllocation?.landlordRentShare ?? rentAmount,
-          ),
+          landlord_share_kobo: convertNairaToKobo(landlordShareAmount),
           agent_subaccount:
             agentDealAllocation?.agentPaystackAccount
               ?.paystack_subaccount_code ?? null,
-          agent_share_kobo: convertNairaToKobo(
-            agentDealAllocation?.commissionAmount ?? 0,
-          ),
+          agent_share_kobo: convertNairaToKobo(agentCommissionAmount),
           platform_remainder_kobo: tenuroFeeKobo,
           bearer: "account",
         }
@@ -609,6 +716,7 @@ async function initializeGatewayPaymentForTenancy(params: {
           mode: "subaccount_flat_fee",
           subaccount: paystackAccount.paystack_subaccount_code,
           transaction_charge_kobo: tenuroFeeKobo,
+          landlord_share_amount: landlordShareAmount,
           bearer: "subaccount",
         },
   };
@@ -667,16 +775,17 @@ async function initializeGatewayPaymentForTenancy(params: {
       recipientType: "landlord",
       recipientProfileId: tenancy.landlord_id,
       agentPropertyListingId: agentDealAllocation?.listing.id ?? null,
-      amount: agentDealAllocation
-        ? agentDealAllocation.landlordRentShare
-        : rentAmount,
+      amount: landlordShareAmount,
       currencyCode: tenancy.currency_code,
       metadata: {
         source: "gateway_payment_intent_initialized",
         payment_purpose: params.paymentPurpose,
+        rent_amount: rentAmount,
+        landlord_charges_amount: landlordChargesAmount,
+        landlord_charges: landlordChargesSummary,
       },
     },
-    ...(agentDealAllocation?.commissionAmount
+    ...(agentCommissionAmount > 0 && agentDealAllocation
       ? [
           {
             gatewayPaymentIntentId: intent.id,
@@ -686,7 +795,7 @@ async function initializeGatewayPaymentForTenancy(params: {
             recipientType: "agent" as const,
             recipientProfileId: agentDealAllocation.listing.agent_id,
             agentPropertyListingId: agentDealAllocation.listing.id,
-            amount: agentDealAllocation.commissionAmount,
+            amount: agentCommissionAmount,
             currencyCode: tenancy.currency_code,
             metadata: {
               source: "gateway_payment_intent_initialized",
@@ -732,7 +841,10 @@ async function initializeGatewayPaymentForTenancy(params: {
       gateway_payment_intent_id: intent.id,
       paystack_reference: intent.paystack_reference,
       rent_amount: rentAmount,
+      landlord_charges_amount: landlordChargesAmount,
+      agent_commission_amount: agentCommissionAmount,
       tenuro_fee_amount: tenuroFeeAmount,
+      landlord_share_amount: landlordShareAmount,
       total_amount: totalAmount,
       period_start: params.periodStart,
       period_end: params.periodEnd,
@@ -740,6 +852,7 @@ async function initializeGatewayPaymentForTenancy(params: {
       property_name: propertyName,
       unit_identifier: unitName,
       payment_purpose: params.paymentPurpose,
+      landlord_charges: landlordChargesSummary,
       agent_deal: metadata.agent_deal,
       allocations: metadata.allocations,
       paystack_split: metadata.paystack_split,
@@ -760,6 +873,10 @@ async function initializeGatewayPaymentForTenancy(params: {
       propertyName,
       unitName,
       rentAmount,
+      landlordChargesAmount,
+      agentCommissionAmount,
+      tenuroFeeAmount,
+      totalAmount,
       paymentUrl: tenantPaymentUrl,
       expiresAt,
     }),
@@ -954,6 +1071,16 @@ export async function getPublicTenantPaymentCheckout(params: {
     reference: intent.paystack_reference,
     authorizationUrl: intent.authorization_url,
     rentAmount: Number(intent.rent_amount),
+    landlordChargesAmount: readMetadataNumber(
+      metadata,
+      "landlord_charges_amount",
+    ),
+    landlordCharges: readMetadataArray(metadata, "landlord_charges"),
+    agentCommissionAmount: readMetadataNumber(
+      metadata,
+      "agent_commission_amount",
+    ),
+    landlordShareAmount: readMetadataNumber(metadata, "landlord_share_amount"),
     tenuroFeeAmount: Number(intent.tenuro_fee_amount),
     totalAmount: Number(intent.total_amount),
     currencyCode: intent.currency_code,
