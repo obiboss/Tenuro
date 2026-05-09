@@ -4,6 +4,7 @@ import {
   FileCheck2,
   FileSignature,
   Phone,
+  ReceiptText,
   UserRound,
 } from "lucide-react";
 import { MoveOutConfirmationCard } from "@/components/quit-notices/move-out-confirmation-card";
@@ -12,6 +13,8 @@ import { QuitNoticeIssueCard } from "@/components/quit-notices/quit-notice-issue
 import { OnboardingInviteCard } from "@/components/tenant/onboarding-invite-card";
 import { TenantActivationInviteCard } from "@/components/tenant/tenant-activation-invite-card";
 import { TenantReviewCard } from "@/components/tenant/tenant-review-card";
+import { LandlordTenancyChargeForm } from "@/components/tenancy/landlord-tenancy-charge-form";
+import { LandlordTenancyChargeList } from "@/components/tenancy/landlord-tenancy-charge-list";
 import { TenancyAgreementDocumentCard } from "@/components/tenancy/tenancy-agreement-document-card";
 import { TenancyForm } from "@/components/tenancy/tenancy-form";
 import { TenancySummaryCard } from "@/components/tenancy/tenancy-summary-card";
@@ -22,6 +25,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { TrustNotice } from "@/components/ui/trust-notice";
 import { TENANT_ONBOARDING_STATUS_COPY } from "@/lib/status-copy";
+import { getLandlordChargesForCurrentLandlord } from "@/server/services/landlord-tenancy-charges.service";
 import { getCurrentTenantLedgerSummary } from "@/server/services/ledger.service";
 import {
   getCurrentTenancyAgreementByTenancyId,
@@ -34,12 +38,19 @@ import {
 } from "@/server/services/tenants.service";
 import { getCurrentTenantActiveTenancy } from "@/server/services/tenancies.service";
 import { getCurrentLandlordQuitNoticesForTenancy } from "@/server/services/quit-notices.service";
+import { getCurrentLandlordTenantAgentCommissionAmount } from "@/server/services/tenant-agent-commission.service";
 
 type TenantDetailPageProps = {
   params: Promise<{
     tenantId: string;
   }>;
 };
+
+function sumCharges(
+  charges: Awaited<ReturnType<typeof getLandlordChargesForCurrentLandlord>>,
+) {
+  return charges.reduce((total, charge) => total + Number(charge.amount), 0);
+}
 
 export default async function TenantDetailPage({
   params,
@@ -66,6 +77,19 @@ export default async function TenantDetailPage({
   const quitNotices = activeTenancy
     ? await getCurrentLandlordQuitNoticesForTenancy(activeTenancy.id)
     : [];
+
+  const landlordCharges = activeTenancy
+    ? await getLandlordChargesForCurrentLandlord(activeTenancy.id)
+    : [];
+
+  const landlordChargesAmount = sumCharges(landlordCharges);
+
+  const agentCommissionAmount =
+    await getCurrentLandlordTenantAgentCommissionAmount(tenant.id);
+
+  const tenuroFeeAmount = Number(
+    process.env.TENURO_GATEWAY_ADMIN_FEE_NAIRA ?? 0,
+  );
 
   const status =
     TENANT_ONBOARDING_STATUS_COPY[tenant.onboarding_status] ??
@@ -200,6 +224,22 @@ export default async function TenantDetailPage({
             <>
               <TenancySummaryCard tenancy={activeTenancy} />
 
+              <SectionCard
+                title="Landlord Charges"
+                description="Add agreement fee, caution deposit, damages deposit, service charge, legal fee, documentation fee, or other charges that should be paid to the landlord."
+              >
+                <div className="space-y-6">
+                  <LandlordTenancyChargeList
+                    tenancyId={activeTenancy.id}
+                    charges={landlordCharges}
+                  />
+
+                  <div className="rounded-card border border-border-soft bg-surface p-4">
+                    <LandlordTenancyChargeForm tenancyId={activeTenancy.id} />
+                  </div>
+                </div>
+              </SectionCard>
+
               <TenancyAgreementDocumentCard
                 tenancyId={activeTenancy.id}
                 agreement={agreementDocument}
@@ -297,6 +337,9 @@ export default async function TenantDetailPage({
               <RentPaymentModal
                 tenancyId={activeTenancy.id}
                 defaultAmount={outstandingBalance}
+                landlordChargesAmount={landlordChargesAmount}
+                agentCommissionAmount={agentCommissionAmount}
+                tenuroFeeAmount={tenuroFeeAmount}
                 periodStart={activeTenancy.start_date}
                 periodEnd={activeTenancy.end_date}
               />
@@ -330,6 +373,16 @@ export default async function TenantDetailPage({
 
         <div className="space-y-6 xl:sticky xl:top-28 xl:self-start">
           <TrustNotice title="Next step" description={nextStepDescription} />
+
+          {activeTenancy ? (
+            <TrustNotice
+              title="Final payment model"
+              description="The tenant pays rent, landlord charges, approved agent commission, and Tenuro fee. Landlord charges go to the landlord. Agent commission goes to the agent."
+              icon={
+                <ReceiptText aria-hidden="true" size={22} strokeWidth={2.6} />
+              }
+            />
+          ) : null}
 
           {shouldShowOnboardingCard ? (
             <OnboardingInviteCard tenantId={tenant.id} />
