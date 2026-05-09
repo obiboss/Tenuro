@@ -1,10 +1,8 @@
 "use client";
 
 import { useActionState } from "react";
-import {
-  createLandlordTenancyChargeAction,
-  initialLandlordTenancyChargeActionState,
-} from "@/actions/landlord-tenancy-charges.actions";
+import { createLandlordTenancyChargeAction } from "@/actions/landlord-tenancy-charges.actions";
+import { initialLandlordTenancyChargeActionState } from "@/actions/landlord-tenancy-charges.state";
 import { ActionResultToast } from "@/components/ui/action-result-toast";
 import { Button } from "@/components/ui/button";
 import { CurrencyInput } from "@/components/ui/currency-input";

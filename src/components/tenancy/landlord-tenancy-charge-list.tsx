@@ -1,10 +1,8 @@
 "use client";
 
 import { useActionState } from "react";
-import {
-  archiveLandlordTenancyChargeAction,
-  initialLandlordTenancyChargeActionState,
-} from "@/actions/landlord-tenancy-charges.actions";
+import { archiveLandlordTenancyChargeAction } from "@/actions/landlord-tenancy-charges.actions";
+import { initialLandlordTenancyChargeActionState } from "@/actions/landlord-tenancy-charges.state";
 import type { LandlordTenancyChargeRow } from "@/server/repositories/landlord-tenancy-charges.repository";
 import { ActionResultToast } from "@/components/ui/action-result-toast";
 import { Badge } from "@/components/ui/badge";

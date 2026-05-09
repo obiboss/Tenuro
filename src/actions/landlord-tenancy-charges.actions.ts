@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import type { LandlordTenancyChargeActionState } from "@/actions/landlord-tenancy-charges.state";
 import { errorResult } from "@/server/errors/result";
 import {
   archiveLandlordChargeForCurrentLandlord,
@@ -12,19 +13,6 @@ import {
   createLandlordTenancyChargeSchema,
   updateLandlordTenancyChargeSchema,
 } from "@/server/validators/landlord-tenancy-charges.schema";
-
-export type LandlordTenancyChargeActionState = {
-  ok: boolean;
-  message: string;
-  chargeId?: string;
-  fieldErrors?: Record<string, string[]>;
-};
-
-export const initialLandlordTenancyChargeActionState: LandlordTenancyChargeActionState =
-  {
-    ok: false,
-    message: "",
-  };
 
 function revalidateChargePaths(tenancyId: string) {
   revalidatePath("/payments");
