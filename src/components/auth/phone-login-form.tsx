@@ -13,9 +13,7 @@ type PhoneLoginFormProps = {
   purpose?: "login" | "register";
 };
 
-export function PhoneLoginForm({
-  purpose: _purpose = "login",
-}: PhoneLoginFormProps) {
+export function PhoneLoginForm({ purpose = "login" }: PhoneLoginFormProps) {
   const [phoneNumber, setPhoneNumber] = useState("");
 
   const [state, formAction, isPending] = useActionState(
@@ -23,12 +21,19 @@ export function PhoneLoginForm({
     initialAuthActionState,
   );
 
+  const noticeTitle =
+    purpose === "register"
+      ? "Continue with phone and password"
+      : "Sign in with phone and password";
+
+  const noticeDescription =
+    purpose === "register"
+      ? "Use your phone number and password to continue setting up your account."
+      : "Use your registered phone number and password. No verification code is required for normal login.";
+
   return (
     <div className="space-y-5">
-      <TrustNotice
-        title="Sign in with phone and password"
-        description="Use your registered phone number and password. No verification code is required for normal login."
-      />
+      <TrustNotice title={noticeTitle} description={noticeDescription} />
 
       <form action={formAction}>
         <Card>

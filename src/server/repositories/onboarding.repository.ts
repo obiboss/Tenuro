@@ -19,6 +19,8 @@ export type TenantOnboardingRecord = {
   onboarding_token_hash: string | null;
   onboarding_token_expires_at: string | null;
   onboarding_token_used_at: string | null;
+  agent_property_listing_id: string | null;
+  invited_by_agent_id: string | null;
   created_at: string;
 };
 
@@ -59,6 +61,8 @@ export type TenantOnboardingInviteRecord = {
   phone_number: string;
   email: string | null;
   onboarding_status: TenantOnboardingStatus;
+  agent_property_listing_id: string | null;
+  invited_by_agent_id: string | null;
   units: {
     id: string;
     unit_identifier: string;
@@ -81,6 +85,8 @@ const TENANT_ONBOARDING_SELECT = `
   onboarding_token_hash,
   onboarding_token_expires_at,
   onboarding_token_used_at,
+  agent_property_listing_id,
+  invited_by_agent_id,
   created_at
 `;
 
@@ -95,6 +101,8 @@ const TENANT_ONBOARDING_RESOLVED_SELECT = `
   onboarding_token_hash,
   onboarding_token_expires_at,
   onboarding_token_used_at,
+  agent_property_listing_id,
+  invited_by_agent_id,
   created_at,
   profiles:landlord_id (
     id,
@@ -131,6 +139,8 @@ const TENANT_ONBOARDING_INVITE_SELECT = `
   phone_number,
   email,
   onboarding_status,
+  agent_property_listing_id,
+  invited_by_agent_id,
   units (
     id,
     unit_identifier,

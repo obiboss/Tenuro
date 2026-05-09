@@ -1,4 +1,3 @@
-import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 function applySecurityHeaders(response: NextResponse) {
@@ -14,7 +13,7 @@ function applySecurityHeaders(response: NextResponse) {
   return response;
 }
 
-export function proxy(_request: NextRequest) {
+export function proxy() {
   return applySecurityHeaders(NextResponse.next());
 }
 

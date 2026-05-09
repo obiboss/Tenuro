@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { cn } from "@/lib/cn";
 
 type CurrencyInputProps = {
@@ -86,14 +86,13 @@ export function CurrencyInput({
   );
 
   const [rawValue, setRawValue] = useState(initialValue);
-  const [displayValue, setDisplayValue] = useState(
-    initialValue ? formatCurrencyForDisplay(initialValue) : "",
-  );
+  const [isFocused, setIsFocused] = useState(false);
 
-  useEffect(() => {
-    setRawValue(initialValue);
-    setDisplayValue(initialValue ? formatCurrencyForDisplay(initialValue) : "");
-  }, [initialValue]);
+  const displayValue = isFocused
+    ? rawValue
+    : rawValue
+      ? formatCurrencyForDisplay(rawValue)
+      : "";
 
   return (
     <div className="space-y-2">
@@ -122,15 +121,13 @@ export function CurrencyInput({
           aria-invalid={error ? "true" : "false"}
           aria-describedby={error ? errorId : helperText ? helperId : undefined}
           onFocus={() => {
-            setDisplayValue(rawValue);
+            setIsFocused(true);
           }}
           onChange={(event) => {
-            const nextValue = sanitiseCurrencyValue(event.target.value);
-            setRawValue(nextValue);
-            setDisplayValue(nextValue);
+            setRawValue(sanitiseCurrencyValue(event.target.value));
           }}
           onBlur={() => {
-            setDisplayValue(rawValue ? formatCurrencyForDisplay(rawValue) : "");
+            setIsFocused(false);
           }}
           className={cn(
             "flex h-14 w-full rounded-button border bg-white pl-14 pr-4 text-base font-medium text-text-strong outline-none transition placeholder:text-text-muted/70",
