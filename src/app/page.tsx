@@ -4,6 +4,7 @@ import {
   BadgeCheck,
   Building2,
   FileCheck2,
+  FileText,
   ReceiptText,
   ShieldCheck,
   Users,
@@ -49,6 +50,25 @@ const features = [
     description:
       "Designed around Nigerian rental workflows, annual rent records, NGN payments, and WhatsApp-first communication.",
     icon: Building2,
+  },
+];
+
+const publicTools = [
+  {
+    title: "Free Rent Receipt Generator",
+    description:
+      "Create a clean Nigerian rent receipt, download a watermarked PDF, share it on WhatsApp, then create an account to save it.",
+    href: "/receipt-generator",
+    icon: ReceiptText,
+    cta: "Generate Receipt",
+  },
+  {
+    title: "Free Tenancy Agreement Generator",
+    description:
+      "Generate a tenancy agreement preview, download the PDF, share it, and attach the agreement to your landlord account.",
+    href: "/agreement-generator",
+    icon: FileText,
+    cta: "Generate Agreement",
   },
 ];
 
@@ -101,15 +121,29 @@ export default function HomePage() {
             </p>
 
             <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:max-w-2xl">
-              <Link href="/register">
+              <Link href="/receipt-generator">
                 <Button size="lg" fullWidth>
+                  Generate Free Receipt
+                  <ReceiptText aria-hidden="true" size={18} strokeWidth={2.6} />
+                </Button>
+              </Link>
+
+              <Link href="/agreement-generator">
+                <Button size="lg" variant="secondary" fullWidth>
+                  Generate Agreement
+                  <FileText aria-hidden="true" size={18} strokeWidth={2.6} />
+                </Button>
+              </Link>
+
+              <Link href="/register">
+                <Button size="lg" variant="secondary" fullWidth>
                   Register as Landlord
                   <ArrowRight aria-hidden="true" size={18} strokeWidth={2.6} />
                 </Button>
               </Link>
 
               <Link href="/agent/register">
-                <Button size="lg" variant="secondary" fullWidth>
+                <Button size="lg" variant="ghost" fullWidth>
                   Register as Agent
                   <BadgeCheck aria-hidden="true" size={18} strokeWidth={2.6} />
                 </Button>
@@ -170,6 +204,62 @@ export default function HomePage() {
         </div>
 
         <section className="rounded-4xl bg-surface px-5 py-8 shadow-card md:px-8 lg:px-10">
+          <div className="max-w-3xl">
+            <Badge tone="primary">Free landlord tools</Badge>
+
+            <h2 className="mt-4 text-2xl font-extrabold tracking-tight text-text-strong md:text-3xl">
+              Start with a receipt or agreement before creating an account.
+            </h2>
+
+            <p className="mt-4 text-base leading-8 text-text-muted md:text-lg">
+              Use BOPA’s free public tools to generate a rent receipt or tenancy
+              agreement first. Download the document, share it on WhatsApp, then
+              create a free landlord account only when you want to save the
+              record.
+            </p>
+          </div>
+
+          <div className="mt-8 grid gap-5 md:grid-cols-2">
+            {publicTools.map((tool) => {
+              const Icon = tool.icon;
+
+              return (
+                <Link
+                  key={tool.href}
+                  href={tool.href}
+                  className="group rounded-card border border-border-soft bg-background p-5 transition hover:border-primary/40 hover:bg-primary-soft/40 md:p-6"
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+                      <Icon aria-hidden="true" size={24} strokeWidth={2.6} />
+                    </div>
+
+                    <div className="min-w-0">
+                      <h3 className="text-lg font-black tracking-tight text-text-strong">
+                        {tool.title}
+                      </h3>
+
+                      <p className="mt-2 text-sm leading-6 text-text-muted">
+                        {tool.description}
+                      </p>
+
+                      <span className="mt-4 inline-flex items-center gap-2 text-sm font-extrabold text-primary group-hover:text-primary-hover">
+                        {tool.cta}
+                        <ArrowRight
+                          aria-hidden="true"
+                          size={17}
+                          strokeWidth={2.6}
+                        />
+                      </span>
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="mt-8 rounded-4xl bg-surface px-5 py-8 shadow-card md:px-8 lg:px-10">
           <div className="max-w-3xl">
             <h2 className="text-2xl font-extrabold tracking-tight text-text-strong md:text-3xl">
               Meet BOPA — Boldverse Property App

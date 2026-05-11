@@ -21,6 +21,7 @@ export const metadata: Metadata = {
 
 export default function ReceiptGeneratorPage() {
   const featuredLocations = getFeaturedReceiptGeneratorLocations();
+
   return (
     <main className="min-h-screen bg-background">
       <section className="mx-auto max-w-7xl px-4 py-8 md:px-8 lg:py-10">
@@ -40,9 +41,9 @@ export default function ReceiptGeneratorPage() {
             </div>
           </Link>
 
-          <Link href="/register" className="hidden sm:block">
+          <Link href="/agreement-generator" className="hidden sm:block">
             <Button variant="secondary">
-              Create Account
+              Generate Agreement
               <ArrowRight aria-hidden="true" size={18} strokeWidth={2.6} />
             </Button>
           </Link>
@@ -88,25 +89,52 @@ export default function ReceiptGeneratorPage() {
 
         <ReceiptGeneratorForm sourcePath="/receipt-generator" />
 
-        <section className="mt-12 rounded-card bg-surface p-5 shadow-card md:p-8">
-          <h2 className="text-2xl font-black tracking-tight text-text-strong">
-            Rent receipt generator for Nigerian landlords
-          </h2>
+        <section className="mt-12 grid gap-6 lg:grid-cols-[1fr_380px]">
+          <div className="rounded-card bg-surface p-5 shadow-card md:p-8">
+            <h2 className="text-2xl font-black tracking-tight text-text-strong">
+              Rent receipt generator for Nigerian landlords
+            </h2>
 
-          <div className="mt-4 space-y-4 text-sm leading-7 text-text-muted md:text-base">
-            <p>
-              BOPA helps landlords create rent receipts for tenant payments,
-              annual rent, six-month rent, bank transfer payments, cash
-              payments, and Paystack payments.
+            <div className="mt-4 space-y-4 text-sm leading-7 text-text-muted md:text-base">
+              <p>
+                BOPA helps landlords create rent receipts for tenant payments,
+                annual rent, six-month rent, bank transfer payments, cash
+                payments, and Paystack payments.
+              </p>
+
+              <p>
+                Use this free receipt generator for rent payment receipt
+                Nigeria, landlord receipt Nigeria, rent receipt template
+                Nigeria, and rent tracking Lagos workflows.
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-card bg-primary p-5 text-white shadow-card md:p-8">
+            <p className="text-sm font-bold uppercase tracking-wide text-white/75">
+              Need an agreement too?
             </p>
 
-            <p>
-              Use this free receipt generator for rent payment receipt Nigeria,
-              landlord receipt Nigeria, rent receipt template Nigeria, and rent
-              tracking Lagos workflows.
+            <h2 className="mt-2 text-2xl font-black tracking-tight">
+              Generate a tenancy agreement preview.
+            </h2>
+
+            <p className="mt-3 text-sm leading-7 text-white/80">
+              After preparing the receipt, you can also generate a Nigerian
+              tenancy agreement, download the PDF, share it on WhatsApp, and
+              save it to your BOPA account.
             </p>
+
+            <div className="mt-6">
+              <Link href="/agreement-generator">
+                <Button variant="secondary" fullWidth>
+                  Open Agreement Generator
+                </Button>
+              </Link>
+            </div>
           </div>
         </section>
+
         <section className="mt-8 rounded-card bg-surface p-5 shadow-card md:p-8">
           <h2 className="text-2xl font-black tracking-tight text-text-strong">
             Popular rent receipt generator locations
