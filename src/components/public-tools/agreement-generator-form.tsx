@@ -72,12 +72,13 @@ export function AgreementGeneratorForm({
     generatePublicAgreementAction,
     initialPublicAgreementGeneratorState,
   );
-  const [agreementStartDate, setAgreementStartDate] = useState("");
-  const [agreementDuration, setAgreementDuration] = useState("1_year");
+
+  const [tenancyStartDate, setTenancyStartDate] = useState("");
+  const [tenancyDuration, setTenancyDuration] = useState("1_year");
 
   const calculatedEndDate = useMemo(
-    () => calculateEndDate(agreementStartDate, agreementDuration),
-    [agreementStartDate, agreementDuration],
+    () => calculateEndDate(tenancyStartDate, tenancyDuration),
+    [tenancyStartDate, tenancyDuration],
   );
 
   return (
@@ -86,9 +87,12 @@ export function AgreementGeneratorForm({
         <input type="hidden" name="sourcePath" value={sourcePath} />
 
         <section className="rounded-card bg-surface p-5 shadow-card md:p-6">
-          <h2 className="text-lg font-black text-text-strong">
-            Landlord Information
-          </h2>
+          <div>
+            <p className="text-sm font-bold text-primary">Agreement parties</p>
+            <h2 className="mt-1 text-lg font-black text-text-strong">
+              Landlord Information
+            </h2>
+          </div>
 
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             <div>
@@ -101,13 +105,14 @@ export function AgreementGeneratorForm({
                   Boolean(state.fieldErrors?.landlordFullName?.[0]),
                 )}
                 placeholder="e.g. Mr Chinedu Okafor"
+                autoComplete="name"
               />
               <FieldError message={state.fieldErrors?.landlordFullName?.[0]} />
             </div>
 
             <div>
               <label className="text-sm font-bold text-text-strong">
-                Phone Number
+                Landlord Phone Number
               </label>
               <input
                 name="landlordPhoneNumber"
@@ -115,6 +120,7 @@ export function AgreementGeneratorForm({
                   Boolean(state.fieldErrors?.landlordPhoneNumber?.[0]),
                 )}
                 placeholder="e.g. 08012345678"
+                autoComplete="tel"
               />
               <FieldError
                 message={state.fieldErrors?.landlordPhoneNumber?.[0]}
@@ -123,7 +129,7 @@ export function AgreementGeneratorForm({
 
             <div className="md:col-span-2">
               <label className="text-sm font-bold text-text-strong">
-                Email Address Optional
+                Landlord Email Optional
               </label>
               <input
                 name="landlordEmail"
@@ -132,6 +138,7 @@ export function AgreementGeneratorForm({
                   Boolean(state.fieldErrors?.landlordEmail?.[0]),
                 )}
                 placeholder="e.g. landlord@example.com"
+                autoComplete="email"
               />
               <FieldError message={state.fieldErrors?.landlordEmail?.[0]} />
             </div>
@@ -139,9 +146,12 @@ export function AgreementGeneratorForm({
         </section>
 
         <section className="rounded-card bg-surface p-5 shadow-card md:p-6">
-          <h2 className="text-lg font-black text-text-strong">
-            Tenant Information
-          </h2>
+          <div>
+            <p className="text-sm font-bold text-primary">Agreement parties</p>
+            <h2 className="mt-1 text-lg font-black text-text-strong">
+              Tenant Information
+            </h2>
+          </div>
 
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             <div>
@@ -154,6 +164,7 @@ export function AgreementGeneratorForm({
                   Boolean(state.fieldErrors?.tenantFullName?.[0]),
                 )}
                 placeholder="e.g. Ada Nwosu"
+                autoComplete="name"
               />
               <FieldError message={state.fieldErrors?.tenantFullName?.[0]} />
             </div>
@@ -168,6 +179,7 @@ export function AgreementGeneratorForm({
                   Boolean(state.fieldErrors?.tenantPhoneNumber?.[0]),
                 )}
                 placeholder="e.g. 08123456789"
+                autoComplete="tel"
               />
               <FieldError message={state.fieldErrors?.tenantPhoneNumber?.[0]} />
             </div>
@@ -183,6 +195,7 @@ export function AgreementGeneratorForm({
                   Boolean(state.fieldErrors?.tenantEmail?.[0]),
                 )}
                 placeholder="e.g. tenant@example.com"
+                autoComplete="email"
               />
               <FieldError message={state.fieldErrors?.tenantEmail?.[0]} />
             </div>
@@ -190,9 +203,12 @@ export function AgreementGeneratorForm({
         </section>
 
         <section className="rounded-card bg-surface p-5 shadow-card md:p-6">
-          <h2 className="text-lg font-black text-text-strong">
-            Property Information
-          </h2>
+          <div>
+            <p className="text-sm font-bold text-primary">Premises</p>
+            <h2 className="mt-1 text-lg font-black text-text-strong">
+              Property / Unit Information
+            </h2>
+          </div>
 
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             <div>
@@ -253,7 +269,7 @@ export function AgreementGeneratorForm({
 
             <div>
               <label className="text-sm font-bold text-text-strong">
-                Property Use
+                Approved Property Use
               </label>
               <select
                 name="propertyUse"
@@ -272,9 +288,62 @@ export function AgreementGeneratorForm({
         </section>
 
         <section className="rounded-card bg-surface p-5 shadow-card md:p-6">
-          <h2 className="text-lg font-black text-text-strong">Tenancy Terms</h2>
+          <div>
+            <p className="text-sm font-bold text-primary">Tenancy term</p>
+            <h2 className="mt-1 text-lg font-black text-text-strong">
+              Rent and Agreement Terms
+            </h2>
+          </div>
 
           <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="text-sm font-bold text-text-strong">
+                Tenancy Start Date
+              </label>
+              <input
+                name="tenancyStartDate"
+                type="date"
+                value={tenancyStartDate}
+                onChange={(event) => setTenancyStartDate(event.target.value)}
+                className={fieldClassName(
+                  Boolean(state.fieldErrors?.tenancyStartDate?.[0]),
+                )}
+              />
+              <FieldError message={state.fieldErrors?.tenancyStartDate?.[0]} />
+            </div>
+
+            <div>
+              <label className="text-sm font-bold text-text-strong">
+                Tenancy Duration
+              </label>
+              <select
+                name="tenancyDuration"
+                value={tenancyDuration}
+                onChange={(event) => setTenancyDuration(event.target.value)}
+                className={fieldClassName(
+                  Boolean(state.fieldErrors?.tenancyDuration?.[0]),
+                )}
+              >
+                <option value="6_months">6 months</option>
+                <option value="1_year">1 year</option>
+                <option value="2_years">2 years</option>
+              </select>
+              <FieldError message={state.fieldErrors?.tenancyDuration?.[0]} />
+            </div>
+
+            <div className="rounded-button bg-primary-soft p-4 md:col-span-2">
+              <p className="text-sm font-bold text-primary">
+                Calculated Tenancy End Date
+              </p>
+              <p className="mt-2 text-lg font-black text-text-strong">
+                {calculatedEndDate || "Select tenancy start date"}
+              </p>
+              <p className="mt-1 text-xs font-semibold leading-5 text-text-muted">
+                The generated agreement will use this period as the tenancy
+                term.
+              </p>
+            </div>
+
             <div>
               <label className="text-sm font-bold text-text-strong">
                 Rent Amount
@@ -292,7 +361,26 @@ export function AgreementGeneratorForm({
 
             <div>
               <label className="text-sm font-bold text-text-strong">
-                Caution Deposit
+                Rent Frequency
+              </label>
+              <select
+                name="rentFrequency"
+                defaultValue="annual"
+                className={fieldClassName(
+                  Boolean(state.fieldErrors?.rentFrequency?.[0]),
+                )}
+              >
+                <option value="annual">Annual</option>
+                <option value="biannual">Every 6 months</option>
+                <option value="quarterly">Quarterly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+              <FieldError message={state.fieldErrors?.rentFrequency?.[0]} />
+            </div>
+
+            <div>
+              <label className="text-sm font-bold text-text-strong">
+                Caution / Security Deposit
               </label>
               <input
                 name="cautionDepositAmount"
@@ -310,61 +398,6 @@ export function AgreementGeneratorForm({
 
             <div>
               <label className="text-sm font-bold text-text-strong">
-                Tenancy Start Date
-              </label>
-              <input
-                name="agreementStartDate"
-                type="date"
-                value={agreementStartDate}
-                onChange={(event) => setAgreementStartDate(event.target.value)}
-                className={fieldClassName(
-                  Boolean(state.fieldErrors?.agreementStartDate?.[0]),
-                )}
-              />
-              <FieldError
-                message={state.fieldErrors?.agreementStartDate?.[0]}
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-bold text-text-strong">
-                Tenancy Duration
-              </label>
-              <select
-                name="agreementDuration"
-                value={agreementDuration}
-                onChange={(event) => setAgreementDuration(event.target.value)}
-                className={fieldClassName(
-                  Boolean(state.fieldErrors?.agreementDuration?.[0]),
-                )}
-              >
-                <option value="6_months">6 months</option>
-                <option value="1_year">1 year</option>
-                <option value="2_years">2 years</option>
-              </select>
-              <FieldError message={state.fieldErrors?.agreementDuration?.[0]} />
-            </div>
-
-            <div>
-              <label className="text-sm font-bold text-text-strong">
-                Payment Frequency
-              </label>
-              <select
-                name="paymentFrequency"
-                defaultValue="annual"
-                className={fieldClassName(
-                  Boolean(state.fieldErrors?.paymentFrequency?.[0]),
-                )}
-              >
-                <option value="annual">Annual</option>
-                <option value="six_months">Every 6 months</option>
-                <option value="monthly">Monthly</option>
-              </select>
-              <FieldError message={state.fieldErrors?.paymentFrequency?.[0]} />
-            </div>
-
-            <div>
-              <label className="text-sm font-bold text-text-strong">
                 Renewal Notice Days
               </label>
               <input
@@ -374,32 +407,57 @@ export function AgreementGeneratorForm({
                 className={fieldClassName(
                   Boolean(state.fieldErrors?.renewalNoticeDays?.[0]),
                 )}
+                placeholder="e.g. 30"
               />
               <FieldError message={state.fieldErrors?.renewalNoticeDays?.[0]} />
             </div>
+          </div>
+        </section>
 
-            <div className="rounded-button bg-primary-soft p-4 md:col-span-2">
-              <p className="text-sm font-bold text-primary">
-                Calculated Tenancy End Date
-              </p>
-              <p className="mt-2 text-lg font-black text-text-strong">
-                {calculatedEndDate || "Select tenancy start date"}
+        <section className="rounded-card bg-surface p-5 shadow-card md:p-6">
+          <div>
+            <p className="text-sm font-bold text-primary">Agreement clauses</p>
+            <h2 className="mt-1 text-lg font-black text-text-strong">
+              Property Requirements and Special Terms
+            </h2>
+          </div>
+
+          <div className="mt-4 grid gap-4">
+            <div>
+              <label className="text-sm font-bold text-text-strong">
+                Property Requirements Optional
+              </label>
+              <textarea
+                name="propertyRules"
+                rows={5}
+                className={fieldClassName(
+                  Boolean(state.fieldErrors?.propertyRules?.[0]),
+                )}
+                placeholder="Example: No subletting. No short-let use. Tenant must keep premises clean. No heavy generator without written consent."
+              />
+              <FieldError message={state.fieldErrors?.propertyRules?.[0]} />
+              <p className="mt-1 text-xs font-semibold leading-5 text-text-muted">
+                These appear under the property requirements section of the
+                agreement.
               </p>
             </div>
 
-            <div className="md:col-span-2">
+            <div>
               <label className="text-sm font-bold text-text-strong">
-                Additional Terms Optional
+                Special Terms Optional
               </label>
               <textarea
-                name="additionalTerms"
+                name="specialTerms"
                 rows={5}
                 className={fieldClassName(
-                  Boolean(state.fieldErrors?.additionalTerms?.[0]),
+                  Boolean(state.fieldErrors?.specialTerms?.[0]),
                 )}
-                placeholder="Add special terms, restrictions, repair responsibilities, service charge notes, or other agreed conditions."
+                placeholder="Example: Tenant is responsible for prepaid meter recharge. Landlord handles structural repairs only."
               />
-              <FieldError message={state.fieldErrors?.additionalTerms?.[0]} />
+              <FieldError message={state.fieldErrors?.specialTerms?.[0]} />
+              <p className="mt-1 text-xs font-semibold leading-5 text-text-muted">
+                These appear under the special terms section of the agreement.
+              </p>
             </div>
           </div>
 
@@ -430,15 +488,29 @@ export function AgreementGeneratorForm({
           <GeneratedAgreementResult agreement={state.agreement} />
         ) : (
           <div className="rounded-card bg-surface p-5 shadow-card md:p-6">
-            <p className="text-sm font-bold text-primary">Free public tool</p>
+            <p className="text-sm font-bold text-primary">
+              Free agreement preview
+            </p>
             <h2 className="mt-2 text-2xl font-black tracking-tight text-text-strong">
-              Generate an agreement preview before signing up.
+              Generate the agreement first. Create an account later.
             </h2>
             <p className="mt-3 text-sm leading-6 text-text-muted">
-              BOPA helps Nigerian landlords prepare structured tenancy agreement
-              details before saving, editing, or downloading documents in later
-              batches.
+              BOPA prepares a tenancy agreement preview using the same structure
+              as the landlord dashboard agreement workflow: parties, premises,
+              tenancy term, rent clause, obligations, property requirements,
+              digital record clause, and signature section.
             </p>
+
+            <div className="mt-5 rounded-button bg-primary-soft p-4">
+              <p className="text-sm font-black text-text-strong">
+                What this creates now
+              </p>
+              <p className="mt-1 text-sm leading-6 text-text-muted">
+                A saved public agreement snapshot and on-screen agreement body
+                preview. PDF download and account attachment come in the next
+                batch.
+              </p>
+            </div>
           </div>
         )}
       </aside>

@@ -1,11 +1,11 @@
 import { z } from "zod";
 
-const requiredText = (fieldName: string, min = 2) =>
+const requiredText = (fieldName: string, min = 2, max = 220) =>
   z
     .string()
     .trim()
     .min(min, `${fieldName} is required.`)
-    .max(220, `${fieldName} is too long.`);
+    .max(max, `${fieldName} is too long.`);
 
 const optionalText = z
   .string()
@@ -22,9 +22,16 @@ const phoneSchema = z
 
 const moneySchema = z.coerce
   .number({
+    message: "Enter a valid rent amount.",
+  })
+  .positive("Rent amount must be greater than zero.")
+  .max(999_999_999, "Rent amount is too high.");
+
+const optionalMoneySchema = z.coerce
+  .number({
     message: "Enter a valid amount.",
   })
-  .positive("Amount must be greater than zero.")
+  .min(0, "Amount cannot be negative.")
   .max(999_999_999, "Amount is too high.");
 
 const dateSchema = z
@@ -38,7 +45,14 @@ export const publicAgreementDurationSchema = z.enum([
   "2_years",
 ]);
 
-export const publicAgreementPropertyUseSchema = z.enum([
+export const publicAgreementRentFrequencySchema = z.enum([
+  "annual",
+  "monthly",
+  "quarterly",
+  "biannual",
+]);
+
+export const publicAgreementUseSchema = z.enum([
   "residential",
   "commercial",
   "mixed_use",
@@ -65,31 +79,32 @@ export const publicAgreementGeneratorSchema = z.object({
 
   propertyName: optionalText,
   propertyAddress: requiredText("Property address", 5),
-  unitIdentifier: optionalText,
+  unitIdentifier: requiredText("Unit / flat / shop", 1),
   cityState: requiredText("City/state"),
+  propertyUse: publicAgreementUseSchema,
 
-  propertyUse: publicAgreementPropertyUseSchema,
+  tenancyStartDate: dateSchema,
+  tenancyDuration: publicAgreementDurationSchema,
   rentAmount: moneySchema,
-  cautionDepositAmount: z.coerce
-    .number({
-      message: "Enter a valid caution deposit amount.",
-    })
-    .min(0, "Caution deposit cannot be negative.")
-    .max(999_999_999, "Caution deposit amount is too high."),
-  agreementStartDate: dateSchema,
-  agreementDuration: publicAgreementDurationSchema,
-
-  paymentFrequency: z.enum(["annual", "six_months", "monthly"]),
+  rentFrequency: publicAgreementRentFrequencySchema,
+  cautionDepositAmount: optionalMoneySchema.default(0),
   renewalNoticeDays: z.coerce
     .number()
     .int("Renewal notice must be a whole number.")
     .min(0, "Renewal notice cannot be negative.")
     .max(365, "Renewal notice is too long."),
 
-  additionalTerms: z
+  propertyRules: z
     .string()
     .trim()
-    .max(1500, "Additional terms are too long.")
+    .max(1800, "Property rules are too long.")
+    .optional()
+    .or(z.literal("")),
+
+  specialTerms: z
+    .string()
+    .trim()
+    .max(1800, "Special terms are too long.")
     .optional()
     .or(z.literal("")),
 
@@ -103,3 +118,9 @@ export type PublicAgreementGeneratorInput = z.infer<
 export type PublicAgreementDuration = z.infer<
   typeof publicAgreementDurationSchema
 >;
+
+export type PublicAgreementRentFrequency = z.infer<
+  typeof publicAgreementRentFrequencySchema
+>;
+
+export type PublicAgreementUse = z.infer<typeof publicAgreementUseSchema>;

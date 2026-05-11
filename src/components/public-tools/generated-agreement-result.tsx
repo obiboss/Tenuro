@@ -2,15 +2,15 @@
 
 type GeneratedAgreementResultProps = {
   agreement: {
-    agreementTitle: string;
+    title: string;
     landlordFullName: string;
     tenantFullName: string;
     propertyLabel: string;
     rentAmount: number;
-    cautionDepositAmount: number;
+    rentFrequency: string;
     tenancyStartDate: string;
     tenancyEndDate: string;
-    paymentFrequency: string;
+    agreementBody: string;
     watermarkText: string;
   };
 };
@@ -35,9 +35,11 @@ export function GeneratedAgreementResult({
   return (
     <div className="rounded-card border border-border-soft bg-white p-5 shadow-card md:p-6">
       <div className="border-b border-border-soft pb-4">
-        <p className="text-sm font-bold text-primary">Agreement generated</p>
+        <p className="text-sm font-bold text-primary">
+          Agreement preview generated
+        </p>
         <h2 className="mt-1 text-2xl font-black tracking-tight text-text-strong">
-          {agreement.agreementTitle}
+          {agreement.title}
         </h2>
       </div>
 
@@ -62,7 +64,7 @@ export function GeneratedAgreementResult({
 
         <div className="rounded-button bg-background p-4 md:col-span-2">
           <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
-            Property
+            Premises
           </p>
           <p className="mt-1 font-black text-text-strong">
             {agreement.propertyLabel}
@@ -80,14 +82,14 @@ export function GeneratedAgreementResult({
 
         <div className="rounded-button bg-background p-4">
           <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
-            Caution Deposit
+            Rent Frequency
           </p>
           <p className="mt-1 font-black text-text-strong">
-            {formatMoney(agreement.cautionDepositAmount)}
+            Per {agreement.rentFrequency}
           </p>
         </div>
 
-        <div className="rounded-button bg-background p-4">
+        <div className="rounded-button bg-background p-4 md:col-span-2">
           <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
             Tenancy Period
           </p>
@@ -96,20 +98,21 @@ export function GeneratedAgreementResult({
             {formatDate(agreement.tenancyEndDate)}
           </p>
         </div>
+      </div>
 
-        <div className="rounded-button bg-background p-4">
-          <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
-            Payment Frequency
-          </p>
-          <p className="mt-1 font-black text-text-strong">
-            {agreement.paymentFrequency}
-          </p>
-        </div>
+      <div className="mt-5 rounded-button bg-background p-4">
+        <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+          Agreement Body Preview
+        </p>
+
+        <pre className="mt-3 max-h-105 overflow-auto whitespace-pre-wrap rounded-button bg-white p-4 text-xs leading-6 text-text-muted">
+          {agreement.agreementBody}
+        </pre>
       </div>
 
       <div className="mt-5 rounded-button bg-warning-soft p-4 text-sm font-semibold leading-6 text-warning">
-        PDF download and account saving will be added in the next agreement
-        batch. This preview has been saved as a generated agreement snapshot.
+        This is a generated agreement preview. PDF download, account saving, and
+        tenant acceptance will be added in the next agreement batches.
       </div>
 
       <p className="mt-5 border-t border-border-soft pt-4 text-xs font-semibold text-text-muted">

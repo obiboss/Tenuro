@@ -1,7 +1,7 @@
 "use server";
 
 import type { PublicAgreementGeneratorActionState } from "@/actions/public-agreement-generator.state";
-import { generatePublicTenancyAgreement } from "@/server/services/public-agreement-generator.service";
+import { generatePublicTenancyAgreementPreview } from "@/server/services/public-agreement-generator.service";
 import { publicAgreementGeneratorSchema } from "@/server/validators/public-agreement-generator.schema";
 
 function getFormString(formData: FormData, key: string) {
@@ -15,7 +15,7 @@ function getActionErrorMessage(error: unknown) {
     return error.message;
   }
 
-  return "We could not generate this agreement. Please check the details and try again.";
+  return "We could not generate this agreement preview. Please check the details and try again.";
 }
 
 export async function generatePublicAgreementAction(
@@ -27,21 +27,26 @@ export async function generatePublicAgreementAction(
       landlordFullName: getFormString(formData, "landlordFullName"),
       landlordPhoneNumber: getFormString(formData, "landlordPhoneNumber"),
       landlordEmail: getFormString(formData, "landlordEmail"),
+
       tenantFullName: getFormString(formData, "tenantFullName"),
       tenantPhoneNumber: getFormString(formData, "tenantPhoneNumber"),
       tenantEmail: getFormString(formData, "tenantEmail"),
+
       propertyName: getFormString(formData, "propertyName"),
       propertyAddress: getFormString(formData, "propertyAddress"),
       unitIdentifier: getFormString(formData, "unitIdentifier"),
       cityState: getFormString(formData, "cityState"),
       propertyUse: getFormString(formData, "propertyUse"),
+
+      tenancyStartDate: getFormString(formData, "tenancyStartDate"),
+      tenancyDuration: getFormString(formData, "tenancyDuration"),
       rentAmount: getFormString(formData, "rentAmount"),
+      rentFrequency: getFormString(formData, "rentFrequency"),
       cautionDepositAmount: getFormString(formData, "cautionDepositAmount"),
-      agreementStartDate: getFormString(formData, "agreementStartDate"),
-      agreementDuration: getFormString(formData, "agreementDuration"),
-      paymentFrequency: getFormString(formData, "paymentFrequency"),
       renewalNoticeDays: getFormString(formData, "renewalNoticeDays"),
-      additionalTerms: getFormString(formData, "additionalTerms"),
+
+      propertyRules: getFormString(formData, "propertyRules"),
+      specialTerms: getFormString(formData, "specialTerms"),
       sourcePath: getFormString(formData, "sourcePath"),
     });
 
@@ -53,7 +58,7 @@ export async function generatePublicAgreementAction(
       };
     }
 
-    const agreement = await generatePublicTenancyAgreement(parsed.data);
+    const agreement = await generatePublicTenancyAgreementPreview(parsed.data);
 
     return {
       ok: true,

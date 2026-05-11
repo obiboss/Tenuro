@@ -5,16 +5,16 @@ export type PublicAgreementGeneratorActionState = {
   agreement?: {
     leadId: string;
     agreementId: string;
-    agreementTitle: string;
+    title: string;
     landlordFullName: string;
     tenantFullName: string;
     propertyLabel: string;
     rentAmount: number;
-    cautionDepositAmount: number;
+    rentFrequency: string;
     tenancyStartDate: string;
     tenancyEndDate: string;
     tenancyDurationMonths: number;
-    paymentFrequency: string;
+    agreementBody: string;
     watermarkText: string;
   };
 };
