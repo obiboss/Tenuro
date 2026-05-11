@@ -32,6 +32,8 @@ export type PublicGeneratedAgreementRow = {
   whatsapp_message: string | null;
   download_token_hash: string | null;
   download_token_expires_at: string | null;
+  claim_token_hash: string | null;
+  claim_token_expires_at: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -68,6 +70,8 @@ const PUBLIC_GENERATED_AGREEMENT_SELECT = [
   "whatsapp_message",
   "download_token_hash",
   "download_token_expires_at",
+  "claim_token_hash",
+  "claim_token_expires_at",
   "metadata",
   "created_at",
   "updated_at",
@@ -95,6 +99,8 @@ export async function createPublicGeneratedAgreement(
     agreementSnapshot: Record<string, unknown>;
     downloadTokenHash: string;
     downloadTokenExpiresAt: string;
+    claimTokenHash: string;
+    claimTokenExpiresAt: string;
     metadata?: Record<string, unknown>;
   },
 ) {
@@ -122,6 +128,8 @@ export async function createPublicGeneratedAgreement(
       document_status: "generated",
       download_token_hash: params.downloadTokenHash,
       download_token_expires_at: params.downloadTokenExpiresAt,
+      claim_token_hash: params.claimTokenHash,
+      claim_token_expires_at: params.claimTokenExpiresAt,
       metadata: params.metadata ?? {},
     })
     .select(PUBLIC_GENERATED_AGREEMENT_SELECT)
@@ -167,6 +175,56 @@ export async function updatePublicGeneratedAgreementWhatsappMessage(
     .eq("id", params.agreementId)
     .select(PUBLIC_GENERATED_AGREEMENT_SELECT)
     .single<PublicGeneratedAgreementRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function markPublicGeneratedAgreementClaimed(
+  supabase: SupabaseClient,
+  params: {
+    agreementId: string;
+    ownerProfileId: string;
+    propertyId: string | null;
+    tenantId: string | null;
+  },
+) {
+  const { data, error } = await supabase
+    .from("public_generated_agreements")
+    .update({
+      owner_profile_id: params.ownerProfileId,
+      existing_property_id: params.propertyId,
+      existing_tenant_id: params.tenantId,
+      document_status: "claimed",
+      claimed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", params.agreementId)
+    .is("owner_profile_id", null)
+    .select(PUBLIC_GENERATED_AGREEMENT_SELECT)
+    .single<PublicGeneratedAgreementRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function listClaimedPublicGeneratedAgreementsForOwner(
+  supabase: SupabaseClient,
+  ownerProfileId: string,
+) {
+  const { data, error } = await supabase
+    .from("public_generated_agreements")
+    .select(PUBLIC_GENERATED_AGREEMENT_SELECT)
+    .eq("owner_profile_id", ownerProfileId)
+    .not("claimed_at", "is", null)
+    .order("created_at", { ascending: false })
+    .returns<PublicGeneratedAgreementRow[]>();
 
   if (error) {
     throw error;

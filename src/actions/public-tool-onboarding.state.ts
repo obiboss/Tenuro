@@ -9,3 +9,15 @@ export const initialPublicReceiptSignupActionState: PublicReceiptSignupActionSta
     ok: false,
     message: "",
   };
+
+export type PublicAgreementSignupActionState = {
+  ok: boolean;
+  message: string;
+  fieldErrors?: Record<string, string[]>;
+};
+
+export const initialPublicAgreementSignupActionState: PublicAgreementSignupActionState =
+  {
+    ok: false,
+    message: "",
+  };

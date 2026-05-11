@@ -124,3 +124,26 @@ export type PublicAgreementRentFrequency = z.infer<
 >;
 
 export type PublicAgreementUse = z.infer<typeof publicAgreementUseSchema>;
+
+export const publicAgreementSignupSchema = z.object({
+  agreementId: z.string().uuid("Agreement link is invalid."),
+  token: z.string().trim().min(20, "Agreement claim token is invalid."),
+
+  fullName: requiredText("Full name"),
+  phoneNumber: phoneSchema,
+  email: z
+    .string()
+    .trim()
+    .email("Enter a valid email address.")
+    .optional()
+    .or(z.literal("")),
+
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters.")
+    .max(72, "Password is too long."),
+});
+
+export type PublicAgreementSignupInput = z.infer<
+  typeof publicAgreementSignupSchema
+>;

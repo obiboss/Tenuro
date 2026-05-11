@@ -34,6 +34,7 @@ export type GeneratedPublicAgreementPreview = {
   watermarkText: string;
   downloadUrl: string;
   whatsappMessage: string;
+  claimUrl: string;
 };
 
 function getAppUrl() {
@@ -68,6 +69,10 @@ function hashToken(token: string) {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
+export function hashPublicAgreementToken(token: string) {
+  return hashToken(token);
+}
+
 function hashesMatch(params: { token: string; storedHash: string }) {
   const receivedHash = hashToken(params.token);
   const receivedBuffer = Buffer.from(receivedHash, "hex");
@@ -86,8 +91,21 @@ function createDownloadExpiry() {
   return expiry.toISOString();
 }
 
+function createClaimExpiry() {
+  const expiry = new Date();
+  expiry.setDate(expiry.getDate() + 30);
+
+  return expiry.toISOString();
+}
+
 function buildDownloadUrl(params: { agreementId: string; token: string }) {
   return `${getAppUrl()}/agreement-generator/download/${encodeURIComponent(
+    params.agreementId,
+  )}?token=${encodeURIComponent(params.token)}`;
+}
+
+function buildClaimUrl(params: { agreementId: string; token: string }) {
+  return `${getAppUrl()}/agreement-generator/claim/${encodeURIComponent(
     params.agreementId,
   )}?token=${encodeURIComponent(params.token)}`;
 }
@@ -406,6 +424,10 @@ export async function generatePublicTenancyAgreementPreview(
   const downloadTokenHash = hashToken(downloadToken);
   const downloadTokenExpiresAt = createDownloadExpiry();
 
+  const claimToken = createSecureToken();
+  const claimTokenHash = hashToken(claimToken);
+  const claimTokenExpiresAt = createClaimExpiry();
+
   const lead = await createPublicToolLead(supabase, {
     landlordFullName: input.landlordFullName,
     landlordPhoneNumber: input.landlordPhoneNumber,
@@ -471,6 +493,8 @@ export async function generatePublicTenancyAgreementPreview(
     agreementSnapshot,
     downloadTokenHash,
     downloadTokenExpiresAt,
+    claimTokenHash,
+    claimTokenExpiresAt,
     metadata: {
       acquisition_channel: "public_agreement_generator",
       rent_frequency: input.rentFrequency,
@@ -483,6 +507,11 @@ export async function generatePublicTenancyAgreementPreview(
   const downloadUrl = buildDownloadUrl({
     agreementId: agreement.id,
     token: downloadToken,
+  });
+
+  const claimUrl = buildClaimUrl({
+    agreementId: agreement.id,
+    token: claimToken,
   });
 
   const whatsappMessage = buildAgreementWhatsappMessage({
@@ -515,6 +544,7 @@ export async function generatePublicTenancyAgreementPreview(
       property_use: input.propertyUse,
       has_pdf_download: true,
       has_whatsapp_share: true,
+      has_account_claim: true,
     },
   });
 
@@ -534,6 +564,7 @@ export async function generatePublicTenancyAgreementPreview(
     watermarkText: "Generated with BOPA — boldverseproperty.com",
     downloadUrl,
     whatsappMessage,
+    claimUrl,
   };
 }
 

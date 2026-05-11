@@ -3,6 +3,7 @@
 import { useActionState, useMemo, useState } from "react";
 import { generatePublicAgreementAction } from "@/actions/public-agreement-generator.actions";
 import { initialPublicAgreementGeneratorState } from "@/actions/public-agreement-generator.state";
+import { FreeAgreementAccountPrompt } from "@/components/public-tools/free-agreement-account-prompt";
 import { GeneratedAgreementResult } from "@/components/public-tools/generated-agreement-result";
 import { Button } from "@/components/ui/button";
 
@@ -80,6 +81,54 @@ export function AgreementGeneratorForm({
     () => calculateEndDate(tenancyStartDate, tenancyDuration),
     [tenancyStartDate, tenancyDuration],
   );
+
+  if (state.ok && state.agreement) {
+    return (
+      <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
+        <div>
+          <GeneratedAgreementResult agreement={state.agreement} />
+        </div>
+
+        <aside className="space-y-6 xl:sticky xl:top-28 xl:self-start">
+          <FreeAgreementAccountPrompt claimUrl={state.agreement.claimUrl} />
+
+          <div className="rounded-card bg-surface p-5 shadow-card md:p-6">
+            <p className="text-sm font-bold text-primary">Agreement Summary</p>
+
+            <div className="mt-4 space-y-3 text-sm leading-6">
+              <div>
+                <p className="font-bold text-text-muted">Landlord</p>
+                <p className="font-black text-text-strong">
+                  {state.agreement.landlordFullName}
+                </p>
+              </div>
+
+              <div>
+                <p className="font-bold text-text-muted">Tenant</p>
+                <p className="font-black text-text-strong">
+                  {state.agreement.tenantFullName}
+                </p>
+              </div>
+
+              <div>
+                <p className="font-bold text-text-muted">Property</p>
+                <p className="font-black text-text-strong">
+                  {state.agreement.propertyLabel}
+                </p>
+              </div>
+
+              <div>
+                <p className="font-bold text-text-muted">Status</p>
+                <p className="font-black text-warning">
+                  Watermarked public preview
+                </p>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
@@ -484,35 +533,30 @@ export function AgreementGeneratorForm({
       </form>
 
       <aside className="space-y-6 xl:sticky xl:top-28 xl:self-start">
-        {state.ok && state.agreement ? (
-          <GeneratedAgreementResult agreement={state.agreement} />
-        ) : (
-          <div className="rounded-card bg-surface p-5 shadow-card md:p-6">
-            <p className="text-sm font-bold text-primary">
-              Free agreement preview
-            </p>
-            <h2 className="mt-2 text-2xl font-black tracking-tight text-text-strong">
-              Generate the agreement first. Create an account later.
-            </h2>
-            <p className="mt-3 text-sm leading-6 text-text-muted">
-              BOPA prepares a tenancy agreement preview using the same structure
-              as the landlord dashboard agreement workflow: parties, premises,
-              tenancy term, rent clause, obligations, property requirements,
-              digital record clause, and signature section.
-            </p>
+        <div className="rounded-card bg-surface p-5 shadow-card md:p-6">
+          <p className="text-sm font-bold text-primary">
+            Free agreement preview
+          </p>
+          <h2 className="mt-2 text-2xl font-black tracking-tight text-text-strong">
+            Generate the agreement first. Create an account later.
+          </h2>
+          <p className="mt-3 text-sm leading-6 text-text-muted">
+            BOPA prepares a tenancy agreement preview using the same structure
+            as the landlord dashboard agreement workflow: parties, premises,
+            tenancy term, rent clause, obligations, property requirements,
+            digital record clause, and signature section.
+          </p>
 
-            <div className="mt-5 rounded-button bg-primary-soft p-4">
-              <p className="text-sm font-black text-text-strong">
-                What this creates now
-              </p>
-              <p className="mt-1 text-sm leading-6 text-text-muted">
-                A saved public agreement snapshot and on-screen agreement body
-                preview. PDF download and account attachment come in the next
-                batch.
-              </p>
-            </div>
+          <div className="mt-5 rounded-button bg-primary-soft p-4">
+            <p className="text-sm font-black text-text-strong">
+              After generation
+            </p>
+            <p className="mt-1 text-sm leading-6 text-text-muted">
+              You can download the watermarked PDF, share it on WhatsApp, or
+              create a free account to save it to your BOPA dashboard.
+            </p>
           </div>
-        )}
+        </div>
       </aside>
     </div>
   );

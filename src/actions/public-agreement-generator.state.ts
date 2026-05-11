@@ -18,6 +18,7 @@ export type PublicAgreementGeneratorActionState = {
     watermarkText: string;
     downloadUrl: string;
     whatsappMessage: string;
+    claimUrl: string;
   };
 };
 
