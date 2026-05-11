@@ -13,6 +13,7 @@ type GeneratedReceiptResultProps = {
     paymentMethod: string;
     whatsappMessage: string;
     watermarkText: string;
+    downloadUrl: string;
   };
 };
 
@@ -47,14 +48,23 @@ export function GeneratedReceiptResult({
           </h2>
         </div>
 
-        <a
-          href={whatsappHref}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex min-h-11 items-center justify-center rounded-button bg-success px-5 py-2.5 text-sm font-extrabold text-white shadow-soft transition hover:opacity-90"
-        >
-          Share on WhatsApp
-        </a>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <a
+            href={receipt.downloadUrl}
+            className="inline-flex min-h-11 items-center justify-center rounded-button bg-primary px-5 py-2.5 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary-hover"
+          >
+            Download PDF
+          </a>
+
+          <a
+            href={whatsappHref}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-h-11 items-center justify-center rounded-button bg-success px-5 py-2.5 text-sm font-extrabold text-white shadow-soft transition hover:opacity-90"
+          >
+            Share on WhatsApp
+          </a>
+        </div>
       </div>
 
       <div className="mt-5 grid gap-3 md:grid-cols-2">

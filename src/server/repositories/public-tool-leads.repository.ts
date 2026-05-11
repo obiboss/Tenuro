@@ -45,11 +45,48 @@ export type PublicGeneratedReceiptRow = {
   watermark_status: "watermarked" | "removed";
   document_status: "generated" | "claimed" | "stored" | "archived";
   whatsapp_message: string | null;
+  download_token_hash: string | null;
+  download_token_expires_at: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
   claimed_at: string | null;
 };
+
+const publicGeneratedReceiptSelect = [
+  "id",
+  "lead_id",
+  "owner_profile_id",
+  "landlord_full_name",
+  "landlord_phone_number",
+  "landlord_email",
+  "tenant_full_name",
+  "tenant_phone_number",
+  "property_name",
+  "property_address",
+  "unit_identifier",
+  "city_state",
+  "rent_amount",
+  "currency_code",
+  "payment_date",
+  "rent_period_start",
+  "rent_period_end",
+  "rent_duration_months",
+  "payment_method",
+  "payment_reference",
+  "receipt_number",
+  "receipt_snapshot",
+  "pdf_path",
+  "watermark_status",
+  "document_status",
+  "whatsapp_message",
+  "download_token_hash",
+  "download_token_expires_at",
+  "metadata",
+  "created_at",
+  "updated_at",
+  "claimed_at",
+].join(", ");
 
 export async function createPublicToolLead(
   supabase: SupabaseClient,
@@ -109,6 +146,8 @@ export async function createPublicGeneratedReceipt(
     receiptNumber: string;
     receiptSnapshot: Record<string, unknown>;
     whatsappMessage: string;
+    downloadTokenHash: string;
+    downloadTokenExpiresAt: string;
     metadata?: Record<string, unknown>;
   },
 ) {
@@ -137,11 +176,28 @@ export async function createPublicGeneratedReceipt(
       watermark_status: "watermarked",
       document_status: "generated",
       whatsapp_message: params.whatsappMessage,
+      download_token_hash: params.downloadTokenHash,
+      download_token_expires_at: params.downloadTokenExpiresAt,
       metadata: params.metadata ?? {},
     })
-    .select(
-      "id, lead_id, owner_profile_id, landlord_full_name, landlord_phone_number, landlord_email, tenant_full_name, tenant_phone_number, property_name, property_address, unit_identifier, city_state, rent_amount, currency_code, payment_date, rent_period_start, rent_period_end, rent_duration_months, payment_method, payment_reference, receipt_number, receipt_snapshot, pdf_path, watermark_status, document_status, whatsapp_message, metadata, created_at, updated_at, claimed_at",
-    )
+    .select(publicGeneratedReceiptSelect)
+    .single<PublicGeneratedReceiptRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getPublicGeneratedReceiptById(
+  supabase: SupabaseClient,
+  receiptId: string,
+) {
+  const { data, error } = await supabase
+    .from("public_generated_receipts")
+    .select(publicGeneratedReceiptSelect)
+    .eq("id", receiptId)
     .single<PublicGeneratedReceiptRow>();
 
   if (error) {

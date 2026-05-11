@@ -6,6 +6,8 @@ import {
   createPublicGeneratedReceipt,
   createPublicToolLead,
   createReceiptUsageEvent,
+  getPublicGeneratedReceiptById,
+  type PublicGeneratedReceiptRow,
 } from "@/server/repositories/public-tool-leads.repository";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import type {
@@ -28,7 +30,18 @@ export type GeneratedPublicReceiptResult = {
   paymentMethod: string;
   whatsappMessage: string;
   watermarkText: string;
+  downloadUrl: string;
 };
+
+function getAppUrl() {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+
+  if (!appUrl) {
+    return "http://localhost:3000";
+  }
+
+  return appUrl.replace(/\/$/, "");
+}
 
 function addMonths(date: Date, months: number) {
   const result = new Date(
@@ -75,6 +88,20 @@ function calculateRentPeriodEnd(
 function createReceiptNumber() {
   const suffix = crypto.randomBytes(4).toString("hex").toUpperCase();
   return `BOPA-REC-${new Date().getFullYear()}-${suffix}`;
+}
+
+function createDownloadToken() {
+  return crypto.randomBytes(32).toString("base64url");
+}
+
+function hashToken(token: string) {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+function createDownloadExpiry() {
+  const expiry = new Date();
+  expiry.setDate(expiry.getDate() + 30);
+  return expiry.toISOString();
 }
 
 function cleanOptional(value: string | null | undefined) {
@@ -134,6 +161,7 @@ function buildReceiptWhatsappMessage(params: {
   paymentDate: string;
   rentPeriodStart: string;
   rentPeriodEnd: string;
+  downloadUrl: string;
 }) {
   return [
     `Rent receipt ${params.receiptNumber}`,
@@ -143,10 +171,19 @@ function buildReceiptWhatsappMessage(params: {
     `Property: ${params.propertyLabel}`,
     `Amount: ${formatMoney(params.rentAmount)}`,
     `Payment date: ${formatDate(params.paymentDate)}`,
-    `Rent period: ${formatDate(params.rentPeriodStart)} - ${formatDate(params.rentPeriodEnd)}`,
+    `Rent period: ${formatDate(params.rentPeriodStart)} - ${formatDate(
+      params.rentPeriodEnd,
+    )}`,
+    `Download PDF: ${params.downloadUrl}`,
     ``,
     `Generated with BOPA — boldverseproperty.com`,
   ].join("\n");
+}
+
+function buildDownloadUrl(params: { receiptId: string; token: string }) {
+  return `${getAppUrl()}/receipt-generator/download/${encodeURIComponent(
+    params.receiptId,
+  )}?token=${encodeURIComponent(params.token)}`;
 }
 
 export async function generatePublicRentReceipt(
@@ -164,6 +201,9 @@ export async function generatePublicRentReceipt(
   const unitIdentifier = cleanOptional(input.unitIdentifier);
   const receiptNumber = createReceiptNumber();
   const propertyLabel = buildPropertyLabel(input);
+  const downloadToken = createDownloadToken();
+  const downloadTokenHash = hashToken(downloadToken);
+  const downloadTokenExpiresAt = createDownloadExpiry();
 
   const lead = await createPublicToolLead(supabase, {
     landlordFullName: input.landlordFullName,
@@ -178,15 +218,9 @@ export async function generatePublicRentReceipt(
     },
   });
 
-  const whatsappMessage = buildReceiptWhatsappMessage({
-    receiptNumber,
-    landlordFullName: input.landlordFullName,
-    tenantFullName: input.tenantFullName,
-    propertyLabel,
-    rentAmount: input.rentAmount,
-    paymentDate: input.paymentDate,
-    rentPeriodStart: input.rentStartDate,
-    rentPeriodEnd,
+  const temporaryDownloadUrl = buildDownloadUrl({
+    receiptId: "pending",
+    token: downloadToken,
   });
 
   const receiptSnapshot = {
@@ -218,6 +252,18 @@ export async function generatePublicRentReceipt(
     watermark: "Generated with BOPA — boldverseproperty.com",
   };
 
+  const initialWhatsappMessage = buildReceiptWhatsappMessage({
+    receiptNumber,
+    landlordFullName: input.landlordFullName,
+    tenantFullName: input.tenantFullName,
+    propertyLabel,
+    rentAmount: input.rentAmount,
+    paymentDate: input.paymentDate,
+    rentPeriodStart: input.rentStartDate,
+    rentPeriodEnd,
+    downloadUrl: temporaryDownloadUrl,
+  });
+
   const receipt = await createPublicGeneratedReceipt(supabase, {
     leadId: lead.id,
     landlordFullName: input.landlordFullName,
@@ -237,10 +283,29 @@ export async function generatePublicRentReceipt(
     paymentMethod: input.paymentMethod,
     receiptNumber,
     receiptSnapshot,
-    whatsappMessage,
+    whatsappMessage: initialWhatsappMessage,
+    downloadTokenHash,
+    downloadTokenExpiresAt,
     metadata: {
       acquisition_channel: "public_receipt_generator",
     },
+  });
+
+  const downloadUrl = buildDownloadUrl({
+    receiptId: receipt.id,
+    token: downloadToken,
+  });
+
+  const whatsappMessage = buildReceiptWhatsappMessage({
+    receiptNumber,
+    landlordFullName: input.landlordFullName,
+    tenantFullName: input.tenantFullName,
+    propertyLabel,
+    rentAmount: input.rentAmount,
+    paymentDate: input.paymentDate,
+    rentPeriodStart: input.rentStartDate,
+    rentPeriodEnd,
+    downloadUrl,
   });
 
   await createReceiptUsageEvent(supabase, {
@@ -251,6 +316,7 @@ export async function generatePublicRentReceipt(
     metadata: {
       rent_amount: input.rentAmount,
       rent_duration_months: rentDurationMonths,
+      has_pdf_download: true,
     },
   });
 
@@ -267,7 +333,57 @@ export async function generatePublicRentReceipt(
     rentPeriodEnd: receipt.rent_period_end,
     rentDurationMonths: receipt.rent_duration_months,
     paymentMethod: paymentMethodLabel(receipt.payment_method),
-    whatsappMessage: receipt.whatsapp_message ?? whatsappMessage,
+    whatsappMessage,
     watermarkText: "Generated with BOPA — boldverseproperty.com",
+    downloadUrl,
   };
+}
+
+export async function getPublicGeneratedReceiptForDownload(params: {
+  receiptId: string;
+  token: string;
+}): Promise<PublicGeneratedReceiptRow> {
+  const supabase = createSupabaseAdminClient();
+  const receipt = await getPublicGeneratedReceiptById(
+    supabase,
+    params.receiptId,
+  );
+
+  if (!receipt.download_token_hash || !receipt.download_token_expires_at) {
+    throw new AppError(
+      "PUBLIC_RECEIPT_DOWNLOAD_NOT_READY",
+      "This receipt download is not ready.",
+      404,
+    );
+  }
+
+  const receivedHash = hashToken(params.token);
+
+  if (receivedHash !== receipt.download_token_hash) {
+    throw new AppError(
+      "PUBLIC_RECEIPT_DOWNLOAD_INVALID",
+      "This receipt download link is invalid.",
+      401,
+    );
+  }
+
+  if (new Date(receipt.download_token_expires_at).getTime() < Date.now()) {
+    throw new AppError(
+      "PUBLIC_RECEIPT_DOWNLOAD_EXPIRED",
+      "This receipt download link has expired. Please generate a fresh receipt.",
+      410,
+    );
+  }
+
+  await createReceiptUsageEvent(supabase, {
+    leadId: receipt.lead_id ?? receipt.id,
+    receiptId: receipt.id,
+    eventType: "receipt_downloaded",
+    sourcePath: "/receipt-generator/download",
+    metadata: {
+      receipt_number: receipt.receipt_number,
+    },
+  });
+
+  return receipt;
 }

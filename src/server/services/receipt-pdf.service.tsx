@@ -9,6 +9,7 @@ import {
   renderToBuffer,
 } from "@react-pdf/renderer";
 import type { RentPaymentRow } from "@/server/repositories/payments.repository";
+import type { PublicGeneratedReceiptRow } from "@/server/repositories/public-tool-leads.repository";
 
 const styles = StyleSheet.create({
   page: {
@@ -126,6 +127,24 @@ function paymentMethodLabel(method: RentPaymentRow["payment_method"]) {
   return "Other";
 }
 
+function publicPaymentMethodLabel(
+  method: PublicGeneratedReceiptRow["payment_method"],
+) {
+  if (method === "bank_transfer") {
+    return "Bank Transfer";
+  }
+
+  if (method === "cash") {
+    return "Cash";
+  }
+
+  if (method === "paystack_gateway") {
+    return "Paystack";
+  }
+
+  return "Other";
+}
+
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.row}>
@@ -207,6 +226,76 @@ function ReceiptPdfDocument({ payment }: { payment: RentPaymentRow }) {
   );
 }
 
+function PublicReceiptPdfDocument({
+  receipt,
+}: {
+  receipt: PublicGeneratedReceiptRow;
+}) {
+  const propertyLabel = [
+    receipt.property_name,
+    receipt.unit_identifier,
+    receipt.property_address,
+    receipt.city_state,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  return (
+    <Document
+      title="Rent Receipt"
+      author="Boldverse Property"
+      subject="Public Rent Receipt"
+    >
+      <Page size="A4" style={styles.page}>
+        <View style={styles.header}>
+          <Text style={styles.brand}>Boldverse Property</Text>
+          <Text style={styles.title}>Rent Receipt</Text>
+          <Text style={styles.meta}>
+            Receipt No: {receipt.receipt_number} | Generated:{" "}
+            {formatDate(receipt.created_at)}
+          </Text>
+        </View>
+
+        <View style={styles.section}>
+          <Row label="Landlord" value={receipt.landlord_full_name} />
+          <Row label="Landlord Phone" value={receipt.landlord_phone_number} />
+          <Row label="Tenant" value={receipt.tenant_full_name} />
+          <Row label="Tenant Phone" value={receipt.tenant_phone_number} />
+          <Row label="Property" value={propertyLabel} />
+          <Row
+            label="Payment Method"
+            value={publicPaymentMethodLabel(receipt.payment_method)}
+          />
+          <Row label="Payment Date" value={formatDate(receipt.payment_date)} />
+          <Row
+            label="Payment Period"
+            value={`${formatDate(receipt.rent_period_start)} - ${formatDate(
+              receipt.rent_period_end,
+            )}`}
+          />
+        </View>
+
+        <View style={styles.amountBox}>
+          <Text style={styles.amountLabel}>Amount Paid</Text>
+          <Text style={styles.amountValue}>
+            {formatPdfMoney(Number(receipt.rent_amount))}
+          </Text>
+        </View>
+
+        <Text style={styles.footer}>
+          Generated with BOPA — boldverseproperty.com
+        </Text>
+      </Page>
+    </Document>
+  );
+}
+
 export async function renderRentReceiptPdf(payment: RentPaymentRow) {
   return renderToBuffer(<ReceiptPdfDocument payment={payment} />);
+}
+
+export async function renderPublicGeneratedReceiptPdf(
+  receipt: PublicGeneratedReceiptRow,
+) {
+  return renderToBuffer(<PublicReceiptPdfDocument receipt={receipt} />);
 }
