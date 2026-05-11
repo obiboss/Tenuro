@@ -5,6 +5,7 @@ import { ReceiptGeneratorForm } from "@/components/public-tools/receipt-generato
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TrustNotice } from "@/components/ui/trust-notice";
+import { getFeaturedReceiptGeneratorLocations } from "@/lib/receipt-generator-locations";
 
 export const metadata: Metadata = {
   title: "Free Rent Receipt Generator Nigeria | BOPA",
@@ -19,6 +20,7 @@ export const metadata: Metadata = {
 };
 
 export default function ReceiptGeneratorPage() {
+  const featuredLocations = getFeaturedReceiptGeneratorLocations();
   return (
     <main className="min-h-screen bg-background">
       <section className="mx-auto max-w-7xl px-4 py-8 md:px-8 lg:py-10">
@@ -103,6 +105,31 @@ export default function ReceiptGeneratorPage() {
               landlord receipt Nigeria, rent receipt template Nigeria, and rent
               tracking Lagos workflows.
             </p>
+          </div>
+        </section>
+        <section className="mt-8 rounded-card bg-surface p-5 shadow-card md:p-8">
+          <h2 className="text-2xl font-black tracking-tight text-text-strong">
+            Popular rent receipt generator locations
+          </h2>
+
+          <p className="mt-3 max-w-2xl text-sm leading-7 text-text-muted md:text-base">
+            Choose a location page for more specific receipt guidance, or use
+            the main generator above for any Nigerian city.
+          </p>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {featuredLocations.map((location) => (
+              <Link
+                key={location.slug}
+                href={`/receipt-generator/${location.slug}`}
+                className="rounded-button border border-border-soft bg-background p-4 transition hover:border-primary/40 hover:bg-primary-soft"
+              >
+                <p className="font-black text-text-strong">{location.label}</p>
+                <p className="mt-1 text-sm font-semibold text-text-muted">
+                  {location.seoKeyword}
+                </p>
+              </Link>
+            ))}
           </div>
         </section>
       </section>

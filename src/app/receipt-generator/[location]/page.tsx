@@ -1,11 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowRight, FileText, ShieldCheck } from "lucide-react";
+import { ArrowRight, FileText, MapPin, ShieldCheck } from "lucide-react";
 import { ReceiptGeneratorForm } from "@/components/public-tools/receipt-generator-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TrustNotice } from "@/components/ui/trust-notice";
+import {
+  getReceiptGeneratorLocation,
+  receiptGeneratorLocations,
+} from "@/lib/receipt-generator-locations";
 
 type LocationPageProps = {
   params: Promise<{
@@ -13,43 +17,17 @@ type LocationPageProps = {
   }>;
 };
 
-const locationCopy: Record<
-  string,
-  {
-    label: string;
-    title: string;
-    description: string;
-    seoKeyword: string;
-  }
-> = {
-  lagos: {
-    label: "Lagos",
-    title: "Free Rent Receipt Generator Lagos",
-    description:
-      "Generate a clean rent receipt for Lagos landlords managing flats, apartments, shops, and annual tenant payments.",
-    seoKeyword: "rent receipt generator Lagos",
-  },
-  abuja: {
-    label: "Abuja",
-    title: "Free Rent Receipt Generator Abuja",
-    description:
-      "Create a professional rent receipt for Abuja landlords and tenants without signing up first.",
-    seoKeyword: "rent receipt generator Abuja",
-  },
-  "port-harcourt": {
-    label: "Port Harcourt",
-    title: "Free Rent Receipt Generator Port Harcourt",
-    description:
-      "Prepare a clear rent payment receipt for Port Harcourt landlords, tenants, and property managers.",
-    seoKeyword: "rent receipt generator Port Harcourt",
-  },
-};
+export function generateStaticParams() {
+  return receiptGeneratorLocations.map((location) => ({
+    location: location.slug,
+  }));
+}
 
 export async function generateMetadata({
   params,
 }: LocationPageProps): Promise<Metadata> {
   const { location } = await params;
-  const page = locationCopy[location];
+  const page = getReceiptGeneratorLocation(location);
 
   if (!page) {
     return {
@@ -72,7 +50,7 @@ export default async function LocalReceiptGeneratorPage({
   params,
 }: LocationPageProps) {
   const { location } = await params;
-  const page = locationCopy[location];
+  const page = getReceiptGeneratorLocation(location);
 
   if (!page) {
     notFound();
@@ -120,20 +98,22 @@ export default async function LocalReceiptGeneratorPage({
                 {page.description} BOPA calculates rent periods for Nigerian
                 annual rent, six-month rent, and two-year rent payments.
               </p>
+
+              <p className="mt-4 max-w-2xl text-sm leading-7 text-text-muted md:text-base">
+                {page.intro}
+              </p>
             </div>
 
             <div className="space-y-4">
               <TrustNotice
                 title={`Built for ${page.label} landlords`}
                 description="Generate the receipt first. Create an account later only when you want to save receipt history and track tenants."
-                icon={
-                  <FileText aria-hidden="true" size={22} strokeWidth={2.6} />
-                }
+                icon={<MapPin aria-hidden="true" size={22} strokeWidth={2.6} />}
               />
 
               <TrustNotice
                 title="Professional tenant record"
-                description="Each generated receipt includes landlord, tenant, property, payment amount, and rent period details."
+                description="Each generated receipt includes landlord, tenant, property, payment amount, payment method, and rent-period details."
                 icon={
                   <ShieldCheck aria-hidden="true" size={22} strokeWidth={2.6} />
                 }
@@ -147,17 +127,60 @@ export default async function LocalReceiptGeneratorPage({
           sourceLocation={page.label}
         />
 
-        <section className="mt-12 rounded-card bg-surface p-5 shadow-card md:p-8">
-          <h2 className="text-2xl font-black tracking-tight text-text-strong">
-            {page.seoKeyword} for Nigerian landlords
-          </h2>
+        <section className="mt-12 grid gap-6 lg:grid-cols-[1fr_420px]">
+          <div className="rounded-card bg-surface p-5 shadow-card md:p-8">
+            <h2 className="text-2xl font-black tracking-tight text-text-strong">
+              {page.seoKeyword} for Nigerian landlords
+            </h2>
 
-          <p className="mt-4 text-sm leading-7 text-text-muted md:text-base">
-            Use BOPA to create rent receipts for tenants in {page.label}. This
-            free public tool supports rent receipt template Nigeria, landlord
-            receipt Nigeria, tenant payment receipt, and annual rent receipt
-            workflows.
-          </p>
+            <p className="mt-4 text-sm leading-7 text-text-muted md:text-base">
+              Use BOPA to create rent receipts for tenants in {page.label},{" "}
+              {page.state}. This free public tool supports rent receipt template
+              Nigeria, landlord receipt Nigeria, tenant payment receipt, annual
+              rent receipt, and property payment record workflows.
+            </p>
+
+            <div className="mt-6 grid gap-3">
+              {page.useCases.map((useCase) => (
+                <div
+                  key={useCase}
+                  className="flex items-start gap-3 rounded-button bg-background p-4"
+                >
+                  <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-primary-soft text-primary">
+                    <FileText aria-hidden="true" size={17} strokeWidth={2.6} />
+                  </div>
+
+                  <p className="text-sm font-semibold leading-6 text-text-muted">
+                    {useCase}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-card bg-primary p-5 text-white shadow-card md:p-8">
+            <p className="text-sm font-bold uppercase tracking-wide text-white/75">
+              After generating
+            </p>
+
+            <h2 className="mt-2 text-2xl font-black tracking-tight">
+              Save receipts inside your BOPA dashboard.
+            </h2>
+
+            <p className="mt-3 text-sm leading-7 text-white/80">
+              After creating a receipt, landlords can create a free account from
+              the generated receipt and keep the imported receipt attached to
+              their profile for review.
+            </p>
+
+            <div className="mt-6">
+              <Link href="/receipt-generator">
+                <Button variant="secondary" fullWidth>
+                  Open Main Receipt Generator
+                </Button>
+              </Link>
+            </div>
+          </div>
         </section>
       </section>
     </main>
