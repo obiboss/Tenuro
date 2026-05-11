@@ -56,11 +56,11 @@ function buildWhatsAppUrl(params: {
   const message = [
     `Hello ${params.tenantName},`,
     "",
-    `You have been invited to complete your tenant profile for ${params.unitIdentifier} at ${params.propertyName} on Tenuro.`,
+    `You have been invited to complete your tenant profile for ${params.unitIdentifier} at ${params.propertyName} on BOPA.`,
     "Please use the secure link below to complete your onboarding:",
     params.onboardingUrl,
     "",
-    "Tenuro - Property records made simple.",
+    "BOPA - Property records made simple.",
   ].join("\n");
 
   return `https://wa.me/${phoneDigits}?text=${encodeURIComponent(message)}`;

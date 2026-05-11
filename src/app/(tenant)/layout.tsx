@@ -22,7 +22,7 @@ export default async function TenantLayout({ children }: TenantLayoutProps) {
 
             <div className="min-w-0">
               <p className="truncate text-lg font-extrabold tracking-tight text-text-strong">
-                Tenuro
+                Boldverse Property
               </p>
               <p className="truncate text-xs font-semibold text-text-muted">
                 Tenant dashboard

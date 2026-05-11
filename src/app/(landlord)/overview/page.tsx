@@ -146,7 +146,7 @@ export default async function OverviewPage() {
         <div className="space-y-6">
           <TrustNotice
             title="Your payment records are protected"
-            description="Tenuro keeps a clear history of every payment, correction, tenant profile, and receipt."
+            description="Boldverse Property keeps a clear history of every payment, correction, tenant profile, and receipt."
           />
 
           <SectionCard

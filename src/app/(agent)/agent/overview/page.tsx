@@ -543,7 +543,7 @@ export default async function AgentOverviewPage() {
             {!payoutConnected ? (
               <TrustNotice
                 title="Connect payout account"
-                description="Add your bank details so Tenuro can route processing fees and commissions to you."
+                description="Add your bank details so BOPA can route processing fees and commissions to you."
                 icon={
                   <CreditCard aria-hidden="true" size={22} strokeWidth={2.6} />
                 }

@@ -120,7 +120,7 @@ function buildTenantPaymentMessage(params: {
     `Rent amount: ${formatNairaAmount(params.rentAmount)}`,
     ...chargeLines,
     ...agentLines,
-    `Tenuro fee: ${formatNairaAmount(params.tenuroFeeAmount)}`,
+    `BOPA fee: ${formatNairaAmount(params.tenuroFeeAmount)}`,
     `Total payable: ${formatNairaAmount(params.totalAmount)}`,
     `Link expires: ${expiryText}`,
     "",
@@ -225,7 +225,7 @@ function getTenantPaymentEmail(params: {
     return `tenant-${sanitizedPhone}@tenuro.app`;
   }
 
-  return "payments@tenuro.app";
+  return "payments@boldverseproperty.com";
 }
 
 function assertGatewayAmountStructure(params: {
@@ -628,7 +628,7 @@ async function initializeGatewayPaymentForTenancy(params: {
 
   const agentDealSplit = shouldUseAgentMultiSplit
     ? await createAgentDealTransactionSplit({
-        name: `Tenuro Agent Deal ${reference}`,
+        name: `BOPA Agent Deal ${reference}`,
         landlordSubaccountCode: paystackAccount.paystack_subaccount_code,
         landlordShareKobo: convertNairaToKobo(landlordShareAmount),
         agentSubaccountCode:

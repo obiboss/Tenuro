@@ -36,7 +36,7 @@ function getTenuroAppFeeAmount() {
   if (!value) {
     throw new AppError(
       "TENURO_APP_FEE_MISSING",
-      "Tenuro app fee is not configured.",
+      "BOPA app fee is not configured.",
       500,
     );
   }
@@ -46,7 +46,7 @@ function getTenuroAppFeeAmount() {
   if (!Number.isFinite(fee) || fee <= 0) {
     throw new AppError(
       "TENURO_APP_FEE_INVALID",
-      "Tenuro app fee is not configured correctly.",
+      "BOPA app fee is not configured correctly.",
       500,
     );
   }
@@ -74,7 +74,7 @@ function getLandlordPaymentEmail(params: {
     return `landlord-${sanitizedPhone}@tenuro.app`;
   }
 
-  return "payments@tenuro.app";
+  return "payments@boldverseproperty.com";
 }
 
 function mapPaystackStatus(status: string) {
@@ -139,7 +139,7 @@ export async function initializeManualRentAppFeePayment(
   if (rentPayment.payment_method === "paystack_gateway") {
     throw new AppError(
       "APP_FEE_ALREADY_COLLECTED",
-      "Tenuro fee was already collected through the tenant Paystack split.",
+      "BOPA fee was already collected through the tenant Paystack split.",
       400,
     );
   }

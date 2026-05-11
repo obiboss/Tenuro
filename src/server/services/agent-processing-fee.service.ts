@@ -64,7 +64,7 @@ function getTenantPaymentEmail(params: {
     return `tenant-${sanitizedPhone}@tenuro.app`;
   }
 
-  return "payments@tenuro.app";
+  return "payments@boldverseproperty.com";
 }
 
 function toRecord(value: unknown): Record<string, unknown> {
@@ -179,7 +179,7 @@ export async function resolveAgentTenantProcessingFeeForOnboarding(params: {
 
   const reference = createPaymentReference();
   const split = await createTransactionSplit({
-    name: `Tenuro Agent Processing Fee ${reference}`,
+    name: `BOPA Agent Processing Fee ${reference}`,
     landlordSubaccountCode: agentPaystackAccount.paystack_subaccount_code,
     landlordShareKobo: convertNairaToKobo(AGENT_PROCESSING_AGENT_SHARE),
     currencyCode: AGENT_PROCESSING_CURRENCY,

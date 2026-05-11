@@ -59,7 +59,7 @@ function TenantAgreementLogo() {
 
       <div>
         <p className="text-lg font-extrabold tracking-tight text-text-strong">
-          Tenuro
+          Boldverse Property
         </p>
         <p className="text-xs font-semibold text-text-muted">
           Tenancy agreement

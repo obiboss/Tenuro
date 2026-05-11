@@ -253,7 +253,7 @@ function RuleCheckboxCard({
             min={1}
             required
             placeholder="Example: 4"
-            helperText="If a tenant enters more than this, Tenuro will reject the application."
+            helperText="If a tenant enters more than this, BOPA will reject the application."
           />
         </span>
       ) : null}
@@ -267,7 +267,7 @@ function RuleCheckboxCard({
             min={1}
             required
             placeholder="Example: 250000"
-            helperText="If a tenant enters less than this, Tenuro will reject the application."
+            helperText="If a tenant enters less than this, BOPA will reject the application."
           />
         </span>
       ) : null}
@@ -336,7 +336,7 @@ function GuidedRuleCreateForm({
           Things you do not want
         </h3>
         <p className="mt-1 text-sm leading-6 text-text-muted">
-          Tick everything you want Tenuro to check before a tenant is approved.
+          Tick everything you want BOPA to check before a tenant is approved.
         </p>
 
         <div className="mt-4 grid gap-3 md:grid-cols-2">

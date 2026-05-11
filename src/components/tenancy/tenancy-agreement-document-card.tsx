@@ -334,7 +334,7 @@ export function TenancyAgreementDocumentCard({
           ) : (
             <TrustNotice
               title="Acceptance before payment"
-              description="When you click Send Agreement Link, Tenuro prepares the link and opens WhatsApp with the message ready."
+              description="When you click Send Agreement Link, BOPA prepares the link and opens WhatsApp with the message ready."
             />
           )}
         </div>

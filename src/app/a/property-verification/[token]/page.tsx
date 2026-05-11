@@ -1,10 +1,5 @@
 import Link from "next/link";
-import {
-  AlertTriangle,
-  Building2,
-  CheckCircle2,
-  ShieldCheck,
-} from "lucide-react";
+import { AlertTriangle, CheckCircle2, ShieldCheck } from "lucide-react";
 import { PublicLandlordVerificationForm } from "@/components/agent/public-landlord-verification-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -53,19 +48,19 @@ async function getPageState(
   }
 }
 
-function TenuroBrand() {
+function BoldverseBrand() {
   return (
     <Link href="/" className="flex items-center gap-3">
-      <div className="flex size-11 items-center justify-center rounded-2xl bg-primary text-white shadow-soft">
-        <Building2 aria-hidden="true" size={23} strokeWidth={2.7} />
+      <div className="flex size-11 items-center justify-center rounded-2xl bg-primary text-2xl font-extrabold tracking-tight text-white shadow-soft">
+        B
       </div>
 
       <div>
         <p className="text-lg font-extrabold tracking-tight text-text-strong">
-          Tenuro
+          Boldverse Property
         </p>
         <p className="text-xs font-semibold text-text-muted">
-          Property records made simple
+          Property Management for Modern Landlords
         </p>
       </div>
     </Link>
@@ -82,7 +77,7 @@ export default async function PropertyVerificationPage({
     return (
       <main className="min-h-screen bg-background px-4 py-8 md:px-6">
         <div className="mx-auto max-w-2xl">
-          <TenuroBrand />
+          <BoldverseBrand />
 
           <div className="mt-8 rounded-card bg-surface p-5 shadow-card md:p-8">
             <div className="flex items-start gap-4">
@@ -102,14 +97,14 @@ export default async function PropertyVerificationPage({
             </div>
 
             <div className="mt-6 rounded-button bg-background p-4 text-sm leading-6 text-text-muted">
-              The agent should open their Tenuro agent dashboard and send a new
+              The agent should open their BOPA agent dashboard and send a new
               verification link to the landlord on WhatsApp.
             </div>
 
             <div className="mt-6">
               <Link href="/">
                 <Button type="button" fullWidth>
-                  Back to Tenuro
+                  Back to BOPA
                 </Button>
               </Link>
             </div>
@@ -127,7 +122,7 @@ export default async function PropertyVerificationPage({
     return (
       <main className="min-h-screen bg-background px-4 py-8 md:px-6">
         <div className="mx-auto max-w-2xl">
-          <TenuroBrand />
+          <BoldverseBrand />
 
           <div className="mt-8 rounded-card bg-surface p-5 shadow-card md:p-8">
             <div className="flex items-start gap-4">
@@ -142,7 +137,7 @@ export default async function PropertyVerificationPage({
                 </h1>
                 <p className="mt-3 text-sm leading-6 text-text-muted">
                   The final property details have been saved. You can now
-                  continue with Tenuro.
+                  continue with BOPA.
                 </p>
               </div>
             </div>
@@ -186,7 +181,7 @@ export default async function PropertyVerificationPage({
   return (
     <main className="min-h-screen bg-background px-4 py-8 md:px-6">
       <div className="mx-auto max-w-3xl">
-        <TenuroBrand />
+        <BoldverseBrand />
 
         <div className="mt-8 rounded-card bg-surface p-5 shadow-card md:p-8">
           <div className="flex items-start gap-4">
@@ -200,7 +195,7 @@ export default async function PropertyVerificationPage({
                 Review and approve this property
               </h1>
               <p className="mt-3 text-sm leading-6 text-text-muted">
-                An agent submitted this property on Tenuro. Please correct any
+                An agent submitted this property on BOPA. Please correct any
                 wrong details before approval. Once approved, the final version
                 will be shown to the agent and cannot be changed by the agent.
               </p>
@@ -217,7 +212,7 @@ export default async function PropertyVerificationPage({
               <div className="mt-4">
                 <Link href="/">
                   <Button type="button" variant="ghost" fullWidth>
-                    Back to Tenuro
+                    Back to BOPA
                   </Button>
                 </Link>
               </div>

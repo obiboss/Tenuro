@@ -14,7 +14,7 @@ export default function ReportsPage() {
 
       <EmptyState
         title="Reports are coming soon"
-        description="Once reporting is active, Tenuro will show rent collected, outstanding balances, and useful property summaries here."
+        description="Once reporting is active, BOPA will show rent collected, outstanding balances, and useful property summaries here."
         icon={<BarChart3 aria-hidden="true" size={24} strokeWidth={2.6} />}
       />
     </div>

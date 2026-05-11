@@ -251,7 +251,7 @@ export default async function TenantDetailPage({
           {canCreateTenancyRecord ? (
             <SectionCard
               title="Create Tenancy and Agreement Setup"
-              description="Confirm rent, tenancy dates, opening balance, and agreement notes. After this record is created, Tenuro will show the agreement draft step."
+              description="Confirm rent, tenancy dates, opening balance, and agreement notes. After this record is created, BOPA will show the agreement draft step."
             >
               <TrustNotice
                 title="Landlord confirmation required"
@@ -302,7 +302,7 @@ export default async function TenantDetailPage({
             >
               <TrustNotice
                 title="No tenancy record yet"
-                description="Create a tenancy record first so Tenuro can start tracking rent balance."
+                description="Create a tenancy record first so BOPA can start tracking rent balance."
                 icon={
                   <FileCheck2 aria-hidden="true" size={22} strokeWidth={2.6} />
                 }
@@ -377,7 +377,7 @@ export default async function TenantDetailPage({
           {activeTenancy ? (
             <TrustNotice
               title="Final payment model"
-              description="The tenant pays rent, landlord charges, approved agent commission, and Tenuro fee. Landlord charges go to the landlord. Agent commission goes to the agent."
+              description="The tenant pays rent, landlord charges, approved agent commission, and BOPA fee. Landlord charges go to the landlord. Agent commission goes to the agent."
               icon={
                 <ReceiptText aria-hidden="true" size={22} strokeWidth={2.6} />
               }

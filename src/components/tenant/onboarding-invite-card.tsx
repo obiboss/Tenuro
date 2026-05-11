@@ -54,7 +54,7 @@ export function OnboardingInviteCard({ tenantId }: OnboardingInviteCardProps) {
 
         <TrustNotice
           title="Send onboarding link"
-          description="Tenuro will generate the secure link and open WhatsApp with the message ready to send."
+          description="BOPA will generate the secure link and open WhatsApp with the message ready to send."
           icon={
             <MessageCircle aria-hidden="true" size={22} strokeWidth={2.6} />
           }

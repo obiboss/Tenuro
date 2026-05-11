@@ -69,11 +69,11 @@ ${quitNotice.reason}
 
 This notice records the Tenant's stated intention to leave. The unit does not become vacant automatically from this notice alone.
 
-Vacancy, tenancy closure, inspection, and final account handling must be confirmed through the proper move-out process on Tenuro.
+Vacancy, tenancy closure, inspection, and final account handling must be confirmed through the proper move-out process on BOPA (Boldverse Property).
 
 5. DIGITAL RECORD
 
-This notice is stored on Tenuro as part of the tenancy record. Where this document is delivered or acknowledged digitally, the stored timestamp and audit trail may be used as supporting evidence of the notice record.
+This notice is stored on BOPA (Boldverse Property) as part of the tenancy record. Where this document is delivered or acknowledged digitally, the stored timestamp and audit trail may be used as supporting evidence of the notice record.
 
 SIGNED:
 
@@ -124,9 +124,9 @@ ${quitNotice.reason}
 
 4. TENANCY AND LEGAL NOTE
 
-This notice is issued in relation to the tenancy record maintained on Tenuro and is subject to applicable Nigerian tenancy laws and any state-specific tenancy regulations.
+This notice is issued in relation to the tenancy record maintained on BOPA (Boldverse Property) and is subject to applicable Nigerian tenancy laws and any state-specific tenancy regulations.
 
-This notice does not by itself mark the unit as vacant on Tenuro. The unit remains occupied until actual move-out, inspection, and landlord confirmation are completed.
+This notice does not by itself mark the unit as vacant on BOPA (Boldverse Property). The unit remains occupied until actual move-out, inspection, and landlord confirmation are completed.
 
 5. LANDLORD NOTE
 
@@ -134,7 +134,7 @@ ${quitNotice.landlord_notes || "No additional landlord note."}
 
 6. DIGITAL RECORD
 
-This notice is stored on Tenuro as part of the tenancy record. Where this document is delivered or acknowledged digitally, the stored timestamp and audit trail may be used as supporting evidence of the notice record.
+This notice is stored on BOPA (Boldverse Property) as part of the tenancy record. Where this document is delivered or acknowledged digitally, the stored timestamp and audit trail may be used as supporting evidence of the notice record.
 
 SIGNED:
 

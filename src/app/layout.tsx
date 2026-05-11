@@ -9,8 +9,9 @@ const plusJakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Tenuro",
-  description: "Simple rent and property records for landlords.",
+  title: "BOPA | Property Management for Modern Landlords",
+  description:
+    "BOPA — Boldverse Property App — helps Nigerian landlords manage tenants, track rent payments, generate receipts, and maintain tenancy agreements. Built for Lagos and beyond.",
 };
 
 export default function RootLayout({

@@ -40,7 +40,7 @@ function getBasicAuthHeader(accountSid: string, authToken: string) {
 }
 
 function buildOtpMessage(otpCode: string) {
-  return `Your Tenuro verification code is ${otpCode}. This code expires in 10 minutes. Do not share it with anyone.`;
+  return `Your BOPA verification code is ${otpCode}. This code expires in 10 minutes. Do not share it with anyone.`;
 }
 
 async function sendTwilioMessage(params: {

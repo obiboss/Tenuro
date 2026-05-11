@@ -326,7 +326,7 @@ export function PublicLandlordVerificationForm({
 
             <TrustNotice
               title="Landlord approval required"
-              description="The agent proposed this commission. You can accept it, reduce it, increase it, or set it to zero. The final approved amount is what Tenuro will use for split payment."
+              description="The agent proposed this commission. You can accept it, reduce it, increase it, or set it to zero. The final approved amount is what BOPA will use for split payment."
             />
 
             <div className="mt-4 space-y-4">

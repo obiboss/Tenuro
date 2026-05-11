@@ -53,14 +53,14 @@ export function MobileMoreMenu() {
             onClick={() => setIsOpen(false)}
           />
 
-          <div className="absolute inset-x-0 bottom-0 rounded-t-[2rem] bg-white p-5 shadow-2xl">
+          <div className="absolute inset-x-0 bottom-0 rounded-t-4xl bg-white p-5 shadow-2xl">
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-extrabold text-text-strong">
                   More
                 </h2>
                 <p className="text-sm text-text-muted">
-                  Extra Tenuro tools and settings.
+                  Extra BOPA tools and settings.
                 </p>
               </div>
 

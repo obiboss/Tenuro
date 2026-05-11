@@ -29,7 +29,7 @@ export async function initializeManualRentAppFeePaymentAction(
 
     return {
       ok: true,
-      message: "Tenuro app fee checkout prepared.",
+      message: "BOPA app fee checkout prepared.",
       authorizationUrl: result.authorizationUrl,
       reference: result.reference,
     };

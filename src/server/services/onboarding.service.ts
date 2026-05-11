@@ -249,11 +249,11 @@ export async function generateTenantOnboardingLink(tenantId: string) {
   const whatsappMessage = [
     `Hello ${tenant.full_name},`,
     "",
-    `You have been invited to complete your tenant profile for ${unitName} at ${propertyName} on Tenuro.`,
+    `You have been invited to complete your tenant profile for ${unitName} at ${propertyName} on BOPA (Boldverse Property).`,
     "Please use the secure link below to complete your onboarding:",
     onboardingUrl,
     "",
-    "Tenuro - Property records made simple.",
+    "BOPA - Property Management for Modern Landlords.",
   ].join("\n");
 
   await writeTenantOnboardingAuditLog({

@@ -87,7 +87,7 @@ export default async function SettingsPage() {
             <p className="font-bold text-text-strong">Payment rule</p>
             <p className="mt-1 text-sm leading-6 text-text-muted">
               Gateway payments will use Paystack split settlement. Manual
-              payments recorded by landlords do not generate Tenuro fees.
+              payments recorded by landlords do not generate BOPA fees.
             </p>
           </div>
         </div>

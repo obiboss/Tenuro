@@ -56,7 +56,7 @@ export function TenantActivationInviteCard({
 
         <TrustNotice
           title="Send password setup link"
-          description="Tenuro will generate the secure activation link and open WhatsApp with the message ready to send."
+          description="BOPA will generate the secure activation link and open WhatsApp with the message ready to send."
           icon={<KeyRound aria-hidden="true" size={22} strokeWidth={2.6} />}
         />
 

@@ -18,7 +18,7 @@ export function Sidebar() {
 
         <div>
           <p className="text-lg font-extrabold tracking-tight text-text-strong">
-            Tenuro
+            BOPA
           </p>
           <p className="text-xs font-semibold text-text-muted">
             Property records made simple

@@ -67,13 +67,13 @@ function buildWhatsAppUrl(params: {
   const message = [
     `Hello ${params.landlordName},`,
     "",
-    `Your property "${params.propertyName}" was submitted on Tenuro by an agent.`,
+    `Your property "${params.propertyName}" was submitted on BOPA by an agent.`,
     "Please review the property details, correct anything that is wrong, and approve it using this secure link:",
     params.verificationUrl,
     "",
     "After approval, you can add more flats, rooms, shops, or units so your property records are complete.",
     "",
-    "Tenuro - Property records made simple.",
+    "BOPA - Property records made simple.",
   ].join("\n");
 
   return `https://wa.me/${phoneDigits}?text=${encodeURIComponent(message)}`;
@@ -482,7 +482,7 @@ export async function getPublicLandlordClaimListing(token: string) {
   if (listing.matched_landlord_id) {
     throw new AppError(
       "LANDLORD_ALREADY_EXISTS",
-      "This landlord already has a Tenuro account. Please sign in to continue.",
+      "This landlord already has a BOPA account. Please sign in to continue.",
       400,
     );
   }

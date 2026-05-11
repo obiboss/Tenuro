@@ -88,7 +88,7 @@ export function RentPaymentModal({
           <div className="space-y-5">
             <TrustNotice
               title="Tenant-paid final onboarding payment"
-              description="The tenant pays rent, landlord charges, approved agent commission, and the Tenuro fee in one secure Paystack checkout."
+              description="The tenant pays rent, landlord charges, approved agent commission, and the BOPA fee in one secure Paystack checkout."
             />
 
             {state.message && !state.ok ? (
@@ -111,7 +111,7 @@ export function RentPaymentModal({
               defaultValue={defaultAmount}
               placeholder="0.00"
               error={state.fieldErrors?.amount?.[0]}
-              helperText="This is the rent/outstanding balance. Landlord charges, approved agent commission, and Tenuro fee are added automatically."
+              helperText="This is the rent/outstanding balance. Landlord charges, approved agent commission, and BOPA fee are added automatically."
               required
             />
 
@@ -150,7 +150,7 @@ export function RentPaymentModal({
 
                 <div className="flex items-center justify-between gap-4">
                   <span className="font-semibold text-text-muted">
-                    Tenuro fee
+                    BOPA fee
                   </span>
                   <span className="font-black text-text-strong">
                     {formatMoney(tenuroFeeAmount)}

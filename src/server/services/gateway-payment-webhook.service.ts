@@ -207,7 +207,7 @@ export async function processVerifiedGatewayPaymentReference(
   if (!intent) {
     throw new AppError(
       "GATEWAY_INTENT_NOT_FOUND",
-      "Payment reference was not found in Tenuro.",
+      "Payment reference was not found in BOPA.",
       404,
     );
   }

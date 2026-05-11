@@ -68,7 +68,7 @@ function buildReceiptWhatsAppMessage(params: {
   return [
     `Hello ${tenantName},`,
     "",
-    `Your rent receipt ${receiptNumber} is ready on Tenuro.`,
+    `Your rent receipt ${receiptNumber} is ready on BOPA.`,
     "",
     `Property: ${propertyName}`,
     `Unit: ${unitIdentifier}`,

@@ -68,7 +68,7 @@ export function ManualPaymentForm({ tenancies }: ManualPaymentFormProps) {
 
         <TrustNotice
           title="Offline rent payment"
-          description="Use this when rent was paid by bank transfer, cash, or another offline method. After recording rent, pay only the Tenuro app fee separately."
+          description="Use this when rent was paid by bank transfer, cash, or another offline method. After recording rent, pay only the BOPA app fee separately."
         />
 
         {paymentState.message ? (
@@ -178,8 +178,8 @@ export function ManualPaymentForm({ tenancies }: ManualPaymentFormProps) {
           />
 
           <TrustNotice
-            title="Tenuro app fee required"
-            description="Because the rent was collected outside Tenuro, the landlord should now pay only the Tenuro app fee. This does not charge the tenant."
+            title="BOPA app fee required"
+            description="Because the rent was collected outside BOPA, the landlord should now pay only the BOPA app fee. This does not charge the tenant."
           />
 
           {appFeeState.message ? (
@@ -201,7 +201,7 @@ export function ManualPaymentForm({ tenancies }: ManualPaymentFormProps) {
             isLoading={isPreparingAppFee}
             fullWidth
           >
-            Pay Tenuro App Fee
+            Pay BOPA App Fee
           </Button>
         </form>
       ) : null}

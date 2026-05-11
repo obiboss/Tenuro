@@ -127,7 +127,7 @@ function TenantOnboardingLogo() {
 
       <div>
         <p className="text-lg font-extrabold tracking-tight text-text-strong">
-          Tenuro
+          Boldverse Property
         </p>
         <p className="text-xs font-semibold text-text-muted">
           Tenant onboarding
@@ -194,7 +194,7 @@ function ProcessingFeeGate({
 
         <TrustNotice
           title="Processing fee required before KYC"
-          description="This ₦15,000 processing fee is separate from your rent. The agent receives ₦10,000 and Tenuro receives ₦5,000."
+          description="This ₦15,000 processing fee is separate from your rent. The agent receives ₦10,000 and BOPA receives ₦5,000."
           icon={<ShieldCheck aria-hidden="true" size={22} strokeWidth={2.6} />}
         />
 
@@ -214,7 +214,7 @@ function ProcessingFeeGate({
           </div>
 
           <div className="rounded-button bg-background p-4">
-            <p className="text-sm font-bold text-text-muted">Tenuro receives</p>
+            <p className="text-sm font-bold text-text-muted">BOPA receives</p>
             <p className="mt-2 font-extrabold text-text-strong">
               {formatMoney(tenuroShareAmount, currencyCode)}
             </p>

@@ -58,7 +58,7 @@ export function LoginForm() {
           </Button>
 
           <p className="text-center text-sm text-text-muted">
-            New to Tenuro?{" "}
+            New to BOPA?{" "}
             <Link href="/register" className="font-bold text-primary">
               Create account
             </Link>

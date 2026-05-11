@@ -152,7 +152,7 @@ export function TenancyForm({
               label="Renewal reminder date"
               name="renewalNoticeDate"
               type="date"
-              helperText="Optional. Use a date before the rent expires so Tenuro can remind you later."
+              helperText="Optional. Use a date before the rent expires so BOPA can remind you later."
               error={state.fieldErrors?.renewalNoticeDate?.[0]}
             />
 

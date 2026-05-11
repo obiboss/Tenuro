@@ -296,7 +296,7 @@ function RenewalCard({
       <div className="mt-5 rounded-button bg-background p-4">
         <p className="text-sm leading-6 text-text-muted">
           This page is for landlord renewal visibility only. WhatsApp reminders
-          are prepared as drafts; Tenuro does not send them automatically.
+          are prepared as drafts; BOPA does not send them automatically.
         </p>
       </div>
 

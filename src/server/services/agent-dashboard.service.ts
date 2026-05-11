@@ -29,13 +29,13 @@ function sumAmounts<T>(rows: T[], selector: (row: T) => number) {
   return rows.reduce((total, row) => total + selector(row), 0);
 }
 
-function countByStatus<
-  T extends { status?: string; allocation_status?: string },
->(rows: T[], status: string) {
-  return rows.filter(
-    (row) => row.status === status || row.allocation_status === status,
-  ).length;
-}
+// function countByStatus<
+//   T extends { status?: string; allocation_status?: string },
+// >(rows: T[], status: string) {
+//   return rows.filter(
+//     (row) => row.status === status || row.allocation_status === status,
+//   ).length;
+// }
 
 export async function getCurrentAgentDashboardOverview() {
   const agent = await requireAgent();

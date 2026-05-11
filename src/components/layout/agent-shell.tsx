@@ -55,7 +55,7 @@ export function AgentShell({ children, agentName }: AgentShellProps) {
 
             <div>
               <p className="text-lg font-extrabold tracking-tight text-text-strong">
-                Tenuro Agent
+                BOPA Agent
               </p>
               <p className="text-xs font-semibold text-text-muted">
                 Verified property partner

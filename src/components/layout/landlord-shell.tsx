@@ -109,7 +109,7 @@ function getFirstName(fullName: string) {
   return fullName.trim().split(/\s+/)[0] || "Landlord";
 }
 
-function TenuroBrand({ subtitle }: { subtitle: string }) {
+function BoldverseBrand({ subtitle }: { subtitle: string }) {
   return (
     <Link href="/overview" className="flex min-w-0 items-center gap-3">
       <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-white shadow-soft">
@@ -118,7 +118,7 @@ function TenuroBrand({ subtitle }: { subtitle: string }) {
 
       <div className="min-w-0">
         <p className="truncate text-lg font-extrabold tracking-tight text-text-strong">
-          Tenuro
+          Boldverse Property
         </p>
         <p className="truncate text-xs font-semibold text-text-muted">
           {subtitle}
@@ -136,7 +136,7 @@ export function LandlordShell({ children, landlordName }: LandlordShellProps) {
     <ToastProvider>
       <div className="min-h-screen bg-background">
         <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-border-soft bg-white px-5 py-6 lg:block">
-          <TenuroBrand subtitle="Property records made simple" />
+          <BoldverseBrand subtitle="Property Management for Modern Landlords" />
 
           <nav className="mt-8 space-y-2">
             {desktopNavItems.map((item) => {
@@ -185,7 +185,7 @@ export function LandlordShell({ children, landlordName }: LandlordShellProps) {
         <div className="lg:pl-72">
           <header className="sticky top-0 z-30 border-b border-border-soft bg-white/95 px-4 py-4 backdrop-blur md:px-6 lg:hidden">
             <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
-              <TenuroBrand subtitle="Landlord dashboard" />
+              <BoldverseBrand subtitle="Landlord dashboard" />
               <LogoutButton className="shrink-0" />
             </div>
           </header>

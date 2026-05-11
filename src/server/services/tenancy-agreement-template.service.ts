@@ -209,7 +209,7 @@ and shall end on ${formatDate(params.tenancy.end_date)} unless renewed or termin
 
 The Tenant shall pay rent in the sum of ${rentAmount} per ${rentFrequency}.
 
-Payment shall be due in accordance with the agreed payment frequency and the tenancy record maintained on Tenuro.
+Payment shall be due in accordance with the agreed payment frequency and the tenancy record maintained on BOPA (Boldverse Property).
 
 4. CAUTION / SECURITY DEPOSIT
 
@@ -252,7 +252,7 @@ The Landlord agrees to:
 a. Ensure peaceful possession of the premises by the Tenant
 b. Carry out structural repairs where necessary and where such repair is not caused by the Tenant
 c. Not interfere unreasonably with the Tenant’s quiet enjoyment
-d. Maintain records of rent payments and tenancy documents through Tenuro where applicable
+d. Maintain records of rent payments and tenancy documents through BOPA (Boldverse Property) where applicable
 
 9. UTILITIES / SERVICE CHARGES
 
@@ -282,7 +282,7 @@ This Agreement shall be governed by the laws of the Federal Republic of Nigeria 
 
 15. DIGITAL RECORD AND ACCEPTANCE
 
-Where this Agreement is reviewed or accepted through Tenuro, the digital acceptance record, timestamp, and stored document copy shall serve as evidence that the Tenant reviewed and accepted the terms. The parties may also print and sign a hard copy for physical record purposes.
+Where this Agreement is reviewed or accepted through BOPA (Boldverse Property), the digital acceptance record, timestamp, and stored document copy shall serve as evidence that the Tenant reviewed and accepted the terms. The parties may also print and sign a hard copy for physical record purposes.
 
 16. SPECIAL TERMS
 

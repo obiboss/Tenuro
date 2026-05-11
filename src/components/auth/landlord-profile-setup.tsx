@@ -22,7 +22,7 @@ export function LandlordProfileSetup() {
     <div className="space-y-5">
       <TrustNotice
         title="Create account with phone and password"
-        description="Your phone number is your main way to access Tenuro. WhatsApp OTP verification will be added later."
+        description="Your phone number is your main way to access BOPA. WhatsApp OTP verification will be added later."
       />
 
       <form action={formAction}>

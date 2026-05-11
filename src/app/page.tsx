@@ -33,10 +33,22 @@ const features = [
     icon: ReceiptText,
   },
   {
-    title: "Generate receipts",
+    title: "Generate receipts automatically",
     description:
-      "Create professional receipts tenants can receive by WhatsApp after payment is confirmed.",
+      "Create professional rent receipts tenants can receive by WhatsApp after payment is confirmed.",
     icon: FileCheck2,
+  },
+  {
+    title: "Manage tenancy agreements digitally",
+    description:
+      "Prepare, send, and track tenancy agreements with clear tenant acceptance records.",
+    icon: ShieldCheck,
+  },
+  {
+    title: "Built for Nigerian landlords",
+    description:
+      "Designed around Nigerian rental workflows, annual rent records, NGN payments, and WhatsApp-first communication.",
+    icon: Building2,
   },
 ];
 
@@ -46,16 +58,16 @@ export default function HomePage() {
       <section className="mx-auto flex max-w-7xl flex-col px-4 py-8 md:px-8 lg:py-10">
         <header className="flex items-center justify-between gap-4">
           <Link href="/" className="flex min-w-0 items-center gap-3">
-            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-white shadow-soft">
-              <Building2 aria-hidden="true" size={23} strokeWidth={2.7} />
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-2xl font-extrabold tracking-tight text-white shadow-soft">
+              B
             </div>
 
             <div className="min-w-0">
               <p className="truncate text-lg font-extrabold tracking-tight text-text-strong">
-                Tenuro
+                Boldverse Property
               </p>
               <p className="truncate text-xs font-semibold text-text-muted">
-                Property records made simple
+                Property Management for Modern Landlords
               </p>
             </div>
           </Link>
@@ -82,9 +94,10 @@ export default function HomePage() {
             </h1>
 
             <p className="mt-6 max-w-2xl text-base leading-8 text-text-muted md:text-lg">
-              Tenuro helps landlords keep proper rental records, track who has
-              paid, know who is owing, and send clear receipts without relying
-              on notebooks or scattered WhatsApp messages.
+              BOPA — Boldverse Property App — helps landlords keep proper rental
+              records, track who has paid, know who is owing, and send clear
+              receipts without relying on notebooks or scattered WhatsApp
+              messages.
             </p>
 
             <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:max-w-2xl">
@@ -118,7 +131,7 @@ export default function HomePage() {
             <div className="mt-8">
               <TrustNotice
                 title="Designed for proper landlord records"
-                description="Every payment, correction, tenant profile, and receipt is kept in a clear history you can trust."
+                description="Boldverse Property keeps a clear history of every payment, correction, tenant profile, and receipt."
                 icon={
                   <ShieldCheck aria-hidden="true" size={22} strokeWidth={2.6} />
                 }
@@ -156,7 +169,23 @@ export default function HomePage() {
           </div>
         </div>
 
-        <section className="grid gap-5 md:grid-cols-3">
+        <section className="rounded-4xl bg-surface px-5 py-8 shadow-card md:px-8 lg:px-10">
+          <div className="max-w-3xl">
+            <h2 className="text-2xl font-extrabold tracking-tight text-text-strong md:text-3xl">
+              Meet BOPA — Boldverse Property App
+            </h2>
+
+            <p className="mt-4 text-base leading-8 text-text-muted md:text-lg">
+              BOPA is a Nigerian property management platform built for
+              independent landlords managing rental properties in Lagos and
+              across Nigeria. Track who has paid, know who is owing, send
+              professional receipts, and manage tenancy agreements — all from
+              your phone.
+            </p>
+          </div>
+        </section>
+
+        <section className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-5">
           {features.map((feature) => {
             const Icon = feature.icon;
 

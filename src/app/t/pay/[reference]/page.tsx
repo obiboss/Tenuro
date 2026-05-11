@@ -1,7 +1,6 @@
 import Link from "next/link";
 import {
   AlertTriangle,
-  Building2,
   CheckCircle2,
   Clock3,
   CreditCard,
@@ -147,7 +146,7 @@ function getStatusCopy(params: { status: string; isExpired: boolean }): {
   return {
     title: "Review rent payment",
     description:
-      "Confirm the rent amount, landlord charges, agent commission, Tenuro fee, and total before continuing to Paystack.",
+      "Confirm the rent amount, landlord charges, agent commission, BOPA fee, and total before continuing to Paystack.",
     badge: "Awaiting Payment",
     tone: "primary",
     icon: <CreditCard aria-hidden="true" size={24} strokeWidth={2.6} />,
@@ -157,13 +156,13 @@ function getStatusCopy(params: { status: string; isExpired: boolean }): {
 function TenantPaymentLogo() {
   return (
     <Link href="/" className="mb-8 flex w-fit items-center gap-3">
-      <div className="flex size-11 items-center justify-center rounded-2xl bg-primary text-white shadow-soft">
-        <Building2 aria-hidden="true" size={23} strokeWidth={2.7} />
+      <div className="flex size-11 items-center justify-center rounded-2xl bg-primary text-2xl font-extrabold tracking-tight text-white shadow-soft">
+        B
       </div>
 
       <div>
         <p className="text-lg font-extrabold tracking-tight text-text-strong">
-          Tenuro
+          Boldverse Property
         </p>
         <p className="text-xs font-semibold text-text-muted">Rent payment</p>
       </div>
@@ -288,7 +287,7 @@ export default async function TenantPaymentPage({
 
                   <div className="rounded-button bg-background p-4">
                     <p className="text-sm font-bold text-text-muted">
-                      Tenuro Fee
+                      BOPA Fee
                     </p>
                     <p className="mt-2 text-xl font-extrabold text-text-strong">
                       {formatNaira(checkout.tenuroFeeAmount)}
@@ -411,7 +410,7 @@ export default async function TenantPaymentPage({
                   <div className="mt-6 rounded-button bg-warning-soft p-4 text-sm font-semibold leading-6 text-warning">
                     <span className="inline-flex items-center gap-2">
                       <Clock3 aria-hidden="true" size={18} strokeWidth={2.6} />
-                      Tenuro is finishing confirmation and receipt preparation.
+                      BOPA is finishing confirmation and receipt preparation.
                       This page will update automatically.
                     </span>
                   </div>
@@ -472,7 +471,7 @@ export default async function TenantPaymentPage({
 
             <TrustNotice
               title="Secure Paystack checkout"
-              description="You will complete the payment on Paystack. After payment, Paystack redirects you back to Tenuro for confirmation."
+              description="You will complete the payment on Paystack. After payment, Paystack redirects you back to BOPA for confirmation."
             />
           </div>
         </div>

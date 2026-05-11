@@ -15,7 +15,7 @@ export default function AgentLoginPage() {
       <div className="space-y-6">
         <TrustNotice
           title="Agent workspace access"
-          description="Only accounts registered as agents can access the Tenuro agent workspace."
+          description="Only accounts registered as agents can access the BOPA agent workspace."
         />
 
         <PhoneLoginForm purpose="login" />

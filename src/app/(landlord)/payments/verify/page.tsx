@@ -77,7 +77,7 @@ function getStatusCopy(status: string): PaymentStatusCopy {
   return {
     title: "Payment is processing",
     description:
-      "Paystack has redirected back to Tenuro. We are checking the payment status and will update this page automatically.",
+      "Paystack has redirected back to BOPA. We are checking the payment status and will update this page automatically.",
     tone: "warning",
     icon: <Clock3 aria-hidden="true" size={24} strokeWidth={2.6} />,
     badge: "Processing",
@@ -115,7 +115,7 @@ export default async function PaymentVerifyPage({
         >
           <TrustNotice
             title="No payment reference found"
-            description="The payment link is incomplete, so Tenuro cannot check the payment status."
+            description="The payment link is incomplete, so BOPA cannot check the payment status."
             icon={
               <AlertTriangle aria-hidden="true" size={22} strokeWidth={2.6} />
             }
@@ -140,7 +140,7 @@ export default async function PaymentVerifyPage({
 
         <PageHeader
           title="Payment Verification"
-          description="We could not find this payment in Tenuro."
+          description="We could not find this payment in BOPA."
         />
 
         <SectionCard
@@ -213,9 +213,7 @@ export default async function PaymentVerifyPage({
                 </div>
 
                 <div className="rounded-button bg-background p-4">
-                  <p className="text-sm font-bold text-text-muted">
-                    Tenuro Fee
-                  </p>
+                  <p className="text-sm font-bold text-text-muted">BOPA Fee</p>
                   <p className="mt-2 text-xl font-extrabold text-text-strong">
                     {formatNaira(Number(intent.tenuro_fee_amount))}
                   </p>
@@ -242,7 +240,7 @@ export default async function PaymentVerifyPage({
 
               {shouldAutoRefresh ? (
                 <div className="mt-6 rounded-button bg-warning-soft p-4 text-sm font-semibold leading-6 text-warning">
-                  Tenuro is checking this payment automatically. You do not need
+                  BOPA is checking this payment automatically. You do not need
                   to refresh the page.
                 </div>
               ) : null}
@@ -270,7 +268,7 @@ export default async function PaymentVerifyPage({
         <div className="xl:sticky xl:top-28 xl:self-start">
           <TrustNotice
             title="Payment posting"
-            description="Tenuro first listens for Paystack’s secure webhook. If it is delayed, this page safely re-checks the payment status and updates the record."
+            description="BOPA first listens for Paystack’s secure webhook. If it is delayed, this page safely re-checks the payment status and updates the record."
           />
         </div>
       </div>

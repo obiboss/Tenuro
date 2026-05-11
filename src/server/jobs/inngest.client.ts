@@ -2,5 +2,5 @@ import { Inngest } from "inngest";
 
 export const inngest = new Inngest({
   id: "tenuro",
-  name: "Tenuro",
+  name: "BOPA",
 });

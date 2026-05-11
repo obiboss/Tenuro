@@ -44,7 +44,7 @@ export function BankSetupForm({ banks }: BankSetupFormProps) {
         <CardContent>
           <TrustNotice
             title="Bank details are verified before saving"
-            description="Tenuro confirms the account with Paystack before creating your landlord payout setup."
+            description="BOPA confirms the account with Paystack before creating your landlord payout setup."
           />
 
           {state.message ? (
@@ -92,7 +92,7 @@ export function BankSetupForm({ banks }: BankSetupFormProps) {
           />
 
           <div className="rounded-button bg-warning-soft p-4 text-sm leading-6 text-text-normal">
-            Manual bank transfer payments will still be free to record. Tenuro
+            Manual bank transfer payments will still be free to record. BOPA
             only earns revenue when tenants pay through the gateway.
           </div>
         </CardContent>

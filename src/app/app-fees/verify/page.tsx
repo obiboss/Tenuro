@@ -53,7 +53,7 @@ function getStatusCopy(status: string): {
   if (status === "paid") {
     return {
       title: "App fee payment successful",
-      description: "The Tenuro app fee has been confirmed.",
+      description: "The BOPA app fee has been confirmed.",
       tone: "success",
       badge: "Paid",
       icon: <CheckCircle2 aria-hidden="true" size={24} strokeWidth={2.6} />,
@@ -74,7 +74,7 @@ function getStatusCopy(status: string): {
   return {
     title: "App fee is processing",
     description:
-      "Paystack redirected back to Tenuro. We are checking the app fee payment status and will update this page automatically.",
+      "Paystack redirected back to BOPA. We are checking the app fee payment status and will update this page automatically.",
     tone: "warning",
     badge: "Processing",
     icon: <Clock3 aria-hidden="true" size={24} strokeWidth={2.6} />,
@@ -112,7 +112,7 @@ export default async function AppFeeVerifyPage({
         >
           <TrustNotice
             title="No payment reference found"
-            description="The payment link is incomplete, so Tenuro cannot check the app fee payment status."
+            description="The payment link is incomplete, so BOPA cannot check the app fee payment status."
             icon={
               <AlertTriangle aria-hidden="true" size={22} strokeWidth={2.6} />
             }
@@ -137,7 +137,7 @@ export default async function AppFeeVerifyPage({
 
         <PageHeader
           title="App Fee Verification"
-          description="We could not find this app fee payment in Tenuro."
+          description="We could not find this app fee payment in BOPA."
         />
 
         <SectionCard
@@ -173,7 +173,7 @@ export default async function AppFeeVerifyPage({
 
       <PageHeader
         title="App Fee Verification"
-        description="Check the status of this Tenuro app fee payment."
+        description="Check the status of this BOPA app fee payment."
         action={<Badge tone={statusCopy.tone}>{statusCopy.badge}</Badge>}
       />
 
@@ -221,7 +221,7 @@ export default async function AppFeeVerifyPage({
 
               {shouldAutoRefresh ? (
                 <div className="mt-6 rounded-button bg-warning-soft p-4 text-sm font-semibold leading-6 text-warning">
-                  Tenuro is checking this app fee payment automatically. You do
+                  BOPA is checking this app fee payment automatically. You do
                   not need to refresh the page.
                 </div>
               ) : null}
@@ -240,7 +240,7 @@ export default async function AppFeeVerifyPage({
         <div className="xl:sticky xl:top-28 xl:self-start">
           <TrustNotice
             title="Separate from rent"
-            description="This app fee is separate from tenant rent. Use it only when rent was collected outside Tenuro."
+            description="This app fee is separate from tenant rent. Use it only when rent was collected outside BOPA."
           />
         </div>
       </div>

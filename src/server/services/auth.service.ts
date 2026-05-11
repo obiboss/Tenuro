@@ -57,7 +57,7 @@ export async function requireUser(): Promise<ServerSessionUser> {
 
     throw new AppError(
       "FORBIDDEN",
-      "This Tenuro account is inactive. Please contact support.",
+      "This BOPA account is inactive. Please contact support.",
       403,
     );
   }

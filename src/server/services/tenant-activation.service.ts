@@ -48,7 +48,7 @@ function buildActivationMessage(params: {
     "",
     `Your tenant account for ${params.unitName} at ${params.propertyName} is ready.`,
     "",
-    "Use this secure link to set your password and access your Tenuro tenant dashboard:",
+    "Use this secure link to set your password and access your BOPA tenant dashboard:",
     params.activationUrl,
     "",
     "This link expires automatically.",

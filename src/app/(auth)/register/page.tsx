@@ -14,7 +14,7 @@ export default function RegisterPage() {
       <div className="space-y-6">
         <TrustNotice
           title="Create account with phone and password"
-          description="Your phone number will be your main way to access Tenuro."
+          description="Your phone number will be your main way to access BOPA."
         />
 
         <RegisterForm />
