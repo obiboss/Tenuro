@@ -29,6 +29,9 @@ export type PublicGeneratedAgreementRow = {
   pdf_path: string | null;
   watermark_status: "watermarked" | "removed";
   document_status: "generated" | "claimed" | "stored" | "archived";
+  whatsapp_message: string | null;
+  download_token_hash: string | null;
+  download_token_expires_at: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -62,6 +65,9 @@ const PUBLIC_GENERATED_AGREEMENT_SELECT = [
   "pdf_path",
   "watermark_status",
   "document_status",
+  "whatsapp_message",
+  "download_token_hash",
+  "download_token_expires_at",
   "metadata",
   "created_at",
   "updated_at",
@@ -87,6 +93,8 @@ export async function createPublicGeneratedAgreement(
     tenancyDurationMonths: number;
     agreementTitle: string;
     agreementSnapshot: Record<string, unknown>;
+    downloadTokenHash: string;
+    downloadTokenExpiresAt: string;
     metadata?: Record<string, unknown>;
   },
 ) {
@@ -112,8 +120,51 @@ export async function createPublicGeneratedAgreement(
       agreement_snapshot: params.agreementSnapshot,
       watermark_status: "watermarked",
       document_status: "generated",
+      download_token_hash: params.downloadTokenHash,
+      download_token_expires_at: params.downloadTokenExpiresAt,
       metadata: params.metadata ?? {},
     })
+    .select(PUBLIC_GENERATED_AGREEMENT_SELECT)
+    .single<PublicGeneratedAgreementRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getPublicGeneratedAgreementById(
+  supabase: SupabaseClient,
+  agreementId: string,
+) {
+  const { data, error } = await supabase
+    .from("public_generated_agreements")
+    .select(PUBLIC_GENERATED_AGREEMENT_SELECT)
+    .eq("id", agreementId)
+    .single<PublicGeneratedAgreementRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function updatePublicGeneratedAgreementWhatsappMessage(
+  supabase: SupabaseClient,
+  params: {
+    agreementId: string;
+    whatsappMessage: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("public_generated_agreements")
+    .update({
+      whatsapp_message: params.whatsappMessage,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", params.agreementId)
     .select(PUBLIC_GENERATED_AGREEMENT_SELECT)
     .single<PublicGeneratedAgreementRow>();
 
@@ -134,6 +185,7 @@ export async function createAgreementUsageEvent(
       | "agreement_generated"
       | "agreement_previewed"
       | "agreement_downloaded"
+      | "agreement_whatsapp_shared"
       | "signup_prompt_viewed"
       | "signup_started"
       | "signup_completed"

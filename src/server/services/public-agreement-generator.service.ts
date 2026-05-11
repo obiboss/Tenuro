@@ -1,9 +1,13 @@
 import "server-only";
 
+import crypto from "node:crypto";
 import { AppError } from "@/server/errors/app-error";
 import {
   createAgreementUsageEvent,
   createPublicGeneratedAgreement,
+  getPublicGeneratedAgreementById,
+  updatePublicGeneratedAgreementWhatsappMessage,
+  type PublicGeneratedAgreementRow,
 } from "@/server/repositories/public-agreement-generator.repository";
 import { createPublicToolLead } from "@/server/repositories/public-tool-leads.repository";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
@@ -28,7 +32,65 @@ export type GeneratedPublicAgreementPreview = {
   tenancyDurationMonths: number;
   agreementBody: string;
   watermarkText: string;
+  downloadUrl: string;
+  whatsappMessage: string;
 };
+
+function getAppUrl() {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+
+  if (appUrl) {
+    return appUrl.replace(/\/$/, "");
+  }
+
+  const vercelProjectUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+
+  if (vercelProjectUrl) {
+    return `https://${vercelProjectUrl
+      .replace(/^https?:\/\//, "")
+      .replace(/\/$/, "")}`;
+  }
+
+  const vercelUrl = process.env.VERCEL_URL?.trim();
+
+  if (vercelUrl) {
+    return `https://${vercelUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")}`;
+  }
+
+  return "http://localhost:3000";
+}
+
+function createSecureToken() {
+  return crypto.randomBytes(32).toString("base64url");
+}
+
+function hashToken(token: string) {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+function hashesMatch(params: { token: string; storedHash: string }) {
+  const receivedHash = hashToken(params.token);
+  const receivedBuffer = Buffer.from(receivedHash, "hex");
+  const storedBuffer = Buffer.from(params.storedHash, "hex");
+
+  return (
+    receivedBuffer.length === storedBuffer.length &&
+    crypto.timingSafeEqual(receivedBuffer, storedBuffer)
+  );
+}
+
+function createDownloadExpiry() {
+  const expiry = new Date();
+  expiry.setDate(expiry.getDate() + 30);
+
+  return expiry.toISOString();
+}
+
+function buildDownloadUrl(params: { agreementId: string; token: string }) {
+  return `${getAppUrl()}/agreement-generator/download/${encodeURIComponent(
+    params.agreementId,
+  )}?token=${encodeURIComponent(params.token)}`;
+}
 
 function addMonths(date: Date, months: number) {
   const result = new Date(
@@ -295,6 +357,30 @@ Signature: _________________
 `;
 }
 
+function buildAgreementWhatsappMessage(params: {
+  agreementTitle: string;
+  landlordFullName: string;
+  tenantFullName: string;
+  propertyLabel: string;
+  tenancyStartDate: string;
+  tenancyEndDate: string;
+  downloadUrl: string;
+}) {
+  return [
+    `${params.agreementTitle}`,
+    "",
+    `Landlord: ${params.landlordFullName}`,
+    `Tenant: ${params.tenantFullName}`,
+    `Property: ${params.propertyLabel}`,
+    `Tenancy period: ${formatDate(params.tenancyStartDate)} - ${formatDate(
+      params.tenancyEndDate,
+    )}`,
+    `Download PDF: ${params.downloadUrl}`,
+    "",
+    "Generated with BOPA — boldverseproperty.com",
+  ].join("\n");
+}
+
 export async function generatePublicTenancyAgreementPreview(
   input: PublicAgreementGeneratorInput,
 ): Promise<GeneratedPublicAgreementPreview> {
@@ -315,6 +401,10 @@ export async function generatePublicTenancyAgreementPreview(
     input,
     tenancyEndDate,
   });
+
+  const downloadToken = createSecureToken();
+  const downloadTokenHash = hashToken(downloadToken);
+  const downloadTokenExpiresAt = createDownloadExpiry();
 
   const lead = await createPublicToolLead(supabase, {
     landlordFullName: input.landlordFullName,
@@ -379,6 +469,8 @@ export async function generatePublicTenancyAgreementPreview(
     tenancyDurationMonths,
     agreementTitle,
     agreementSnapshot,
+    downloadTokenHash,
+    downloadTokenExpiresAt,
     metadata: {
       acquisition_channel: "public_agreement_generator",
       rent_frequency: input.rentFrequency,
@@ -388,9 +480,32 @@ export async function generatePublicTenancyAgreementPreview(
     },
   });
 
+  const downloadUrl = buildDownloadUrl({
+    agreementId: agreement.id,
+    token: downloadToken,
+  });
+
+  const whatsappMessage = buildAgreementWhatsappMessage({
+    agreementTitle,
+    landlordFullName: input.landlordFullName,
+    tenantFullName: input.tenantFullName,
+    propertyLabel,
+    tenancyStartDate: input.tenancyStartDate,
+    tenancyEndDate,
+    downloadUrl,
+  });
+
+  const updatedAgreement = await updatePublicGeneratedAgreementWhatsappMessage(
+    supabase,
+    {
+      agreementId: agreement.id,
+      whatsappMessage,
+    },
+  );
+
   await createAgreementUsageEvent(supabase, {
     leadId: lead.id,
-    agreementId: agreement.id,
+    agreementId: updatedAgreement.id,
     eventType: "agreement_generated",
     sourcePath: input.sourcePath,
     metadata: {
@@ -398,22 +513,78 @@ export async function generatePublicTenancyAgreementPreview(
       rent_amount: input.rentAmount,
       rent_frequency: input.rentFrequency,
       property_use: input.propertyUse,
+      has_pdf_download: true,
+      has_whatsapp_share: true,
     },
   });
 
   return {
     leadId: lead.id,
-    agreementId: agreement.id,
-    title: agreement.agreement_title,
-    landlordFullName: agreement.landlord_full_name,
-    tenantFullName: agreement.tenant_full_name,
+    agreementId: updatedAgreement.id,
+    title: updatedAgreement.agreement_title,
+    landlordFullName: updatedAgreement.landlord_full_name,
+    tenantFullName: updatedAgreement.tenant_full_name,
     propertyLabel,
-    rentAmount: Number(agreement.rent_amount),
+    rentAmount: Number(updatedAgreement.rent_amount),
     rentFrequency: rentFrequencyLabel(input.rentFrequency),
-    tenancyStartDate: agreement.tenancy_start_date,
-    tenancyEndDate: agreement.tenancy_end_date,
-    tenancyDurationMonths: agreement.tenancy_duration_months,
+    tenancyStartDate: updatedAgreement.tenancy_start_date,
+    tenancyEndDate: updatedAgreement.tenancy_end_date,
+    tenancyDurationMonths: updatedAgreement.tenancy_duration_months,
     agreementBody,
     watermarkText: "Generated with BOPA — boldverseproperty.com",
+    downloadUrl,
+    whatsappMessage,
   };
+}
+
+export async function getPublicGeneratedAgreementForDownload(params: {
+  agreementId: string;
+  token: string;
+}): Promise<PublicGeneratedAgreementRow> {
+  const supabase = createSupabaseAdminClient();
+  const agreement = await getPublicGeneratedAgreementById(
+    supabase,
+    params.agreementId,
+  );
+
+  if (!agreement.download_token_hash || !agreement.download_token_expires_at) {
+    throw new AppError(
+      "PUBLIC_AGREEMENT_DOWNLOAD_NOT_READY",
+      "This agreement download is not ready.",
+      404,
+    );
+  }
+
+  if (
+    !hashesMatch({
+      token: params.token,
+      storedHash: agreement.download_token_hash,
+    })
+  ) {
+    throw new AppError(
+      "PUBLIC_AGREEMENT_DOWNLOAD_INVALID",
+      "This agreement download link is invalid.",
+      401,
+    );
+  }
+
+  if (new Date(agreement.download_token_expires_at).getTime() < Date.now()) {
+    throw new AppError(
+      "PUBLIC_AGREEMENT_DOWNLOAD_EXPIRED",
+      "This agreement download link has expired. Please generate a fresh agreement.",
+      410,
+    );
+  }
+
+  await createAgreementUsageEvent(supabase, {
+    leadId: agreement.lead_id,
+    agreementId: agreement.id,
+    eventType: "agreement_downloaded",
+    sourcePath: "/agreement-generator/download",
+    metadata: {
+      agreement_title: agreement.agreement_title,
+    },
+  });
+
+  return agreement;
 }

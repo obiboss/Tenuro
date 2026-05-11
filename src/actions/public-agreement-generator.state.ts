@@ -16,6 +16,8 @@ export type PublicAgreementGeneratorActionState = {
     tenancyDurationMonths: number;
     agreementBody: string;
     watermarkText: string;
+    downloadUrl: string;
+    whatsappMessage: string;
   };
 };
 
