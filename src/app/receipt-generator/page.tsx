@@ -1,0 +1,111 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { ArrowRight, FileText, ShieldCheck } from "lucide-react";
+import { ReceiptGeneratorForm } from "@/components/public-tools/receipt-generator-form";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { TrustNotice } from "@/components/ui/trust-notice";
+
+export const metadata: Metadata = {
+  title: "Free Rent Receipt Generator Nigeria | BOPA",
+  description:
+    "Generate a free rent receipt for Nigerian landlords. Create clean tenant rent payment receipts for Lagos, Abuja, Port Harcourt, and across Nigeria.",
+  openGraph: {
+    title: "Free Rent Receipt Generator Nigeria | BOPA",
+    description:
+      "Generate a clean rent receipt for Nigerian tenants and landlords before creating a BOPA account.",
+    type: "website",
+  },
+};
+
+export default function ReceiptGeneratorPage() {
+  return (
+    <main className="min-h-screen bg-background">
+      <section className="mx-auto max-w-7xl px-4 py-8 md:px-8 lg:py-10">
+        <header className="flex items-center justify-between gap-4">
+          <Link href="/" className="flex min-w-0 items-center gap-3">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-2xl font-extrabold tracking-tight text-white shadow-soft">
+              B
+            </div>
+
+            <div className="min-w-0">
+              <p className="truncate text-lg font-extrabold tracking-tight text-text-strong">
+                Boldverse Property
+              </p>
+              <p className="truncate text-xs font-semibold text-text-muted">
+                Property Management for Modern Landlords
+              </p>
+            </div>
+          </Link>
+
+          <Link href="/register" className="hidden sm:block">
+            <Button variant="secondary">
+              Create Account
+              <ArrowRight aria-hidden="true" size={18} strokeWidth={2.6} />
+            </Button>
+          </Link>
+        </header>
+
+        <div className="py-12 lg:py-16">
+          <Badge tone="primary" size="md">
+            Free rent receipt generator Nigeria
+          </Badge>
+
+          <div className="mt-6 grid gap-8 lg:grid-cols-[1fr_420px] lg:items-start">
+            <div>
+              <h1 className="max-w-4xl text-4xl font-extrabold tracking-tight text-text-strong md:text-5xl lg:text-6xl">
+                Generate a clean Nigerian rent receipt in minutes.
+              </h1>
+
+              <p className="mt-6 max-w-2xl text-base leading-8 text-text-muted md:text-lg">
+                Create a professional rent payment receipt for tenants without
+                signing up first. Enter the landlord, tenant, property, and
+                payment details, then BOPA calculates the rent period for you.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <TrustNotice
+                title="Value first, signup later"
+                description="Generate your first receipt without creating an account. After that, you can save records by creating a free BOPA account."
+                icon={
+                  <FileText aria-hidden="true" size={22} strokeWidth={2.6} />
+                }
+              />
+
+              <TrustNotice
+                title="Built for annual rent"
+                description="Supports Nigerian rent patterns like 6 months, 1 year, and 2 years with automatic end-date calculation."
+                icon={
+                  <ShieldCheck aria-hidden="true" size={22} strokeWidth={2.6} />
+                }
+              />
+            </div>
+          </div>
+        </div>
+
+        <ReceiptGeneratorForm sourcePath="/receipt-generator" />
+
+        <section className="mt-12 rounded-card bg-surface p-5 shadow-card md:p-8">
+          <h2 className="text-2xl font-black tracking-tight text-text-strong">
+            Rent receipt generator for Nigerian landlords
+          </h2>
+
+          <div className="mt-4 space-y-4 text-sm leading-7 text-text-muted md:text-base">
+            <p>
+              BOPA helps landlords create rent receipts for tenant payments,
+              annual rent, six-month rent, bank transfer payments, cash
+              payments, and Paystack payments.
+            </p>
+
+            <p>
+              Use this free receipt generator for rent payment receipt Nigeria,
+              landlord receipt Nigeria, rent receipt template Nigeria, and rent
+              tracking Lagos workflows.
+            </p>
+          </div>
+        </section>
+      </section>
+    </main>
+  );
+}
