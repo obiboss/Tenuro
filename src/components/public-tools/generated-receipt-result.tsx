@@ -43,15 +43,15 @@ export function GeneratedReceiptResult({
       <div className="flex flex-col gap-3 border-b border-border-soft pb-4 md:flex-row md:items-start md:justify-between">
         <div>
           <p className="text-sm font-bold text-primary">Receipt generated</p>
-          <h2 className="mt-1 text-2xl font-black tracking-tight text-text-strong">
+          <h2 className="mt-1 break-all text-2xl font-black tracking-tight text-text-strong">
             {receipt.receiptNumber}
           </h2>
         </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="flex flex-col gap-2 sm:flex-row md:flex-col lg:flex-row">
           <a
             href={receipt.downloadUrl}
-            className="inline-flex min-h-11 items-center justify-center rounded-button bg-primary px-5 py-2.5 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary-hover"
+            className="inline-flex min-h-11 items-center justify-center rounded-button bg-primary px-5 py-2.5 text-center text-sm font-extrabold text-white shadow-soft transition hover:bg-primary-hover"
           >
             Download PDF
           </a>
@@ -60,7 +60,7 @@ export function GeneratedReceiptResult({
             href={whatsappHref}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex min-h-11 items-center justify-center rounded-button bg-success px-5 py-2.5 text-sm font-extrabold text-white shadow-soft transition hover:opacity-90"
+            className="inline-flex min-h-11 items-center justify-center rounded-button bg-success px-5 py-2.5 text-center text-sm font-extrabold text-white shadow-soft transition hover:opacity-90"
           >
             Share on WhatsApp
           </a>
