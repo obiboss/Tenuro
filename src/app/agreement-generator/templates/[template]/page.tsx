@@ -38,10 +38,22 @@ export async function generateMetadata({
   return {
     title: `${page.title} | BOPA`,
     description: page.description,
+
+    alternates: {
+      canonical: `https://boldverseproperty.com/agreement-generator/templates/${page.slug}`,
+    },
+
     openGraph: {
       title: `${page.title} | BOPA`,
       description: page.description,
+      url: `https://boldverseproperty.com/agreement-generator/templates/${page.slug}`,
       type: "website",
+    },
+
+    twitter: {
+      card: "summary_large_image",
+      title: `${page.title} | BOPA`,
+      description: page.description,
     },
   };
 }
