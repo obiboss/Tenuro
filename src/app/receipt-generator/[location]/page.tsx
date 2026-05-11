@@ -36,12 +36,33 @@ export async function generateMetadata({
   }
 
   return {
-    title: `${page.title} | BOPA`,
+    title: page.title,
+
     description: page.description,
+
+    keywords: [
+      page.seoKeyword,
+      `rent receipt ${page.label}`,
+      `landlord receipt ${page.label}`,
+      `rent receipt generator ${page.state}`,
+      "rent receipt Nigeria",
+    ],
+
+    alternates: {
+      canonical: `https://boldverseproperty.com/receipt-generator/${page.slug}`,
+    },
+
     openGraph: {
       title: `${page.title} | BOPA`,
       description: page.description,
+      url: `https://boldverseproperty.com/receipt-generator/${page.slug}`,
       type: "website",
+    },
+
+    twitter: {
+      card: "summary_large_image",
+      title: `${page.title} | BOPA`,
+      description: page.description,
     },
   };
 }

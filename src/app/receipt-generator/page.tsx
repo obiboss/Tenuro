@@ -8,14 +8,37 @@ import { TrustNotice } from "@/components/ui/trust-notice";
 import { getFeaturedReceiptGeneratorLocations } from "@/lib/receipt-generator-locations";
 
 export const metadata: Metadata = {
-  title: "Free Rent Receipt Generator Nigeria | BOPA",
+  title: "Free Rent Receipt Generator Nigeria",
+
   description:
-    "Generate a free rent receipt for Nigerian landlords. Create clean tenant rent payment receipts for Lagos, Abuja, Port Harcourt, and across Nigeria.",
+    "Generate professional Nigerian rent receipts online for landlords and tenants. Create PDF rent payment receipts for Lagos, Abuja, Port Harcourt, and all Nigerian states.",
+
+  keywords: [
+    "rent receipt generator Nigeria",
+    "rent receipt Lagos",
+    "tenant payment receipt Nigeria",
+    "landlord receipt template Nigeria",
+    "receipt generator Abuja",
+    "rent receipt PDF Nigeria",
+  ],
+
+  alternates: {
+    canonical: "https://boldverseproperty.com/receipt-generator",
+  },
+
   openGraph: {
     title: "Free Rent Receipt Generator Nigeria | BOPA",
     description:
-      "Generate a clean rent receipt for Nigerian tenants and landlords before creating a BOPA account.",
+      "Generate professional Nigerian rent receipts online and download PDF copies instantly.",
+    url: "https://boldverseproperty.com/receipt-generator",
     type: "website",
+  },
+
+  twitter: {
+    card: "summary_large_image",
+    title: "Free Rent Receipt Generator Nigeria | BOPA",
+    description:
+      "Generate Nigerian landlord rent receipts online with PDF download support.",
   },
 };
 

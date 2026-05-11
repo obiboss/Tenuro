@@ -11,14 +11,37 @@ import {
 } from "@/lib/agreement-generator-seo";
 
 export const metadata: Metadata = {
-  title: "Free Tenancy Agreement Generator Nigeria | BOPA",
+  title: "Free Tenancy Agreement Generator Nigeria",
+
   description:
-    "Generate a tenancy agreement preview for Nigerian landlords. Create a watermarked PDF, share on WhatsApp, and save agreement data to a BOPA landlord account.",
+    "Generate Nigerian tenancy agreement previews online. Download watermarked PDF agreements, share via WhatsApp, and save agreements to your BOPA account.",
+
+  keywords: [
+    "tenancy agreement Nigeria",
+    "rental agreement generator Nigeria",
+    "lease agreement Nigeria",
+    "landlord agreement Lagos",
+    "tenant agreement PDF Nigeria",
+    "property agreement template Nigeria",
+  ],
+
+  alternates: {
+    canonical: "https://boldverseproperty.com/agreement-generator",
+  },
+
   openGraph: {
     title: "Free Tenancy Agreement Generator Nigeria | BOPA",
     description:
-      "Create a structured tenancy agreement preview for Nigerian landlords before creating a BOPA account.",
+      "Generate Nigerian tenancy agreement previews online with PDF download support.",
+    url: "https://boldverseproperty.com/agreement-generator",
     type: "website",
+  },
+
+  twitter: {
+    card: "summary_large_image",
+    title: "Free Tenancy Agreement Generator Nigeria | BOPA",
+    description:
+      "Create Nigerian tenancy agreement previews online using BOPA.",
   },
 };
 
