@@ -1,7 +1,13 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
-export function FreeToolAccountPrompt() {
+type FreeToolAccountPromptProps = {
+  claimUrl?: string;
+};
+
+export function FreeToolAccountPrompt({
+  claimUrl,
+}: FreeToolAccountPromptProps) {
   return (
     <div className="rounded-card bg-primary p-5 text-white shadow-card md:p-6">
       <p className="text-sm font-bold uppercase tracking-wide text-white/75">
@@ -13,17 +19,24 @@ export function FreeToolAccountPrompt() {
       </h2>
 
       <p className="mt-3 text-sm leading-6 text-white/80">
-        Create a free BOPA account after generating your receipt. Your details
-        can be used to continue faster when account attachment is enabled in the
-        next batch.
+        Your details are already captured from this receipt. Create a free BOPA
+        account with a password and continue from your landlord dashboard.
       </p>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
-        <Link href="/register">
-          <Button type="button" variant="secondary" fullWidth>
-            Create Free Account
-          </Button>
-        </Link>
+        {claimUrl ? (
+          <Link href={claimUrl}>
+            <Button type="button" variant="secondary" fullWidth>
+              Create Free Account
+            </Button>
+          </Link>
+        ) : (
+          <Link href="/register">
+            <Button type="button" variant="secondary" fullWidth>
+              Create Free Account
+            </Button>
+          </Link>
+        )}
 
         <Link href="/receipt-generator">
           <Button type="button" variant="ghost" fullWidth>

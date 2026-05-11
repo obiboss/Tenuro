@@ -81,3 +81,26 @@ export type PublicReceiptDuration = z.infer<typeof publicReceiptDurationSchema>;
 export type PublicReceiptPaymentMethod = z.infer<
   typeof publicReceiptPaymentMethodSchema
 >;
+
+export const publicReceiptSignupSchema = z.object({
+  receiptId: z.string().uuid("Receipt link is invalid."),
+  token: z.string().trim().min(20, "Receipt claim token is invalid."),
+
+  fullName: requiredText("Full name"),
+  phoneNumber: phoneSchema,
+  email: z
+    .string()
+    .trim()
+    .email("Enter a valid email address.")
+    .optional()
+    .or(z.literal("")),
+
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters.")
+    .max(72, "Password is too long."),
+});
+
+export type PublicReceiptSignupInput = z.infer<
+  typeof publicReceiptSignupSchema
+>;

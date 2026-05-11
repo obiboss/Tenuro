@@ -1,7 +1,6 @@
 import Link from "next/link";
 import {
   AlertTriangle,
-  Building2,
   CalendarClock,
   CreditCard,
   Home,

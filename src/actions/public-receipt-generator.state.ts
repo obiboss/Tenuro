@@ -18,6 +18,7 @@ export type PublicReceiptGeneratorActionState = {
     whatsappMessage: string;
     watermarkText: string;
     downloadUrl: string;
+    claimUrl: string;
   };
 };
 

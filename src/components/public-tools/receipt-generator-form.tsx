@@ -367,7 +367,7 @@ export function ReceiptGeneratorForm({
         {state.ok && state.receipt ? (
           <>
             <GeneratedReceiptResult receipt={state.receipt} />
-            <FreeToolAccountPrompt />
+            <FreeToolAccountPrompt claimUrl={state.receipt.claimUrl} />
           </>
         ) : (
           <div className="rounded-card bg-surface p-5 shadow-card md:p-6">

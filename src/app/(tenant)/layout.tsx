@@ -1,11 +1,11 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
-import { Building2 } from "lucide-react";
 import { LogoutButton } from "@/components/auth/logout-button";
 import { TenantMobileNav } from "@/components/layout/tenant-mobile-nav";
 import { requireTenant } from "@/server/services/auth.service";
 
 type TenantLayoutProps = {
-  children: React.ReactNode;
+  children: ReactNode;
 };
 
 export default async function TenantLayout({ children }: TenantLayoutProps) {

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, Building2, KeyRound } from "lucide-react";
+import { AlertTriangle, KeyRound } from "lucide-react";
 import { TenantActivationForm } from "@/components/tenant/tenant-activation-form";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/ui/page-header";
