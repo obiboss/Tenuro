@@ -170,6 +170,12 @@ export default async function OverviewPage() {
                 </Button>
               </Link>
 
+              <Link href="/public-receipts">
+                <Button fullWidth variant="secondary">
+                  Review Imported Receipts
+                </Button>
+              </Link>
+
               <Link href="/settings">
                 <Button fullWidth variant="secondary">
                   Set Up Bank Account

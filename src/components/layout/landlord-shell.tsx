@@ -6,6 +6,7 @@ import {
   BarChart3,
   Building2,
   CreditCard,
+  FileText,
   History,
   Home,
   LockKeyhole,
@@ -48,6 +49,12 @@ const desktopNavItems = [
     label: "Payments",
     href: "/payments",
     icon: CreditCard,
+    status: "available",
+  },
+  {
+    label: "Imported Receipts",
+    href: "/public-receipts",
+    icon: FileText,
     status: "available",
   },
   {

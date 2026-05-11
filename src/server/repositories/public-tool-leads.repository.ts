@@ -344,3 +344,22 @@ export async function createReceiptUsageEvent(
     throw error;
   }
 }
+
+export async function listClaimedPublicGeneratedReceiptsForOwner(
+  supabase: SupabaseClient,
+  ownerProfileId: string,
+) {
+  const { data, error } = await supabase
+    .from("public_generated_receipts")
+    .select(publicGeneratedReceiptSelect)
+    .eq("owner_profile_id", ownerProfileId)
+    .not("claimed_at", "is", null)
+    .order("created_at", { ascending: false })
+    .returns<PublicGeneratedReceiptRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
