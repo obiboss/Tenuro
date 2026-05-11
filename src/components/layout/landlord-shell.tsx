@@ -58,6 +58,12 @@ const desktopNavItems = [
     status: "available",
   },
   {
+    label: "Imported Agreements",
+    href: "/public-agreements",
+    icon: FileText,
+    status: "available",
+  },
+  {
     label: "Renewals",
     href: "/renewals",
     icon: RefreshCcw,

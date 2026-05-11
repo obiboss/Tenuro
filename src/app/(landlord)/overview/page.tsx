@@ -176,6 +176,12 @@ export default async function OverviewPage() {
                 </Button>
               </Link>
 
+              <Link href="/public-agreements">
+                <Button fullWidth variant="secondary">
+                  Review Imported Agreements
+                </Button>
+              </Link>
+
               <Link href="/settings">
                 <Button fullWidth variant="secondary">
                   Set Up Bank Account
