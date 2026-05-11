@@ -23,7 +23,7 @@ export default function AgentLoginPage() {
         <EmailFallbackPanel />
 
         <p className="text-center text-sm text-text-muted">
-          New Tenuro agent?{" "}
+          New BOPA agent?{" "}
           <Link href="/agent/register" className="font-bold text-primary">
             Create agent account
           </Link>

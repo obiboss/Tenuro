@@ -275,8 +275,7 @@ export async function emailPasswordLoginAction(
 
       return {
         ok: false,
-        message:
-          "We could not find your Tenuro profile. Please contact support.",
+        message: "We could not find your BOPA profile. Please contact support.",
       };
     }
 

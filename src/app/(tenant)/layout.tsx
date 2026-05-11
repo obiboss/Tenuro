@@ -16,8 +16,8 @@ export default async function TenantLayout({ children }: TenantLayoutProps) {
       <header className="sticky top-0 z-30 border-b border-border-soft bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 md:px-6">
           <Link href="/tenant" className="flex min-w-0 items-center gap-3">
-            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-white shadow-soft">
-              <Building2 aria-hidden="true" size={23} strokeWidth={2.7} />
+            <div className="flex size-11 items-center justify-center rounded-2xl bg-primary text-2xl font-extrabold tracking-tight text-white shadow-soft">
+              B
             </div>
 
             <div className="min-w-0">

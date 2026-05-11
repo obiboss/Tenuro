@@ -112,8 +112,8 @@ function getFirstName(fullName: string) {
 function BoldverseBrand({ subtitle }: { subtitle: string }) {
   return (
     <Link href="/overview" className="flex min-w-0 items-center gap-3">
-      <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-white shadow-soft">
-        <Building2 aria-hidden="true" size={23} strokeWidth={2.7} />
+      <div className="flex size-11 items-center justify-center rounded-2xl bg-primary text-2xl font-extrabold tracking-tight text-white shadow-soft">
+        B
       </div>
 
       <div className="min-w-0">

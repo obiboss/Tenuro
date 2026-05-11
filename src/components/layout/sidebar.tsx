@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2 } from "lucide-react";
+// import { Building2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { LANDLORD_NAVIGATION } from "@/lib/navigation";
 
@@ -12,8 +12,8 @@ export function Sidebar() {
   return (
     <aside className="hidden min-h-screen w-72 border-r border-border-soft bg-surface px-4 py-5 lg:fixed lg:inset-y-0 lg:left-0 lg:block">
       <Link href="/overview" className="flex items-center gap-3 px-2">
-        <div className="flex size-11 items-center justify-center rounded-2xl bg-primary text-white shadow-soft">
-          <Building2 aria-hidden="true" size={23} strokeWidth={2.7} />
+        <div className="flex size-11 items-center justify-center rounded-2xl bg-primary text-2xl font-extrabold tracking-tight text-white shadow-soft">
+          B
         </div>
 
         <div>

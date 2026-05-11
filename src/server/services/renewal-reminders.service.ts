@@ -142,7 +142,7 @@ function buildTenantRenewalReminderMessage(params: {
   return [
     `Hello ${params.tenantName},`,
     "",
-    `This is a Tenuro renewal reminder for ${params.unitName} at ${params.propertyName}.`,
+    `This is a BOPA renewal reminder for ${params.unitName} at ${params.propertyName}.`,
     "",
     `Your next rent/renewal date is ${formatDate(params.renewalDate)}.`,
     `Days remaining: ${params.daysUntilRenewal}`,

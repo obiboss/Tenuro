@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Building2, PlusCircle } from "lucide-react";
+import { PlusCircle } from "lucide-react";
 import { LandlordClaimSignupForm } from "@/components/agent/landlord-claim-signup-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,8 +22,8 @@ export default async function LandlordClaimPage({
     <main className="min-h-screen bg-background px-4 py-8 md:px-6">
       <div className="mx-auto max-w-2xl">
         <Link href="/" className="flex items-center gap-3">
-          <div className="flex size-11 items-center justify-center rounded-2xl bg-primary text-white shadow-soft">
-            <Building2 aria-hidden="true" size={23} strokeWidth={2.7} />
+          <div className="flex size-11 items-center justify-center rounded-2xl bg-primary text-2xl font-extrabold tracking-tight text-white shadow-soft">
+            B
           </div>
 
           <div>
