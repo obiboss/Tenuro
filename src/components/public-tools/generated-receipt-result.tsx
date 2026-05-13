@@ -1,10 +1,13 @@
 "use client";
 
+import { buildWaMeUrl } from "@/server/utils/whatsapp";
+
 type GeneratedReceiptResultProps = {
   receipt: {
     receiptNumber: string;
     landlordFullName: string;
     tenantFullName: string;
+    tenantPhoneNumber: string;
     propertyLabel: string;
     rentAmount: number;
     paymentDate: string;
@@ -34,9 +37,10 @@ function formatDate(value: string) {
 export function GeneratedReceiptResult({
   receipt,
 }: GeneratedReceiptResultProps) {
-  const whatsappHref = `https://wa.me/?text=${encodeURIComponent(
-    receipt.whatsappMessage,
-  )}`;
+  const whatsappHref = buildWaMeUrl({
+    phoneNumber: receipt.tenantPhoneNumber,
+    message: receipt.whatsappMessage,
+  });
 
   return (
     <div className="rounded-card border border-border-soft bg-white p-5 shadow-card md:p-6">

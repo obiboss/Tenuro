@@ -24,6 +24,7 @@ export type GeneratedPublicAgreementPreview = {
   title: string;
   landlordFullName: string;
   tenantFullName: string;
+  tenantPhoneNumber: string;
   propertyLabel: string;
   rentAmount: number;
   rentFrequency: string;
@@ -554,6 +555,7 @@ export async function generatePublicTenancyAgreementPreview(
     title: updatedAgreement.agreement_title,
     landlordFullName: updatedAgreement.landlord_full_name,
     tenantFullName: updatedAgreement.tenant_full_name,
+    tenantPhoneNumber: input.tenantPhoneNumber,
     propertyLabel,
     rentAmount: Number(updatedAgreement.rent_amount),
     rentFrequency: rentFrequencyLabel(input.rentFrequency),

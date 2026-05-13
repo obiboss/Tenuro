@@ -8,6 +8,7 @@ export type PublicReceiptGeneratorActionState = {
     receiptNumber: string;
     landlordFullName: string;
     tenantFullName: string;
+    tenantPhoneNumber: string;
     propertyLabel: string;
     rentAmount: number;
     paymentDate: string;

@@ -8,6 +8,7 @@ export type PublicAgreementGeneratorActionState = {
     title: string;
     landlordFullName: string;
     tenantFullName: string;
+    tenantPhoneNumber: string;
     propertyLabel: string;
     rentAmount: number;
     rentFrequency: string;

@@ -1,10 +1,13 @@
 "use client";
 
+import { buildWaMeUrl } from "@/server/utils/whatsapp";
+
 type GeneratedAgreementResultProps = {
   agreement: {
     title: string;
     landlordFullName: string;
     tenantFullName: string;
+    tenantPhoneNumber: string;
     propertyLabel: string;
     rentAmount: number;
     rentFrequency: string;
@@ -34,9 +37,10 @@ function formatDate(value: string) {
 export function GeneratedAgreementResult({
   agreement,
 }: GeneratedAgreementResultProps) {
-  const whatsappHref = `https://wa.me/?text=${encodeURIComponent(
-    agreement.whatsappMessage,
-  )}`;
+  const whatsappHref = buildWaMeUrl({
+    phoneNumber: agreement.tenantPhoneNumber,
+    message: agreement.whatsappMessage,
+  });
 
   return (
     <div className="rounded-card border border-border-soft bg-white p-5 shadow-card md:p-6">

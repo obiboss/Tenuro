@@ -22,6 +22,7 @@ export type GeneratedPublicReceiptResult = {
   receiptNumber: string;
   landlordFullName: string;
   tenantFullName: string;
+  tenantPhoneNumber: string;
   propertyLabel: string;
   rentAmount: number;
   paymentDate: string;
@@ -379,6 +380,7 @@ export async function generatePublicRentReceipt(
     receiptNumber: updatedReceipt.receipt_number,
     landlordFullName: updatedReceipt.landlord_full_name,
     tenantFullName: updatedReceipt.tenant_full_name,
+    tenantPhoneNumber: input.tenantPhoneNumber,
     propertyLabel,
     rentAmount: Number(updatedReceipt.rent_amount),
     paymentDate: updatedReceipt.payment_date,
