@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Rounded square background with shadow effect -->
+  <defs>
+    <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.1"/>
+    </filter>
+  </defs>
+  
+  <!-- Rounded square background -->
+  <rect x="32" y="32" width="192" height="192" rx="40" ry="40" fill="#1B4FD8" filter="url(#shadow)"/>
+  
+  <!-- Bold white "B" letter using Plus Jakarta Sans style -->
+  <text x="128" y="168" font-family="'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="140" font-weight="800" fill="#FFFFFF" text-anchor="middle" dominant-baseline="middle">B</text>
+</svg>

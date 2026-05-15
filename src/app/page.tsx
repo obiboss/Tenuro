@@ -212,10 +212,10 @@ export default function HomePage() {
             </h2>
 
             <p className="mt-4 text-base leading-8 text-text-muted md:text-lg">
-              Use BOPA’s free public tools to generate a rent receipt or tenancy
-              agreement first. Download the document, share it on WhatsApp, then
-              create a free landlord account only when you want to save the
-              record.
+              Use BOPA&apos;s free public tools to generate a rent receipt or
+              tenancy agreement first. Download the document, share it on
+              WhatsApp, then create a free landlord account only when you want
+              to save the record.
             </p>
           </div>
 
@@ -293,6 +293,39 @@ export default function HomePage() {
             );
           })}
         </section>
+
+        {/* Footer */}
+        <footer className="mt-16 border-t border-border-soft pt-8 pb-4">
+          <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
+            <p className="text-sm text-text-muted">
+              © {new Date().getFullYear()} Boldverse Services. All rights
+              reserved.
+            </p>
+
+            <div className="flex flex-wrap items-center justify-center gap-5 text-sm text-text-muted sm:justify-end">
+              <Link
+                href="/privacy"
+                className="transition-colors hover:text-text-strong"
+              >
+                Privacy Policy
+              </Link>
+
+              <Link
+                href="/terms"
+                className="transition-colors hover:text-text-strong"
+              >
+                Terms & Conditions
+              </Link>
+
+              <Link
+                href="/refund-policy"
+                className="transition-colors hover:text-text-strong"
+              >
+                Refund Policy
+              </Link>
+            </div>
+          </div>
+        </footer>
       </section>
     </main>
   );
