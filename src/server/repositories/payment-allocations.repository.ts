@@ -59,12 +59,48 @@ const PAYMENT_ALLOCATION_SELECT = `
   updated_at
 `;
 
+export async function hasPaymentAllocationsForIntent(
+  supabase: SupabaseClient,
+  gatewayPaymentIntentId: string,
+) {
+  const { count, error } = await supabase
+    .from("payment_allocations")
+    .select("id", { count: "exact", head: true })
+    .eq("gateway_payment_intent_id", gatewayPaymentIntentId);
+
+  if (error) {
+    throw error;
+  }
+
+  return (count ?? 0) > 0;
+}
+
 export async function createPaymentAllocations(
   supabase: SupabaseClient,
   allocations: PaymentAllocationInput[],
 ) {
   if (allocations.length === 0) {
     return [];
+  }
+
+  const intentId = allocations[0]?.gatewayPaymentIntentId;
+
+  if (intentId) {
+    const alreadyExists = await hasPaymentAllocationsForIntent(supabase, intentId);
+
+    if (alreadyExists) {
+      const { data: existing, error: existingError } = await supabase
+        .from("payment_allocations")
+        .select(PAYMENT_ALLOCATION_SELECT)
+        .eq("gateway_payment_intent_id", intentId)
+        .returns<PaymentAllocationRow[]>();
+
+      if (existingError) {
+        throw existingError;
+      }
+
+      return existing;
+    }
   }
 
   const { data, error } = await supabase

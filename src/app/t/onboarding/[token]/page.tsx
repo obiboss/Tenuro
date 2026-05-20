@@ -16,6 +16,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { ToastProvider } from "@/components/ui/toast-provider";
 import { TrustNotice } from "@/components/ui/trust-notice";
+import { errorResult } from "@/server/errors/result";
 import {
   resolveAgentTenantProcessingFeeForOnboarding,
   verifyAgentTenantProcessingFeeReference,
@@ -63,10 +64,7 @@ async function getTenantOnboardingPageState(params: {
         processingFeeNotice =
           "Processing fee payment confirmed. You can now complete your KYC form.";
       } catch (error) {
-        processingFeeNotice =
-          error instanceof Error
-            ? error.message
-            : "Processing fee payment could not be verified.";
+        processingFeeNotice = errorResult(error).message;
       }
     }
 
@@ -86,10 +84,7 @@ async function getTenantOnboardingPageState(params: {
   } catch (error) {
     return {
       ok: false,
-      message:
-        error instanceof Error
-          ? error.message
-          : "This onboarding link could not be opened.",
+      message: errorResult(error).message,
     };
   }
 }

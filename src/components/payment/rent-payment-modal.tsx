@@ -80,7 +80,7 @@ export function RentPaymentModal({
         ok={state.ok}
         message={state.message}
         successTitle="Payment link ready"
-        errorTitle="Payment link failed"
+        errorTitle="Online payment unavailable"
       />
 
       <Card>
@@ -88,7 +88,7 @@ export function RentPaymentModal({
           <div className="space-y-5">
             <TrustNotice
               title="Tenant-paid final onboarding payment"
-              description="The tenant pays rent, landlord charges, approved agent commission, and the BOPA fee in one secure Paystack checkout."
+              description="The tenant pays rent, landlord charges, approved agent commission, and the BOPA fee in one secure Paystack checkout when payout verification is ready."
             />
 
             {state.message && !state.ok ? (

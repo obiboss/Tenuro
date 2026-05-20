@@ -8,31 +8,15 @@ import {
   getTenantDashboardTenantByProfile,
   getTenantPayments,
 } from "@/server/repositories/tenant-dashboard.repository";
+import { getActiveLandlordPaystackAccount } from "@/server/repositories/landlord-paystack.repository";
+import { getCanonicalTenancyBalance } from "@/server/services/tenancy-financial-integrity.service";
+import { getPaystackPayoutVerificationUiState } from "@/server/services/paystack-verification.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import {
   createSignedRentReceiptPdfUrl,
   createSignedTenancyAgreementPdfUrl,
 } from "@/server/services/storage.service";
 import { requireTenant } from "./auth.service";
-
-function calculateOutstandingBalance(params: {
-  tenancyOpeningBalance: number;
-  tenancyRentAmount: number;
-  payments: {
-    status: string;
-    balance_after: number;
-  }[];
-}) {
-  const latestPostedPayment = params.payments.find(
-    (payment) => payment.status === "posted",
-  );
-
-  if (latestPostedPayment) {
-    return Number(latestPostedPayment.balance_after);
-  }
-
-  return Number(params.tenancyOpeningBalance || params.tenancyRentAmount || 0);
-}
 
 export async function getCurrentTenantDashboard() {
   const user = await requireTenant();
@@ -53,6 +37,13 @@ export async function getCurrentTenantDashboard() {
 
   const tenancy = await getActiveTenantTenancy(supabase, tenant.id);
   const payments = await getTenantPayments(supabase, tenant.id);
+  const landlordPayoutAccount = tenancy
+    ? await getActiveLandlordPaystackAccount(supabase, tenancy.landlord_id)
+    : null;
+  const onlinePaymentAvailability = getPaystackPayoutVerificationUiState(
+    landlordPayoutAccount,
+    "tenant",
+  );
 
   const agreement = tenancy
     ? await getAcceptedTenantAgreement(supabase, {
@@ -79,12 +70,12 @@ export async function getCurrentTenantDashboard() {
     })),
   );
 
-  const outstandingBalance = tenancy
-    ? calculateOutstandingBalance({
-        tenancyOpeningBalance: tenancy.opening_balance,
-        tenancyRentAmount: tenancy.rent_amount,
-        payments,
-      })
+  const tenancyBalance = tenancy
+    ? await getCanonicalTenancyBalance(supabase, tenancy.id)
+    : null;
+
+  const outstandingBalance = tenancyBalance
+    ? Number(tenancyBalance.outstanding_balance)
     : 0;
 
   return {
@@ -96,5 +87,6 @@ export async function getCurrentTenantDashboard() {
     moveOutNotice,
     outstandingBalance,
     payments: paymentHistory,
+    onlinePaymentAvailability,
   };
 }

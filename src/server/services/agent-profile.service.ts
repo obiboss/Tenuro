@@ -1,6 +1,12 @@
 import "server-only";
 
 import {
+  AUDIT_ACTOR_ROLES,
+  AUDIT_ENTITY_TYPES,
+  AUDIT_EVENT_TYPES,
+} from "@/server/constants/audit-events";
+import { AppError } from "@/server/errors/app-error";
+import {
   createAgentPaystackAccount,
   deactivateAgentPaystackAccounts,
   getActiveAgentPaystackAccount,
@@ -9,6 +15,7 @@ import {
   getAgentProfileByAgentId,
   upsertAgentProfile,
 } from "@/server/repositories/agent-profile.repository";
+import { writeAuditLog } from "@/server/services/audit-log.service";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { normalisePhoneNumber } from "@/server/utils/phone";
 import type {
@@ -21,7 +28,32 @@ import {
   getSupportedBanks,
   verifyBankAccount,
 } from "./paystack.service";
-import { AppError } from "@/server/errors/app-error";
+
+function buildPayoutVerificationAuditMetadata(params: {
+  accountId: string;
+  accountOwnerRole: "agent";
+  bankName: string;
+  accountName: string;
+  accountNumber: string;
+  paystackSubaccountCode: string;
+  verificationStatus: string;
+}) {
+  return {
+    account_owner_role: params.accountOwnerRole,
+    payout_account_id: params.accountId,
+    bank_name: params.bankName,
+    account_name: params.accountName,
+    account_number_last4: params.accountNumber.slice(-4),
+    paystack_subaccount_code: params.paystackSubaccountCode,
+    verification_status: params.verificationStatus,
+    awaiting_paystack_verification: true,
+    internal_notification: {
+      type: "paystack_payout_verification_required",
+      status: "pending",
+      channel: "audit_log",
+    },
+  };
+}
 
 async function writeAgentAuditLog(params: {
   agentId: string;
@@ -165,18 +197,36 @@ export async function setupAgentBankAccount(input: SetupAgentBankAccountInput) {
     currencyCode: "NGN",
   });
 
-  await writeAgentAuditLog({
-    agentId: agent.id,
-    eventType: "agent_payout_account_connected",
-    entityType: "agent_paystack_account",
+  const auditMetadata = buildPayoutVerificationAuditMetadata({
+    accountId: paystackAccount.id,
+    accountOwnerRole: "agent",
+    bankName: paystackAccount.bank_name,
+    accountName: paystackAccount.account_name,
+    accountNumber: paystackAccount.account_number,
+    paystackSubaccountCode: paystackAccount.paystack_subaccount_code,
+    verificationStatus: paystackAccount.verification_status,
+  });
+
+  await writeAuditLog({
+    landlordId: null,
+    actorProfileId: agent.id,
+    actorRole: AUDIT_ACTOR_ROLES.agent,
+    eventType: AUDIT_EVENT_TYPES.payoutAccountCreated,
+    entityType: AUDIT_ENTITY_TYPES.bankAccount,
     entityId: paystackAccount.id,
-    description: `Agent payout account connected: ${paystackAccount.bank_name}`,
-    metadata: {
-      bank_name: paystackAccount.bank_name,
-      account_name: paystackAccount.account_name,
-      account_number_last4: paystackAccount.account_number.slice(-4),
-      paystack_subaccount_code: paystackAccount.paystack_subaccount_code,
-    },
+    description: `Agent payout account created: ${paystackAccount.bank_name}`,
+    metadata: auditMetadata,
+  });
+
+  await writeAuditLog({
+    landlordId: null,
+    actorProfileId: agent.id,
+    actorRole: AUDIT_ACTOR_ROLES.agent,
+    eventType: AUDIT_EVENT_TYPES.payoutVerificationPending,
+    entityType: AUDIT_ENTITY_TYPES.bankAccount,
+    entityId: paystackAccount.id,
+    description: "Agent payout account is awaiting manual Paystack verification.",
+    metadata: auditMetadata,
   });
 
   return paystackAccount;

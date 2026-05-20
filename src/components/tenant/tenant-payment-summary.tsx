@@ -12,6 +12,8 @@ import { formatNaira } from "@/server/utils/money";
 
 type TenantPaymentSummaryProps = {
   outstandingBalance: number;
+  onlinePaymentAvailable: boolean;
+  unavailableMessage: string;
 };
 
 function formatDateTime(value: string | null | undefined) {
@@ -28,6 +30,8 @@ function formatDateTime(value: string | null | undefined) {
 
 export function TenantPaymentSummary({
   outstandingBalance,
+  onlinePaymentAvailable,
+  unavailableMessage,
 }: TenantPaymentSummaryProps) {
   const idempotencyKey = useMemo(() => crypto.randomUUID(), []);
 
@@ -52,14 +56,22 @@ export function TenantPaymentSummary({
           <TrustNotice
             title={hasBalance ? "Rent payment" : "No rent due"}
             description={
-              hasBalance
+              hasBalance && onlinePaymentAvailable
                 ? `You currently have ${formatNaira(
                     outstandingBalance,
                   )} outstanding. Continue to Paystack when you are ready to pay.`
-                : "Your rent balance is currently clear."
+                : hasBalance
+                  ? unavailableMessage
+                  : "Your rent balance is currently clear."
             }
             icon={<CreditCard aria-hidden="true" size={22} strokeWidth={2.6} />}
           />
+
+          {!onlinePaymentAvailable && hasBalance ? (
+            <div className="rounded-button bg-warning-soft px-4 py-3 text-sm font-semibold leading-6 text-warning">
+              {unavailableMessage}
+            </div>
+          ) : null}
 
           {state.message && !state.ok ? (
             <div
@@ -88,7 +100,7 @@ export function TenantPaymentSummary({
             </div>
           ) : null}
 
-          {hasBalance && !state.tenantPaymentUrl ? (
+          {hasBalance && onlinePaymentAvailable && !state.tenantPaymentUrl ? (
             <form action={formAction}>
               <input
                 type="hidden"

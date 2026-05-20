@@ -1,6 +1,7 @@
 import { ZodError } from "zod";
 import { AppError, isAppError } from "./app-error";
 import { ERROR_MESSAGES } from "./error-map";
+import { getFriendlyPayoutVerificationErrorMessage } from "@/server/services/paystack-verification.service";
 
 export type ActionResult<T = unknown> =
   | {
@@ -177,7 +178,9 @@ export function errorResult(error: unknown): ActionResult {
   if (isAppError(error)) {
     return {
       ok: false,
-      message: error.userMessage,
+      message:
+        getFriendlyPayoutVerificationErrorMessage(error.code) ??
+        error.userMessage,
     };
   }
 

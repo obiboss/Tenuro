@@ -1,6 +1,7 @@
 import "server-only";
 
 import crypto from "node:crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   AUDIT_ACTOR_ROLES,
   AUDIT_ENTITY_TYPES,
@@ -15,7 +16,11 @@ import {
   getGatewayPaymentIntentByReference,
   getLatestGatewayPaymentIntentForTenancyPurpose,
 } from "@/server/repositories/gateway-payment.repository";
-import { getTenancyBalanceSummary } from "@/server/repositories/ledger.repository";
+import {
+  assertGatewayRentPaymentAmount,
+  getCanonicalTenancyBalance,
+} from "@/server/services/tenancy-financial-integrity.service";
+import { getPayableOutstandingBalance } from "@/server/utils/tenancy-balance";
 import { getActiveLandlordPaystackAccount } from "@/server/repositories/landlord-paystack.repository";
 import {
   getActiveLandlordTenancyCharges,
@@ -32,6 +37,11 @@ import {
   writeAuditLog,
   writeSystemAuditLog,
 } from "@/server/services/audit-log.service";
+import {
+  assertAgentPayoutVerified,
+  assertLandlordPayoutVerified,
+  getPaystackPayoutVerificationUiState,
+} from "@/server/services/paystack-verification.service";
 import { generateTenantActivationLinkSystem } from "@/server/services/tenant-activation.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
@@ -394,7 +404,54 @@ async function resolveReusablePaymentIntent(params: {
   return getLatestGatewayPaymentIntentForTenancyPurpose(supabase, {
     tenancyId: params.tenancyId,
     paymentPurpose: params.paymentPurpose,
+    status: "initialized",
   });
+}
+
+function getReusableIntentAgentId(metadata: Record<string, unknown>) {
+  const agentDeal = toRecord(metadata.agent_deal);
+  const agentDealAgentId = readMetadataText(agentDeal, "agent_id");
+
+  if (agentDealAgentId) {
+    return agentDealAgentId;
+  }
+
+  const allocations = toRecord(metadata.allocations);
+  const agentAllocation = toRecord(allocations.agent);
+
+  return readMetadataText(agentAllocation, "agent_id");
+}
+
+async function assertReusableGatewayIntentPayoutsVerified(params: {
+  supabase: SupabaseClient;
+  metadata: Record<string, unknown>;
+  agentPropertyListingId: string | null;
+  invitedByAgentId: string | null;
+}) {
+  if (readMetadataNumber(params.metadata, "agent_commission_amount") <= 0) {
+    return;
+  }
+
+  const agentId = getReusableIntentAgentId(params.metadata);
+
+  if (agentId) {
+    const agentPaystackAccount = await getActiveAgentPaystackAccount(
+      params.supabase,
+      agentId,
+    );
+
+    assertAgentPayoutVerified(agentPaystackAccount);
+    return;
+  }
+
+  const agentDealAllocation = await resolveAgentDealPaymentAllocation({
+    agentPropertyListingId: params.agentPropertyListingId,
+    invitedByAgentId: params.invitedByAgentId,
+  });
+
+  if (agentDealAllocation?.isAgentCommissionPayable !== true) {
+    assertAgentPayoutVerified(null);
+  }
 }
 
 async function resolveAgentDealPaymentAllocation(params: {
@@ -437,17 +494,12 @@ async function resolveAgentDealPaymentAllocation(params: {
     listing.agent_id,
   );
 
-  if (!agentPaystackAccount) {
-    throw new AppError(
-      "AGENT_BANK_ACCOUNT_REQUIRED",
-      "The agent payout account is not ready for commission split.",
-      400,
-    );
-  }
+  const verifiedAgentPaystackAccount =
+    assertAgentPayoutVerified(agentPaystackAccount);
 
   return {
     listing,
-    agentPaystackAccount,
+    agentPaystackAccount: verifiedAgentPaystackAccount,
     commissionAmount,
     isAgentDeal: true,
     isAgentCommissionPayable: true,
@@ -504,6 +556,12 @@ async function initializeGatewayPaymentForTenancy(params: {
   const propertyName =
     tenancy.units?.properties?.property_name ?? "your apartment";
   const unitName = tenancy.units?.unit_identifier ?? "your unit";
+  const paystackAccount = await getActiveLandlordPaystackAccount(
+    supabase,
+    tenancy.landlord_id,
+  );
+
+  const verifiedPaystackAccount = assertLandlordPayoutVerified(paystackAccount);
 
   const reusableIntent = await resolveReusablePaymentIntent({
     tenancyId: tenancy.id,
@@ -542,6 +600,14 @@ async function initializeGatewayPaymentForTenancy(params: {
     }
 
     const metadata = toRecord(reusableIntent.metadata);
+
+    await assertReusableGatewayIntentPayoutsVerified({
+      supabase,
+      metadata,
+      agentPropertyListingId: tenancy.tenants.agent_property_listing_id,
+      invitedByAgentId: tenancy.tenants.invited_by_agent_id,
+    });
+
     const tenantPaymentUrl = getTenantPaymentUrl(
       reusableIntent.paystack_reference,
     );
@@ -574,19 +640,6 @@ async function initializeGatewayPaymentForTenancy(params: {
         expiresAt: reusableExpiry ?? reusableIntent.created_at,
       }),
     };
-  }
-
-  const paystackAccount = await getActiveLandlordPaystackAccount(
-    supabase,
-    tenancy.landlord_id,
-  );
-
-  if (!paystackAccount) {
-    throw new AppError(
-      "BANK_ACCOUNT_REQUIRED",
-      "The landlord payout account is not ready for online rent payment.",
-      400,
-    );
   }
 
   const landlordCharges = await getActiveLandlordTenancyCharges(supabase, {
@@ -629,10 +682,12 @@ async function initializeGatewayPaymentForTenancy(params: {
   const agentDealSplit = shouldUseAgentMultiSplit
     ? await createAgentDealTransactionSplit({
         name: `BOPA Agent Deal ${reference}`,
-        landlordSubaccountCode: paystackAccount.paystack_subaccount_code,
+        landlordSubaccountCode:
+          verifiedPaystackAccount.paystack_subaccount_code,
         landlordShareKobo: convertNairaToKobo(landlordShareAmount),
-        agentSubaccountCode:
-          agentDealAllocation.agentPaystackAccount.paystack_subaccount_code,
+        agentSubaccountCode: assertAgentPayoutVerified(
+          agentDealAllocation.agentPaystackAccount,
+        ).paystack_subaccount_code,
         agentShareKobo: convertNairaToKobo(agentCommissionAmount),
         currencyCode: tenancy.currency_code,
       })
@@ -703,7 +758,7 @@ async function initializeGatewayPaymentForTenancy(params: {
           mode: "agent_deal_flat_split",
           split_code: agentDealSplit.split_code,
           split_id: agentDealSplit.id,
-          landlord_subaccount: paystackAccount.paystack_subaccount_code,
+          landlord_subaccount: verifiedPaystackAccount.paystack_subaccount_code,
           landlord_share_kobo: convertNairaToKobo(landlordShareAmount),
           agent_subaccount:
             agentDealAllocation?.agentPaystackAccount
@@ -714,7 +769,7 @@ async function initializeGatewayPaymentForTenancy(params: {
         }
       : {
           mode: "subaccount_flat_fee",
-          subaccount: paystackAccount.paystack_subaccount_code,
+          subaccount: verifiedPaystackAccount.paystack_subaccount_code,
           transaction_charge_kobo: tenuroFeeKobo,
           landlord_share_amount: landlordShareAmount,
           bearer: "subaccount",
@@ -742,7 +797,7 @@ async function initializeGatewayPaymentForTenancy(params: {
         amountKobo: totalAmountKobo,
         reference,
         callbackUrl: getTenantPaymentVerifyUrl(reference),
-        subaccountCode: paystackAccount.paystack_subaccount_code,
+        subaccountCode: verifiedPaystackAccount.paystack_subaccount_code,
         transactionChargeKobo: tenuroFeeKobo,
         currencyCode: tenancy.currency_code,
         metadata,
@@ -897,6 +952,14 @@ export async function initializeRentPayment(input: InitializeRentPaymentInput) {
     );
   }
 
+  const adminSupabase = createSupabaseAdminClient();
+  const balance = await getCanonicalTenancyBalance(adminSupabase, tenancy.id);
+
+  assertGatewayRentPaymentAmount({
+    rentAmount: input.amount,
+    outstandingBefore: balance.outstanding_balance,
+  });
+
   return initializeGatewayPaymentForTenancy({
     tenancyId: input.tenancyId,
     amount: input.amount,
@@ -984,9 +1047,12 @@ export async function initializeTenantDashboardRentPayment(params: {
     );
   }
 
-  const balance = await getTenancyBalanceSummary(supabase, tenancy.id);
+  const balance = await getCanonicalTenancyBalance(supabase, tenancy.id);
+  const payableOutstanding = getPayableOutstandingBalance(
+    balance.outstanding_balance,
+  );
 
-  if (Number(balance.outstanding_balance) <= 0) {
+  if (payableOutstanding <= 0) {
     throw new AppError(
       "NO_RENT_DUE",
       "There is no outstanding rent due for this tenancy.",
@@ -994,9 +1060,14 @@ export async function initializeTenantDashboardRentPayment(params: {
     );
   }
 
+  assertGatewayRentPaymentAmount({
+    rentAmount: payableOutstanding,
+    outstandingBefore: balance.outstanding_balance,
+  });
+
   return initializeGatewayPaymentForTenancy({
     tenancyId: tenancy.id,
-    amount: Number(balance.outstanding_balance),
+    amount: payableOutstanding,
     periodStart: tenancy.current_period_start,
     periodEnd: tenancy.current_period_end,
     idempotencyKey,
@@ -1015,10 +1086,23 @@ export async function getPublicTenantPaymentCheckout(params: {
   const supabase = createSupabaseAdminClient();
 
   if (params.verify) {
-    try {
-      await processVerifiedGatewayPaymentReference(params.reference);
-    } catch (error) {
-      console.error("Public tenant payment verification failed:", error);
+    const intentForVerify = await getGatewayPaymentIntentByReference(
+      supabase,
+      params.reference,
+    );
+
+    if (
+      intentForVerify &&
+      (intentForVerify.status === "initialized" ||
+        (intentForVerify.status === "paid" && !intentForVerify.processed_payment_id))
+    ) {
+      try {
+        await processVerifiedGatewayPaymentReference(params.reference, {
+          replaySource: "verify_page",
+        });
+      } catch (error) {
+        console.error("Public tenant payment verification failed:", error);
+      }
     }
   }
 
@@ -1032,6 +1116,14 @@ export async function getPublicTenantPaymentCheckout(params: {
   }
 
   const metadata = toRecord(intent.metadata);
+  const landlordPayoutAccount = await getActiveLandlordPaystackAccount(
+    supabase,
+    intent.landlord_id,
+  );
+  const onlinePaymentAvailability = getPaystackPayoutVerificationUiState(
+    landlordPayoutAccount,
+    "tenant",
+  );
   const expiresAt = getEffectiveExpiry({
     expiresAt: intent.expires_at,
     createdAt: intent.created_at,
@@ -1088,6 +1180,7 @@ export async function getPublicTenantPaymentCheckout(params: {
     paidAt: intent.paid_at,
     expiresAt,
     isExpired,
+    onlinePaymentAvailability,
     propertyName: readMetadataText(metadata, "property_name"),
     unitIdentifier: readMetadataText(metadata, "unit_identifier"),
     periodStart: intent.period_start,

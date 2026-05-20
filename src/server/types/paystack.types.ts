@@ -43,6 +43,15 @@ export type PaystackInitializedTransaction = {
   reference: string;
 };
 
+export const PAYSTACK_VERIFICATION_STATUSES = [
+  "unverified",
+  "verified",
+  "failed",
+] as const;
+
+export type PaystackVerificationStatus =
+  (typeof PAYSTACK_VERIFICATION_STATUSES)[number];
+
 export type PaystackChargeBearer =
   | "account"
   | "subaccount"
@@ -89,7 +98,26 @@ export type LandlordPaystackAccount = {
   paystack_split_id: number | null;
   currency_code: string;
   is_active: boolean;
-  verified_at: string;
+  verification_status: PaystackVerificationStatus;
+  verified_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AgentPaystackAccount = {
+  id: string;
+  agent_id: string;
+  business_name: string;
+  bank_code: string;
+  bank_name: string;
+  account_number: string;
+  account_name: string;
+  paystack_subaccount_code: string;
+  paystack_subaccount_id: number | null;
+  currency_code: string;
+  is_active: boolean;
+  verification_status: PaystackVerificationStatus;
+  verified_at: string | null;
   created_at: string;
   updated_at: string;
 };

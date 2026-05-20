@@ -52,6 +52,7 @@ export async function registerGatewayPaymentEvent(
       "id, provider, event_type, payment_reference, gateway_payment_intent_id, processed_payment_id, processing_status, error_message",
     )
     .eq("provider", "paystack")
+    .eq("event_type", params.eventType)
     .eq("payment_reference", params.paymentReference)
     .single<GatewayPaymentEventRow>();
 
@@ -114,6 +115,31 @@ export async function markGatewayPaymentEventIgnored(
   if (error) {
     throw error;
   }
+}
+
+export async function getGatewayPaymentEventByProviderEventReference(
+  supabase: SupabaseClient,
+  params: {
+    provider: string;
+    eventType: string;
+    paymentReference: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("gateway_payment_events")
+    .select(
+      "id, provider, event_type, payment_reference, gateway_payment_intent_id, processed_payment_id, processing_status, error_message",
+    )
+    .eq("provider", params.provider)
+    .eq("event_type", params.eventType)
+    .eq("payment_reference", params.paymentReference)
+    .maybeSingle<GatewayPaymentEventRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
 }
 
 export async function markGatewayPaymentEventFailed(

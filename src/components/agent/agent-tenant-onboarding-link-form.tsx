@@ -9,10 +9,12 @@ import { Textarea } from "@/components/ui/textarea";
 
 type AgentTenantOnboardingLinkFormProps = {
   listingId: string;
+  disabled?: boolean;
 };
 
 export function AgentTenantOnboardingLinkForm({
   listingId,
+  disabled = false,
 }: AgentTenantOnboardingLinkFormProps) {
   const [state, formAction, isPending] = useActionState(
     createAgentTenantOnboardingLinkAction,
@@ -49,6 +51,7 @@ export function AgentTenantOnboardingLinkForm({
         name="fullName"
         placeholder="Enter tenant name"
         error={state.fieldErrors?.fullName?.[0]}
+        disabled={disabled}
         required
       />
 
@@ -57,6 +60,7 @@ export function AgentTenantOnboardingLinkForm({
         name="phoneNumber"
         placeholder="080..."
         error={state.fieldErrors?.phoneNumber?.[0]}
+        disabled={disabled}
         required
       />
 
@@ -66,6 +70,7 @@ export function AgentTenantOnboardingLinkForm({
         type="email"
         placeholder="Optional"
         error={state.fieldErrors?.email?.[0]}
+        disabled={disabled}
       />
 
       <Textarea
@@ -73,9 +78,10 @@ export function AgentTenantOnboardingLinkForm({
         name="note"
         placeholder="Optional note for the landlord record"
         error={state.fieldErrors?.note?.[0]}
+        disabled={disabled}
       />
 
-      <Button type="submit" isLoading={isPending} fullWidth>
+      <Button type="submit" isLoading={isPending} disabled={disabled} fullWidth>
         Send Tenant Onboarding Link
       </Button>
     </form>

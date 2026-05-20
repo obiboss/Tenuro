@@ -1,5 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { LandlordPaystackAccount } from "@/server/types/paystack.types";
+import type {
+  LandlordPaystackAccount,
+  PaystackVerificationStatus,
+} from "@/server/types/paystack.types";
+
+export type LandlordPaystackAccountWithOwner = LandlordPaystackAccount & {
+  landlord: {
+    id: string;
+    full_name: string;
+    email: string | null;
+    phone_number: string | null;
+  } | null;
+};
 
 const LANDLORD_PAYSTACK_ACCOUNT_SELECT = `
   id,
@@ -15,10 +27,36 @@ const LANDLORD_PAYSTACK_ACCOUNT_SELECT = `
   paystack_split_id,
   currency_code,
   is_active,
+  verification_status,
   verified_at,
   created_at,
   updated_at
 `;
+
+const LANDLORD_PAYSTACK_ACCOUNT_WITH_OWNER_SELECT = `
+  ${LANDLORD_PAYSTACK_ACCOUNT_SELECT},
+  landlord:profiles!landlord_paystack_accounts_landlord_id_fkey (
+    id,
+    full_name,
+    email,
+    phone_number
+  )
+`;
+
+function buildVerificationStatusUpdate(params: {
+  verificationStatus: PaystackVerificationStatus;
+  verifiedAt?: string | null;
+}) {
+  const isVerified = params.verificationStatus === "verified";
+
+  return {
+    verification_status: params.verificationStatus,
+    verified_at: isVerified
+      ? (params.verifiedAt ?? new Date().toISOString())
+      : null,
+    updated_at: new Date().toISOString(),
+  };
+}
 
 export async function getActiveLandlordPaystackAccount(
   supabase: SupabaseClient,
@@ -95,4 +133,194 @@ export async function createLandlordPaystackAccount(
   }
 
   return data;
+}
+
+export async function updateLandlordPaystackAccountVerificationStatus(
+  supabase: SupabaseClient,
+  params: {
+    accountId: string;
+    verificationStatus: PaystackVerificationStatus;
+    verifiedAt?: string | null;
+  },
+) {
+  const { data, error } = await supabase
+    .from("landlord_paystack_accounts")
+    .update(
+      buildVerificationStatusUpdate({
+        verificationStatus: params.verificationStatus,
+        verifiedAt: params.verifiedAt,
+      }),
+    )
+    .eq("id", params.accountId)
+    .select(LANDLORD_PAYSTACK_ACCOUNT_SELECT)
+    .single<LandlordPaystackAccount>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function updateActiveLandlordPaystackAccountVerificationStatus(
+  supabase: SupabaseClient,
+  params: {
+    accountId: string;
+    expectedUpdatedAt: string;
+    verificationStatus: PaystackVerificationStatus;
+    verifiedAt?: string | null;
+  },
+) {
+  const { data, error } = await supabase
+    .from("landlord_paystack_accounts")
+    .update(
+      buildVerificationStatusUpdate({
+        verificationStatus: params.verificationStatus,
+        verifiedAt: params.verifiedAt,
+      }),
+    )
+    .eq("id", params.accountId)
+    .eq("is_active", true)
+    .eq("updated_at", params.expectedUpdatedAt)
+    .select(LANDLORD_PAYSTACK_ACCOUNT_SELECT)
+    .maybeSingle<LandlordPaystackAccount>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getLandlordPaystackAccountById(
+  supabase: SupabaseClient,
+  accountId: string,
+) {
+  const { data, error } = await supabase
+    .from("landlord_paystack_accounts")
+    .select(LANDLORD_PAYSTACK_ACCOUNT_SELECT)
+    .eq("id", accountId)
+    .maybeSingle<LandlordPaystackAccount>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function markLandlordPaystackAccountVerified(
+  supabase: SupabaseClient,
+  params: {
+    accountId: string;
+    verifiedAt?: string;
+  },
+) {
+  return updateLandlordPaystackAccountVerificationStatus(supabase, {
+    accountId: params.accountId,
+    verificationStatus: "verified",
+    verifiedAt: params.verifiedAt,
+  });
+}
+
+export async function markLandlordPaystackAccountFailed(
+  supabase: SupabaseClient,
+  accountId: string,
+) {
+  return updateLandlordPaystackAccountVerificationStatus(supabase, {
+    accountId,
+    verificationStatus: "failed",
+  });
+}
+
+export async function getLandlordPaystackAccountsByVerificationStatus(
+  supabase: SupabaseClient,
+  verificationStatus: PaystackVerificationStatus,
+  params: {
+    activeOnly?: boolean;
+  } = {},
+) {
+  let query = supabase
+    .from("landlord_paystack_accounts")
+    .select(LANDLORD_PAYSTACK_ACCOUNT_SELECT)
+    .eq("verification_status", verificationStatus)
+    .order("created_at", { ascending: false });
+
+  if (params.activeOnly) {
+    query = query.eq("is_active", true);
+  }
+
+  const { data, error } = await query.returns<LandlordPaystackAccount[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getLandlordPaystackAccountsWithOwnersByVerificationStatus(
+  supabase: SupabaseClient,
+  verificationStatus: PaystackVerificationStatus,
+  params: {
+    activeOnly?: boolean;
+  } = {},
+) {
+  let query = supabase
+    .from("landlord_paystack_accounts")
+    .select(LANDLORD_PAYSTACK_ACCOUNT_WITH_OWNER_SELECT)
+    .eq("verification_status", verificationStatus)
+    .order("created_at", { ascending: false });
+
+  if (params.activeOnly) {
+    query = query.eq("is_active", true);
+  }
+
+  const { data, error } =
+    await query.returns<LandlordPaystackAccountWithOwner[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getPendingLandlordPaystackAccounts(
+  supabase: SupabaseClient,
+  params?: {
+    activeOnly?: boolean;
+  },
+) {
+  return getLandlordPaystackAccountsByVerificationStatus(
+    supabase,
+    "unverified",
+    params,
+  );
+}
+
+export async function getVerifiedLandlordPaystackAccounts(
+  supabase: SupabaseClient,
+  params?: {
+    activeOnly?: boolean;
+  },
+) {
+  return getLandlordPaystackAccountsByVerificationStatus(
+    supabase,
+    "verified",
+    params,
+  );
+}
+
+export async function getFailedLandlordPaystackAccounts(
+  supabase: SupabaseClient,
+  params?: {
+    activeOnly?: boolean;
+  },
+) {
+  return getLandlordPaystackAccountsByVerificationStatus(
+    supabase,
+    "failed",
+    params,
+  );
 }

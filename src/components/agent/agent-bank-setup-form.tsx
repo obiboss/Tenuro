@@ -7,6 +7,7 @@ import { ActionResultToast } from "@/components/ui/action-result-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { TrustNotice } from "@/components/ui/trust-notice";
 
 type AgentBankSetupFormProps = {
   banks: {
@@ -39,6 +40,11 @@ export function AgentBankSetupForm({
         message={state.message}
         successTitle="Payout account connected"
         errorTitle="Payout setup failed"
+      />
+
+      <TrustNotice
+        title="Payout verification required"
+        description="After connecting your bank account, split payouts stay disabled until verification is approved."
       />
 
       {state.message ? (

@@ -13,6 +13,11 @@ import {
   type RentPaymentFilter,
 } from "@/server/repositories/payments.repository";
 import { writeAuditLog } from "@/server/services/audit-log.service";
+import {
+  assertManualRentPaymentAmount,
+  buildPaymentBalanceAuditMetadata,
+  getCanonicalTenancyBalance,
+} from "@/server/services/tenancy-financial-integrity.service";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import type { RecordManualPaymentInput } from "@/server/validators/payment.schema";
 import { requireLandlord } from "./auth.service";
@@ -69,6 +74,12 @@ export async function recordManualPaymentForCurrentLandlord(
     ? input.paymentForPeriodEnd.toISOString().slice(0, 10)
     : null;
 
+  const balance = await getCanonicalTenancyBalance(supabase, tenancy.id);
+  const paymentClassification = assertManualRentPaymentAmount({
+    amountPaid: input.amountPaid,
+    outstandingBefore: balance.outstanding_balance,
+  });
+
   const paymentId = await recordManualRentPaymentViaRpc(supabase, {
     tenancyId: input.tenancyId,
     amountPaid: input.amountPaid,
@@ -99,6 +110,7 @@ export async function recordManualPaymentForCurrentLandlord(
       payment_date: input.paymentDate.toISOString(),
       period_start: periodStart,
       period_end: periodEnd,
+      ...buildPaymentBalanceAuditMetadata(paymentClassification),
     },
   });
 

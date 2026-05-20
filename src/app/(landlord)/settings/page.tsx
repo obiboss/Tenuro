@@ -1,5 +1,6 @@
 import { Settings } from "lucide-react";
 import { BankSetupForm } from "@/components/payment/bank-setup-form";
+import { PaymentVerificationAutoRefresh } from "@/components/payment/payment-verification-auto-refresh";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
@@ -7,15 +8,27 @@ import {
   getCurrentLandlordBankSetup,
   getPaystackBanksForSetup,
 } from "@/server/services/landlord-bank.service";
+import { getPaystackPayoutVerificationUiState } from "@/server/services/paystack-verification.service";
 
 export default async function SettingsPage() {
   const [bankSetup, banks] = await Promise.all([
     getCurrentLandlordBankSetup(),
     getPaystackBanksForSetup(),
   ]);
+  const payoutVerification = getPaystackPayoutVerificationUiState(
+    bankSetup,
+    "landlord",
+  );
+
+  const shouldAutoRefreshPayoutVerification =
+    Boolean(bankSetup) && payoutVerification.state === "unverified";
 
   return (
     <div>
+      <PaymentVerificationAutoRefresh
+        enabled={shouldAutoRefreshPayoutVerification}
+      />
+
       <PageHeader
         title="Settings"
         description="Manage landlord profile, payout bank account, and notification preferences."
@@ -26,38 +39,50 @@ export default async function SettingsPage() {
           title="Gateway payout account"
           description="This account receives landlord rent when tenants pay through Paystack."
           action={
-            bankSetup ? (
-              <Badge tone="success">Connected</Badge>
-            ) : (
-              <Badge tone="warning">Not Connected</Badge>
-            )
+            <Badge tone={payoutVerification.badgeTone}>
+              {payoutVerification.badgeLabel}
+            </Badge>
           }
         >
           {bankSetup ? (
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-button bg-background p-4">
-                <p className="text-sm font-bold text-text-muted">Bank</p>
-                <p className="mt-2 font-extrabold text-text-strong">
-                  {bankSetup.bank_name}
-                </p>
+            <div className="space-y-4">
+              <div
+                className={
+                  payoutVerification.isVerified
+                    ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold leading-6 text-success"
+                    : payoutVerification.state === "failed"
+                      ? "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold leading-6 text-danger"
+                      : "rounded-button bg-warning-soft px-4 py-3 text-sm font-semibold leading-6 text-warning"
+                }
+              >
+                {payoutVerification.guidance}
               </div>
 
-              <div className="rounded-button bg-background p-4">
-                <p className="text-sm font-bold text-text-muted">
-                  Account Number
-                </p>
-                <p className="mt-2 font-extrabold text-text-strong">
-                  {bankSetup.account_number}
-                </p>
-              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-button bg-background p-4">
+                  <p className="text-sm font-bold text-text-muted">Bank</p>
+                  <p className="mt-2 font-extrabold text-text-strong">
+                    {bankSetup.bank_name}
+                  </p>
+                </div>
 
-              <div className="rounded-button bg-background p-4 md:col-span-2">
-                <p className="text-sm font-bold text-text-muted">
-                  Account Name
-                </p>
-                <p className="mt-2 font-extrabold text-text-strong">
-                  {bankSetup.account_name}
-                </p>
+                <div className="rounded-button bg-background p-4">
+                  <p className="text-sm font-bold text-text-muted">
+                    Account Number
+                  </p>
+                  <p className="mt-2 font-extrabold text-text-strong">
+                    {bankSetup.account_number}
+                  </p>
+                </div>
+
+                <div className="rounded-button bg-background p-4 md:col-span-2">
+                  <p className="text-sm font-bold text-text-muted">
+                    Account Name
+                  </p>
+                  <p className="mt-2 font-extrabold text-text-strong">
+                    {bankSetup.account_name}
+                  </p>
+                </div>
               </div>
             </div>
           ) : (

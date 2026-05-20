@@ -39,6 +39,8 @@ import {
 import { getCurrentTenantActiveTenancy } from "@/server/services/tenancies.service";
 import { getCurrentLandlordQuitNoticesForTenancy } from "@/server/services/quit-notices.service";
 import { getCurrentLandlordTenantAgentCommissionAmount } from "@/server/services/tenant-agent-commission.service";
+import { getCurrentLandlordBankSetup } from "@/server/services/landlord-bank.service";
+import { getPaystackPayoutVerificationUiState } from "@/server/services/paystack-verification.service";
 
 type TenantDetailPageProps = {
   params: Promise<{
@@ -86,6 +88,11 @@ export default async function TenantDetailPage({
 
   const agentCommissionAmount =
     await getCurrentLandlordTenantAgentCommissionAmount(tenant.id);
+  const payoutAccount = await getCurrentLandlordBankSetup();
+  const payoutVerification = getPaystackPayoutVerificationUiState(
+    payoutAccount,
+    "landlord",
+  );
 
   const tenuroFeeAmount = Number(
     process.env.TENURO_GATEWAY_ADMIN_FEE_NAIRA ?? 0,
@@ -106,9 +113,11 @@ export default async function TenantDetailPage({
     ledgerSummary.balance && outstandingBalance <= 0,
   );
 
-  const canSendPaymentLink = Boolean(
+  const hasPaymentLinkPrerequisites = Boolean(
     activeTenancy && hasOutstandingBalance && isAgreementAccepted,
   );
+  const canSendPaymentLink =
+    hasPaymentLinkPrerequisites && payoutVerification.isVerified;
 
   const shouldShowPaymentLockedNotice = Boolean(
     activeTenancy && hasOutstandingBalance && !isAgreementAccepted,
@@ -145,7 +154,9 @@ export default async function TenantDetailPage({
             : !isAgreementAccepted
               ? "Send the agreement acceptance link to the tenant."
               : hasOutstandingBalance
-                ? "Send the tenant rent payment link before account activation."
+                ? payoutVerification.isVerified
+                  ? "Send the tenant rent payment link before account activation."
+                  : "Online rent payment links are unavailable until payout verification is approved. You can still record manual payments."
                 : "Send the tenant activation link so they can set their password and access their dashboard.";
 
   return (
@@ -324,6 +335,31 @@ export default async function TenantDetailPage({
                     size={22}
                     strokeWidth={2.6}
                   />
+                }
+              />
+            </SectionCard>
+          ) : null}
+
+          {hasPaymentLinkPrerequisites && !payoutVerification.isVerified ? (
+            <SectionCard
+              title="Online Payment Link Unavailable"
+              description="Manual rent recording is still available. Online Paystack rent collection depends on payout verification."
+              action={
+                <Badge tone={payoutVerification.badgeTone}>
+                  {payoutVerification.badgeLabel}
+                </Badge>
+              }
+            >
+              <TrustNotice
+                title="Payout verification required"
+                description={payoutVerification.guidance}
+                icon={
+                  <ReceiptText aria-hidden="true" size={22} strokeWidth={2.6} />
+                }
+                className={
+                  payoutVerification.state === "failed"
+                    ? "bg-danger-soft text-danger"
+                    : "bg-warning-soft text-warning"
                 }
               />
             </SectionCard>

@@ -15,6 +15,7 @@ import type {
   OtpPurpose,
   OtpRequestResult,
   OtpVerifyResult,
+  UserRole,
 } from "@/server/types/auth.types";
 import { sha256Hex, timingSafeEqualText } from "@/server/utils/crypto";
 import { maskPhoneNumber, normalisePhoneNumber } from "@/server/utils/phone";
@@ -186,7 +187,7 @@ export async function verifyOtp(params: {
     .eq("phone_number", normalizedPhone.e164)
     .maybeSingle<{
       id: string;
-      role: "landlord" | "tenant" | "caretaker";
+      role: UserRole;
       phone_number: string;
     }>();
 

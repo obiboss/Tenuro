@@ -215,6 +215,11 @@ export default async function TenantPaymentPage({
   const shouldShowLandlordCharges =
     landlordCharges.length > 0 || checkout.landlordChargesAmount > 0;
   const shouldShowAgentCommission = checkout.agentCommissionAmount > 0;
+  const onlinePaymentAvailable = checkout.onlinePaymentAvailability.isVerified;
+  const shouldShowPaymentUnavailable =
+    !onlinePaymentAvailable &&
+    !checkout.isExpired &&
+    checkout.status !== "paid";
 
   const shouldAutoRefresh =
     shouldVerify &&
@@ -222,7 +227,8 @@ export default async function TenantPaymentPage({
     (checkout.status === "initialized" ||
       (checkout.status === "paid" && !checkout.receiptDownloadUrl));
 
-  const canPay = checkout.status !== "paid" && !checkout.isExpired;
+  const canPay =
+    checkout.status !== "paid" && !checkout.isExpired && onlinePaymentAvailable;
 
   return (
     <main className="min-h-screen bg-background">
@@ -233,7 +239,11 @@ export default async function TenantPaymentPage({
 
         <PageHeader
           title={statusCopy.title}
-          description={statusCopy.description}
+          description={
+            shouldShowPaymentUnavailable
+              ? checkout.onlinePaymentAvailability.guidance
+              : statusCopy.description
+          }
           action={<Badge tone={statusCopy.tone}>{statusCopy.badge}</Badge>}
         />
 
@@ -402,6 +412,19 @@ export default async function TenantPaymentPage({
                       <Clock3 aria-hidden="true" size={18} strokeWidth={2.6} />
                       This link has expired and can no longer be used for
                       Paystack checkout.
+                    </span>
+                  </div>
+                ) : null}
+
+                {shouldShowPaymentUnavailable ? (
+                  <div className="mt-6 rounded-button bg-warning-soft p-4 text-sm font-semibold leading-6 text-warning">
+                    <span className="inline-flex items-center gap-2">
+                      <AlertTriangle
+                        aria-hidden="true"
+                        size={18}
+                        strokeWidth={2.6}
+                      />
+                      {checkout.onlinePaymentAvailability.guidance}
                     </span>
                   </div>
                 ) : null}

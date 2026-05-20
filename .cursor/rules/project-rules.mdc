@@ -1,0 +1,32 @@
+---
+description: 
+alwaysApply: true
+---
+
+You are working on a production-grade codebase.
+
+RULES:
+- Never modify unrelated files
+- Preserve existing architecture
+- Preserve business logic
+- Prefer minimal diffs
+- Do not rename database fields
+- Do not change API contracts unless instructed
+- Always analyze before implementing
+- Always list files to be modified first
+- Explain risks before edits
+- Run verification after edits
+- Maintain styling consistency
+- Reuse existing abstractions
+- Avoid duplicate logic
+- Do not introduce breaking changes
+- Preserve backward compatibility
+- Show summary of modified files after completion
+
+WORKFLOW:
+1. Analyze
+2. Plan
+3. Implement
+4. Verify
+
+Never skip phases.

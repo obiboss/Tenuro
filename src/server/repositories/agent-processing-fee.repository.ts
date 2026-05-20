@@ -228,7 +228,7 @@ export async function markAgentProcessingFeeIntentFailed(
       updated_at: new Date().toISOString(),
     })
     .eq("id", params.intentId)
-    .neq("status", "paid");
+    .eq("status", "initialized");
 
   if (error) {
     throw error;

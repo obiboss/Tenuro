@@ -1,14 +1,24 @@
 import {
   Building2,
   ClipboardList,
+  CreditCard,
   History,
   Home,
+  LayoutDashboard,
   ReceiptText,
   RefreshCcw,
   Settings,
   ShieldCheck,
+  type LucideIcon,
   Users,
 } from "lucide-react";
+
+type PlatformAdminNavigationItem = {
+  label: string;
+  href: string;
+  icon: LucideIcon;
+  status: "available" | "coming_soon";
+};
 
 export const LANDLORD_NAVIGATION = [
   {
@@ -57,3 +67,19 @@ export const LANDLORD_NAVIGATION = [
     icon: Settings,
   },
 ] as const;
+
+export const PLATFORM_ADMIN_NAVIGATION: readonly PlatformAdminNavigationItem[] =
+  [
+    {
+      label: "Dashboard",
+      href: "/admin",
+      icon: LayoutDashboard,
+      status: "available",
+    },
+    {
+      label: "Payout Verifications",
+      href: "/admin/payout-verifications",
+      icon: CreditCard,
+      status: "available",
+    },
+  ];

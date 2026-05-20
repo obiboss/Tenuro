@@ -25,7 +25,9 @@ import {
   getCurrentAgentWorkspace,
   getPaystackBanksForAgentSetup,
 } from "@/server/services/agent-profile.service";
+import { PaymentVerificationAutoRefresh } from "@/components/payment/payment-verification-auto-refresh";
 import { getListingVerificationStatusCopy } from "@/server/services/agent-property-listings.service";
+import { getPaystackPayoutVerificationUiState } from "@/server/services/paystack-verification.service";
 
 function formatMoney(amount: number) {
   return new Intl.NumberFormat("en-NG", {
@@ -173,9 +175,20 @@ export default async function AgentOverviewPage() {
 
   const profileComplete = Boolean(profile);
   const payoutConnected = Boolean(paystackAccount);
+  const payoutVerification = getPaystackPayoutVerificationUiState(
+    paystackAccount,
+    "agent",
+  );
+  const payoutVerified = payoutVerification.isVerified;
+  const shouldAutoRefreshPayoutVerification =
+    Boolean(paystackAccount) && payoutVerification.state === "unverified";
 
   return (
     <div>
+      <PaymentVerificationAutoRefresh
+        enabled={shouldAutoRefreshPayoutVerification}
+      />
+
       <PageHeader
         title="Agent workspace"
         description="Set up your agent profile, connect payout, and track listings, tenant onboarding, processing fees, and commissions."
@@ -190,16 +203,26 @@ export default async function AgentOverviewPage() {
         />
 
         <SetupStatusCard
-          title="Payout"
-          value={payoutConnected ? "Connected" : "Not connected"}
-          toneClass="bg-gold-soft text-gold-deep"
+          title="Payout Account"
+          value={payoutConnected ? "Connected" : "Required"}
+          toneClass={
+            payoutConnected
+              ? "bg-primary-soft text-primary"
+              : "bg-warning-soft text-warning"
+          }
           icon={<CreditCard aria-hidden="true" size={22} strokeWidth={2.6} />}
         />
 
         <SetupStatusCard
-          title="Verification"
-          value={profile?.is_verified ? "Verified" : "Pending"}
-          toneClass="bg-success-soft text-success"
+          title="Payout Verification"
+          value={payoutVerification.badgeLabel}
+          toneClass={
+            payoutVerification.state === "verified"
+              ? "bg-success-soft text-success"
+              : payoutVerification.state === "failed"
+                ? "bg-danger-soft text-danger"
+                : "bg-warning-soft text-warning"
+          }
           icon={<ShieldCheck aria-hidden="true" size={22} strokeWidth={2.6} />}
         />
       </div>
@@ -228,37 +251,53 @@ export default async function AgentOverviewPage() {
             description="Agent processing fees and commissions are settled to this Paystack subaccount when split payments are used."
             action={
               payoutConnected ? (
-                <Badge tone="success">Connected</Badge>
+                <Badge tone={payoutVerification.badgeTone}>
+                  {payoutVerification.badgeLabel}
+                </Badge>
               ) : (
                 <Badge tone="warning">Not connected</Badge>
               )
             }
           >
             {paystackAccount ? (
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-button bg-background p-4">
-                  <p className="text-sm font-bold text-text-muted">Bank</p>
-                  <p className="mt-2 font-extrabold text-text-strong">
-                    {paystackAccount.bank_name}
-                  </p>
+              <div className="space-y-4">
+                <div
+                  className={
+                    payoutVerification.state === "verified"
+                      ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold leading-6 text-success"
+                      : payoutVerification.state === "failed"
+                        ? "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold leading-6 text-danger"
+                        : "rounded-button bg-warning-soft px-4 py-3 text-sm font-semibold leading-6 text-warning"
+                  }
+                >
+                  {payoutVerification.guidance}
                 </div>
 
-                <div className="rounded-button bg-background p-4">
-                  <p className="text-sm font-bold text-text-muted">
-                    Account Number
-                  </p>
-                  <p className="mt-2 font-extrabold text-text-strong">
-                    {paystackAccount.account_number}
-                  </p>
-                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="rounded-button bg-background p-4">
+                    <p className="text-sm font-bold text-text-muted">Bank</p>
+                    <p className="mt-2 font-extrabold text-text-strong">
+                      {paystackAccount.bank_name}
+                    </p>
+                  </div>
 
-                <div className="rounded-button bg-background p-4 md:col-span-2">
-                  <p className="text-sm font-bold text-text-muted">
-                    Account Name
-                  </p>
-                  <p className="mt-2 font-extrabold text-text-strong">
-                    {paystackAccount.account_name}
-                  </p>
+                  <div className="rounded-button bg-background p-4">
+                    <p className="text-sm font-bold text-text-muted">
+                      Account Number
+                    </p>
+                    <p className="mt-2 font-extrabold text-text-strong">
+                      {paystackAccount.account_number}
+                    </p>
+                  </div>
+
+                  <div className="rounded-button bg-background p-4 md:col-span-2">
+                    <p className="text-sm font-bold text-text-muted">
+                      Account Name
+                    </p>
+                    <p className="mt-2 font-extrabold text-text-strong">
+                      {paystackAccount.account_name}
+                    </p>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -312,10 +351,12 @@ export default async function AgentOverviewPage() {
           title="Dashboard summary"
           description="Track your agent pipeline, tenant onboarding, processing fee earnings, and final commission allocations."
           action={
-            payoutConnected ? (
+            payoutVerified ? (
               <Badge tone="success">Payout Ready</Badge>
             ) : (
-              <Badge tone="warning">Payout Pending</Badge>
+              <Badge tone={payoutVerification.badgeTone}>
+                {payoutVerification.badgeLabel}
+              </Badge>
             )
           }
         />

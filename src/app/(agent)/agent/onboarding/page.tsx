@@ -4,7 +4,9 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
+import { TrustNotice } from "@/components/ui/trust-notice";
 import { getCurrentAgentTenantOnboardingWorkspace } from "@/server/services/agent-tenant-onboarding.service";
+import { getPaystackPayoutVerificationUiState } from "@/server/services/paystack-verification.service";
 
 function formatMoney(amount: number | null, currencyCode: string) {
   if (!amount) {
@@ -19,7 +21,12 @@ function formatMoney(amount: number | null, currencyCode: string) {
 }
 
 export default async function AgentOnboardingPage() {
-  const { listings } = await getCurrentAgentTenantOnboardingWorkspace();
+  const { listings, paystackAccount } =
+    await getCurrentAgentTenantOnboardingWorkspace();
+  const payoutVerification = getPaystackPayoutVerificationUiState(
+    paystackAccount,
+    "agent",
+  );
 
   return (
     <div>
@@ -62,11 +69,27 @@ export default async function AgentOnboardingPage() {
             </div>
             <div>
               <p className="text-sm font-bold text-text-muted">Next step</p>
-              <p className="font-black text-text-strong">Tenant KYC</p>
+              <p className="font-black text-text-strong">
+                {payoutVerification.isVerified ? "Tenant KYC" : "Payout review"}
+              </p>
             </div>
           </div>
         </div>
       </div>
+
+      {!payoutVerification.isVerified ? (
+        <div className="mb-6">
+          <TrustNotice
+            title={payoutVerification.badgeLabel}
+            description={payoutVerification.guidance}
+            className={
+              payoutVerification.state === "failed"
+                ? "bg-danger-soft text-danger"
+                : "bg-warning-soft text-warning"
+            }
+          />
+        </div>
+      ) : null}
 
       {listings.length === 0 ? (
         <EmptyState
@@ -81,7 +104,19 @@ export default async function AgentOnboardingPage() {
               key={listing.id}
               title={listing.property_name}
               description={`${listing.address}, ${listing.lga}, ${listing.state}`}
-              action={<Badge tone="success">Ready</Badge>}
+              action={
+                <Badge
+                  tone={
+                    payoutVerification.isVerified
+                      ? "success"
+                      : payoutVerification.badgeTone
+                  }
+                >
+                  {payoutVerification.isVerified
+                    ? "Ready"
+                    : payoutVerification.badgeLabel}
+                </Badge>
+              }
             >
               <div className="mb-5 grid gap-3 md:grid-cols-3">
                 <div className="rounded-button bg-background p-3">
@@ -115,7 +150,10 @@ export default async function AgentOnboardingPage() {
                 </div>
               </div>
 
-              <AgentTenantOnboardingLinkForm listingId={listing.id} />
+              <AgentTenantOnboardingLinkForm
+                listingId={listing.id}
+                disabled={!payoutVerification.isVerified}
+              />
             </SectionCard>
           ))}
         </div>

@@ -2,6 +2,7 @@ export const AUDIT_ACTOR_ROLES = {
   system: "system",
   landlord: "landlord",
   tenant: "tenant",
+  agent: "agent",
 } as const;
 
 export const AUDIT_ENTITY_TYPES = {
@@ -53,6 +54,8 @@ export const AUDIT_EVENT_TYPES = {
   receiptWhatsappPrepared: "receipt.whatsapp_prepared",
 
   bankAccountSetup: "bank_account.setup",
+  payoutAccountCreated: "bank_account.payout_created",
+  payoutVerificationPending: "bank_account.paystack_verification_pending",
 
   propertyCreated: "property.created",
   propertyUpdated: "property.updated",

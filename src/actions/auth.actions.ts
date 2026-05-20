@@ -33,6 +33,10 @@ function toActionError(error: unknown): AuthActionState {
 }
 
 function getPostLoginRedirect(role: ProfileRole) {
+  if (role === "platform_admin") {
+    return "/admin";
+  }
+
   if (role === "tenant") {
     return "/tenant";
   }

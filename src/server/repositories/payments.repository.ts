@@ -295,14 +295,19 @@ export async function updateRentPaymentReceipt(
     })
     .eq("id", params.paymentId)
     .eq("status", "posted")
+    .is("receipt_path", null)
     .select(RENT_PAYMENT_SELECT)
-    .single<RentPaymentRow>();
+    .maybeSingle<RentPaymentRow>();
 
   if (error) {
     throw error;
   }
 
-  return data;
+  if (data) {
+    return data;
+  }
+
+  return getRentPaymentById(supabase, params.paymentId);
 }
 
 export async function markRentPaymentReceiptFailed(

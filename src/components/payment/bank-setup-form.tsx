@@ -44,7 +44,7 @@ export function BankSetupForm({ banks }: BankSetupFormProps) {
         <CardContent>
           <TrustNotice
             title="Bank details are verified before saving"
-            description="BOPA confirms the account with Paystack before creating your landlord payout setup."
+            description="BOPA confirms the bank account with Paystack before saving it. Online rent payments become available after payout verification is approved."
           />
 
           {state.message ? (

@@ -11,6 +11,8 @@ import {
   getAgentPropertyListings,
   type AgentPropertyListingRow,
 } from "@/server/repositories/agent-property-listings.repository";
+import { getActiveAgentPaystackAccount } from "@/server/repositories/agent-paystack.repository";
+import { assertAgentPayoutVerified } from "@/server/services/paystack-verification.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { normalisePhoneNumber } from "@/server/utils/phone";
@@ -124,10 +126,14 @@ export async function getCurrentAgentTenantOnboardingWorkspace() {
   const agent = await requireAgent();
   const supabase = await createSupabaseServerClient();
 
-  const listings = await getAgentPropertyListings(supabase, agent.id);
+  const [listings, paystackAccount] = await Promise.all([
+    getAgentPropertyListings(supabase, agent.id),
+    getActiveAgentPaystackAccount(supabase, agent.id),
+  ]);
 
   return {
     agent,
+    paystackAccount,
     listings: listings.filter(
       (listing) =>
         listing.status === "converted" &&
@@ -144,6 +150,10 @@ export async function createTenantOnboardingLinkForCurrentAgent(
   const supabase = await createSupabaseServerClient();
 
   const listing = await getAgentPropertyListingById(supabase, input.listingId);
+  const paystackAccount = await getActiveAgentPaystackAccount(
+    supabase,
+    agent.id,
+  );
 
   if (listing.agent_id !== agent.id) {
     throw new AppError(
@@ -154,6 +164,7 @@ export async function createTenantOnboardingLinkForCurrentAgent(
   }
 
   assertListingReadyForTenantOnboarding(listing);
+  assertAgentPayoutVerified(paystackAccount);
 
   const landlordId = listing.matched_landlord_id;
   const unitId = listing.converted_unit_id;

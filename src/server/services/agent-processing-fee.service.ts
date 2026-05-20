@@ -23,6 +23,7 @@ import {
   initializePaystackMultiSplitTransaction,
   verifyPaystackTransaction,
 } from "@/server/services/paystack.service";
+import { assertAgentPayoutVerified } from "@/server/services/paystack-verification.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 
 const AGENT_PROCESSING_TOTAL_AMOUNT = 15_000;
@@ -146,6 +147,14 @@ export async function resolveAgentTenantProcessingFeeForOnboarding(params: {
     };
   }
 
+  const agentPaystackAccount = await getActiveAgentPaystackAccount(
+    supabase,
+    agentSource.agentId,
+  );
+
+  const verifiedAgentPaystackAccount =
+    assertAgentPayoutVerified(agentPaystackAccount);
+
   const latestIntent = await getLatestAgentProcessingFeeIntentForTenant(
     supabase,
     params.tenant.id,
@@ -164,23 +173,11 @@ export async function resolveAgentTenantProcessingFeeForOnboarding(params: {
     };
   }
 
-  const agentPaystackAccount = await getActiveAgentPaystackAccount(
-    supabase,
-    agentSource.agentId,
-  );
-
-  if (!agentPaystackAccount) {
-    throw new AppError(
-      "AGENT_PAYOUT_ACCOUNT_REQUIRED",
-      "The agent payout account is not ready. Please ask the agent to complete their payout setup.",
-      400,
-    );
-  }
-
   const reference = createPaymentReference();
   const split = await createTransactionSplit({
     name: `BOPA Agent Processing Fee ${reference}`,
-    landlordSubaccountCode: agentPaystackAccount.paystack_subaccount_code,
+    landlordSubaccountCode:
+      verifiedAgentPaystackAccount.paystack_subaccount_code,
     landlordShareKobo: convertNairaToKobo(AGENT_PROCESSING_AGENT_SHARE),
     currencyCode: AGENT_PROCESSING_CURRENCY,
   });

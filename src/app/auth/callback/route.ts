@@ -2,9 +2,26 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSessionAfterOTP } from "@/server/services/session.service";
+import type { UserRole } from "@/server/types/auth.types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+function getPostLoginRedirect(role: UserRole) {
+  if (role === "platform_admin") {
+    return "/admin";
+  }
+
+  if (role === "tenant") {
+    return "/tenant";
+  }
+
+  if (role === "agent") {
+    return "/agent/overview";
+  }
+
+  return "/overview";
+}
 
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
@@ -30,7 +47,7 @@ export async function GET(request: Request) {
     .eq("id", data.user.id)
     .single<{
       id: string;
-      role: "landlord" | "tenant" | "caretaker";
+      role: UserRole;
       phone_number: string;
     }>();
 
@@ -44,5 +61,7 @@ export async function GET(request: Request) {
     phoneNumber: profile.phone_number,
   });
 
-  return NextResponse.redirect(new URL("/overview", request.url));
+  return NextResponse.redirect(
+    new URL(getPostLoginRedirect(profile.role), request.url),
+  );
 }

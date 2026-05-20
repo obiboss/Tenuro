@@ -5,10 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
+import { TrustNotice } from "@/components/ui/trust-notice";
 import {
   getCurrentAgentListingsWorkspace,
   getListingVerificationStatusCopy,
 } from "@/server/services/agent-property-listings.service";
+import { getPaystackPayoutVerificationUiState } from "@/server/services/paystack-verification.service";
 
 function formatMoney(amount: number | null, currencyCode: string) {
   if (!amount) {
@@ -43,6 +45,10 @@ export default async function AgentListingsPage() {
     await getCurrentAgentListingsWorkspace();
 
   const canSubmitListing = Boolean(profile);
+  const payoutVerification = getPaystackPayoutVerificationUiState(
+    paystackAccount,
+    "agent",
+  );
 
   return (
     <div>
@@ -86,12 +92,26 @@ export default async function AgentListingsPage() {
             <div>
               <p className="text-sm font-bold text-text-muted">Payout</p>
               <p className="font-black text-text-strong">
-                {paystackAccount ? "Connected" : "Pending"}
+                {payoutVerification.badgeLabel}
               </p>
             </div>
           </div>
         </div>
       </div>
+
+      {!payoutVerification.isVerified ? (
+        <div className="mb-6">
+          <TrustNotice
+            title={payoutVerification.badgeLabel}
+            description={payoutVerification.guidance}
+            className={
+              payoutVerification.state === "failed"
+                ? "bg-danger-soft text-danger"
+                : "bg-warning-soft text-warning"
+            }
+          />
+        </div>
+      ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[1fr_460px]">
         <SectionCard

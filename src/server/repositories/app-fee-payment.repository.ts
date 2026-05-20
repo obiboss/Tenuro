@@ -144,13 +144,27 @@ export async function markAppFeePaymentIntentPaid(
     .eq("id", params.intentId)
     .neq("status", "paid")
     .select(APP_FEE_PAYMENT_SELECT)
-    .single<AppFeePaymentIntentRow>();
+    .maybeSingle<AppFeePaymentIntentRow>();
 
   if (error) {
     throw error;
   }
 
-  return data;
+  if (data) {
+    return data;
+  }
+
+  const { data: existingIntent, error: existingError } = await supabase
+    .from("app_fee_payment_intents")
+    .select(APP_FEE_PAYMENT_SELECT)
+    .eq("id", params.intentId)
+    .single<AppFeePaymentIntentRow>();
+
+  if (existingError) {
+    throw existingError;
+  }
+
+  return existingIntent;
 }
 
 export async function markAppFeePaymentIntentFailed(
@@ -171,7 +185,7 @@ export async function markAppFeePaymentIntentFailed(
       updated_at: new Date().toISOString(),
     })
     .eq("id", params.intentId)
-    .neq("status", "paid")
+    .eq("status", "initialized")
     .select(APP_FEE_PAYMENT_SELECT)
     .single<AppFeePaymentIntentRow>();
 

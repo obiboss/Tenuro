@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { normalizeTenancyBalanceSummary } from "@/server/utils/tenancy-balance";
 
 export type TenancyBalanceSummary = {
   tenancy_id: string;
@@ -104,13 +105,9 @@ export async function getTenancyBalanceSummary(
     throw error;
   }
 
-  return (
-    data ?? {
-      tenancy_id: tenancyId,
-      total_debit: 0,
-      total_credit: 0,
-      outstanding_balance: 0,
-    }
+  return normalizeTenancyBalanceSummary(
+    (data as Record<string, unknown> | null) ?? null,
+    tenancyId,
   );
 }
 

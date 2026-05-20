@@ -12,40 +12,19 @@ import {
   getRentPaymentById,
   markRentPaymentReceiptFailed,
   type RentPaymentRow,
-  updateRentPaymentReceipt,
 } from "@/server/repositories/payments.repository";
 import {
   writeAuditLog,
-  writeSystemAuditLog,
 } from "@/server/services/audit-log.service";
+import { generateCanonicalRentReceipt } from "@/server/services/rent-receipt-integrity.service";
 import {
   createSignedRentReceiptPdfUrl,
-  uploadRentReceiptPdf,
 } from "@/server/services/storage.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { formatNaira } from "@/server/utils/money";
 import { buildWaMeUrl } from "@/server/utils/whatsapp";
 import { requireLandlord } from "./auth.service";
-import { renderRentReceiptPdf } from "./receipt-pdf.service";
-
-function buildReceiptNumber(paymentId: string) {
-  return `REC-${paymentId.slice(0, 8).toUpperCase()}`;
-}
-
-function buildReceiptPath(params: {
-  landlordId: string;
-  tenantId: string;
-  tenancyId: string;
-  paymentId: string;
-}) {
-  return [
-    params.landlordId,
-    params.tenantId,
-    params.tenancyId,
-    `${params.paymentId}.pdf`,
-  ].join("/");
-}
 
 function formatReceiptDate(value: string) {
   return new Intl.DateTimeFormat("en-NG", {
@@ -85,77 +64,11 @@ async function generateRentReceiptWithClient(params: {
   supabase: SupabaseClient;
   payment: RentPaymentRow;
 }) {
-  if (params.payment.status !== "posted") {
-    throw new AppError(
-      "PAYMENT_NOT_POSTED",
-      "Receipt can only be generated for a posted payment.",
-      400,
-    );
-  }
-
-  if (params.payment.receipt_path) {
-    const receiptDownloadUrl = await createSignedRentReceiptPdfUrl(
-      params.payment.receipt_path,
-    );
-
-    return {
-      payment: params.payment,
-      receiptDownloadUrl,
-    };
-  }
-
   try {
-    const receiptNumber =
-      params.payment.receipt_number ?? buildReceiptNumber(params.payment.id);
-
-    const paymentForPdf: RentPaymentRow = {
-      ...params.payment,
-      receipt_number: receiptNumber,
-    };
-
-    const pdfBuffer = await renderRentReceiptPdf(paymentForPdf);
-
-    const receiptPath = buildReceiptPath({
-      landlordId: params.payment.landlord_id,
-      tenantId: params.payment.tenant_id,
-      tenancyId: params.payment.tenancy_id,
-      paymentId: params.payment.id,
+    return await generateCanonicalRentReceipt({
+      supabase: params.supabase,
+      payment: params.payment,
     });
-
-    await uploadRentReceiptPdf({
-      path: receiptPath,
-      pdfBuffer,
-    });
-
-    const updatedPayment = await updateRentPaymentReceipt(params.supabase, {
-      paymentId: params.payment.id,
-      receiptPath,
-      receiptNumber,
-    });
-
-    await writeSystemAuditLog({
-      landlordId: updatedPayment.landlord_id,
-      tenantId: updatedPayment.tenant_id,
-      tenancyId: updatedPayment.tenancy_id,
-      eventType: AUDIT_EVENT_TYPES.receiptGenerated,
-      entityType: AUDIT_ENTITY_TYPES.receipt,
-      entityId: updatedPayment.id,
-      description: "Rent receipt generated.",
-      metadata: {
-        payment_id: updatedPayment.id,
-        receipt_number: updatedPayment.receipt_number,
-        receipt_path: updatedPayment.receipt_path,
-        amount_paid: updatedPayment.amount_paid,
-        payment_date: updatedPayment.payment_date,
-      },
-    });
-
-    const receiptDownloadUrl = await createSignedRentReceiptPdfUrl(receiptPath);
-
-    return {
-      payment: updatedPayment,
-      receiptDownloadUrl,
-    };
   } catch (error) {
     try {
       await markRentPaymentReceiptFailed(params.supabase, params.payment.id);
@@ -218,6 +131,14 @@ export async function getRentReceiptDownloadUrlForCurrentLandlord(
     );
   }
 
+  if (!payment.receipt_path) {
+    throw new AppError(
+      "RECEIPT_NOT_GENERATED",
+      "Receipt has not been generated for this payment yet.",
+      404,
+    );
+  }
+
   return createSignedRentReceiptPdfUrl(payment.receipt_path);
 }
 
@@ -267,6 +188,7 @@ export async function prepareRentReceiptWhatsAppForCurrentLandlord(
     whatsappUrl,
   };
 }
+
 export async function getTenantRentReceiptDownloadUrlByGatewayReference(
   reference: string,
 ) {

@@ -275,6 +275,12 @@ export default async function TenantDashboardPage() {
             >
               <TenantPaymentSummary
                 outstandingBalance={dashboard.outstandingBalance}
+                onlinePaymentAvailable={
+                  dashboard.onlinePaymentAvailability.isVerified
+                }
+                unavailableMessage={
+                  dashboard.onlinePaymentAvailability.guidance
+                }
               />
             </SectionCard>
 

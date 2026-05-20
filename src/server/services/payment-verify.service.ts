@@ -2,6 +2,7 @@ import "server-only";
 
 import { AppError } from "@/server/errors/app-error";
 import { getGatewayPaymentIntentByReference } from "@/server/repositories/gateway-payment.repository";
+import { shouldVerifyGatewayIntentWithPaystack } from "@/server/services/gateway-payment-idempotency.service";
 import { processVerifiedGatewayPaymentReference } from "@/server/services/gateway-payment-webhook.service";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { requireLandlord } from "./auth.service";
@@ -27,8 +28,10 @@ export async function getCurrentLandlordPaymentVerification(reference: string) {
     );
   }
 
-  if (initialIntent.status === "initialized") {
-    await processVerifiedGatewayPaymentReference(reference);
+  if (shouldVerifyGatewayIntentWithPaystack(initialIntent)) {
+    await processVerifiedGatewayPaymentReference(reference, {
+      replaySource: "landlord_verify",
+    });
   }
 
   const refreshedIntent = await getGatewayPaymentIntentByReference(

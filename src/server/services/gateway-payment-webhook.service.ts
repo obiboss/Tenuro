@@ -16,11 +16,7 @@ import {
   markGatewayPaymentEventProcessed,
   registerGatewayPaymentEvent,
 } from "@/server/repositories/gateway-payment-event.repository";
-import {
-  findPaymentByIdempotencyKey,
-  recordGatewayRentPaymentViaRpc,
-} from "@/server/repositories/payments.repository";
-import { markPaymentAllocationsPaidForIntent } from "@/server/repositories/payment-allocations.repository";
+import { recordGatewayRentPaymentViaRpc } from "@/server/repositories/payments.repository";
 import { getTenancyPaymentContext } from "@/server/repositories/payment-context.repository";
 import {
   getUnitById,
@@ -29,13 +25,21 @@ import {
 import { writeSystemAuditLog } from "@/server/services/audit-log.service";
 import { verifyAgentTenantProcessingFeeReference } from "@/server/services/agent-processing-fee.service";
 import {
+  auditGatewayPaymentReplayIgnored,
+  buildPaystackRentPaymentIdempotencyKey,
+  completeGatewayPaymentAllocationsSafely,
+  findExistingPaystackRentPayment,
+  generateGatewayRentReceiptSafely,
+  getGatewayPaymentVerificationPhase,
+  shouldVerifyGatewayIntentWithPaystack,
+} from "@/server/services/gateway-payment-idempotency.service";
+import {
   convertKoboToNaira,
   convertNairaToKobo,
   parsePaystackWebhook,
   verifyPaystackTransaction,
   verifyPaystackWebhookSignature,
 } from "@/server/services/paystack.service";
-import { generateRentReceiptSystem } from "@/server/services/receipts.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 
 export type GatewayPaymentWebhookResult = {
@@ -175,30 +179,65 @@ async function markUnitOccupiedAfterFirstRentPaymentSafely(params: {
   }
 }
 
-async function generateReceiptSafely(paymentId: string) {
-  try {
-    await generateRentReceiptSystem(paymentId);
-  } catch (error) {
-    console.error("Receipt generation failed after gateway payment:", error);
+async function finalizeGatewayPaymentSettlement(params: {
+  intent: Awaited<ReturnType<typeof getGatewayPaymentIntentByReference>>;
+  paymentId: string;
+  isReplay: boolean;
+  replaySource?: "webhook" | "verify_page" | "landlord_verify" | "reconciliation";
+}) {
+  if (!params.intent) {
+    return;
+  }
+
+  await completeGatewayPaymentAllocationsSafely({
+    gatewayPaymentIntentId: params.intent.id,
+    rentPaymentId: params.paymentId,
+  });
+
+  if (isFirstRentPaymentIntent(params.intent.metadata)) {
+    await markUnitOccupiedAfterFirstRentPaymentSafely({
+      tenancyId: params.intent.tenancy_id,
+      paymentId: params.paymentId,
+      paystackReference: params.intent.paystack_reference,
+    });
+  }
+
+  await generateGatewayRentReceiptSafely(params.paymentId);
+
+  if (params.isReplay && params.replaySource === "webhook") {
+    await auditGatewayPaymentReplayIgnored({
+      intent: params.intent,
+      paymentId: params.paymentId,
+      source: params.replaySource,
+      reason: "payment_already_settled",
+    });
   }
 }
 
-async function markPaymentAllocationsPaidSafely(params: {
-  gatewayPaymentIntentId: string;
-  rentPaymentId: string;
+async function returnDuplicateGatewayPaymentResult(params: {
+  intent: NonNullable<Awaited<ReturnType<typeof getGatewayPaymentIntentByReference>>>;
+  paymentId: string;
+  replaySource?: "webhook" | "verify_page" | "landlord_verify" | "reconciliation";
 }) {
-  try {
-    await markPaymentAllocationsPaidForIntent(createSupabaseAdminClient(), {
-      gatewayPaymentIntentId: params.gatewayPaymentIntentId,
-      rentPaymentId: params.rentPaymentId,
-    });
-  } catch (error) {
-    console.error("Failed to mark payment allocations as paid:", error);
-  }
+  await finalizeGatewayPaymentSettlement({
+    intent: params.intent,
+    paymentId: params.paymentId,
+    isReplay: true,
+    replaySource: params.replaySource,
+  });
+
+  return {
+    status: "duplicate" as const,
+    message: "Gateway payment already recorded.",
+    paymentId: params.paymentId,
+  };
 }
 
 export async function processVerifiedGatewayPaymentReference(
   reference: string,
+  options?: {
+    replaySource?: "webhook" | "verify_page" | "landlord_verify" | "reconciliation";
+  },
 ): Promise<GatewayPaymentWebhookResult> {
   const supabase = createSupabaseAdminClient();
 
@@ -212,26 +251,49 @@ export async function processVerifiedGatewayPaymentReference(
     );
   }
 
-  if (intent.status === "paid" && intent.processed_payment_id) {
-    await markPaymentAllocationsPaidSafely({
-      gatewayPaymentIntentId: intent.id,
-      rentPaymentId: intent.processed_payment_id,
+  const phase = getGatewayPaymentVerificationPhase(intent);
+
+  if (phase === "settled" && intent.processed_payment_id) {
+    return returnDuplicateGatewayPaymentResult({
+      intent,
+      paymentId: intent.processed_payment_id,
+      replaySource: options?.replaySource,
     });
+  }
 
-    await generateReceiptSafely(intent.processed_payment_id);
+  const existingPayment = await findExistingPaystackRentPayment(supabase, {
+    landlordId: intent.landlord_id,
+    paystackReference: intent.paystack_reference,
+  });
 
-    if (isFirstRentPaymentIntent(intent.metadata)) {
-      await markUnitOccupiedAfterFirstRentPaymentSafely({
-        tenancyId: intent.tenancy_id,
-        paymentId: intent.processed_payment_id,
-        paystackReference: intent.paystack_reference,
+  if (existingPayment) {
+    if (intent.status !== "paid" || intent.processed_payment_id !== existingPayment.id) {
+      await markGatewayPaymentIntentPaid(supabase, {
+        intentId: intent.id,
+        paymentId: existingPayment.id,
+        paidAt: intent.paid_at ?? new Date().toISOString(),
+        verifiedPayload: intent.verified_payload ?? {},
       });
     }
 
+    return returnDuplicateGatewayPaymentResult({
+      intent,
+      paymentId: existingPayment.id,
+      replaySource: options?.replaySource ?? "reconciliation",
+    });
+  }
+
+  if (phase === "terminal_unpaid") {
     return {
-      status: "duplicate",
-      message: "Gateway payment already recorded.",
-      paymentId: intent.processed_payment_id,
+      status: "ignored",
+      message: "Payment intent is no longer eligible for verification.",
+    };
+  }
+
+  if (!shouldVerifyGatewayIntentWithPaystack(intent)) {
+    return {
+      status: "ignored",
+      message: "Payment intent is not in a verifiable state.",
     };
   }
 
@@ -296,24 +358,19 @@ export async function processVerifiedGatewayPaymentReference(
     expectedTotalNaira: intent.total_amount,
   });
 
-  const idempotencyKey = `paystack:${intent.paystack_reference}`;
+  const idempotencyKey = buildPaystackRentPaymentIdempotencyKey(
+    intent.paystack_reference,
+  );
 
-  const existingPayment = await findPaymentByIdempotencyKey(supabase, {
-    landlordId: intent.landlord_id,
+  const paymentId = await recordGatewayRentPaymentViaRpc(supabase, {
+    tenancyId: intent.tenancy_id,
+    amountPaid: intent.rent_amount,
+    paymentReference: intent.paystack_reference,
+    paymentDate: verifiedTransaction.paid_at ?? new Date().toISOString(),
+    periodStart: intent.period_start,
+    periodEnd: intent.period_end,
     idempotencyKey,
   });
-
-  const paymentId =
-    existingPayment?.id ??
-    (await recordGatewayRentPaymentViaRpc(supabase, {
-      tenancyId: intent.tenancy_id,
-      amountPaid: intent.rent_amount,
-      paymentReference: intent.paystack_reference,
-      paymentDate: verifiedTransaction.paid_at ?? new Date().toISOString(),
-      periodStart: intent.period_start,
-      periodEnd: intent.period_end,
-      idempotencyKey,
-    }));
 
   await markGatewayPaymentIntentPaid(supabase, {
     intentId: intent.id,
@@ -322,58 +379,60 @@ export async function processVerifiedGatewayPaymentReference(
     verifiedPayload,
   });
 
-  await markPaymentAllocationsPaidSafely({
-    gatewayPaymentIntentId: intent.id,
-    rentPaymentId: paymentId,
-  });
+  const shouldRecordVerificationAudit =
+    intent.status !== "paid" || !intent.processed_payment_id;
 
-  if (isFirstRentPaymentIntent(intent.metadata)) {
-    await markUnitOccupiedAfterFirstRentPaymentSafely({
+  if (shouldRecordVerificationAudit) {
+    await writeSystemAuditLog({
+      landlordId: intent.landlord_id,
+      tenantId: intent.tenant_id,
       tenancyId: intent.tenancy_id,
-      paymentId,
-      paystackReference: intent.paystack_reference,
+      eventType: AUDIT_EVENT_TYPES.gatewayPaymentVerified,
+      entityType: AUDIT_ENTITY_TYPES.payment,
+      entityId: paymentId,
+      description: "Paystack gateway payment verified.",
+      metadata: {
+        payment_id: paymentId,
+        gateway_payment_intent_id: intent.id,
+        paystack_reference: intent.paystack_reference,
+        amount_paid: intent.rent_amount,
+        total_amount: intent.total_amount,
+        verified_amount_kobo: verifiedTransaction.amount,
+        paid_at: verifiedTransaction.paid_at,
+        period_start: intent.period_start,
+        period_end: intent.period_end,
+        agent_deal: intent.metadata.agent_deal ?? null,
+        allocations: intent.metadata.allocations ?? null,
+      },
     });
   }
 
-  await writeSystemAuditLog({
-    landlordId: intent.landlord_id,
-    tenantId: intent.tenant_id,
-    tenancyId: intent.tenancy_id,
-    eventType: AUDIT_EVENT_TYPES.gatewayPaymentVerified,
-    entityType: AUDIT_ENTITY_TYPES.payment,
-    entityId: paymentId,
-    description: "Paystack gateway payment verified.",
-    metadata: {
-      payment_id: paymentId,
-      gateway_payment_intent_id: intent.id,
-      paystack_reference: intent.paystack_reference,
-      amount_paid: intent.rent_amount,
-      total_amount: intent.total_amount,
-      verified_amount_kobo: verifiedTransaction.amount,
-      paid_at: verifiedTransaction.paid_at,
-      period_start: intent.period_start,
-      period_end: intent.period_end,
-      agent_deal: intent.metadata.agent_deal ?? null,
-      allocations: intent.metadata.allocations ?? null,
-    },
+  await finalizeGatewayPaymentSettlement({
+    intent,
+    paymentId,
+    isReplay: !shouldRecordVerificationAudit,
+    replaySource: options?.replaySource,
   });
 
-  await generateReceiptSafely(paymentId);
-
   return {
-    status: existingPayment ? "duplicate" : "processed",
-    message: existingPayment
-      ? "Gateway payment already recorded."
-      : `Gateway payment of ₦${convertKoboToNaira(
+    status: shouldRecordVerificationAudit ? "processed" : "duplicate",
+    message: shouldRecordVerificationAudit
+      ? `Gateway payment of ₦${convertKoboToNaira(
           verifiedTransaction.amount,
-        ).toLocaleString("en-NG")} confirmed.`,
+        ).toLocaleString("en-NG")} confirmed.`
+      : "Gateway payment already recorded.",
     paymentId,
   };
 }
 
-async function processVerifiedPaystackReferenceWithFallback(reference: string) {
+async function processVerifiedPaystackReferenceWithFallback(
+  reference: string,
+  options?: {
+    replaySource?: "webhook" | "verify_page" | "landlord_verify" | "reconciliation";
+  },
+) {
   try {
-    return await processVerifiedGatewayPaymentReference(reference);
+    return await processVerifiedGatewayPaymentReference(reference, options);
   } catch (error) {
     if (!isGatewayIntentNotFoundError(error)) {
       throw error;
@@ -388,6 +447,81 @@ async function processVerifiedPaystackReferenceWithFallback(reference: string) {
       paymentId: processingFeeIntent.id,
     };
   }
+}
+
+async function resolveDuplicateWebhookEvent(params: {
+  supabase: ReturnType<typeof createSupabaseAdminClient>;
+  registeredEvent: Awaited<ReturnType<typeof registerGatewayPaymentEvent>>;
+  paymentReference: string;
+}): Promise<GatewayPaymentWebhookResult | null> {
+  if (!params.registeredEvent.isDuplicate) {
+    return null;
+  }
+
+  if (
+    params.registeredEvent.event.processing_status === "processed" &&
+    params.registeredEvent.event.processed_payment_id
+  ) {
+    return {
+      status: "duplicate",
+      message: "Payment webhook already processed.",
+      paymentId: params.registeredEvent.event.processed_payment_id,
+    };
+  }
+
+  if (params.registeredEvent.event.processing_status === "ignored") {
+    return {
+      status: "duplicate",
+      message: "Payment webhook was already ignored.",
+    };
+  }
+
+  const intent = await getGatewayPaymentIntentByReference(
+    params.supabase,
+    params.paymentReference,
+  );
+
+  if (
+    intent?.status === "paid" &&
+    intent.processed_payment_id
+  ) {
+    await markGatewayPaymentEventProcessed(params.supabase, {
+      eventId: params.registeredEvent.event.id,
+      gatewayPaymentIntentId: intent.id,
+      processedPaymentId: intent.processed_payment_id,
+      verifiedPayload: intent.verified_payload ?? {},
+    });
+
+    return {
+      status: "duplicate",
+      message: "Payment webhook already processed.",
+      paymentId: intent.processed_payment_id,
+    };
+  }
+
+  const existingPayment =
+    intent &&
+    (await findExistingPaystackRentPayment(params.supabase, {
+      landlordId: intent.landlord_id,
+      paystackReference: intent.paystack_reference,
+    }));
+
+  if (existingPayment && intent) {
+    await markGatewayPaymentEventProcessed(params.supabase, {
+      eventId: params.registeredEvent.event.id,
+      gatewayPaymentIntentId: intent.id,
+      processedPaymentId: existingPayment.id,
+      verifiedPayload: intent.verified_payload ?? {},
+    });
+
+    return {
+      status: "duplicate",
+      message: "Payment webhook already processed.",
+      paymentId: existingPayment.id,
+    };
+  }
+
+  return null;
 }
 
 export async function processGatewayPaystackWebhook(params: {
@@ -410,26 +544,14 @@ export async function processGatewayPaystackWebhook(params: {
     signature: params.signature ?? "",
   });
 
-  if (
-    registeredEvent.isDuplicate &&
-    registeredEvent.event.processing_status === "processed" &&
-    registeredEvent.event.processed_payment_id
-  ) {
-    return {
-      status: "duplicate",
-      message: "Payment webhook already processed.",
-      paymentId: registeredEvent.event.processed_payment_id,
-    };
-  }
+  const duplicateResult = await resolveDuplicateWebhookEvent({
+    supabase,
+    registeredEvent,
+    paymentReference: webhook.data.reference,
+  });
 
-  if (
-    registeredEvent.isDuplicate &&
-    registeredEvent.event.processing_status === "ignored"
-  ) {
-    return {
-      status: "duplicate",
-      message: "Payment webhook was already ignored.",
-    };
+  if (duplicateResult) {
+    return duplicateResult;
   }
 
   try {
@@ -470,6 +592,7 @@ export async function processGatewayPaystackWebhook(params: {
 
     const result = await processVerifiedPaystackReferenceWithFallback(
       webhook.data.reference,
+      { replaySource: "webhook" },
     );
 
     const intent = await getGatewayPaymentIntentByReference(

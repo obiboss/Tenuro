@@ -55,6 +55,8 @@ export const APP_PERMISSIONS = {
   AGENT_TENANT_ONBOARDING_SEND: "agent.tenant_onboarding.send",
   AGENT_DASHBOARD_VIEW: "agent.dashboard.view",
 
+  PLATFORM_ADMIN_DASHBOARD_VIEW: "platform_admin.dashboard.view",
+
   ADMIN_SUPPORT_VIEW: "admin.support.view",
 } as const;
 
@@ -147,11 +149,16 @@ const AGENT_PERMISSIONS: readonly AppPermission[] = [
   APP_PERMISSIONS.RECEIPT_READ,
 ];
 
+const PLATFORM_ADMIN_PERMISSIONS: readonly AppPermission[] = [
+  APP_PERMISSIONS.PLATFORM_ADMIN_DASHBOARD_VIEW,
+];
+
 export const ROLE_PERMISSIONS: Record<UserRole, readonly AppPermission[]> = {
   landlord: LANDLORD_PERMISSIONS,
   tenant: TENANT_PERMISSIONS,
   caretaker: CARETAKER_PERMISSIONS,
   agent: AGENT_PERMISSIONS,
+  platform_admin: PLATFORM_ADMIN_PERMISSIONS,
 };
 
 export function hasPermission(role: UserRole, permission: AppPermission) {

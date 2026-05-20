@@ -178,7 +178,7 @@ export async function markGatewayPaymentIntentFailed(
       updated_at: new Date().toISOString(),
     })
     .eq("id", params.intentId)
-    .neq("status", "paid");
+    .eq("status", "initialized");
 
   if (error) {
     throw error;
@@ -190,13 +190,20 @@ export async function getLatestGatewayPaymentIntentForTenancyPurpose(
   params: {
     tenancyId: string;
     paymentPurpose: string;
+    status?: GatewayPaymentIntent["status"];
   },
 ) {
-  const { data, error } = await supabase
+  let query = supabase
     .from("gateway_payment_intents")
     .select(GATEWAY_PAYMENT_INTENT_SELECT)
     .eq("tenancy_id", params.tenancyId)
-    .eq("metadata->>payment_purpose", params.paymentPurpose)
+    .eq("metadata->>payment_purpose", params.paymentPurpose);
+
+  if (params.status) {
+    query = query.eq("status", params.status);
+  }
+
+  const { data, error } = await query
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle<GatewayPaymentIntent>();
