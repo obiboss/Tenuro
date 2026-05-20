@@ -11,6 +11,14 @@ export type GatewayPaymentEventRow = {
   error_message: string | null;
 };
 
+export type GatewayPaymentEventDetailRow = GatewayPaymentEventRow & {
+  created_at: string;
+  processed_at: string | null;
+};
+
+const GATEWAY_PAYMENT_EVENT_DETAIL_SELECT =
+  "id, provider, event_type, payment_reference, gateway_payment_intent_id, processed_payment_id, processing_status, error_message, created_at, processed_at";
+
 export async function registerGatewayPaymentEvent(
   supabase: SupabaseClient,
   params: {
@@ -115,6 +123,24 @@ export async function markGatewayPaymentEventIgnored(
   if (error) {
     throw error;
   }
+}
+
+export async function listGatewayPaymentEventsByReference(
+  supabase: SupabaseClient,
+  paymentReference: string,
+) {
+  const { data, error } = await supabase
+    .from("gateway_payment_events")
+    .select(GATEWAY_PAYMENT_EVENT_DETAIL_SELECT)
+    .eq("payment_reference", paymentReference)
+    .order("created_at", { ascending: false })
+    .returns<GatewayPaymentEventDetailRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
 }
 
 export async function getGatewayPaymentEventByProviderEventReference(

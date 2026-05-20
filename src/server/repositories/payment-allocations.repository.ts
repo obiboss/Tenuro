@@ -131,6 +131,46 @@ export async function createPaymentAllocations(
   return data;
 }
 
+export async function listPaymentAllocationsByIntentId(
+  supabase: SupabaseClient,
+  gatewayPaymentIntentId: string,
+) {
+  const { data, error } = await supabase
+    .from("payment_allocations")
+    .select(PAYMENT_ALLOCATION_SELECT)
+    .eq("gateway_payment_intent_id", gatewayPaymentIntentId)
+    .order("recipient_type", { ascending: true })
+    .returns<PaymentAllocationRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function listPaymentAllocationsByIntentIds(
+  supabase: SupabaseClient,
+  gatewayPaymentIntentIds: string[],
+) {
+  if (gatewayPaymentIntentIds.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from("payment_allocations")
+    .select(PAYMENT_ALLOCATION_SELECT)
+    .in("gateway_payment_intent_id", gatewayPaymentIntentIds)
+    .order("recipient_type", { ascending: true })
+    .returns<PaymentAllocationRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 export async function markPaymentAllocationsPaidForIntent(
   supabase: SupabaseClient,
   params: {

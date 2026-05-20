@@ -13,6 +13,27 @@ export type ProfileRow = {
 
 const PROFILE_SELECT = "id, role, full_name, phone_number, email";
 
+export async function getProfilesByIds(
+  supabase: SupabaseClient,
+  profileIds: string[],
+) {
+  if (profileIds.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select(PROFILE_SELECT)
+    .in("id", profileIds)
+    .returns<ProfileRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 export async function getProfileById(
   supabase: SupabaseClient,
   profileId: string,

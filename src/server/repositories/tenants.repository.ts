@@ -220,6 +220,28 @@ export async function getTenantsForLandlord(
   return data;
 }
 
+export async function getTenantsByIds(
+  supabase: SupabaseClient,
+  tenantIds: string[],
+) {
+  if (tenantIds.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from("tenants")
+    .select("id, full_name, phone_number")
+    .in("id", tenantIds)
+    .is("deleted_at", null)
+    .returns<{ id: string; full_name: string; phone_number: string }[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 export async function getTenantById(
   supabase: SupabaseClient,
   tenantId: string,

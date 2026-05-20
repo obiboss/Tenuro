@@ -12,7 +12,7 @@ export default async function PlatformAdminDashboardPage() {
       <PageHeader
         eyebrow="Platform Operations"
         title="Admin dashboard"
-        description="Internal tools for operating payout verification workflows and platform safety checks."
+        description="Internal tools for payment operations oversight, payout verification, and platform safety checks."
         action={<Badge tone="success">Protected</Badge>}
       />
 
@@ -106,12 +106,24 @@ export default async function PlatformAdminDashboardPage() {
             <div className="rounded-button bg-background p-4">
               <div className="flex items-center justify-between gap-3">
                 <p className="font-extrabold text-text-strong">
-                  Payout Verifications
+                  Payment Operations
                 </p>
-                <Badge tone="warning">Not built</Badge>
+                <Badge tone="success">Active</Badge>
               </div>
               <p className="mt-2 text-sm leading-6 text-text-muted">
-                Reserved for the upcoming verification queue implementation.
+                Monitor gateway payments, failures, and allocation issues.
+              </p>
+            </div>
+
+            <div className="rounded-button bg-background p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="font-extrabold text-text-strong">
+                  Payout Verifications
+                </p>
+                <Badge tone="success">Active</Badge>
+              </div>
+              <p className="mt-2 text-sm leading-6 text-text-muted">
+                Review landlord and agent payout accounts before split payouts.
               </p>
             </div>
           </div>

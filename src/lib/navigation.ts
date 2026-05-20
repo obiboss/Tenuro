@@ -77,6 +77,12 @@ export const PLATFORM_ADMIN_NAVIGATION: readonly PlatformAdminNavigationItem[] =
       status: "available",
     },
     {
+      label: "Payment Operations",
+      href: "/admin/payments",
+      icon: ReceiptText,
+      status: "available",
+    },
+    {
       label: "Payout Verifications",
       href: "/admin/payout-verifications",
       icon: CreditCard,
