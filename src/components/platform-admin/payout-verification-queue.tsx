@@ -93,6 +93,11 @@ function AccountCard({
   account: PlatformAdminPayoutVerificationAccount;
   highlightPending?: boolean;
 }) {
+  const showActions =
+    account.isActive &&
+    (account.verificationStatus === "unverified" ||
+      account.verificationStatus === "failed");
+
   return (
     <article
       className={cn(
@@ -100,7 +105,12 @@ function AccountCard({
         highlightPending && "border-warning/35 bg-warning-soft/30",
       )}
     >
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+      <div
+        className={cn(
+          "flex flex-col gap-4",
+          showActions && "xl:flex-row xl:items-start xl:justify-between",
+        )}
+      >
         <div className="min-w-0 flex-1">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
@@ -143,15 +153,17 @@ function AccountCard({
           </div>
         </div>
 
-        <div className="w-full xl:w-64">
-          <PayoutVerificationActions
-            accountType={account.ownerRole}
-            accountId={account.id}
-            expectedUpdatedAt={account.updatedAt}
-            verificationStatus={account.verificationStatus}
-            isActive={account.isActive}
-          />
-        </div>
+        {showActions ? (
+          <div className="w-full xl:w-64">
+            <PayoutVerificationActions
+              accountType={account.ownerRole}
+              accountId={account.id}
+              expectedUpdatedAt={account.updatedAt}
+              verificationStatus={account.verificationStatus}
+              isActive={account.isActive}
+            />
+          </div>
+        ) : null}
       </div>
     </article>
   );

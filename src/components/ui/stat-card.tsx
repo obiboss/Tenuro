@@ -7,7 +7,7 @@ type StatTone = "primary" | "success" | "warning" | "danger" | "gold";
 type StatCardProps = {
   title: string;
   value: string;
-  description?: string;
+  description?: ReactNode;
   icon: ReactNode;
   tone?: StatTone;
   className?: string;

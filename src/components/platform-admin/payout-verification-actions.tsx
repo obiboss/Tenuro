@@ -43,6 +43,19 @@ function HiddenAccountFields({
   );
 }
 
+function shouldShowPayoutVerificationActions(
+  verificationStatus: PaystackVerificationStatus,
+  isActive: boolean,
+) {
+  if (!isActive) {
+    return false;
+  }
+
+  return (
+    verificationStatus === "unverified" || verificationStatus === "failed"
+  );
+}
+
 export function PayoutVerificationActions({
   accountType,
   accountId,
@@ -60,8 +73,11 @@ export function PayoutVerificationActions({
   );
 
   const isBusy = isVerifying || isFailing;
-  const canVerify = isActive && verificationStatus !== "verified";
-  const canFail = isActive && verificationStatus !== "failed";
+  const showActions = shouldShowPayoutVerificationActions(
+    verificationStatus,
+    isActive,
+  );
+  const showFailAction = verificationStatus === "unverified";
   const latestMessage = verifyState.message || failState.message;
   const latestState = verifyState.message ? verifyState : failState;
   const router = useRouter();
@@ -73,6 +89,10 @@ export function PayoutVerificationActions({
 
     router.refresh();
   }, [latestState.ok, latestState.message, router]);
+
+  if (!showActions) {
+    return null;
+  }
 
   return (
     <div className="space-y-3">
@@ -87,30 +107,32 @@ export function PayoutVerificationActions({
             type="submit"
             size="sm"
             fullWidth
-            disabled={!canVerify || isBusy}
+            disabled={isBusy}
             isLoading={isVerifying}
           >
             Verify
           </Button>
         </form>
 
-        <form action={failFormAction} className="min-w-0 flex-1">
-          <HiddenAccountFields
-            accountType={accountType}
-            accountId={accountId}
-            expectedUpdatedAt={expectedUpdatedAt}
-          />
-          <Button
-            type="submit"
-            size="sm"
-            variant="danger"
-            fullWidth
-            disabled={!canFail || isBusy}
-            isLoading={isFailing}
-          >
-            Mark Failed
-          </Button>
-        </form>
+        {showFailAction ? (
+          <form action={failFormAction} className="min-w-0 flex-1">
+            <HiddenAccountFields
+              accountType={accountType}
+              accountId={accountId}
+              expectedUpdatedAt={expectedUpdatedAt}
+            />
+            <Button
+              type="submit"
+              size="sm"
+              variant="danger"
+              fullWidth
+              disabled={isBusy}
+              isLoading={isFailing}
+            >
+              Mark Failed
+            </Button>
+          </form>
+        ) : null}
       </div>
 
       {latestMessage ? (

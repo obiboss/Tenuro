@@ -7,6 +7,7 @@ import { LogoutButton } from "@/components/auth/logout-button";
 import { Badge } from "@/components/ui/badge";
 import { ToastProvider } from "@/components/ui/toast-provider";
 import { cn } from "@/lib/cn";
+import { isPlatformAdminNavItemActive } from "@/lib/platform-admin-navigation";
 import { PLATFORM_ADMIN_NAVIGATION } from "@/lib/navigation";
 
 type PlatformAdminShellProps = {
@@ -56,8 +57,7 @@ export function PlatformAdminShell({
           >
             {PLATFORM_ADMIN_NAVIGATION.map((item) => {
               const Icon = item.icon;
-              const active =
-                pathname === item.href || pathname.startsWith(`${item.href}/`);
+              const active = isPlatformAdminNavItemActive(pathname, item.href);
               const comingSoon = item.status === "coming_soon";
               const className = cn(
                 "flex min-h-12 items-center justify-between rounded-button px-4 text-sm font-extrabold transition",
@@ -142,9 +142,7 @@ export function PlatformAdminShell({
               >
                 {PLATFORM_ADMIN_NAVIGATION.map((item) => {
                   const Icon = item.icon;
-                  const active =
-                    pathname === item.href ||
-                    pathname.startsWith(`${item.href}/`);
+                  const active = isPlatformAdminNavItemActive(pathname, item.href);
                   const comingSoon = item.status === "coming_soon";
                   const className = cn(
                     "flex min-h-12 items-center justify-between rounded-button px-4 text-sm font-extrabold transition",

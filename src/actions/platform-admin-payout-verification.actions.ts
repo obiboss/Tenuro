@@ -45,6 +45,7 @@ function parsePayoutVerificationFormData(formData: FormData) {
 }
 
 function revalidatePayoutVerificationSurfaces() {
+  revalidatePath("/admin");
   revalidatePath("/admin/payout-verifications");
   revalidatePath("/settings");
   revalidatePath("/agent/overview");

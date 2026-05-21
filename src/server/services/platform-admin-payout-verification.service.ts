@@ -263,7 +263,11 @@ export async function verifyPlatformAdminPayoutAccount(params: {
   });
 
   if (isAlreadyVerified(currentAccount)) {
-    return currentAccount;
+    throw new AppError(
+      "PAYOUT_ACCOUNT_ALREADY_VERIFIED",
+      "This payout account is already verified.",
+      409,
+    );
   }
 
   const supabase = createSupabaseAdminClient();
@@ -287,7 +291,11 @@ export async function verifyPlatformAdminPayoutAccount(params: {
     const latestAccount = assertActiveAccount(await getCurrentAccount(params));
 
     if (isAlreadyVerified(latestAccount)) {
-      return latestAccount;
+      throw new AppError(
+        "PAYOUT_ACCOUNT_ALREADY_VERIFIED",
+        "This payout account is already verified.",
+        409,
+      );
     }
 
     throw new AppError(
@@ -314,6 +322,14 @@ export async function failPlatformAdminPayoutAccount(params: {
     targetStatus: "failed",
   });
 
+  if (currentAccount.verification_status === "verified") {
+    throw new AppError(
+      "PAYOUT_ACCOUNT_ALREADY_VERIFIED",
+      "Verified payout accounts cannot be marked as failed.",
+      409,
+    );
+  }
+
   if (currentAccount.verification_status === "failed") {
     return currentAccount;
   }
@@ -336,6 +352,14 @@ export async function failPlatformAdminPayoutAccount(params: {
 
   if (!updatedAccount) {
     const latestAccount = assertActiveAccount(await getCurrentAccount(params));
+
+    if (latestAccount.verification_status === "verified") {
+      throw new AppError(
+        "PAYOUT_ACCOUNT_ALREADY_VERIFIED",
+        "Verified payout accounts cannot be marked as failed.",
+        409,
+      );
+    }
 
     if (latestAccount.verification_status === "failed") {
       return latestAccount;
