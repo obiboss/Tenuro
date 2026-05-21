@@ -21,6 +21,7 @@ export type TenancyPaymentContext = {
   units: {
     id: string;
     unit_identifier: string;
+    property_id: string;
     properties: {
       id: string;
       property_name: string;
@@ -56,6 +57,7 @@ export async function getTenancyPaymentContext(
       units (
         id,
         unit_identifier,
+        property_id,
         properties (
           id,
           property_name

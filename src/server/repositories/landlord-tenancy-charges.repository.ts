@@ -1,4 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { getLandlordChargePresetForName } from "@/lib/landlord-charge-presets";
+
+export type LandlordChargeType =
+  | "agreement_fee"
+  | "caution_deposit"
+  | "damages_deposit"
+  | "service_charge"
+  | "legal_fee"
+  | "documentation_fee"
+  | "other";
 
 export type LandlordChargeStatus = "draft" | "active" | "archived";
 
@@ -55,10 +65,23 @@ const LANDLORD_TENANCY_CHARGE_SELECT = `
   updated_at
 `;
 
+function resolveLegacyChargeType(chargeName: string): LandlordChargeType {
+  const preset = getLandlordChargePresetForName(chargeName);
+
+  if (!preset) {
+    return "other";
+  }
+
+  return preset.id as LandlordChargeType;
+}
+
 function buildLegacyChargeFields(chargeName: string) {
+  const trimmedName = chargeName.trim();
+
   return {
-    charge_name: chargeName,
-    charge_type: "other" as const,
+    charge_name: trimmedName,
+    label: trimmedName,
+    charge_type: resolveLegacyChargeType(trimmedName),
   };
 }
 

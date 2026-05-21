@@ -26,7 +26,11 @@ import { requireLandlord } from "./auth.service";
 function getPropertyIdFromTenancyContext(
   tenancy: Awaited<ReturnType<typeof getTenancyPaymentContext>>,
 ) {
-  return tenancy.units?.properties?.id ?? null;
+  return (
+    tenancy.units?.properties?.id ??
+    tenancy.units?.property_id ??
+    null
+  );
 }
 
 async function getAuthorizedTenancyForLandlord(params: {
@@ -105,6 +109,13 @@ export async function createLandlordChargeForCurrentLandlord(
   const tenancy = await getAuthorizedTenancyForLandlord({
     tenancyId: input.tenancyId,
     landlordId: landlord.id,
+  });
+
+  await assertUniqueActiveChargeName({
+    supabase,
+    tenancyId: input.tenancyId,
+    landlordId: landlord.id,
+    chargeName: input.chargeName,
   });
 
   const charge = await createLandlordTenancyCharge(supabase, {
