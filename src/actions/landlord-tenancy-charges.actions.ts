@@ -53,7 +53,7 @@ export async function createLandlordTenancyChargeAction(
       amount: formData.get("amount"),
       currencyCode: formData.get("currencyCode") || "NGN",
       isRefundable: formData.get("isRefundable") === "on",
-      isRequiredBeforeMoveIn: formData.get("isRequiredBeforeMoveIn") !== "off",
+      isRequiredBeforeMoveIn: formData.get("isRequiredBeforeMoveIn") === "on",
     });
 
     const charge = await createLandlordChargeForCurrentLandlord(parsed);
@@ -83,7 +83,7 @@ export async function updateLandlordTenancyChargeAction(
       amount: formData.get("amount"),
       currencyCode: formData.get("currencyCode") || "NGN",
       isRefundable: formData.get("isRefundable") === "on",
-      isRequiredBeforeMoveIn: formData.get("isRequiredBeforeMoveIn") !== "off",
+      isRequiredBeforeMoveIn: formData.get("isRequiredBeforeMoveIn") === "on",
     });
 
     const charge = await updateLandlordChargeForCurrentLandlord(parsed);

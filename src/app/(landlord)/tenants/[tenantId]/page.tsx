@@ -15,7 +15,7 @@ import { QuitNoticeIssueCard } from "@/components/quit-notices/quit-notice-issue
 import { OnboardingInviteCard } from "@/components/tenant/onboarding-invite-card";
 import { TenantActivationInviteCard } from "@/components/tenant/tenant-activation-invite-card";
 import { TenantReviewCard } from "@/components/tenant/tenant-review-card";
-import { LandlordTenancyChargeForm } from "@/components/tenancy/landlord-tenancy-charge-form";
+import { LandlordTenancyChargePanel } from "@/components/tenancy/landlord-tenancy-charge-panel";
 import { LandlordTenancyChargeList } from "@/components/tenancy/landlord-tenancy-charge-list";
 import { TenancyAgreementDocumentCard } from "@/components/tenancy/tenancy-agreement-document-card";
 import { TenancyForm } from "@/components/tenancy/tenancy-form";
@@ -363,20 +363,11 @@ export default async function TenantDetailPage({
                   title="Review Landlord Charges"
                   description="Add move-in charges, review the running total, remove any mistakes, then confirm to continue."
                 >
-                <div className="space-y-6">
-                  <LandlordTenancyChargeList
-                    tenancyId={setupTenancy.id}
-                    charges={landlordCharges}
-                    showConfirmAction
-                    chargesConfirmed={Boolean(setupTenancy.charges_confirmed_at)}
-                  />
-
-                  {!setupTenancy.charges_confirmed_at ? (
-                    <div className="rounded-card border border-border-soft bg-surface p-4">
-                      <LandlordTenancyChargeForm tenancyId={setupTenancy.id} />
-                    </div>
-                  ) : null}
-                </div>
+                <LandlordTenancyChargePanel
+                  tenancyId={setupTenancy.id}
+                  charges={landlordCharges}
+                  chargesConfirmed={Boolean(setupTenancy.charges_confirmed_at)}
+                />
               </SectionCard>
               </div>
             </>

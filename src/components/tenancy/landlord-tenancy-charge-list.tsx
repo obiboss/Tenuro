@@ -1,22 +1,20 @@
 "use client";
 
-import { useActionState } from "react";
+import { ReceiptText, Trash2 } from "lucide-react";
 import { archiveLandlordTenancyChargeAction } from "@/actions/landlord-tenancy-charges.actions";
-import { confirmTenancyChargesAction } from "@/actions/tenancies.actions";
 import { initialLandlordTenancyChargeActionState } from "@/actions/landlord-tenancy-charges.state";
-import { initialTenancyActionState } from "@/actions/tenancy.state";
 import type { LandlordTenancyChargeRow } from "@/server/repositories/landlord-tenancy-charges.repository";
 import { ActionResultToast } from "@/components/ui/action-result-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { TrustNotice } from "@/components/ui/trust-notice";
-import { ReceiptText } from "lucide-react";
+import { getLandlordChargePresetIcon } from "@/lib/landlord-charge-presets";
+import { useActionState } from "react";
 
 type LandlordTenancyChargeListProps = {
   tenancyId: string;
   charges: LandlordTenancyChargeRow[];
-  showConfirmAction?: boolean;
   chargesConfirmed?: boolean;
 };
 
@@ -41,7 +39,7 @@ function ArchiveChargeForm({
   );
 
   return (
-    <form action={formAction} className="space-y-2">
+    <form action={formAction}>
       <ActionResultToast
         ok={state.ok}
         message={state.message}
@@ -57,47 +55,10 @@ function ArchiveChargeForm({
         variant="ghost"
         size="sm"
         isLoading={isPending}
-        fullWidth
+        aria-label="Remove charge"
       >
+        <Trash2 aria-hidden="true" size={16} strokeWidth={2.6} />
         Remove
-      </Button>
-    </form>
-  );
-}
-
-function ConfirmChargesForm({ tenancyId }: { tenancyId: string }) {
-  const [state, formAction, isPending] = useActionState(
-    confirmTenancyChargesAction,
-    initialTenancyActionState,
-  );
-
-  return (
-    <form action={formAction} className="space-y-4">
-      <ActionResultToast
-        ok={state.ok}
-        message={state.message}
-        successTitle="Charges confirmed"
-        errorTitle="Charge confirmation failed"
-      />
-
-      <input type="hidden" name="tenancyId" value={tenancyId} />
-
-      <TrustNotice
-        title="Confirm landlord charges"
-        description="Review the charge list and running total. Once confirmed, BOPA will open the agreement draft preview."
-      />
-
-      {state.message && !state.ok ? (
-        <div
-          role="alert"
-          className="rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold leading-6 text-danger"
-        >
-          {state.message}
-        </div>
-      ) : null}
-
-      <Button type="submit" isLoading={isPending} fullWidth>
-        Confirm Charges and Continue
       </Button>
     </form>
   );
@@ -106,103 +67,93 @@ function ConfirmChargesForm({ tenancyId }: { tenancyId: string }) {
 export function LandlordTenancyChargeList({
   tenancyId,
   charges,
-  showConfirmAction = false,
   chargesConfirmed = false,
 }: LandlordTenancyChargeListProps) {
   const total = charges.reduce((sum, charge) => sum + Number(charge.amount), 0);
 
   if (charges.length === 0) {
     return (
-      <div className="space-y-4">
-        <EmptyState
-          title="No landlord charges added"
-          description="Add move-in charges such as agreement fees, caution deposits, or service charges."
-          icon={<ReceiptText aria-hidden="true" size={24} strokeWidth={2.6} />}
-        />
-
-        {showConfirmAction && !chargesConfirmed ? (
-          <TrustNotice
-            title="Charges are optional"
-            description="You can confirm with no charges if the tenant only pays rent, or add charges first and then confirm."
-          />
-        ) : null}
-
-        {showConfirmAction && !chargesConfirmed ? (
-          <ConfirmChargesForm tenancyId={tenancyId} />
-        ) : null}
-      </div>
+      <EmptyState
+        title="No charges added"
+        description="No landlord charges were added for this tenancy."
+        icon={<ReceiptText aria-hidden="true" size={24} strokeWidth={2.6} />}
+      />
     );
   }
 
   return (
     <div className="space-y-4">
-      <div className="rounded-card bg-background p-4">
-        <p className="text-sm font-bold text-text-muted">
-          Total landlord charges
-        </p>
-        <p className="mt-2 text-2xl font-black text-text-strong">
-          {formatMoney(total, charges[0]?.currency_code ?? "NGN")}
-        </p>
-      </div>
+      {chargesConfirmed ? (
+        <TrustNotice
+          title="Charges confirmed"
+          description="These landlord charges are included in the agreement and final payment."
+        />
+      ) : null}
 
       <div className="space-y-3">
-        {charges.map((charge) => (
-          <article
-            key={charge.id}
-            className="rounded-card border border-border-soft bg-background p-4"
-          >
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="font-black text-text-strong">
-                    {charge.charge_name}
-                  </h3>
+        {charges.map((charge) => {
+          const Icon = getLandlordChargePresetIcon(charge.charge_name);
 
-                  <Badge tone={charge.is_refundable ? "warning" : "primary"}>
-                    {charge.is_refundable ? "Refundable" : "Non-refundable"}
-                  </Badge>
+          return (
+            <article
+              key={charge.id}
+              className="rounded-card border border-border-soft bg-surface p-4 shadow-card"
+            >
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+                    <Icon aria-hidden="true" size={20} strokeWidth={2.6} />
+                  </div>
 
-                  {charge.is_required_before_move_in ? (
-                    <Badge tone="success">Before move-in</Badge>
-                  ) : null}
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="font-bold text-text-strong">
+                        {charge.charge_name}
+                      </h3>
+
+                      <Badge
+                        tone={charge.is_refundable ? "warning" : "primary"}
+                      >
+                        {charge.is_refundable ? "Refundable" : "Non-refundable"}
+                      </Badge>
+
+                      {charge.is_required_before_move_in ? (
+                        <Badge tone="success">Before move-in</Badge>
+                      ) : null}
+                    </div>
+
+                    {charge.description ? (
+                      <p className="mt-1 text-sm leading-6 text-text-muted">
+                        {charge.description}
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
 
-                {charge.description ? (
-                  <p className="mt-2 text-sm leading-6 text-text-muted">
-                    {charge.description}
+                <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-end">
+                  <p className="text-lg font-black text-text-strong">
+                    {formatMoney(Number(charge.amount), charge.currency_code)}
                   </p>
-                ) : null}
-              </div>
 
-              <div className="min-w-36 text-left md:text-right">
-                <p className="text-lg font-black text-text-strong">
-                  {formatMoney(Number(charge.amount), charge.currency_code)}
-                </p>
-
-                {!chargesConfirmed ? (
-                  <div className="mt-3">
+                  {!chargesConfirmed ? (
                     <ArchiveChargeForm
                       tenancyId={tenancyId}
                       chargeId={charge.id}
                     />
-                  </div>
-                ) : null}
+                  ) : null}
+                </div>
               </div>
-            </div>
-          </article>
-        ))}
+            </article>
+          );
+        })}
       </div>
 
-      {showConfirmAction && !chargesConfirmed ? (
-        <ConfirmChargesForm tenancyId={tenancyId} />
-      ) : null}
-
-      {chargesConfirmed ? (
-        <TrustNotice
-          title="Charges confirmed"
-          description="These landlord charges will be included in the agreement draft and the tenant’s final payment."
-        />
-      ) : null}
+      <div className="rounded-card bg-background p-4">
+        <p className="text-sm font-bold text-text-muted">Running total</p>
+        <p className="mt-2 text-2xl font-black text-text-strong">
+          {formatMoney(total, charges[0]?.currency_code ?? "NGN")}
+        </p>
+      </div>
     </div>
   );
 }
