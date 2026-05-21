@@ -58,7 +58,10 @@ export async function recordManualPaymentForCurrentLandlord(
     );
   }
 
-  if (tenancy.status !== "active") {
+  if (
+    tenancy.tenancy_status !== "active" ||
+    tenancy.agreement_live_at === null
+  ) {
     throw new AppError(
       "TENANCY_NOT_ACTIVE",
       "Payment can only be recorded for an active rental agreement.",

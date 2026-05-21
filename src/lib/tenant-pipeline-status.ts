@@ -18,7 +18,8 @@ export type TenantPipelineStatus = {
 
 export function resolveTenantPipelineStatus(params: {
   onboardingStatus: TenantOnboardingStatus;
-  tenancyStatus: "draft" | "active" | "expired" | "terminated" | "archived" | null;
+  isAgreementSetup: boolean;
+  isOperationallyLive: boolean;
   chargesConfirmed: boolean;
   agreementDocumentStatus:
     | "draft"
@@ -60,10 +61,7 @@ export function resolveTenantPipelineStatus(params: {
     };
   }
 
-  if (
-    params.onboardingStatus === "approved" &&
-    !params.tenancyStatus
-  ) {
+  if (params.onboardingStatus === "approved" && !params.isAgreementSetup) {
     return {
       label: "Awaiting Agreement",
       tone: "primary",
@@ -71,10 +69,7 @@ export function resolveTenantPipelineStatus(params: {
     };
   }
 
-  if (
-    params.tenancyStatus === "draft" &&
-    !params.chargesConfirmed
-  ) {
+  if (params.isAgreementSetup && !params.chargesConfirmed) {
     return {
       label: "Awaiting Agreement",
       tone: "primary",
@@ -82,11 +77,7 @@ export function resolveTenantPipelineStatus(params: {
     };
   }
 
-  if (
-    params.tenancyStatus === "draft" &&
-    params.chargesConfirmed &&
-    !params.agreementDocumentStatus
-  ) {
+  if (params.isAgreementSetup && params.chargesConfirmed) {
     return {
       label: "Awaiting Agreement",
       tone: "primary",
@@ -114,7 +105,7 @@ export function resolveTenantPipelineStatus(params: {
   }
 
   if (
-    params.tenancyStatus === "draft" ||
+    params.isAgreementSetup ||
     params.agreementDocumentStatus === "draft"
   ) {
     return {
@@ -124,8 +115,16 @@ export function resolveTenantPipelineStatus(params: {
     };
   }
 
+  if (params.isOperationallyLive) {
+    return {
+      label: "Active",
+      tone: "success",
+      phase: "active",
+    };
+  }
+
   return {
-    label: "Active",
+    label: "Approved",
     tone: "success",
     phase: "active",
   };

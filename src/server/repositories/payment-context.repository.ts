@@ -8,6 +8,8 @@ export type TenancyPaymentContext = {
   rent_amount: number;
   currency_code: string;
   status: string;
+  tenancy_status: string;
+  agreement_live_at: string | null;
   tenants: {
     id: string;
     full_name: string;
@@ -41,6 +43,8 @@ export async function getTenancyPaymentContext(
       rent_amount,
       currency_code,
       status,
+      tenancy_status,
+      agreement_live_at,
       tenants (
         id,
         full_name,

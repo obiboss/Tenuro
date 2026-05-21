@@ -6,6 +6,16 @@ import {
 } from "@/lib/tenancy-period";
 import type { CreateTenancyInput } from "@/server/validators/tenancy.schema";
 
+export type TenancyLifecycleStatus =
+  | "active"
+  | "expired"
+  | "terminated"
+  | "pending_renewal"
+  | "notice_given"
+  | "hold"
+  | "special_case"
+  | "archived";
+
 export type TenancyRow = {
   id: string;
   tenancy_reference: string | null;
@@ -21,6 +31,7 @@ export type TenancyRow = {
   renewal_notice_date: string | null;
   reminder_interval_days: number | null;
   charges_confirmed_at: string | null;
+  agreement_live_at: string | null;
   rent_due_day: number;
   rent_anchor_month: number | null;
   current_period_start: string | null;
@@ -28,7 +39,8 @@ export type TenancyRow = {
   next_rent_charge_date: string | null;
   opening_balance: number;
   opening_balance_note: string | null;
-  status: "draft" | "active" | "expired" | "terminated" | "archived" | null;
+  status: string | null;
+  tenancy_status: TenancyLifecycleStatus;
   agreement_notes: string | null;
   archived_at: string | null;
   created_at: string;
@@ -70,6 +82,7 @@ const TENANCY_SELECT = `
   renewal_notice_date,
   reminder_interval_days,
   charges_confirmed_at,
+  agreement_live_at,
   rent_due_day,
   rent_anchor_month,
   current_period_start,
@@ -78,6 +91,7 @@ const TENANCY_SELECT = `
   opening_balance,
   opening_balance_note,
   status,
+  tenancy_status,
   agreement_notes,
   archived_at,
   created_at
@@ -98,6 +112,7 @@ const TENANCY_DETAIL_SELECT = `
   renewal_notice_date,
   reminder_interval_days,
   charges_confirmed_at,
+  agreement_live_at,
   rent_due_day,
   rent_anchor_month,
   current_period_start,
@@ -106,6 +121,7 @@ const TENANCY_DETAIL_SELECT = `
   opening_balance,
   opening_balance_note,
   status,
+  tenancy_status,
   agreement_notes,
   archived_at,
   created_at,
@@ -151,6 +167,22 @@ function toDateOnly(value: Date) {
   return value.toISOString().slice(0, 10);
 }
 
+export function isTenancyInAgreementSetup(
+  tenancy: Pick<TenancyRow, "agreement_live_at" | "tenancy_status">,
+) {
+  return (
+    tenancy.agreement_live_at === null && tenancy.tenancy_status === "active"
+  );
+}
+
+export function isTenancyOperationallyLive(
+  tenancy: Pick<TenancyRow, "agreement_live_at" | "tenancy_status">,
+) {
+  return (
+    tenancy.agreement_live_at !== null && tenancy.tenancy_status === "active"
+  );
+}
+
 export async function getSetupTenancyForTenant(
   supabase: SupabaseClient,
   tenantId: string,
@@ -159,7 +191,8 @@ export async function getSetupTenancyForTenant(
     .from("tenancies")
     .select(TENANCY_DETAIL_SELECT)
     .eq("tenant_id", tenantId)
-    .in("status", ["draft", "active"])
+    .eq("tenancy_status", "active")
+    .is("agreement_live_at", null)
     .is("deleted_at", null)
     .is("archived_at", null)
     .order("created_at", { ascending: false })
@@ -173,7 +206,7 @@ export async function getSetupTenancyForTenant(
   return data;
 }
 
-export async function getDraftTenancyForUnit(
+export async function getPendingAgreementTenancyForUnit(
   supabase: SupabaseClient,
   unitId: string,
 ) {
@@ -181,7 +214,8 @@ export async function getDraftTenancyForUnit(
     .from("tenancies")
     .select(TENANCY_SELECT)
     .eq("unit_id", unitId)
-    .eq("status", "draft")
+    .eq("tenancy_status", "active")
+    .is("agreement_live_at", null)
     .is("deleted_at", null)
     .is("archived_at", null)
     .maybeSingle<TenancyRow>();
@@ -193,18 +227,22 @@ export async function getDraftTenancyForUnit(
   return data;
 }
 
-export async function activateTenancy(
+export async function markTenancyAgreementLive(
   supabase: SupabaseClient,
   tenancyId: string,
 ) {
+  const liveAt = new Date().toISOString();
+
   const { data, error } = await supabase
     .from("tenancies")
     .update({
+      agreement_live_at: liveAt,
       status: "active",
       tenancy_status: "active",
     })
     .eq("id", tenancyId)
-    .eq("status", "draft")
+    .eq("tenancy_status", "active")
+    .is("agreement_live_at", null)
     .is("deleted_at", null)
     .is("archived_at", null)
     .select(TENANCY_SELECT)
@@ -231,39 +269,13 @@ export async function confirmTenancyCharges(
     })
     .eq("id", params.tenancyId)
     .eq("landlord_id", params.landlordId)
-    .eq("status", "draft")
+    .eq("tenancy_status", "active")
+    .is("agreement_live_at", null)
     .is("charges_confirmed_at", null)
     .is("deleted_at", null)
     .is("archived_at", null)
     .select(TENANCY_DETAIL_SELECT)
     .single<TenancyDetailRow>();
-
-  if (error) {
-    throw error;
-  }
-
-  return data;
-}
-
-export async function getDraftTenanciesForLandlord(
-  supabase: SupabaseClient,
-  landlordId: string,
-) {
-  const { data, error } = await supabase
-    .from("tenancies")
-    .select("id, tenant_id, status, charges_confirmed_at")
-    .eq("landlord_id", landlordId)
-    .eq("status", "draft")
-    .is("deleted_at", null)
-    .is("archived_at", null)
-    .returns<
-      {
-        id: string;
-        tenant_id: string;
-        status: "draft";
-        charges_confirmed_at: string | null;
-      }[]
-    >();
 
   if (error) {
     throw error;
@@ -282,7 +294,8 @@ export async function getTenancyPipelineSummariesForLandlord(
       `
       id,
       tenant_id,
-      status,
+      tenancy_status,
+      agreement_live_at,
       charges_confirmed_at,
       tenancy_agreement_documents (
         document_status
@@ -290,16 +303,25 @@ export async function getTenancyPipelineSummariesForLandlord(
     `,
     )
     .eq("landlord_id", landlordId)
-    .in("status", ["draft", "active"])
+    .eq("tenancy_status", "active")
     .is("deleted_at", null)
     .is("archived_at", null)
     .returns<
       {
         id: string;
         tenant_id: string;
-        status: "draft" | "active";
+        tenancy_status: TenancyLifecycleStatus;
+        agreement_live_at: string | null;
         charges_confirmed_at: string | null;
         tenancy_agreement_documents:
+          | {
+              document_status:
+                | "draft"
+                | "finalized"
+                | "sent_to_tenant"
+                | "accepted"
+                | "voided";
+            }
           | {
               document_status:
                 | "draft"
@@ -327,7 +349,8 @@ export async function getActiveTenancyForTenant(
     .from("tenancies")
     .select(TENANCY_DETAIL_SELECT)
     .eq("tenant_id", tenantId)
-    .eq("status", "active")
+    .eq("tenancy_status", "active")
+    .not("agreement_live_at", "is", null)
     .is("deleted_at", null)
     .is("archived_at", null)
     .maybeSingle<TenancyDetailRow>();
@@ -347,7 +370,8 @@ export async function getActiveTenancyForUnit(
     .from("tenancies")
     .select(TENANCY_SELECT)
     .eq("unit_id", unitId)
-    .eq("status", "active")
+    .eq("tenancy_status", "active")
+    .not("agreement_live_at", "is", null)
     .is("deleted_at", null)
     .is("archived_at", null)
     .maybeSingle<TenancyRow>();
@@ -397,11 +421,12 @@ export async function createTenancy(
       move_out_date: null,
       next_renewal_date: nextRentChargeDate,
       tenancy_status: "active",
+      agreement_live_at: null,
 
       opening_balance: params.input.openingBalance,
       opening_balance_note: params.input.openingBalanceNote || null,
       agreement_notes: params.input.agreementNotes || null,
-      status: "draft",
+      status: "active",
     })
     .select(TENANCY_DETAIL_SELECT)
     .single<TenancyDetailRow>();
@@ -452,7 +477,7 @@ export async function terminateTenancy(
       archived_at: archivedAt,
     })
     .eq("id", params.tenancyId)
-    .eq("status", "active")
+    .eq("tenancy_status", "active")
     .is("deleted_at", null)
     .is("archived_at", null)
     .select(TENANCY_SELECT)
@@ -493,7 +518,8 @@ export async function getRenewalTenanciesForLandlord(
     .from("tenancies")
     .select(TENANCY_DETAIL_SELECT)
     .eq("landlord_id", landlordId)
-    .eq("status", "active")
+    .eq("tenancy_status", "active")
+    .not("agreement_live_at", "is", null)
     .is("deleted_at", null)
     .is("archived_at", null)
     .not("next_rent_charge_date", "is", null)
@@ -522,7 +548,8 @@ export async function getUpcomingRenewalCountForLandlord(
       head: true,
     })
     .eq("landlord_id", landlordId)
-    .eq("status", "active")
+    .eq("tenancy_status", "active")
+    .not("agreement_live_at", "is", null)
     .is("deleted_at", null)
     .is("archived_at", null)
     .not("next_rent_charge_date", "is", null)

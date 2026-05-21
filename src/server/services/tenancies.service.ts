@@ -12,16 +12,17 @@ import {
   postInitialTenancyLedgerEntries,
 } from "@/server/repositories/ledger.repository";
 import {
-  activateTenancy,
   confirmTenancyCharges,
   createTenancy,
   getActiveTenancyForTenant,
   getActiveTenancyForUnit,
-  getDraftTenancyForUnit,
+  getPendingAgreementTenancyForUnit,
   getRenewalTenanciesForLandlord,
   getSetupTenancyForTenant,
   getTenanciesForLandlord,
   getTenancyById,
+  isTenancyInAgreementSetup,
+  markTenancyAgreementLive,
   renewTenancyPeriod,
   terminateTenancy,
   type TenancyDetailRow,
@@ -180,10 +181,10 @@ export async function confirmTenancyChargesForCurrentLandlord(tenancyId: string)
     );
   }
 
-  if (tenancy.status !== "draft") {
+  if (!isTenancyInAgreementSetup(tenancy)) {
     throw new AppError(
-      "TENANCY_NOT_DRAFT",
-      "Only draft tenancies can be confirmed at this stage.",
+      "TENANCY_NOT_IN_SETUP",
+      "This tenancy is no longer in the agreement setup stage.",
       400,
     );
   }
@@ -202,11 +203,11 @@ export async function activateTenancyAfterAgreementAcceptance(tenancyId: string)
   const supabase = createSupabaseAdminClient();
   const tenancy = await getTenancyById(supabase, tenancyId);
 
-  if (tenancy.status !== "draft") {
+  if (!isTenancyInAgreementSetup(tenancy)) {
     return tenancy;
   }
 
-  const activatedTenancy = await activateTenancy(supabase, tenancyId);
+  const activatedTenancy = await markTenancyAgreementLive(supabase, tenancyId);
 
   await postInitialTenancyLedgerEntries(supabase, tenancyId);
 
@@ -288,12 +289,12 @@ export async function createTenancyForCurrentLandlord(
     );
   }
 
-  const existingDraftUnitTenancy = await getDraftTenancyForUnit(
+  const existingPendingUnitTenancy = await getPendingAgreementTenancyForUnit(
     supabase,
     input.unitId,
   );
 
-  if (existingDraftUnitTenancy) {
+  if (existingPendingUnitTenancy) {
     throw new AppError(
       "UNIT_ALREADY_HAS_TENANCY",
       "This unit already has an active rental agreement.",

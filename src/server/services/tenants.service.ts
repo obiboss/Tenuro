@@ -37,7 +37,8 @@ import { resolveTenantPipelineStatus } from "@/lib/tenant-pipeline-status";
 import { requireLandlord } from "./auth.service";
 
 export type TenantPipelineSummary = {
-  tenancyStatus: "draft" | "active" | null;
+  isAgreementSetup: boolean;
+  isOperationallyLive: boolean;
   chargesConfirmed: boolean;
   agreementDocumentStatus:
     | "draft"
@@ -90,7 +91,8 @@ export async function getCurrentLandlordTenantPipelineSummaries() {
       : (agreementDocuments?.document_status ?? null);
 
     pipelineByTenantId.set(summary.tenant_id, {
-      tenancyStatus: summary.status,
+      isAgreementSetup: summary.agreement_live_at === null,
+      isOperationallyLive: summary.agreement_live_at !== null,
       chargesConfirmed: Boolean(summary.charges_confirmed_at),
       agreementDocumentStatus,
     });
@@ -112,7 +114,8 @@ export async function getCurrentLandlordTenantsWithPipeline() {
       tenant,
       pipelineStatus: resolveTenantPipelineStatus({
         onboardingStatus: tenant.onboarding_status,
-        tenancyStatus: pipeline?.tenancyStatus ?? null,
+        isAgreementSetup: pipeline?.isAgreementSetup ?? false,
+        isOperationallyLive: pipeline?.isOperationallyLive ?? false,
         chargesConfirmed: pipeline?.chargesConfirmed ?? false,
         agreementDocumentStatus: pipeline?.agreementDocumentStatus ?? null,
       }),

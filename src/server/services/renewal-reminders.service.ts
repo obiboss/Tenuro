@@ -216,7 +216,8 @@ async function getRenewalReminderTenancies(runDate: string) {
       )
     `,
     )
-    .eq("status", "active")
+    .eq("tenancy_status", "active")
+    .not("agreement_live_at", "is", null)
     .is("deleted_at", null)
     .is("archived_at", null)
     .not("next_rent_charge_date", "is", null)

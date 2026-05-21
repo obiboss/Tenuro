@@ -224,11 +224,14 @@ export async function getActiveTenantTenancy(
         rent_due_day,
         rent_anchor_month,
         status,
+        tenancy_status,
+        agreement_live_at,
         opening_balance
       `,
     )
     .eq("tenant_id", tenantId)
-    .eq("status", "active")
+    .eq("tenancy_status", "active")
+    .not("agreement_live_at", "is", null)
     .order("start_date", { ascending: false })
     .limit(1)
     .maybeSingle<TenantDashboardTenancyRow>();

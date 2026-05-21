@@ -27,6 +27,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { TrustNotice } from "@/components/ui/trust-notice";
 import { resolveTenantPipelineStatus } from "@/lib/tenant-pipeline-status";
+import { isTenancyInAgreementSetup } from "@/server/repositories/tenancies.repository";
 import { getLandlordChargesForCurrentLandlord } from "@/server/services/landlord-tenancy-charges.service";
 import { getCurrentTenantLedgerSummary } from "@/server/services/ledger.service";
 import {
@@ -78,7 +79,8 @@ function resolveAgreementStep(params: {
   }
 
   if (
-    params.setupTenancy?.status === "draft" &&
+    params.setupTenancy &&
+    isTenancyInAgreementSetup(params.setupTenancy) &&
     params.setupTenancy.charges_confirmed_at
   ) {
     return params.requestedStep === "charges"
@@ -86,7 +88,10 @@ function resolveAgreementStep(params: {
       : "agreement-draft";
   }
 
-  if (params.setupTenancy?.status === "draft") {
+  if (
+    params.setupTenancy &&
+    isTenancyInAgreementSetup(params.setupTenancy)
+  ) {
     return "charges";
   }
 
@@ -114,7 +119,7 @@ export default async function TenantDetailPage({
     ]);
 
   const activeTenancy =
-    setupTenancy?.status === "active"
+    setupTenancy && !isTenancyInAgreementSetup(setupTenancy)
       ? setupTenancy
       : await getCurrentTenantActiveTenancy(tenantId);
 
@@ -151,7 +156,12 @@ export default async function TenantDetailPage({
 
   const pipelineStatus = resolveTenantPipelineStatus({
     onboardingStatus: tenant.onboarding_status,
-    tenancyStatus: setupTenancy?.status ?? null,
+    isAgreementSetup: setupTenancy
+      ? isTenancyInAgreementSetup(setupTenancy)
+      : false,
+    isOperationallyLive: setupTenancy
+      ? !isTenancyInAgreementSetup(setupTenancy)
+      : Boolean(activeTenancy),
     chargesConfirmed: Boolean(setupTenancy?.charges_confirmed_at),
     agreementDocumentStatus: agreementDocument?.document_status ?? null,
   });
@@ -190,7 +200,7 @@ export default async function TenantDetailPage({
     tenant.onboarding_status === "rejected";
 
   const canIssueQuitNotice = Boolean(
-    activeTenancy && activeTenancy.status === "active",
+    activeTenancy && activeTenancy.tenancy_status === "active",
   );
 
   const shouldShowOnboardingCard =
@@ -383,18 +393,16 @@ export default async function TenantDetailPage({
             <>
               <TenancySummaryCard tenancy={setupTenancy} />
 
-              {setupTenancy.status === "active" ? (
-                <SectionCard
-                  title="Landlord Charges"
-                  description="Confirmed landlord charges included in this tenancy."
-                >
-                  <LandlordTenancyChargeList
-                    tenancyId={setupTenancy.id}
-                    charges={landlordCharges}
-                    chargesConfirmed
-                  />
-                </SectionCard>
-              ) : null}
+              <SectionCard
+                title="Landlord Charges"
+                description="Confirmed landlord charges included in this tenancy."
+              >
+                <LandlordTenancyChargeList
+                  tenancyId={setupTenancy.id}
+                  charges={landlordCharges}
+                  chargesConfirmed
+                />
+              </SectionCard>
 
               <TenancyAgreementDocumentCard
                 tenancyId={setupTenancy.id}

@@ -23,7 +23,10 @@ import {
   updateTenancyAgreementDraft,
   type TenancyAgreementDocumentRow,
 } from "@/server/repositories/tenancy-agreements.repository";
-import { getTenancyById } from "@/server/repositories/tenancies.repository";
+import {
+  getTenancyById,
+  isTenancyInAgreementSetup,
+} from "@/server/repositories/tenancies.repository";
 import {
   writeAuditLog,
   writeSystemAuditLog,
@@ -296,10 +299,18 @@ export async function generateTenancyAgreementForCurrentLandlord(
     );
   }
 
-  if (tenancy.status !== "active" && tenancy.status !== "draft") {
+  if (tenancy.tenancy_status !== "active") {
     throw new AppError(
       "TENANCY_NOT_ACTIVE",
       "Create an active tenancy record before generating the agreement document.",
+      400,
+    );
+  }
+
+  if (!isTenancyInAgreementSetup(tenancy)) {
+    throw new AppError(
+      "TENANCY_NOT_IN_SETUP",
+      "Agreement generation is only available during the agreement setup stage.",
       400,
     );
   }

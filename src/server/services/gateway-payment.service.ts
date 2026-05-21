@@ -521,7 +521,10 @@ async function initializeGatewayPaymentForTenancy(params: {
   const supabase = createSupabaseAdminClient();
   const tenancy = await getTenancyPaymentContext(supabase, params.tenancyId);
 
-  if (tenancy.status !== "active") {
+  if (
+    tenancy.tenancy_status !== "active" ||
+    tenancy.agreement_live_at === null
+  ) {
     throw new AppError(
       "TENANCY_NOT_ACTIVE",
       "Payment can only be made for an active rental agreement.",
