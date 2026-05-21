@@ -122,9 +122,10 @@ function calculateTrend(current: number, previous: number) {
   }
 
   const rawChange = ((current - previous) / previous) * 100;
+  const changePercent = Number.isFinite(rawChange) ? Math.abs(rawChange) : 0;
 
   return {
-    changePercent: Math.abs(rawChange),
+    changePercent,
     trendDirection:
       rawChange > 0
         ? ("up" as const)
@@ -168,8 +169,8 @@ function mapSignupActivity(
     eventType: "user.signup",
     title: "New sign-up",
     description: `${formatRoleLabel(signup.role)} account created on BOPA.`,
-    actorName: signup.full_name.trim() || "Unknown user",
-    createdAt: signup.created_at,
+    actorName: signup.full_name?.trim() || "Unknown user",
+    createdAt: signup.created_at ?? "",
   };
 }
 
@@ -195,7 +196,7 @@ function mapPayoutAuditActivity(params: {
     title: "Payout verification activity",
     description: params.event.description,
     actorName,
-    createdAt: params.event.created_at,
+    createdAt: params.event.created_at ?? "",
   };
 }
 
@@ -267,21 +268,29 @@ export async function getPlatformAdminDashboard(params: {
     pendingPayoutCreatedPrevious,
   );
 
-  const actorIds = recentPayoutEvents
+  const signups = recentSignups ?? [];
+  const payoutEvents = recentPayoutEvents ?? [];
+
+  const actorIds = payoutEvents
     .map((event) => event.actor_profile_id)
     .filter((value): value is string => Boolean(value));
   const actorNames = await getProfileNamesByIds(supabase, actorIds);
 
   const recentActivity = [
-    ...recentSignups.map(mapSignupActivity),
-    ...recentPayoutEvents.map((event) =>
+    ...signups.map(mapSignupActivity),
+    ...payoutEvents.map((event) =>
       mapPayoutAuditActivity({ event, actorNames }),
     ),
   ]
-    .sort(
-      (left, right) =>
-        new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
-    )
+    .sort((left, right) => {
+      const rightTime = Date.parse(right.createdAt);
+      const leftTime = Date.parse(left.createdAt);
+
+      return (
+        (Number.isFinite(rightTime) ? rightTime : 0) -
+        (Number.isFinite(leftTime) ? leftTime : 0)
+      );
+    })
     .slice(0, 10);
 
   return {

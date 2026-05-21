@@ -7,7 +7,9 @@ import {
   ReceiptText,
   UserRound,
 } from "lucide-react";
+import { AgreementDraftPreview } from "@/components/tenancy/agreement-draft-preview";
 import { MoveOutConfirmationCard } from "@/components/quit-notices/move-out-confirmation-card";
+import { PayoutPaymentGateNotice } from "@/components/payment/payout-payment-gate-notice";
 import { RentPaymentModal } from "@/components/payment/rent-payment-modal";
 import { QuitNoticeIssueCard } from "@/components/quit-notices/quit-notice-issue-card";
 import { OnboardingInviteCard } from "@/components/tenant/onboarding-invite-card";
@@ -24,7 +26,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { TrustNotice } from "@/components/ui/trust-notice";
-import { TENANT_ONBOARDING_STATUS_COPY } from "@/lib/status-copy";
+import { resolveTenantPipelineStatus } from "@/lib/tenant-pipeline-status";
 import { getLandlordChargesForCurrentLandlord } from "@/server/services/landlord-tenancy-charges.service";
 import { getCurrentTenantLedgerSummary } from "@/server/services/ledger.service";
 import {
@@ -36,15 +38,24 @@ import {
   getCurrentLandlordTenantGuarantor,
   getCurrentLandlordTenantKycDocumentLinks,
 } from "@/server/services/tenants.service";
-import { getCurrentTenantActiveTenancy } from "@/server/services/tenancies.service";
+import {
+  getCurrentTenantActiveTenancy,
+  getCurrentTenantSetupTenancy,
+} from "@/server/services/tenancies.service";
 import { getCurrentLandlordQuitNoticesForTenancy } from "@/server/services/quit-notices.service";
 import { getCurrentLandlordTenantAgentCommissionAmount } from "@/server/services/tenant-agent-commission.service";
 import { getCurrentLandlordBankSetup } from "@/server/services/landlord-bank.service";
-import { getPaystackPayoutVerificationUiState } from "@/server/services/paystack-verification.service";
+import {
+  getLandlordPaymentGateUiState,
+  getPaystackPayoutVerificationUiState,
+} from "@/server/services/paystack-verification.service";
 
 type TenantDetailPageProps = {
   params: Promise<{
     tenantId: string;
+  }>;
+  searchParams: Promise<{
+    step?: string;
   }>;
 };
 
@@ -54,22 +65,61 @@ function sumCharges(
   return charges.reduce((total, charge) => total + Number(charge.amount), 0);
 }
 
+function resolveAgreementStep(params: {
+  requestedStep: string | undefined;
+  isTenantApproved: boolean;
+  setupTenancy: Awaited<ReturnType<typeof getCurrentTenantSetupTenancy>>;
+  agreementDocument: Awaited<
+    ReturnType<typeof getCurrentTenancyAgreementByTenancyId>
+  >;
+}) {
+  if (params.agreementDocument) {
+    return "agreement";
+  }
+
+  if (
+    params.setupTenancy?.status === "draft" &&
+    params.setupTenancy.charges_confirmed_at
+  ) {
+    return params.requestedStep === "charges"
+      ? "charges"
+      : "agreement-draft";
+  }
+
+  if (params.setupTenancy?.status === "draft") {
+    return "charges";
+  }
+
+  if (params.isTenantApproved && !params.setupTenancy) {
+    return "agreement-setup";
+  }
+
+  return null;
+}
+
 export default async function TenantDetailPage({
   params,
+  searchParams,
 }: TenantDetailPageProps) {
   const { tenantId } = await params;
+  const { step } = await searchParams;
 
-  const [tenant, guarantor, kycDocuments, activeTenancy, ledgerSummary] =
+  const [tenant, guarantor, kycDocuments, setupTenancy, ledgerSummary] =
     await Promise.all([
       getCurrentLandlordTenant(tenantId),
       getCurrentLandlordTenantGuarantor(tenantId),
       getCurrentLandlordTenantKycDocumentLinks(tenantId),
-      getCurrentTenantActiveTenancy(tenantId),
+      getCurrentTenantSetupTenancy(tenantId),
       getCurrentTenantLedgerSummary(tenantId),
     ]);
 
-  const agreementDocument = activeTenancy
-    ? await getCurrentTenancyAgreementByTenancyId(activeTenancy.id)
+  const activeTenancy =
+    setupTenancy?.status === "active"
+      ? setupTenancy
+      : await getCurrentTenantActiveTenancy(tenantId);
+
+  const agreementDocument = setupTenancy
+    ? await getCurrentTenancyAgreementByTenancyId(setupTenancy.id)
     : null;
 
   const agreementPdfDownloadUrl = agreementDocument?.pdf_path
@@ -80,8 +130,8 @@ export default async function TenantDetailPage({
     ? await getCurrentLandlordQuitNoticesForTenancy(activeTenancy.id)
     : [];
 
-  const landlordCharges = activeTenancy
-    ? await getLandlordChargesForCurrentLandlord(activeTenancy.id)
+  const landlordCharges = setupTenancy
+    ? await getLandlordChargesForCurrentLandlord(setupTenancy.id)
     : [];
 
   const landlordChargesAmount = sumCharges(landlordCharges);
@@ -93,14 +143,18 @@ export default async function TenantDetailPage({
     payoutAccount,
     "landlord",
   );
+  const paymentGate = getLandlordPaymentGateUiState(payoutAccount);
 
   const tenuroFeeAmount = Number(
     process.env.TENURO_GATEWAY_ADMIN_FEE_NAIRA ?? 0,
   );
 
-  const status =
-    TENANT_ONBOARDING_STATUS_COPY[tenant.onboarding_status] ??
-    TENANT_ONBOARDING_STATUS_COPY.invited;
+  const pipelineStatus = resolveTenantPipelineStatus({
+    onboardingStatus: tenant.onboarding_status,
+    tenancyStatus: setupTenancy?.status ?? null,
+    chargesConfirmed: Boolean(setupTenancy?.charges_confirmed_at),
+    agreementDocumentStatus: agreementDocument?.document_status ?? null,
+  });
 
   const outstandingBalance = ledgerSummary.balance?.outstanding_balance ?? 0;
   const hasOutstandingBalance = Boolean(
@@ -123,7 +177,17 @@ export default async function TenantDetailPage({
     activeTenancy && hasOutstandingBalance && !isAgreementAccepted,
   );
 
-  const canCreateTenancyRecord = isTenantApproved && !activeTenancy;
+  const canCreateTenancyRecord = isTenantApproved && !setupTenancy;
+  const agreementStep = resolveAgreementStep({
+    requestedStep: step,
+    isTenantApproved,
+    setupTenancy,
+    agreementDocument,
+  });
+
+  const shouldShowKycReview =
+    tenant.onboarding_status === "profile_complete" ||
+    tenant.onboarding_status === "rejected";
 
   const canIssueQuitNotice = Boolean(
     activeTenancy && activeTenancy.status === "active",
@@ -144,20 +208,25 @@ export default async function TenantDetailPage({
   const nextStepDescription = tenant.profile_id
     ? "This tenant already has an active tenant account."
     : tenant.onboarding_status === "profile_complete"
-      ? "Review the tenant KYC submission and approve the tenant before creating the tenancy record."
+      ? "Review the tenant KYC submission and approve the tenant to start agreement setup."
       : !isTenantApproved
         ? "Send the tenant onboarding link so they can complete their profile, ID document, and guarantor details."
-        : !activeTenancy
-          ? "Create the tenancy record using the approved tenant and assigned unit. After that, prepare and send the tenancy agreement."
-          : !agreementDocument
-            ? "Generate the tenancy agreement draft before sending it to the tenant."
-            : !isAgreementAccepted
-              ? "Send the agreement acceptance link to the tenant."
-              : hasOutstandingBalance
-                ? payoutVerification.isVerified
-                  ? "Send the tenant rent payment link before account activation."
-                  : "Online rent payment links are unavailable until payout verification is approved. You can still record manual payments."
-                : "Send the tenant activation link so they can set their password and access their dashboard.";
+        : agreementStep === "agreement-setup"
+          ? "Confirm rent, tenancy dates, and renewal reminder interval to begin agreement setup."
+          : agreementStep === "charges"
+            ? "Add landlord charges, review the running total, and confirm before generating the agreement."
+            : agreementStep === "agreement-draft"
+              ? "Review the agreement draft preview and generate the tenancy agreement document."
+              : !agreementDocument
+                ? "Generate the tenancy agreement draft before sending it to the tenant."
+                : !isAgreementAccepted
+                  ? "Send the agreement acceptance link to the tenant."
+                  : hasOutstandingBalance
+                    ? payoutVerification.isVerified
+                      ? "Send the tenant rent payment link before account activation."
+                      : paymentGate?.description ??
+                        "Online rent payment links are unavailable until payout verification is approved. You can still record manual payments."
+                    : "Send the tenant activation link so they can set their password and access their dashboard.";
 
   return (
     <div>
@@ -172,7 +241,7 @@ export default async function TenantDetailPage({
       <PageHeader
         title={tenant.full_name}
         description="Tenant record, assigned unit, documents, tenancy record, and payment history."
-        action={<Badge tone={status.tone}>{status.label}</Badge>}
+        action={<Badge tone={pipelineStatus.tone}>{pipelineStatus.label}</Badge>}
       />
 
       <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
@@ -225,48 +294,36 @@ export default async function TenantDetailPage({
             </CardContent>
           </Card>
 
-          <TenantReviewCard
-            tenant={tenant}
-            guarantor={guarantor}
-            documents={kycDocuments}
-          />
-
-          {activeTenancy ? (
-            <>
-              <TenancySummaryCard tenancy={activeTenancy} />
-
-              <SectionCard
-                title="Landlord Charges"
-                description="Add agreement fee, caution deposit, damages deposit, service charge, legal fee, documentation fee, or other charges that should be paid to the landlord."
-              >
-                <div className="space-y-6">
-                  <LandlordTenancyChargeList
-                    tenancyId={activeTenancy.id}
-                    charges={landlordCharges}
-                  />
-
-                  <div className="rounded-card border border-border-soft bg-surface p-4">
-                    <LandlordTenancyChargeForm tenancyId={activeTenancy.id} />
-                  </div>
-                </div>
-              </SectionCard>
-
-              <TenancyAgreementDocumentCard
-                tenancyId={activeTenancy.id}
-                agreement={agreementDocument}
-                pdfDownloadUrl={agreementPdfDownloadUrl}
-              />
-            </>
-          ) : null}
-
-          {canCreateTenancyRecord ? (
+          {shouldShowKycReview ? (
+            <TenantReviewCard
+              tenant={tenant}
+              guarantor={guarantor}
+              documents={kycDocuments}
+            />
+          ) : isTenantApproved ? (
             <SectionCard
-              title="Create Tenancy and Agreement Setup"
-              description="Confirm rent, tenancy dates, opening balance, and agreement notes. After this record is created, BOPA will show the agreement draft step."
+              title="Tenant Approved"
+              description="KYC review is complete. Continue with agreement setup below."
             >
               <TrustNotice
+                title="Approval confirmed"
+                description="The tenant profile, documents, and guarantor details were approved. Agreement setup is now unlocked."
+                icon={
+                  <FileCheck2 aria-hidden="true" size={22} strokeWidth={2.6} />
+                }
+              />
+            </SectionCard>
+          ) : null}
+
+          {canCreateTenancyRecord && agreementStep === "agreement-setup" ? (
+            <div id="agreement-setup">
+              <SectionCard
+                title="Create Tenancy and Agreement Setup"
+                description="Confirm rent, tenancy dates, renewal reminder interval, and agreement notes."
+              >
+              <TrustNotice
                 title="Landlord confirmation required"
-                description="The tenant has been approved. Confirm the tenancy terms before the agreement is generated so the final document uses landlord-approved details."
+                description="The tenant has been approved. Confirm the tenancy terms before adding landlord charges and generating the agreement."
                 icon={
                   <FileSignature
                     aria-hidden="true"
@@ -284,9 +341,70 @@ export default async function TenantDetailPage({
                 />
               </div>
             </SectionCard>
+            </div>
           ) : null}
 
-          {!activeTenancy && !isTenantApproved ? (
+          {setupTenancy && agreementStep === "charges" ? (
+            <>
+              <TenancySummaryCard tenancy={setupTenancy} />
+
+              <div id="charges">
+                <SectionCard
+                  title="Review Landlord Charges"
+                  description="Add move-in charges, review the running total, remove any mistakes, then confirm to continue."
+                >
+                <div className="space-y-6">
+                  <LandlordTenancyChargeList
+                    tenancyId={setupTenancy.id}
+                    charges={landlordCharges}
+                    showConfirmAction
+                    chargesConfirmed={Boolean(setupTenancy.charges_confirmed_at)}
+                  />
+
+                  {!setupTenancy.charges_confirmed_at ? (
+                    <div className="rounded-card border border-border-soft bg-surface p-4">
+                      <LandlordTenancyChargeForm tenancyId={setupTenancy.id} />
+                    </div>
+                  ) : null}
+                </div>
+              </SectionCard>
+              </div>
+            </>
+          ) : null}
+
+          {setupTenancy && agreementStep === "agreement-draft" ? (
+            <AgreementDraftPreview
+              tenancy={setupTenancy}
+              charges={landlordCharges}
+            />
+          ) : null}
+
+          {setupTenancy && agreementStep === "agreement" ? (
+            <>
+              <TenancySummaryCard tenancy={setupTenancy} />
+
+              {setupTenancy.status === "active" ? (
+                <SectionCard
+                  title="Landlord Charges"
+                  description="Confirmed landlord charges included in this tenancy."
+                >
+                  <LandlordTenancyChargeList
+                    tenancyId={setupTenancy.id}
+                    charges={landlordCharges}
+                    chargesConfirmed
+                  />
+                </SectionCard>
+              ) : null}
+
+              <TenancyAgreementDocumentCard
+                tenancyId={setupTenancy.id}
+                agreement={agreementDocument}
+                pdfDownloadUrl={agreementPdfDownloadUrl}
+              />
+            </>
+          ) : null}
+
+          {!setupTenancy && !isTenantApproved ? (
             <SectionCard
               title="Tenancy Record Locked"
               description="Approve the tenant before creating the tenancy record."
@@ -340,7 +458,7 @@ export default async function TenantDetailPage({
             </SectionCard>
           ) : null}
 
-          {hasPaymentLinkPrerequisites && !payoutVerification.isVerified ? (
+          {hasPaymentLinkPrerequisites && paymentGate ? (
             <SectionCard
               title="Online Payment Link Unavailable"
               description="Manual rent recording is still available. Online Paystack rent collection depends on payout verification."
@@ -350,18 +468,7 @@ export default async function TenantDetailPage({
                 </Badge>
               }
             >
-              <TrustNotice
-                title="Payout verification required"
-                description={payoutVerification.guidance}
-                icon={
-                  <ReceiptText aria-hidden="true" size={22} strokeWidth={2.6} />
-                }
-                className={
-                  payoutVerification.state === "failed"
-                    ? "bg-danger-soft text-danger"
-                    : "bg-warning-soft text-warning"
-                }
-              />
+              <PayoutPaymentGateNotice gate={paymentGate} />
             </SectionCard>
           ) : null}
 

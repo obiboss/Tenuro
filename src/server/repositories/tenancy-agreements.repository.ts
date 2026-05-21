@@ -122,6 +122,7 @@ export async function createTenancyAgreementDraft(
     propertySnapshot: Record<string, unknown>;
     tenancySnapshot: Record<string, unknown>;
     agreementBody: string;
+    agreementTemplateId?: string | null;
   },
 ) {
   const { data, error } = await supabase
@@ -137,6 +138,7 @@ export async function createTenancyAgreementDraft(
       property_snapshot: params.propertySnapshot,
       tenancy_snapshot: params.tenancySnapshot,
       agreement_body: params.agreementBody,
+      agreement_template_id: params.agreementTemplateId ?? null,
     })
     .select(AGREEMENT_SELECT)
     .single<TenancyAgreementDocumentRow>();

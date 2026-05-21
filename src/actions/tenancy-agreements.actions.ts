@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { errorResult } from "@/server/errors/result";
 import {
   acceptTenancyAgreementFromTenant,
@@ -42,6 +43,8 @@ export async function generateTenancyAgreementAction(
   _previousState: TenancyAgreementActionState,
   formData: FormData,
 ): Promise<TenancyAgreementActionState> {
+  let tenantId: string | null = null;
+
   try {
     const parsed = generateTenancyAgreementSchema.parse({
       tenancyId: formData.get("tenancyId"),
@@ -49,14 +52,10 @@ export async function generateTenancyAgreementAction(
 
     const agreement = await generateTenancyAgreementForCurrentLandlord(parsed);
 
+    tenantId = agreement.tenant_id;
+
     revalidatePath("/tenants");
     revalidatePath(`/tenants/${agreement.tenant_id}`);
-
-    return {
-      ok: true,
-      message: "Agreement draft generated.",
-      agreementId: agreement.id,
-    };
   } catch (error) {
     console.error("generateTenancyAgreementAction failed:", error);
 
@@ -68,6 +67,15 @@ export async function generateTenancyAgreementAction(
       fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
     };
   }
+
+  if (tenantId) {
+    redirect(`/tenants/${tenantId}?step=agreement`);
+  }
+
+  return {
+    ok: true,
+    message: "Agreement draft generated.",
+  };
 }
 
 export async function saveTenancyAgreementDraftAction(

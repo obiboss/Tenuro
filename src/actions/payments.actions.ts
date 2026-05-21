@@ -1,23 +1,33 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { isAppError } from "@/server/errors/app-error";
 import { errorResult } from "@/server/errors/result";
+import type { LandlordPaymentGateUiState } from "@/lib/landlord-payment-gate";
 import {
   initializeRentPayment,
   initializeTenantDashboardRentPayment,
 } from "@/server/services/gateway-payment.service";
-import { setupLandlordBankAccount } from "@/server/services/landlord-bank.service";
+import { getCurrentLandlordBankSetup, setupLandlordBankAccount } from "@/server/services/landlord-bank.service";
 import { recordManualPaymentForCurrentLandlord } from "@/server/services/payments.service";
 import { generateRentReceiptForCurrentLandlord } from "@/server/services/receipts.service";
+import { getLandlordPaymentGateUiState } from "@/server/services/paystack-verification.service";
 import {
   initializeRentPaymentSchema,
   recordManualPaymentSchema,
   setupLandlordBankAccountSchema,
 } from "@/server/validators/payment.schema";
 
+const LANDLORD_PAYOUT_VERIFICATION_ERROR_CODES = new Set([
+  "BANK_ACCOUNT_REQUIRED",
+  "PAYOUT_ACCOUNT_PENDING_VERIFICATION",
+  "PAYOUT_ACCOUNT_VERIFICATION_FAILED",
+]);
+
 export type PaymentActionState = {
   ok: boolean;
   message: string;
+  paymentGate?: LandlordPaymentGateUiState | null;
   paymentId?: string;
   authorizationUrl?: string;
   tenantPaymentUrl?: string;
@@ -92,6 +102,20 @@ export async function initializeRentPaymentAction(
     };
   } catch (error) {
     const result = errorResult(error);
+
+    if (
+      isAppError(error) &&
+      LANDLORD_PAYOUT_VERIFICATION_ERROR_CODES.has(error.code)
+    ) {
+      const payoutAccount = await getCurrentLandlordBankSetup();
+
+      return {
+        ok: false,
+        message: result.message,
+        paymentGate: getLandlordPaymentGateUiState(payoutAccount),
+        fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
+      };
+    }
 
     return {
       ok: false,

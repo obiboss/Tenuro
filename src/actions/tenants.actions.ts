@@ -104,19 +104,19 @@ export async function approveTenantAction(
   _previousState: TenantActionState,
   formData: FormData,
 ): Promise<TenantActionState> {
+  let tenantId: string | null = null;
+
   try {
     const parsed = approveTenantSchema.parse({
       tenantId: formData.get("tenantId"),
     });
 
+    tenantId = parsed.tenantId;
+
     await approveTenantForCurrentLandlord(parsed.tenantId);
 
     revalidatePath("/tenants");
     revalidatePath(`/tenants/${parsed.tenantId}`);
-
-    return successResult(
-      "Tenant approved. Continue below to create the tenancy record and prepare the agreement.",
-    );
   } catch (error) {
     console.error("approveTenantAction failed:", error);
 
@@ -128,6 +128,12 @@ export async function approveTenantAction(
       fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
     };
   }
+
+  if (tenantId) {
+    redirect(`/tenants/${tenantId}?step=agreement-setup`);
+  }
+
+  return successResult("Tenant approved.");
 }
 
 export async function rejectTenantAction(

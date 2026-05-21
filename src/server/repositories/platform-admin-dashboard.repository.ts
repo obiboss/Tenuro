@@ -34,7 +34,6 @@ export async function countActiveProfiles(
   let query = supabase
     .from("profiles")
     .select("id", { count: "exact", head: true })
-    .is("deleted_at", null)
     .eq("is_active", true);
 
   if (params?.createdBefore) {
@@ -60,7 +59,6 @@ export async function countProfilesCreatedBetween(
   const { count, error } = await supabase
     .from("profiles")
     .select("id", { count: "exact", head: true })
-    .is("deleted_at", null)
     .gte("created_at", params.startInclusive)
     .lt("created_at", params.endExclusive);
 
@@ -194,7 +192,6 @@ export async function listRecentProfileSignups(
   const { data, error } = await supabase
     .from("profiles")
     .select("id, full_name, role, email, phone_number, created_at")
-    .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(limit)
     .returns<PlatformAdminProfileSignupRow[]>();
@@ -203,7 +200,7 @@ export async function listRecentProfileSignups(
     throw error;
   }
 
-  return data;
+  return data ?? [];
 }
 
 export async function listRecentPayoutAuditEvents(
@@ -222,7 +219,7 @@ export async function listRecentPayoutAuditEvents(
     throw error;
   }
 
-  return data;
+  return data ?? [];
 }
 
 export async function getProfileNamesByIds(
@@ -244,6 +241,9 @@ export async function getProfileNamesByIds(
   }
 
   return new Map(
-    (data ?? []).map((profile) => [profile.id, profile.full_name.trim() || "Unknown user"]),
+    (data ?? []).map((profile) => [
+      profile.id,
+      profile.full_name?.trim() || "Unknown user",
+    ]),
   );
 }

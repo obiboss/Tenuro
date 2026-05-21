@@ -19,6 +19,8 @@ export type TenancyRow = {
   end_date: string | null;
   move_out_date: string | null;
   renewal_notice_date: string | null;
+  reminder_interval_days: number | null;
+  charges_confirmed_at: string | null;
   rent_due_day: number;
   rent_anchor_month: number | null;
   current_period_start: string | null;
@@ -66,6 +68,8 @@ const TENANCY_SELECT = `
   end_date,
   move_out_date,
   renewal_notice_date,
+  reminder_interval_days,
+  charges_confirmed_at,
   rent_due_day,
   rent_anchor_month,
   current_period_start,
@@ -92,6 +96,8 @@ const TENANCY_DETAIL_SELECT = `
   end_date,
   move_out_date,
   renewal_notice_date,
+  reminder_interval_days,
+  charges_confirmed_at,
   rent_due_day,
   rent_anchor_month,
   current_period_start,
@@ -143,6 +149,174 @@ function addDays(date: Date, days: number) {
 
 function toDateOnly(value: Date) {
   return value.toISOString().slice(0, 10);
+}
+
+export async function getSetupTenancyForTenant(
+  supabase: SupabaseClient,
+  tenantId: string,
+) {
+  const { data, error } = await supabase
+    .from("tenancies")
+    .select(TENANCY_DETAIL_SELECT)
+    .eq("tenant_id", tenantId)
+    .in("status", ["draft", "active"])
+    .is("deleted_at", null)
+    .is("archived_at", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<TenancyDetailRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getDraftTenancyForUnit(
+  supabase: SupabaseClient,
+  unitId: string,
+) {
+  const { data, error } = await supabase
+    .from("tenancies")
+    .select(TENANCY_SELECT)
+    .eq("unit_id", unitId)
+    .eq("status", "draft")
+    .is("deleted_at", null)
+    .is("archived_at", null)
+    .maybeSingle<TenancyRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function activateTenancy(
+  supabase: SupabaseClient,
+  tenancyId: string,
+) {
+  const { data, error } = await supabase
+    .from("tenancies")
+    .update({
+      status: "active",
+      tenancy_status: "active",
+    })
+    .eq("id", tenancyId)
+    .eq("status", "draft")
+    .is("deleted_at", null)
+    .is("archived_at", null)
+    .select(TENANCY_SELECT)
+    .single<TenancyRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function confirmTenancyCharges(
+  supabase: SupabaseClient,
+  params: {
+    tenancyId: string;
+    landlordId: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("tenancies")
+    .update({
+      charges_confirmed_at: new Date().toISOString(),
+    })
+    .eq("id", params.tenancyId)
+    .eq("landlord_id", params.landlordId)
+    .eq("status", "draft")
+    .is("charges_confirmed_at", null)
+    .is("deleted_at", null)
+    .is("archived_at", null)
+    .select(TENANCY_DETAIL_SELECT)
+    .single<TenancyDetailRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getDraftTenanciesForLandlord(
+  supabase: SupabaseClient,
+  landlordId: string,
+) {
+  const { data, error } = await supabase
+    .from("tenancies")
+    .select("id, tenant_id, status, charges_confirmed_at")
+    .eq("landlord_id", landlordId)
+    .eq("status", "draft")
+    .is("deleted_at", null)
+    .is("archived_at", null)
+    .returns<
+      {
+        id: string;
+        tenant_id: string;
+        status: "draft";
+        charges_confirmed_at: string | null;
+      }[]
+    >();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getTenancyPipelineSummariesForLandlord(
+  supabase: SupabaseClient,
+  landlordId: string,
+) {
+  const { data, error } = await supabase
+    .from("tenancies")
+    .select(
+      `
+      id,
+      tenant_id,
+      status,
+      charges_confirmed_at,
+      tenancy_agreement_documents (
+        document_status
+      )
+    `,
+    )
+    .eq("landlord_id", landlordId)
+    .in("status", ["draft", "active"])
+    .is("deleted_at", null)
+    .is("archived_at", null)
+    .returns<
+      {
+        id: string;
+        tenant_id: string;
+        status: "draft" | "active";
+        charges_confirmed_at: string | null;
+        tenancy_agreement_documents:
+          | {
+              document_status:
+                | "draft"
+                | "finalized"
+                | "sent_to_tenant"
+                | "accepted"
+                | "voided";
+            }[]
+          | null;
+      }[]
+    >();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
 }
 
 export async function getActiveTenancyForTenant(
@@ -211,6 +385,7 @@ export async function createTenancy(
       start_date: params.input.startDate,
       end_date: params.input.endDate,
       renewal_notice_date: params.input.renewalNoticeDate || null,
+      reminder_interval_days: params.input.reminderIntervalDays,
 
       rent_due_day: rentDueDay,
       rent_anchor_month: rentAnchorMonth,
@@ -226,7 +401,7 @@ export async function createTenancy(
       opening_balance: params.input.openingBalance,
       opening_balance_note: params.input.openingBalanceNote || null,
       agreement_notes: params.input.agreementNotes || null,
-      status: "active",
+      status: "draft",
     })
     .select(TENANCY_DETAIL_SELECT)
     .single<TenancyDetailRow>();

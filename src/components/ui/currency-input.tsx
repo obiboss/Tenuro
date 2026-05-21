@@ -1,12 +1,13 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useId, useState } from "react";
 import { cn } from "@/lib/cn";
 
 type CurrencyInputProps = {
   label: string;
   name: string;
   defaultValue?: number | string | null;
+  resetKey?: number;
   helperText?: string;
   error?: string;
   required?: boolean;
@@ -64,7 +65,7 @@ function formatCurrencyForDisplay(value: string) {
   }).format(numericValue);
 }
 
-export function CurrencyInput({
+function CurrencyInputField({
   label,
   name,
   defaultValue,
@@ -74,18 +75,14 @@ export function CurrencyInput({
   disabled = false,
   placeholder = "0.00",
   id,
-}: CurrencyInputProps) {
+}: Omit<CurrencyInputProps, "resetKey">) {
   const generatedId = useId();
   const inputId = id ?? generatedId;
   const helperId = `${inputId}-helper`;
   const errorId = `${inputId}-error`;
-
-  const initialValue = useMemo(
-    () => normaliseInitialValue(defaultValue),
-    [defaultValue],
+  const [rawValue, setRawValue] = useState(() =>
+    normaliseInitialValue(defaultValue),
   );
-
-  const [rawValue, setRawValue] = useState(initialValue);
   const [isFocused, setIsFocused] = useState(false);
 
   const displayValue = isFocused
@@ -151,4 +148,11 @@ export function CurrencyInput({
       ) : null}
     </div>
   );
+}
+
+export function CurrencyInput({
+  resetKey = 0,
+  ...props
+}: CurrencyInputProps) {
+  return <CurrencyInputField key={resetKey} {...props} />;
 }

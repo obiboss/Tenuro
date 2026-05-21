@@ -7,23 +7,12 @@ import { ActionResultToast } from "@/components/ui/action-result-toast";
 import { Button } from "@/components/ui/button";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { TrustNotice } from "@/components/ui/trust-notice";
 
 type LandlordTenancyChargeFormProps = {
   tenancyId: string;
 };
-
-const chargeTypeOptions = [
-  { label: "Agreement fee", value: "agreement_fee" },
-  { label: "Caution deposit", value: "caution_deposit" },
-  { label: "Damages deposit", value: "damages_deposit" },
-  { label: "Service charge", value: "service_charge" },
-  { label: "Legal fee", value: "legal_fee" },
-  { label: "Documentation fee", value: "documentation_fee" },
-  { label: "Other", value: "other" },
-];
 
 export function LandlordTenancyChargeForm({
   tenancyId,
@@ -47,7 +36,7 @@ export function LandlordTenancyChargeForm({
 
       <TrustNotice
         title="Landlord charges are paid to you"
-        description="Use this for agreement fees, caution deposits, damages deposits, service charge, legal fee, documentation fee, or any landlord-defined charge. These charges are added to the tenant’s final payment and paid to the landlord."
+        description="Add agreement fees, caution deposits, service charges, or any other move-in charge. Each charge is added to the review list below."
       />
 
       {state.message && !state.ok ? (
@@ -59,23 +48,14 @@ export function LandlordTenancyChargeForm({
         </div>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Select
-          label="Charge type"
-          name="chargeType"
-          options={chargeTypeOptions}
-          error={state.fieldErrors?.chargeType?.[0]}
-          required
-        />
-
-        <Input
-          label="Charge label"
-          name="label"
-          placeholder="Example: Agreement fee"
-          error={state.fieldErrors?.label?.[0]}
-          required
-        />
-      </div>
+      <Input
+        label="Charge name"
+        name="chargeName"
+        placeholder="Example: Caution deposit"
+        error={state.fieldErrors?.chargeName?.[0]}
+        helperText="Each active charge name must be unique for this tenancy."
+        required
+      />
 
       <CurrencyInput
         label="Amount"
@@ -128,7 +108,7 @@ export function LandlordTenancyChargeForm({
       </div>
 
       <Button type="submit" isLoading={isPending} fullWidth>
-        Add Landlord Charge
+        Add to Charge List
       </Button>
     </form>
   );

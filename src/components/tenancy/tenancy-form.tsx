@@ -12,6 +12,11 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { TrustNotice } from "@/components/ui/trust-notice";
 import {
+  REMINDER_INTERVAL_OPTIONS,
+  formatReminderPreview,
+  type ReminderIntervalDays,
+} from "@/lib/reminder-interval";
+import {
   calculateTenancyEndDate,
   formatDisplayDate,
   getTodayDateInputValue,
@@ -34,6 +39,11 @@ const paymentFrequencyOptions: {
   { label: "Monthly", value: "monthly" },
 ];
 
+const reminderIntervalOptions = REMINDER_INTERVAL_OPTIONS.map((option) => ({
+  label: option.label,
+  value: String(option.value),
+}));
+
 export function TenancyForm({
   tenantId,
   unitId,
@@ -42,6 +52,8 @@ export function TenancyForm({
   const [startDate, setStartDate] = useState(getTodayDateInputValue());
   const [paymentFrequency, setPaymentFrequency] =
     useState<TenancyPaymentFrequency>("annual");
+  const [reminderIntervalDays, setReminderIntervalDays] =
+    useState<ReminderIntervalDays>(90);
 
   const [state, formAction, isPending] = useActionState(
     createTenancyAction,
@@ -60,12 +72,30 @@ export function TenancyForm({
     ? formatDisplayDate(calculatedEndDate)
     : "Select a valid rent start date";
 
+  const reminderPreview = useMemo(() => {
+    if (!calculatedEndDate) {
+      return "Select tenancy dates to preview the renewal reminder.";
+    }
+
+    try {
+      return formatReminderPreview(calculatedEndDate, reminderIntervalDays);
+    } catch {
+      return "Renewal reminder preview unavailable.";
+    }
+  }, [calculatedEndDate, reminderIntervalDays]);
+
   function handleStartDateChange(event: ChangeEvent<HTMLInputElement>) {
     setStartDate(event.target.value);
   }
 
   function handlePaymentFrequencyChange(event: ChangeEvent<HTMLSelectElement>) {
     setPaymentFrequency(event.target.value as TenancyPaymentFrequency);
+  }
+
+  function handleReminderIntervalChange(event: ChangeEvent<HTMLSelectElement>) {
+    setReminderIntervalDays(
+      Number(event.target.value) as ReminderIntervalDays,
+    );
   }
 
   return (
@@ -148,13 +178,25 @@ export function TenancyForm({
               </div>
             </div>
 
-            <Input
-              label="Renewal reminder date"
-              name="renewalNoticeDate"
-              type="date"
-              helperText="Optional. Use a date before the rent expires so BOPA can remind you later."
-              error={state.fieldErrors?.renewalNoticeDate?.[0]}
+            <Select
+              label="Renewal reminder interval"
+              name="reminderIntervalDays"
+              options={reminderIntervalOptions}
+              value={String(reminderIntervalDays)}
+              onChange={handleReminderIntervalChange}
+              error={state.fieldErrors?.reminderIntervalDays?.[0]}
+              helperText="BOPA will remind you this many days before the rent period ends."
+              required
             />
+
+            <div className="rounded-button border border-border-soft bg-background px-4 py-3">
+              <p className="text-sm font-bold text-text-muted">
+                Renewal reminder preview
+              </p>
+              <p className="mt-2 text-sm font-semibold leading-6 text-text-strong">
+                {reminderPreview}
+              </p>
+            </div>
 
             <CurrencyInput
               label="Opening balance"
@@ -183,7 +225,7 @@ export function TenancyForm({
 
         <CardFooter>
           <Button type="submit" isLoading={isPending} fullWidth>
-            Create Rental Agreement
+            Continue to Landlord Charges
           </Button>
         </CardFooter>
       </Card>

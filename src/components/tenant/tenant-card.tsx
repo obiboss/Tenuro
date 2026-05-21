@@ -2,17 +2,21 @@ import Link from "next/link";
 import { Phone, UserRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import type { TenantPipelineStatus } from "@/lib/tenant-pipeline-status";
 import { TENANT_ONBOARDING_STATUS_COPY } from "@/lib/status-copy";
 import type { TenantListRow } from "@/server/repositories/tenants.repository";
 
 type TenantCardProps = {
   tenant: TenantListRow;
+  pipelineStatus?: TenantPipelineStatus;
 };
 
-export function TenantCard({ tenant }: TenantCardProps) {
-  const status =
+export function TenantCard({ tenant, pipelineStatus }: TenantCardProps) {
+  const fallbackStatus =
     TENANT_ONBOARDING_STATUS_COPY[tenant.onboarding_status] ??
     TENANT_ONBOARDING_STATUS_COPY.invited;
+
+  const status = pipelineStatus ?? fallbackStatus;
 
   return (
     <Card>

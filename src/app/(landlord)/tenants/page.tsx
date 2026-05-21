@@ -4,10 +4,10 @@ import { TenantCard } from "@/components/tenant/tenant-card";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
-import { getCurrentLandlordTenants } from "@/server/services/tenants.service";
+import { getCurrentLandlordTenantsWithPipeline } from "@/server/services/tenants.service";
 
 export default async function TenantsPage() {
-  const tenants = await getCurrentLandlordTenants();
+  const tenants = await getCurrentLandlordTenantsWithPipeline();
 
   return (
     <div>
@@ -34,8 +34,12 @@ export default async function TenantsPage() {
         />
       ) : (
         <div className="grid gap-5">
-          {tenants.map((tenant) => (
-            <TenantCard key={tenant.id} tenant={tenant} />
+          {tenants.map(({ tenant, pipelineStatus }) => (
+            <TenantCard
+              key={tenant.id}
+              tenant={tenant}
+              pipelineStatus={pipelineStatus}
+            />
           ))}
         </div>
       )}

@@ -31,6 +31,7 @@ import {
 import { initializeFirstRentPaymentAfterAgreementAcceptance } from "@/server/services/gateway-payment.service";
 import { createSignedTenancyAgreementPdfUrl } from "@/server/services/storage.service";
 import { generateAndStoreTenancyAgreementPdf } from "@/server/services/tenancy-agreement-pdf.service";
+import { activateTenancyAfterAgreementAcceptance } from "@/server/services/tenancies.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { sha256Hex } from "@/server/utils/crypto";
@@ -49,7 +50,10 @@ import type {
   SubmitAgreementGuarantorInput,
 } from "@/server/validators/tenancy-agreement.schema";
 import { requireLandlord } from "./auth.service";
-import { buildTenancyAgreementTemplate } from "./tenancy-agreement-template.service";
+import {
+  buildAgreementFromTemplate,
+  resolveAgreementTemplateBody,
+} from "./agreement-templates.service";
 
 function getSnapshotTextValue(
   snapshot: Record<string, unknown>,
@@ -223,6 +227,7 @@ function buildSnapshots(params: {
       startDate: params.tenancy.start_date,
       endDate: params.tenancy.end_date,
       renewalNoticeDate: params.tenancy.renewal_notice_date,
+      reminderIntervalDays: params.tenancy.reminder_interval_days,
       openingBalance: params.tenancy.opening_balance,
       openingBalanceNote: params.tenancy.opening_balance_note,
     },
@@ -291,10 +296,18 @@ export async function generateTenancyAgreementForCurrentLandlord(
     );
   }
 
-  if (tenancy.status !== "active") {
+  if (tenancy.status !== "active" && tenancy.status !== "draft") {
     throw new AppError(
       "TENANCY_NOT_ACTIVE",
       "Create an active tenancy record before generating the agreement document.",
+      400,
+    );
+  }
+
+  if (!tenancy.charges_confirmed_at) {
+    throw new AppError(
+      "CHARGES_NOT_CONFIRMED",
+      "Confirm the landlord charges before generating the agreement document.",
       400,
     );
   }
@@ -318,7 +331,13 @@ export async function generateTenancyAgreementForCurrentLandlord(
     unitId: tenancy.unit_id,
   });
 
-  const agreementBody = buildTenancyAgreementTemplate({
+  const resolvedTemplate = await resolveAgreementTemplateBody({
+    landlordId: landlord.id,
+    propertyId: tenancy.units?.properties?.id ?? null,
+  });
+
+  const agreementBody = buildAgreementFromTemplate({
+    templateBody: resolvedTemplate.templateBody,
     landlord,
     tenancy,
     propertyRules,
@@ -329,6 +348,7 @@ export async function generateTenancyAgreementForCurrentLandlord(
     tenantId: tenancy.tenant_id,
     tenancyId: tenancy.id,
     agreementBody,
+    agreementTemplateId: resolvedTemplate.templateId,
     ...snapshots,
   });
 
@@ -608,6 +628,8 @@ export async function acceptTenancyAgreementFromTenant(
     ipAddress: input.ipAddress,
     userAgent: input.userAgent,
   });
+
+  await activateTenancyAfterAgreementAcceptance(acceptedAgreement.tenancy_id);
 
   const agreementWithPdf = await generateAndStoreTenancyAgreementPdf(
     supabase,

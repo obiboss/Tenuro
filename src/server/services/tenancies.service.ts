@@ -12,10 +12,14 @@ import {
   postInitialTenancyLedgerEntries,
 } from "@/server/repositories/ledger.repository";
 import {
+  activateTenancy,
+  confirmTenancyCharges,
   createTenancy,
   getActiveTenancyForTenant,
   getActiveTenancyForUnit,
+  getDraftTenancyForUnit,
   getRenewalTenanciesForLandlord,
+  getSetupTenancyForTenant,
   getTenanciesForLandlord,
   getTenancyById,
   renewTenancyPeriod,
@@ -24,6 +28,7 @@ import {
 } from "@/server/repositories/tenancies.repository";
 import { getTenantById } from "@/server/repositories/tenants.repository";
 import { getUnitById } from "@/server/repositories/units.repository";
+import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { writeAuditLog } from "@/server/services/audit-log.service";
 import type {
@@ -144,6 +149,70 @@ export async function getCurrentTenantActiveTenancy(tenantId: string) {
   return getActiveTenancyForTenant(supabase, tenantId);
 }
 
+export async function getCurrentTenantSetupTenancy(tenantId: string) {
+  const landlord = await requireLandlord();
+  const supabase = await createSupabaseServerClient();
+
+  const tenant = await getTenantById(supabase, tenantId);
+
+  if (tenant.landlord_id !== landlord.id) {
+    throw new AppError(
+      "FORBIDDEN",
+      "You do not have permission to view this tenancy.",
+      403,
+    );
+  }
+
+  return getSetupTenancyForTenant(supabase, tenantId);
+}
+
+export async function confirmTenancyChargesForCurrentLandlord(tenancyId: string) {
+  const landlord = await requireLandlord();
+  const supabase = await createSupabaseServerClient();
+
+  const tenancy = await getTenancyById(supabase, tenancyId);
+
+  if (tenancy.landlord_id !== landlord.id) {
+    throw new AppError(
+      "FORBIDDEN",
+      "You do not have permission to confirm charges for this tenancy.",
+      403,
+    );
+  }
+
+  if (tenancy.status !== "draft") {
+    throw new AppError(
+      "TENANCY_NOT_DRAFT",
+      "Only draft tenancies can be confirmed at this stage.",
+      400,
+    );
+  }
+
+  if (tenancy.charges_confirmed_at) {
+    return tenancy;
+  }
+
+  return confirmTenancyCharges(supabase, {
+    tenancyId,
+    landlordId: landlord.id,
+  });
+}
+
+export async function activateTenancyAfterAgreementAcceptance(tenancyId: string) {
+  const supabase = createSupabaseAdminClient();
+  const tenancy = await getTenancyById(supabase, tenancyId);
+
+  if (tenancy.status !== "draft") {
+    return tenancy;
+  }
+
+  const activatedTenancy = await activateTenancy(supabase, tenancyId);
+
+  await postInitialTenancyLedgerEntries(supabase, tenancyId);
+
+  return activatedTenancy;
+}
+
 export async function createTenancyForCurrentLandlord(
   input: CreateTenancyInput,
 ) {
@@ -193,7 +262,7 @@ export async function createTenancyForCurrentLandlord(
     );
   }
 
-  const existingTenantTenancy = await getActiveTenancyForTenant(
+  const existingTenantTenancy = await getSetupTenancyForTenant(
     supabase,
     input.tenantId,
   );
@@ -201,7 +270,7 @@ export async function createTenancyForCurrentLandlord(
   if (existingTenantTenancy) {
     throw new AppError(
       "ACTIVE_TENANCY_EXISTS",
-      "This tenant already has an active rental agreement.",
+      "This tenant already has a rental agreement in progress.",
       400,
     );
   }
@@ -219,12 +288,23 @@ export async function createTenancyForCurrentLandlord(
     );
   }
 
+  const existingDraftUnitTenancy = await getDraftTenancyForUnit(
+    supabase,
+    input.unitId,
+  );
+
+  if (existingDraftUnitTenancy) {
+    throw new AppError(
+      "UNIT_ALREADY_HAS_TENANCY",
+      "This unit already has an active rental agreement.",
+      400,
+    );
+  }
+
   const tenancy = await createTenancy(supabase, {
     landlordId: landlord.id,
     input,
   });
-
-  await postInitialTenancyLedgerEntries(supabase, tenancy.id);
 
   await writeAuditLog({
     landlordId: landlord.id,

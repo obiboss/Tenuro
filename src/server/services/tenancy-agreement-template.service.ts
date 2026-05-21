@@ -50,7 +50,7 @@ function getRuleNumber(rule: PropertyRuleDetailRow, key: string) {
   return null;
 }
 
-function buildPropertyRequirementClauses(rules: PropertyRuleDetailRow[]) {
+export function buildPropertyRequirementClauses(rules: PropertyRuleDetailRow[]) {
   const clauses: string[] = [];
 
   for (const rule of rules) {

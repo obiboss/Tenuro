@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useMemo, useRef } from "react";
 import { initializeRentPaymentAction } from "@/actions/payments.actions";
 import { initialPaymentActionState } from "@/actions/payment.state";
+import { PayoutPaymentGateNotice } from "@/components/payment/payout-payment-gate-notice";
 import { ActionResultToast } from "@/components/ui/action-result-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -91,13 +92,17 @@ export function RentPaymentModal({
               description="The tenant pays rent, landlord charges, approved agent commission, and the BOPA fee in one secure Paystack checkout when payout verification is ready."
             />
 
-            {state.message && !state.ok ? (
+            {state.message && !state.ok && !state.paymentGate ? (
               <div
                 role="alert"
                 className="rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
               >
                 {state.message}
               </div>
+            ) : null}
+
+            {state.paymentGate ? (
+              <PayoutPaymentGateNotice gate={state.paymentGate} />
             ) : null}
 
             <input type="hidden" name="tenancyId" value={tenancyId} />

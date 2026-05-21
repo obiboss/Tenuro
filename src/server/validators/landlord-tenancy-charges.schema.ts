@@ -1,24 +1,13 @@
 import { z } from "zod";
 import { positiveMoneySchema, uuidSchema } from "./common.schema";
 
-export const landlordChargeTypeSchema = z.enum([
-  "agreement_fee",
-  "caution_deposit",
-  "damages_deposit",
-  "service_charge",
-  "legal_fee",
-  "documentation_fee",
-  "other",
-]);
-
 export const createLandlordTenancyChargeSchema = z.object({
   tenancyId: uuidSchema,
-  chargeType: landlordChargeTypeSchema,
-  label: z
+  chargeName: z
     .string()
     .trim()
-    .min(2, "Enter the charge label.")
-    .max(120, "Charge label is too long."),
+    .min(2, "Enter the charge name.")
+    .max(120, "Charge name is too long."),
   description: z.string().trim().max(500).optional().or(z.literal("")),
   amount: positiveMoneySchema,
   currencyCode: z.string().trim().length(3).default("NGN"),

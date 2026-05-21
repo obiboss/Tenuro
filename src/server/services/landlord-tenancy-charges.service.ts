@@ -10,6 +10,7 @@ import {
   archiveLandlordTenancyCharge,
   createLandlordTenancyCharge,
   getLandlordTenancyChargesForTenancy,
+  hasActiveChargeWithName,
   updateLandlordTenancyCharge,
 } from "@/server/repositories/landlord-tenancy-charges.repository";
 import { getTenancyPaymentContext } from "@/server/repositories/payment-context.repository";
@@ -54,6 +55,32 @@ async function getAuthorizedTenancyForLandlord(params: {
   return tenancy;
 }
 
+const DUPLICATE_CHARGE_NAME_MESSAGE =
+  "An active charge with this name already exists. Use a different name or remove the existing charge first.";
+
+async function assertUniqueActiveChargeName(params: {
+  supabase: ReturnType<typeof createSupabaseAdminClient>;
+  tenancyId: string;
+  landlordId: string;
+  chargeName: string;
+  excludeChargeId?: string;
+}) {
+  const hasDuplicate = await hasActiveChargeWithName(params.supabase, {
+    tenancyId: params.tenancyId,
+    landlordId: params.landlordId,
+    chargeName: params.chargeName,
+    excludeChargeId: params.excludeChargeId,
+  });
+
+  if (hasDuplicate) {
+    throw new AppError(
+      "DUPLICATE_CHARGE_NAME",
+      DUPLICATE_CHARGE_NAME_MESSAGE,
+      400,
+    );
+  }
+}
+
 export async function getLandlordChargesForCurrentLandlord(tenancyId: string) {
   const landlord = await requireLandlord();
   const supabase = createSupabaseAdminClient();
@@ -86,8 +113,7 @@ export async function createLandlordChargeForCurrentLandlord(
     tenancyId: tenancy.id,
     unitId: tenancy.unit_id,
     propertyId: getPropertyIdFromTenancyContext(tenancy),
-    chargeType: input.chargeType,
-    label: input.label,
+    chargeName: input.chargeName,
     description: input.description,
     amount: input.amount,
     currencyCode: input.currencyCode,
@@ -109,11 +135,11 @@ export async function createLandlordChargeForCurrentLandlord(
     eventType: AUDIT_EVENT_TYPES.paymentLinkSent,
     entityType: AUDIT_ENTITY_TYPES.payment,
     entityId: charge.id,
-    description: `Landlord charge added: ${charge.label}.`,
+    description: `Landlord charge added: ${charge.charge_name}.`,
     metadata: {
       audit_subtype: "landlord_tenancy_charge_created",
       charge_id: charge.id,
-      charge_type: charge.charge_type,
+      charge_name: charge.charge_name,
       amount: charge.amount,
       currency_code: charge.currency_code,
       is_refundable: charge.is_refundable,
@@ -135,11 +161,18 @@ export async function updateLandlordChargeForCurrentLandlord(
     landlordId: landlord.id,
   });
 
+  await assertUniqueActiveChargeName({
+    supabase,
+    tenancyId: input.tenancyId,
+    landlordId: landlord.id,
+    chargeName: input.chargeName,
+    excludeChargeId: input.chargeId,
+  });
+
   const charge = await updateLandlordTenancyCharge(supabase, {
     chargeId: input.chargeId,
     landlordId: landlord.id,
-    chargeType: input.chargeType,
-    label: input.label,
+    chargeName: input.chargeName,
     description: input.description,
     amount: input.amount,
     currencyCode: input.currencyCode,
@@ -158,11 +191,11 @@ export async function updateLandlordChargeForCurrentLandlord(
     eventType: AUDIT_EVENT_TYPES.paymentLinkSent,
     entityType: AUDIT_ENTITY_TYPES.payment,
     entityId: charge.id,
-    description: `Landlord charge updated: ${charge.label}.`,
+    description: `Landlord charge updated: ${charge.charge_name}.`,
     metadata: {
       audit_subtype: "landlord_tenancy_charge_updated",
       charge_id: charge.id,
-      charge_type: charge.charge_type,
+      charge_name: charge.charge_name,
       amount: charge.amount,
       currency_code: charge.currency_code,
       is_refundable: charge.is_refundable,
@@ -200,11 +233,11 @@ export async function archiveLandlordChargeForCurrentLandlord(
     eventType: AUDIT_EVENT_TYPES.paymentLinkExpired,
     entityType: AUDIT_ENTITY_TYPES.payment,
     entityId: charge.id,
-    description: `Landlord charge archived: ${charge.label}.`,
+    description: `Landlord charge archived: ${charge.charge_name}.`,
     metadata: {
       audit_subtype: "landlord_tenancy_charge_archived",
       charge_id: charge.id,
-      charge_type: charge.charge_type,
+      charge_name: charge.charge_name,
       amount: charge.amount,
       currency_code: charge.currency_code,
     },

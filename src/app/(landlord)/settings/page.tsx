@@ -1,9 +1,11 @@
 import { Settings } from "lucide-react";
+import { AgreementTemplateEditor } from "@/components/agreement/agreement-template-editor";
 import { BankSetupForm } from "@/components/payment/bank-setup-form";
 import { PaymentVerificationAutoRefresh } from "@/components/payment/payment-verification-auto-refresh";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
+import { getLandlordAgreementTemplateEditorState } from "@/server/services/agreement-templates.service";
 import {
   getCurrentLandlordBankSetup,
   getPaystackBanksForSetup,
@@ -11,9 +13,10 @@ import {
 import { getPaystackPayoutVerificationUiState } from "@/server/services/paystack-verification.service";
 
 export default async function SettingsPage() {
-  const [bankSetup, banks] = await Promise.all([
+  const [bankSetup, banks, agreementTemplate] = await Promise.all([
     getCurrentLandlordBankSetup(),
     getPaystackBanksForSetup(),
+    getLandlordAgreementTemplateEditorState(),
   ]);
   const payoutVerification = getPaystackPayoutVerificationUiState(
     bankSetup,
@@ -92,7 +95,10 @@ export default async function SettingsPage() {
           )}
         </SectionCard>
 
-        <div className="xl:sticky xl:top-28 xl:self-start">
+        <div
+          id="payout-account"
+          className="scroll-mt-28 xl:sticky xl:top-28 xl:self-start"
+        >
           <SectionCard
             title="Set Up Bank Account"
             description="Connect the landlord account for Paystack split payments."
@@ -100,6 +106,21 @@ export default async function SettingsPage() {
             <BankSetupForm banks={banks} />
           </SectionCard>
         </div>
+      </div>
+
+      <div id="agreement-template" className="mt-6 scroll-mt-28">
+        <SectionCard
+          title="Agreement Template"
+          description="Save a reusable tenancy agreement template for all properties. Property pages can override this with property-specific templates."
+        >
+          <AgreementTemplateEditor
+            scope={agreementTemplate.scope}
+            propertyId={agreementTemplate.propertyId}
+            propertyName={agreementTemplate.propertyName}
+            name={agreementTemplate.name}
+            templateBody={agreementTemplate.templateBody}
+          />
+        </SectionCard>
       </div>
 
       <div className="mt-6 rounded-card bg-surface p-5 shadow-card">

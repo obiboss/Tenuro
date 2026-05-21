@@ -1,14 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type LandlordChargeType =
-  | "agreement_fee"
-  | "caution_deposit"
-  | "damages_deposit"
-  | "service_charge"
-  | "legal_fee"
-  | "documentation_fee"
-  | "other";
-
 export type LandlordChargeStatus = "draft" | "active" | "archived";
 
 export type LandlordTenancyChargeRow = {
@@ -18,8 +9,7 @@ export type LandlordTenancyChargeRow = {
   tenancy_id: string | null;
   unit_id: string | null;
   property_id: string | null;
-  charge_type: LandlordChargeType;
-  label: string;
+  charge_name: string;
   description: string | null;
   amount: number;
   currency_code: string;
@@ -37,8 +27,7 @@ export type LandlordTenancyChargeInput = {
   tenancyId: string;
   unitId: string;
   propertyId: string | null;
-  chargeType: LandlordChargeType;
-  label: string;
+  chargeName: string;
   description?: string | null;
   amount: number;
   currencyCode: string;
@@ -54,8 +43,7 @@ const LANDLORD_TENANCY_CHARGE_SELECT = `
   tenancy_id,
   unit_id,
   property_id,
-  charge_type,
-  label,
+  charge_name,
   description,
   amount,
   currency_code,
@@ -66,6 +54,13 @@ const LANDLORD_TENANCY_CHARGE_SELECT = `
   created_at,
   updated_at
 `;
+
+function buildLegacyChargeFields(chargeName: string) {
+  return {
+    charge_name: chargeName,
+    charge_type: "other" as const,
+  };
+}
 
 export async function createLandlordTenancyCharge(
   supabase: SupabaseClient,
@@ -79,8 +74,7 @@ export async function createLandlordTenancyCharge(
       tenancy_id: input.tenancyId,
       unit_id: input.unitId,
       property_id: input.propertyId,
-      charge_type: input.chargeType,
-      label: input.label,
+      ...buildLegacyChargeFields(input.chargeName),
       description: input.description?.trim() ? input.description.trim() : null,
       amount: input.amount,
       currency_code: input.currencyCode,
@@ -104,8 +98,7 @@ export async function updateLandlordTenancyCharge(
   params: {
     chargeId: string;
     landlordId: string;
-    chargeType: LandlordChargeType;
-    label: string;
+    chargeName: string;
     description?: string | null;
     amount: number;
     currencyCode: string;
@@ -116,8 +109,7 @@ export async function updateLandlordTenancyCharge(
   const { data, error } = await supabase
     .from("landlord_tenancy_charges")
     .update({
-      charge_type: params.chargeType,
-      label: params.label,
+      ...buildLegacyChargeFields(params.chargeName),
       description: params.description?.trim()
         ? params.description.trim()
         : null,
@@ -216,4 +208,35 @@ export function sumActiveLandlordChargeAmount(
   charges: LandlordTenancyChargeRow[],
 ) {
   return charges.reduce((total, charge) => total + Number(charge.amount), 0);
+}
+
+export function normalizeChargeName(value: string) {
+  return value.trim().toLowerCase();
+}
+
+export async function hasActiveChargeWithName(
+  supabase: SupabaseClient,
+  params: {
+    tenancyId: string;
+    landlordId: string;
+    chargeName: string;
+    excludeChargeId?: string;
+  },
+) {
+  const normalizedName = normalizeChargeName(params.chargeName);
+  const activeCharges = await getActiveLandlordTenancyCharges(supabase, {
+    tenancyId: params.tenancyId,
+    landlordId: params.landlordId,
+  });
+
+  return activeCharges.some((charge) => {
+    if (
+      params.excludeChargeId &&
+      charge.id === params.excludeChargeId
+    ) {
+      return false;
+    }
+
+    return normalizeChargeName(charge.charge_name) === normalizedName;
+  });
 }

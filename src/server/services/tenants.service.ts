@@ -15,7 +15,10 @@ import {
   rejectTenant,
   updateTenant,
 } from "@/server/repositories/tenants.repository";
-import { getActiveTenancyForUnit } from "@/server/repositories/tenancies.repository";
+import {
+  getActiveTenancyForUnit,
+  getTenancyPipelineSummariesForLandlord,
+} from "@/server/repositories/tenancies.repository";
 import {
   getUnitById,
   getVacantUnitsForLandlord,
@@ -30,13 +33,91 @@ import type {
   RejectTenantInput,
   UpdateTenantInput,
 } from "@/server/validators/tenant.schema";
+import { resolveTenantPipelineStatus } from "@/lib/tenant-pipeline-status";
 import { requireLandlord } from "./auth.service";
+
+export type TenantPipelineSummary = {
+  tenancyStatus: "draft" | "active" | null;
+  chargesConfirmed: boolean;
+  agreementDocumentStatus:
+    | "draft"
+    | "finalized"
+    | "sent_to_tenant"
+    | "accepted"
+    | "voided"
+    | null;
+};
 
 export async function getCurrentLandlordTenants() {
   const landlord = await requireLandlord();
   const supabase = await createSupabaseServerClient();
 
   return getTenantsForLandlord(supabase, landlord.id);
+}
+
+export async function getCurrentLandlordTenantPipelineSummaries() {
+  const landlord = await requireLandlord();
+  const supabase = await createSupabaseServerClient();
+  const summaries = await getTenancyPipelineSummariesForLandlord(
+    supabase,
+    landlord.id,
+  );
+
+  const pipelineByTenantId = new Map<string, TenantPipelineSummary>();
+
+  for (const summary of summaries) {
+    const agreementDocuments = summary.tenancy_agreement_documents as
+      | {
+          document_status:
+            | "draft"
+            | "finalized"
+            | "sent_to_tenant"
+            | "accepted"
+            | "voided";
+        }
+      | {
+          document_status:
+            | "draft"
+            | "finalized"
+            | "sent_to_tenant"
+            | "accepted"
+            | "voided";
+        }[]
+      | null;
+
+    const agreementDocumentStatus = Array.isArray(agreementDocuments)
+      ? (agreementDocuments[0]?.document_status ?? null)
+      : (agreementDocuments?.document_status ?? null);
+
+    pipelineByTenantId.set(summary.tenant_id, {
+      tenancyStatus: summary.status,
+      chargesConfirmed: Boolean(summary.charges_confirmed_at),
+      agreementDocumentStatus,
+    });
+  }
+
+  return pipelineByTenantId;
+}
+
+export async function getCurrentLandlordTenantsWithPipeline() {
+  const [tenants, pipelineByTenantId] = await Promise.all([
+    getCurrentLandlordTenants(),
+    getCurrentLandlordTenantPipelineSummaries(),
+  ]);
+
+  return tenants.map((tenant) => {
+    const pipeline = pipelineByTenantId.get(tenant.id);
+
+    return {
+      tenant,
+      pipelineStatus: resolveTenantPipelineStatus({
+        onboardingStatus: tenant.onboarding_status,
+        tenancyStatus: pipeline?.tenancyStatus ?? null,
+        chargesConfirmed: pipeline?.chargesConfirmed ?? false,
+        agreementDocumentStatus: pipeline?.agreementDocumentStatus ?? null,
+      }),
+    };
+  });
 }
 
 export async function getCurrentLandlordTenant(tenantId: string) {

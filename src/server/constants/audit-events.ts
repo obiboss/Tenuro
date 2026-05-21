@@ -13,6 +13,7 @@ export const AUDIT_ENTITY_TYPES = {
   propertyRule: "property_rule",
   payment: "payment",
   agreement: "agreement",
+  agreementTemplate: "agreement_template",
   receipt: "receipt",
   bankAccount: "bank_account",
   onboarding: "onboarding",
@@ -42,6 +43,7 @@ export const AUDIT_EVENT_TYPES = {
   agreementFinalized: "agreement.finalized",
   agreementAccepted: "agreement.accepted",
   agreementAcceptanceLinkRefreshed: "agreement.acceptance_link_refreshed",
+  agreementTemplateSaved: "agreement.template_saved",
 
   paymentLinkSent: "payment.link_sent",
   paymentLinkExpired: "payment.link_expired",

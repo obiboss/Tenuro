@@ -39,11 +39,12 @@ const metricTones: Record<
 };
 
 function formatMetricValue(value: number) {
-  return new Intl.NumberFormat("en-NG").format(value);
+  const safeValue = Number.isFinite(value) ? value : 0;
+  return new Intl.NumberFormat("en-NG").format(safeValue);
 }
 
 function formatChangePercent(value: number) {
-  if (value === 0) {
+  if (!Number.isFinite(value) || value === 0) {
     return "0%";
   }
 
@@ -89,9 +90,11 @@ export function AdminDashboardMetrics({
   metrics,
   periodLabel,
 }: AdminDashboardMetricsProps) {
+  const items = metrics ?? [];
+
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-      {metrics.map((metric) => (
+      {items.map((metric) => (
         <StatCard
           key={metric.key}
           title={metric.title}

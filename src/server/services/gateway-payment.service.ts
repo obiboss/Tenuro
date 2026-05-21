@@ -695,8 +695,7 @@ async function initializeGatewayPaymentForTenancy(params: {
 
   const landlordChargesSummary = landlordCharges.map((charge) => ({
     id: charge.id,
-    charge_type: charge.charge_type,
-    label: charge.label,
+    charge_name: charge.charge_name,
     amount: Number(charge.amount),
     currency_code: charge.currency_code,
     is_refundable: charge.is_refundable,

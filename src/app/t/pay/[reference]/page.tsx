@@ -92,7 +92,7 @@ function getChargeDisplayItems(
   return charges
     .map((charge, index) => ({
       id: getRecordString(charge, "id", `charge-${index}`),
-      label: getRecordString(charge, "label", "Landlord charge"),
+      label: getRecordString(charge, "charge_name", "Landlord charge"),
       amount: getRecordNumber(charge, "amount"),
       isRefundable: getRecordBoolean(charge, "is_refundable"),
     }))

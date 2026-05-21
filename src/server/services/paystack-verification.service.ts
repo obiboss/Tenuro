@@ -1,11 +1,18 @@
 import "server-only";
 
+import {
+  buildLandlordPaymentGateUiState,
+  getLandlordPaymentGateUiStateFromErrorCode,
+  type LandlordPaymentGateUiState,
+} from "@/lib/landlord-payment-gate";
 import { AppError } from "@/server/errors/app-error";
 import type {
   AgentPaystackAccount,
   LandlordPaystackAccount,
   PaystackVerificationStatus,
 } from "@/server/types/paystack.types";
+
+export type { LandlordPaymentGateUiState };
 
 export type PaystackPayoutVerificationState =
   | "missing"
@@ -123,16 +130,10 @@ export function getPaystackPayoutVerificationUiState(
 }
 
 export function getFriendlyPayoutVerificationErrorMessage(code: string) {
-  if (code === "BANK_ACCOUNT_REQUIRED") {
-    return "Connect and verify your payout account before sending online rent payment links. Manual payment recording is still available.";
-  }
+  const gate = getLandlordPaymentGateUiStateFromErrorCode(code);
 
-  if (code === "PAYOUT_ACCOUNT_PENDING_VERIFICATION") {
-    return "Your payout account is pending verification. Online rent payments will be available once verification is approved.";
-  }
-
-  if (code === "PAYOUT_ACCOUNT_VERIFICATION_FAILED") {
-    return "Your payout account verification failed. Update your payout details or contact support before using online rent payments.";
+  if (gate) {
+    return gate.description;
   }
 
   if (code === "AGENT_BANK_ACCOUNT_REQUIRED") {
@@ -148,6 +149,18 @@ export function getFriendlyPayoutVerificationErrorMessage(code: string) {
   }
 
   return null;
+}
+
+export function getLandlordPaymentGateUiState(
+  account: PaystackPayoutAccountVerificationFields | null,
+): LandlordPaymentGateUiState | null {
+  const state = getPaystackPayoutVerificationState(account);
+
+  if (state === "verified") {
+    return null;
+  }
+
+  return buildLandlordPaymentGateUiState(state);
 }
 
 function createLandlordPayoutVerificationError(

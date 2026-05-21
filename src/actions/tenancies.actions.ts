@@ -1,13 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { errorResult, successResult } from "@/server/errors/result";
 import {
+  confirmTenancyChargesForCurrentLandlord,
   createTenancyForCurrentLandlord,
   renewTenancyForCurrentLandlord,
   terminateTenancyForCurrentLandlord,
 } from "@/server/services/tenancies.service";
 import {
+  confirmTenancyChargesSchema,
   createTenancySchema,
   renewTenancySchema,
   terminateTenancySchema,
@@ -23,6 +26,8 @@ export async function createTenancyAction(
   _previousState: TenancyActionState,
   formData: FormData,
 ): Promise<TenancyActionState> {
+  let tenantId: string | null = null;
+
   try {
     const parsed = createTenancySchema.parse({
       tenantId: formData.get("tenantId"),
@@ -30,12 +35,14 @@ export async function createTenancyAction(
       rentAmount: formData.get("rentAmount"),
       paymentFrequency: formData.get("paymentFrequency"),
       startDate: formData.get("startDate"),
-      renewalNoticeDate: formData.get("renewalNoticeDate") || undefined,
+      reminderIntervalDays: formData.get("reminderIntervalDays") || 90,
       openingBalance: formData.get("openingBalance") || 0,
       openingBalanceNote: formData.get("openingBalanceNote"),
       agreementNotes: formData.get("agreementNotes"),
       currencyCode: "NGN",
     });
+
+    tenantId = parsed.tenantId;
 
     await createTenancyForCurrentLandlord(parsed);
 
@@ -43,10 +50,6 @@ export async function createTenancyAction(
     revalidatePath(`/tenants/${parsed.tenantId}`);
     revalidatePath("/overview");
     revalidatePath("/renewals");
-
-    return successResult(
-      "Tenancy record created. You can now generate and send the tenancy agreement.",
-    );
   } catch (error) {
     console.error("createTenancyAction failed:", error);
 
@@ -58,6 +61,50 @@ export async function createTenancyAction(
       fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
     };
   }
+
+  if (tenantId) {
+    redirect(`/tenants/${tenantId}?step=charges`);
+  }
+
+  return successResult("Tenancy record created.");
+}
+
+export async function confirmTenancyChargesAction(
+  _previousState: TenancyActionState,
+  formData: FormData,
+): Promise<TenancyActionState> {
+  let tenantId: string | null = null;
+
+  try {
+    const parsed = confirmTenancyChargesSchema.parse({
+      tenancyId: formData.get("tenancyId"),
+    });
+
+    const tenancy = await confirmTenancyChargesForCurrentLandlord(
+      parsed.tenancyId,
+    );
+
+    tenantId = tenancy.tenant_id;
+
+    revalidatePath("/tenants");
+    revalidatePath(`/tenants/${tenancy.tenant_id}`);
+  } catch (error) {
+    console.error("confirmTenancyChargesAction failed:", error);
+
+    const result = errorResult(error);
+
+    return {
+      ok: false,
+      message: result.message,
+      fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
+    };
+  }
+
+  if (tenantId) {
+    redirect(`/tenants/${tenantId}?step=agreement-draft`);
+  }
+
+  return successResult("Landlord charges confirmed.");
 }
 
 export async function renewTenancyAction(

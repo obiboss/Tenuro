@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { SubmitTenantOnboardingInput } from "@/server/validators/onboarding.schema";
+import type { PropertyRuleDetailRow } from "@/server/repositories/property-rules.repository";
+import { getActivePropertyRulesForOnboarding } from "@/server/repositories/property-rules.repository";
 
 export type TenantOnboardingStatus =
   | "invited"
@@ -25,7 +27,7 @@ export type TenantOnboardingRecord = {
 };
 
 export type TenantOnboardingResolvedRecord = TenantOnboardingRecord & {
-  property_rules: [];
+  property_rules: PropertyRuleDetailRow[];
   profiles: {
     id: string;
     full_name: string;
@@ -189,9 +191,17 @@ export async function getResolvedTenantByOnboardingTokenHash(
     return null;
   }
 
+  const propertyId = data.units?.properties?.id ?? null;
+  const propertyRules = propertyId
+    ? await getActivePropertyRulesForOnboarding(supabase, {
+        propertyId,
+        unitId: data.unit_id,
+      })
+    : [];
+
   return {
     ...data,
-    property_rules: [],
+    property_rules: propertyRules,
   } satisfies TenantOnboardingResolvedRecord;
 }
 

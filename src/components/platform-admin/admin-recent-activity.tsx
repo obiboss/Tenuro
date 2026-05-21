@@ -10,10 +10,16 @@ type AdminRecentActivityProps = {
 };
 
 function formatTimestamp(value: string) {
+  const parsed = Date.parse(value);
+
+  if (!Number.isFinite(parsed)) {
+    return "Unknown time";
+  }
+
   return new Intl.DateTimeFormat("en-NG", {
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(new Date(value));
+  }).format(new Date(parsed));
 }
 
 function formatEventTypeLabel(eventType: string) {
@@ -40,13 +46,15 @@ export function AdminRecentActivity({
   activity,
   periodLabel,
 }: AdminRecentActivityProps) {
+  const items = activity ?? [];
+
   return (
     <SectionCard
       title="Recent activity"
       description={`Latest sign-ups and payout verification events. Showing recent platform activity for ${periodLabel.toLowerCase()}.`}
       contentClassName="space-y-3"
     >
-      {activity.length === 0 ? (
+      {items.length === 0 ? (
         <EmptyState
           title="No recent activity"
           description="New sign-ups and payout verification events will appear here."
@@ -54,7 +62,7 @@ export function AdminRecentActivity({
           className="bg-background shadow-none"
         />
       ) : (
-        activity.map((item) => (
+        items.map((item) => (
           <article
             key={item.id}
             className="rounded-card border border-border-soft bg-background p-4"

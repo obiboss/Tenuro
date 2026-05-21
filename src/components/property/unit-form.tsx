@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { createUnitAction } from "@/actions/units.actions";
 import { initialUnitActionState } from "@/actions/unit.state";
 import { ActionResultToast } from "@/components/ui/action-result-toast";
@@ -74,7 +74,11 @@ const unitTypeDefaults: Record<
 
 type UnitFormProps = {
   propertyId: string;
+  layout?: "card" | "embedded";
+  onSuccess?: () => void;
 };
+
+const defaultUnitType = "single_room";
 
 function setFormNumberValue(
   form: HTMLFormElement | null,
@@ -90,9 +94,14 @@ function setFormNumberValue(
   field.value = String(value);
 }
 
-export function UnitForm({ propertyId }: UnitFormProps) {
+export function UnitForm({
+  propertyId,
+  layout = "card",
+  onSuccess,
+}: UnitFormProps) {
   const formRef = useRef<HTMLFormElement | null>(null);
   const handledSuccessMessageRef = useRef<string | null>(null);
+  const [formResetKey, setFormResetKey] = useState(0);
   const createAction = createUnitAction.bind(null, propertyId);
 
   const [state, formAction, isPending] = useActionState(
@@ -111,7 +120,11 @@ export function UnitForm({ propertyId }: UnitFormProps) {
 
     handledSuccessMessageRef.current = state.message;
     formRef.current?.reset();
-  }, [state.message, state.ok]);
+    setFormResetKey((currentKey) => currentKey + 1);
+    setFormNumberValue(formRef.current, "bedrooms", unitTypeDefaults[defaultUnitType].bedrooms);
+    setFormNumberValue(formRef.current, "bathrooms", unitTypeDefaults[defaultUnitType].bathrooms);
+    onSuccess?.();
+  }, [onSuccess, state.message, state.ok]);
 
   function handleUnitTypeChange(event: React.ChangeEvent<HTMLSelectElement>) {
     const defaults = unitTypeDefaults[event.target.value];
@@ -124,6 +137,95 @@ export function UnitForm({ propertyId }: UnitFormProps) {
     setFormNumberValue(formRef.current, "bathrooms", defaults.bathrooms);
   }
 
+  const formFields = (
+    <div className="space-y-5">
+      {state.message ? (
+        <div
+          role="alert"
+          className={
+            state.ok
+              ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
+              : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
+          }
+        >
+          {state.ok
+            ? "Unit saved. The form is ready for the next unit."
+            : state.message}
+        </div>
+      ) : null}
+
+      <Input
+        label="Building or block"
+        name="buildingName"
+        placeholder="Example: Block A, Back Building, Landlord House"
+        helperText="Use this if the property has more than one building or block."
+        key={`building-${formResetKey}`}
+      />
+
+      <Input
+        label="Unit name"
+        name="unitIdentifier"
+        placeholder="Example: Flat 3, Room 2A, Shop 1"
+        error={state.fieldErrors?.unitIdentifier?.[0]}
+        key={`unit-identifier-${formResetKey}`}
+        required
+      />
+
+      <Select
+        label="Unit type"
+        name="unitType"
+        options={unitTypeOptions}
+        defaultValue={defaultUnitType}
+        key={`unit-type-${formResetKey}`}
+        onChange={handleUnitTypeChange}
+        error={state.fieldErrors?.unitType?.[0]}
+        required
+      />
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Input
+          label="Bedrooms"
+          name="bedrooms"
+          type="number"
+          min={0}
+          defaultValue={unitTypeDefaults[defaultUnitType].bedrooms}
+          key={`bedrooms-${formResetKey}`}
+          error={state.fieldErrors?.bedrooms?.[0]}
+          helperText="Auto-filled from unit type. You can adjust it."
+        />
+
+        <Input
+          label="Bathrooms"
+          name="bathrooms"
+          type="number"
+          min={0}
+          defaultValue={unitTypeDefaults[defaultUnitType].bathrooms}
+          key={`bathrooms-${formResetKey}`}
+          error={state.fieldErrors?.bathrooms?.[0]}
+          helperText="Auto-filled from unit type. You can adjust it."
+        />
+      </div>
+
+      <CurrencyInput
+        label="Annual rent"
+        name="annualRent"
+        placeholder="0.00"
+        resetKey={formResetKey}
+        error={state.fieldErrors?.annualRent?.[0]}
+        helperText="Most Nigerian landlords collect rent yearly, so this is the main rent amount."
+      />
+
+      <CurrencyInput
+        label="Monthly rent"
+        name="monthlyRent"
+        placeholder="0.00"
+        resetKey={formResetKey}
+        error={state.fieldErrors?.monthlyRent?.[0]}
+        helperText="Use only if this unit is rented monthly."
+      />
+    </div>
+  );
+
   return (
     <form ref={formRef} action={formAction}>
       <ActionResultToast
@@ -133,94 +235,26 @@ export function UnitForm({ propertyId }: UnitFormProps) {
         errorTitle="Unit could not be saved"
       />
 
-      <Card>
-        <CardContent>
-          <div className="space-y-5">
-            {state.message ? (
-              <div
-                role="alert"
-                className={
-                  state.ok
-                    ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
-                    : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
-                }
-              >
-                {state.ok
-                  ? "Unit saved. The form is ready for the next unit."
-                  : state.message}
-              </div>
-            ) : null}
-
-            <Input
-              label="Building or block"
-              name="buildingName"
-              placeholder="Example: Block A, Back Building, Landlord House"
-              helperText="Use this if the property has more than one building or block."
-            />
-
-            <Input
-              label="Unit name"
-              name="unitIdentifier"
-              placeholder="Example: Flat 3, Room 2A, Shop 1"
-              error={state.fieldErrors?.unitIdentifier?.[0]}
-              required
-            />
-
-            <Select
-              label="Unit type"
-              name="unitType"
-              options={unitTypeOptions}
-              onChange={handleUnitTypeChange}
-              error={state.fieldErrors?.unitType?.[0]}
-              required
-            />
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <Input
-                label="Bedrooms"
-                name="bedrooms"
-                type="number"
-                min={0}
-                defaultValue={0}
-                error={state.fieldErrors?.bedrooms?.[0]}
-                helperText="Auto-filled from unit type. You can adjust it."
-              />
-
-              <Input
-                label="Bathrooms"
-                name="bathrooms"
-                type="number"
-                min={0}
-                defaultValue={0}
-                error={state.fieldErrors?.bathrooms?.[0]}
-                helperText="Auto-filled from unit type. You can adjust it."
-              />
-            </div>
-
-            <CurrencyInput
-              label="Annual rent"
-              name="annualRent"
-              placeholder="0.00"
-              error={state.fieldErrors?.annualRent?.[0]}
-              helperText="Most Nigerian landlords collect rent yearly, so this is the main rent amount."
-            />
-
-            <CurrencyInput
-              label="Monthly rent"
-              name="monthlyRent"
-              placeholder="0.00"
-              error={state.fieldErrors?.monthlyRent?.[0]}
-              helperText="Use only if this unit is rented monthly."
-            />
+      {layout === "embedded" ? (
+        <>
+          {formFields}
+          <div className="mt-6">
+            <Button type="submit" isLoading={isPending} fullWidth>
+              Save Unit
+            </Button>
           </div>
-        </CardContent>
+        </>
+      ) : (
+        <Card>
+          <CardContent>{formFields}</CardContent>
 
-        <CardFooter>
-          <Button type="submit" isLoading={isPending}>
-            Save Unit
-          </Button>
-        </CardFooter>
-      </Card>
+          <CardFooter>
+            <Button type="submit" isLoading={isPending}>
+              Save Unit
+            </Button>
+          </CardFooter>
+        </Card>
+      )}
     </form>
   );
 }
