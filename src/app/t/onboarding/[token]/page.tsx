@@ -23,7 +23,7 @@ import {
 } from "@/server/constants/onboarding-lifecycle";
 import { errorResult } from "@/server/errors/result";
 import {
-  resolveTenantProcessingFeeForOnboarding,
+  safeResolveTenantProcessingFeeForOnboarding,
   verifyTenantProcessingFeeReference,
 } from "@/server/services/tenant-verification-processing-fee.service";
 import { resolveTenantOnboardingToken } from "@/server/services/onboarding.service";
@@ -43,9 +43,10 @@ type TenantOnboardingPageState =
       ok: true;
       tenant: Awaited<ReturnType<typeof resolveTenantOnboardingToken>>;
       processingFee: Awaited<
-        ReturnType<typeof resolveTenantProcessingFeeForOnboarding>
-      >;
+        ReturnType<typeof safeResolveTenantProcessingFeeForOnboarding>
+      >["processingFee"];
       processingFeeNotice: string | null;
+      paymentInitError: string | null;
     }
   | {
       ok: false;
@@ -57,41 +58,43 @@ async function getTenantOnboardingPageState(params: {
   shouldVerifyProcessingFee: boolean;
   processingFeeReference: string | undefined;
 }): Promise<TenantOnboardingPageState> {
-  try {
-    let processingFeeNotice: string | null = null;
+  let processingFeeNotice: string | null = null;
 
-    if (params.shouldVerifyProcessingFee && params.processingFeeReference) {
-      try {
-        await verifyTenantProcessingFeeReference(
-          params.processingFeeReference,
-        );
+  if (params.shouldVerifyProcessingFee && params.processingFeeReference) {
+    try {
+      await verifyTenantProcessingFeeReference(params.processingFeeReference);
 
-        processingFeeNotice =
-          "Verification fee payment confirmed. Your application has been submitted for landlord review.";
-      } catch (error) {
-        processingFeeNotice = errorResult(error).message;
-      }
+      processingFeeNotice =
+        "Verification fee payment confirmed. Your application has been submitted for landlord review.";
+    } catch (error) {
+      processingFeeNotice = errorResult(error).message;
     }
+  }
 
-    const tenant = await resolveTenantOnboardingToken(params.token);
+  let tenant: Awaited<ReturnType<typeof resolveTenantOnboardingToken>>;
 
-    const processingFee = await resolveTenantProcessingFeeForOnboarding({
-      tenant,
-      token: params.token,
-    });
-
-    return {
-      ok: true,
-      tenant,
-      processingFee,
-      processingFeeNotice,
-    };
+  try {
+    tenant = await resolveTenantOnboardingToken(params.token);
   } catch (error) {
     return {
       ok: false,
       message: errorResult(error).message,
     };
   }
+
+  const { processingFee, paymentInitError } =
+    await safeResolveTenantProcessingFeeForOnboarding({
+      tenant,
+      token: params.token,
+    });
+
+  return {
+    ok: true,
+    tenant,
+    processingFee,
+    processingFeeNotice,
+    paymentInitError,
+  };
 }
 
 function formatDate(value: string | null) {
@@ -324,8 +327,12 @@ export default async function TenantOnboardingPage({
                   currencyCode={state.processingFee.currencyCode}
                   authorizationUrl={state.processingFee.authorizationUrl}
                   paymentNotice={state.processingFeeNotice}
+                  paymentError={state.paymentInitError}
                   isOfficiallySubmitted={isOfficiallySubmitted}
-                  isPaymentDisabled={state.processingFee.status === "disabled"}
+                  isPaymentDisabled={
+                    state.processingFee.status === "disabled" ||
+                    state.processingFee.status === "payment_unavailable"
+                  }
                 />
               ) : isOfficiallySubmitted ? (
                 <SectionCard

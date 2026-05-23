@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CreditCard, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CreditCard, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SectionCard } from "@/components/ui/section-card";
 import { TrustNotice } from "@/components/ui/trust-notice";
@@ -16,6 +16,7 @@ type VerificationProcessingSummaryProps = {
   currencyCode: string;
   authorizationUrl: string | null;
   paymentNotice: string | null;
+  paymentError?: string | null;
   isOfficiallySubmitted: boolean;
   isPaymentDisabled?: boolean;
 };
@@ -40,6 +41,7 @@ export function VerificationProcessingSummary({
   currencyCode,
   authorizationUrl,
   paymentNotice,
+  paymentError = null,
   isOfficiallySubmitted,
   isPaymentDisabled = false,
 }: VerificationProcessingSummaryProps) {
@@ -70,6 +72,16 @@ export function VerificationProcessingSummary({
           >
             {paymentNotice}
           </div>
+        ) : null}
+
+        {paymentError ? (
+          <TrustNotice
+            title="Payment temporarily unavailable"
+            description={paymentError}
+            icon={
+              <AlertTriangle aria-hidden="true" size={22} strokeWidth={2.6} />
+            }
+          />
         ) : null}
 
         <div className="rounded-button bg-background p-4">
@@ -169,11 +181,15 @@ export function VerificationProcessingSummary({
               Pay Verification & Processing Fee
             </Button>
           </Link>
-        ) : isPaymentDisabled ? (
+        ) : isPaymentDisabled && !paymentError ? (
           <TrustNotice
             title="Verification fee temporarily unavailable"
             description="Verification and processing fee is currently disabled. Please contact support or try again later."
           />
+        ) : isPaymentDisabled || paymentError ? (
+          <Button type="button" fullWidth disabled>
+            Pay Verification & Processing Fee
+          </Button>
         ) : (
           <Button type="button" fullWidth disabled>
             Preparing payment...
