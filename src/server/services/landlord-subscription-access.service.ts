@@ -81,7 +81,7 @@ function hasActiveTrial(params: {
     subscriptionExpiresAt: params.subscription.expires_at,
   });
 
-  return isFutureTimestamp(expiresAt, nowMs);
+  return isFutureTimestamp(expiresAt, params.nowMs);
 }
 
 function isLegacyGrandfathered(params: {
