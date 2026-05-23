@@ -1,21 +1,32 @@
 import "server-only";
 
 import crypto from "node:crypto";
+import {
+  AUDIT_ENTITY_TYPES,
+  AUDIT_EVENT_TYPES,
+} from "@/server/constants/audit-events";
+import {
+  isAgentSourcedTenant,
+  isLandlordSourcedTenant,
+  isOnboardingTokenFlowActive,
+  isSubmittedForLandlordReview,
+  TENANT_ONBOARDING_STATUSES,
+} from "@/server/constants/onboarding-lifecycle";
 import { AppError } from "@/server/errors/app-error";
 import {
   getResolvedTenantByOnboardingTokenHash,
   getTenantByOnboardingTokenHash,
   getTenantForOnboardingInvite,
-  submitTenantOnboardingProfile,
+  officiallySubmitTenantOnboardingAfterPayment,
+  saveTenantOnboardingDraft,
   updateTenantOnboardingToken,
 } from "@/server/repositories/onboarding.repository";
 import { getActivePropertyRulesForOnboarding } from "@/server/repositories/property-rules.repository";
-import { hasPaidAgentTenantProcessingFee } from "@/server/services/agent-processing-fee.service";
 import { evaluateTenantKycAgainstPropertyRules } from "@/server/services/property-rule-kyc.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { normalisePhoneNumber } from "@/server/utils/phone";
 import type { SubmitTenantOnboardingInput } from "@/server/validators/onboarding.schema";
-import { requireLandlord } from "./auth.service";
+import { requireLandlordPlatformOperator } from "./auth.service";
 
 const TENANT_ONBOARDING_TOKEN_BYTES = 32;
 const TENANT_ONBOARDING_TOKEN_DAYS = 7;
@@ -69,38 +80,6 @@ function buildKycAnswers(input: SubmitTenantOnboardingInput) {
   };
 }
 
-function isAgentSourcedTenant(params: {
-  agentPropertyListingId: string | null;
-  invitedByAgentId: string | null;
-}) {
-  return Boolean(params.agentPropertyListingId && params.invitedByAgentId);
-}
-
-async function assertAgentProcessingFeePaidBeforeKyc(params: {
-  tenantId: string;
-  agentPropertyListingId: string | null;
-  invitedByAgentId: string | null;
-}) {
-  if (
-    !isAgentSourcedTenant({
-      agentPropertyListingId: params.agentPropertyListingId,
-      invitedByAgentId: params.invitedByAgentId,
-    })
-  ) {
-    return;
-  }
-
-  const hasPaid = await hasPaidAgentTenantProcessingFee(params.tenantId);
-
-  if (!hasPaid) {
-    throw new AppError(
-      "AGENT_PROCESSING_FEE_REQUIRED",
-      "Please pay the tenant processing fee before submitting your KYC form.",
-      402,
-    );
-  }
-}
-
 async function writeTenantOnboardingAuditLog(params: {
   tenantId: string;
   landlordId: string;
@@ -122,7 +101,7 @@ async function writeTenantOnboardingAuditLog(params: {
     actor_profile_id: params.actorProfileId,
     actor_role: params.actorRole,
     event_type: params.eventType,
-    entity_type: "tenant",
+    entity_type: AUDIT_ENTITY_TYPES.onboarding,
     entity_id: params.tenantId,
     description: params.description,
     metadata: params.metadata,
@@ -133,8 +112,97 @@ async function writeTenantOnboardingAuditLog(params: {
   }
 }
 
+function assertOnboardingTokenUsable(params: {
+  onboardingStatus: string;
+  onboardingTokenExpiresAt: string | null;
+}) {
+  if (!isOnboardingTokenFlowActive(params.onboardingStatus)) {
+    throw new AppError(
+      "TENANT_ONBOARDING_NOT_AVAILABLE",
+      "This tenant onboarding link is no longer available.",
+      400,
+    );
+  }
+
+  if (!params.onboardingTokenExpiresAt) {
+    throw new AppError(
+      "INVALID_TENANT_ONBOARDING_LINK",
+      "This tenant onboarding link is invalid.",
+      400,
+    );
+  }
+
+  if (new Date(params.onboardingTokenExpiresAt).getTime() < Date.now()) {
+    throw new AppError(
+      "EXPIRED_TENANT_ONBOARDING_LINK",
+      "This tenant onboarding link has expired. Please ask the landlord to send a new link.",
+      410,
+    );
+  }
+}
+
+async function prepareTenantOnboardingSubmission(
+  input: SubmitTenantOnboardingInput,
+) {
+  const supabase = createSupabaseAdminClient();
+  const tokenHash = hashToken(input.token);
+
+  const tenant = await getTenantByOnboardingTokenHash(supabase, tokenHash);
+
+  if (!tenant) {
+    throw new AppError(
+      "INVALID_TENANT_ONBOARDING_LINK",
+      "This tenant onboarding link is invalid or has already been used.",
+      404,
+    );
+  }
+
+  assertOnboardingTokenUsable({
+    onboardingStatus: tenant.onboarding_status,
+    onboardingTokenExpiresAt: tenant.onboarding_token_expires_at,
+  });
+
+  const normalizedPhone = normalisePhoneNumber(input.phoneNumber);
+  const normalizedInput: SubmitTenantOnboardingInput = {
+    ...input,
+    phoneNumber: normalizedPhone.e164,
+    email: input.email?.trim() ? input.email.trim().toLowerCase() : "",
+  };
+
+  const kycAnswers = buildKycAnswers(normalizedInput);
+
+  const propertyId = tenant.unit_id
+    ? (
+        await supabase
+          .from("units")
+          .select("property_id")
+          .eq("id", tenant.unit_id)
+          .maybeSingle<{ property_id: string }>()
+      ).data?.property_id ?? null
+    : null;
+
+  const propertyRules = propertyId
+    ? await getActivePropertyRulesForOnboarding(supabase, {
+        propertyId,
+        unitId: tenant.unit_id,
+      })
+    : [];
+
+  const kycReviewFlags = evaluateTenantKycAgainstPropertyRules({
+    rules: propertyRules,
+    input: normalizedInput,
+  });
+
+  return {
+    tenant,
+    normalizedInput,
+    kycAnswers,
+    kycReviewFlags,
+  };
+}
+
 export async function generateTenantOnboardingLink(tenantId: string) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = createSupabaseAdminClient();
 
   const tenant = await getTenantForOnboardingInvite(supabase, {
@@ -143,8 +211,12 @@ export async function generateTenantOnboardingLink(tenantId: string) {
   });
 
   if (
-    tenant.onboarding_status !== "invited" &&
-    tenant.onboarding_status !== "profile_complete"
+    tenant.onboarding_status !== TENANT_ONBOARDING_STATUSES.invited &&
+    tenant.onboarding_status !==
+      TENANT_ONBOARDING_STATUSES.documentsSubmitted &&
+    tenant.onboarding_status !== TENANT_ONBOARDING_STATUSES.profileComplete &&
+    tenant.onboarding_status !==
+      TENANT_ONBOARDING_STATUSES.submittedForLandlordReview
   ) {
     throw new AppError(
       "TENANT_ONBOARDING_NOT_AVAILABLE",
@@ -186,7 +258,7 @@ export async function generateTenantOnboardingLink(tenantId: string) {
     unitId: tenant.unit_id,
     actorRole: "landlord",
     actorProfileId: landlord.id,
-    eventType: "tenant_onboarding_link_generated",
+    eventType: AUDIT_EVENT_TYPES.onboardingLinkSent,
     description: `Tenant onboarding link generated for ${tenant.full_name}.`,
     metadata: {
       tenant_name: tenant.full_name,
@@ -224,32 +296,10 @@ export async function resolveTenantOnboardingToken(token: string) {
     );
   }
 
-  if (
-    tenant.onboarding_status !== "invited" &&
-    tenant.onboarding_status !== "profile_complete"
-  ) {
-    throw new AppError(
-      "TENANT_ONBOARDING_NOT_AVAILABLE",
-      "This tenant onboarding link is no longer available.",
-      400,
-    );
-  }
-
-  if (!tenant.onboarding_token_expires_at) {
-    throw new AppError(
-      "INVALID_TENANT_ONBOARDING_LINK",
-      "This tenant onboarding link is invalid.",
-      400,
-    );
-  }
-
-  if (new Date(tenant.onboarding_token_expires_at).getTime() < Date.now()) {
-    throw new AppError(
-      "EXPIRED_TENANT_ONBOARDING_LINK",
-      "This tenant onboarding link has expired. Please ask the landlord to send a new link.",
-      410,
-    );
-  }
+  assertOnboardingTokenUsable({
+    onboardingStatus: tenant.onboarding_status,
+    onboardingTokenExpiresAt: tenant.onboarding_token_expires_at,
+  });
 
   return tenant;
 }
@@ -258,110 +308,148 @@ export async function submitTenantOnboarding(
   input: SubmitTenantOnboardingInput,
 ) {
   const supabase = createSupabaseAdminClient();
-  const tokenHash = hashToken(input.token);
+  const { tenant, normalizedInput, kycAnswers, kycReviewFlags } =
+    await prepareTenantOnboardingSubmission(input);
 
-  const tenant = await getTenantByOnboardingTokenHash(supabase, tokenHash);
-
-  if (!tenant) {
-    throw new AppError(
-      "INVALID_TENANT_ONBOARDING_LINK",
-      "This tenant onboarding link is invalid or has already been used.",
-      404,
-    );
-  }
-
-  if (
-    tenant.onboarding_status !== "invited" &&
-    tenant.onboarding_status !== "profile_complete"
-  ) {
-    throw new AppError(
-      "TENANT_ONBOARDING_NOT_AVAILABLE",
-      "This tenant onboarding link is no longer available.",
-      400,
-    );
-  }
-
-  if (!tenant.onboarding_token_expires_at) {
-    throw new AppError(
-      "INVALID_TENANT_ONBOARDING_LINK",
-      "This tenant onboarding link is invalid.",
-      400,
-    );
-  }
-
-  if (new Date(tenant.onboarding_token_expires_at).getTime() < Date.now()) {
-    throw new AppError(
-      "EXPIRED_TENANT_ONBOARDING_LINK",
-      "This tenant onboarding link has expired. Please ask the landlord to send a new link.",
-      410,
-    );
-  }
-
-  await assertAgentProcessingFeePaidBeforeKyc({
-    tenantId: tenant.id,
+  const agentSourced = isAgentSourcedTenant({
     agentPropertyListingId: tenant.agent_property_listing_id,
     invitedByAgentId: tenant.invited_by_agent_id,
   });
 
-  const normalizedPhone = normalisePhoneNumber(input.phoneNumber);
-  const normalizedInput: SubmitTenantOnboardingInput = {
-    ...input,
-    phoneNumber: normalizedPhone.e164,
-    email: input.email?.trim() ? input.email.trim().toLowerCase() : "",
-  };
-
-  const kycAnswers = buildKycAnswers(normalizedInput);
-
-  const propertyId = tenant.unit_id
-    ? (
-        await supabase
-          .from("units")
-          .select("property_id")
-          .eq("id", tenant.unit_id)
-          .maybeSingle<{ property_id: string }>()
-      ).data?.property_id ?? null
-    : null;
-
-  const propertyRules = propertyId
-    ? await getActivePropertyRulesForOnboarding(supabase, {
-        propertyId,
-        unitId: tenant.unit_id,
-      })
-    : [];
-
-  const kycReviewFlags = evaluateTenantKycAgainstPropertyRules({
-    rules: propertyRules,
-    input: normalizedInput,
+  const landlordSourced = isLandlordSourcedTenant({
+    agentPropertyListingId: tenant.agent_property_listing_id,
+    invitedByAgentId: tenant.invited_by_agent_id,
   });
 
-  const updatedTenant = await submitTenantOnboardingProfile(supabase, {
-    tenantId: tenant.id,
-    input: normalizedInput,
-    idNumberCiphertext: protectIdNumber(normalizedInput.idNumber),
-    kycAnswers,
-    kycReviewFlags,
-  });
+  if (agentSourced || landlordSourced) {
+    const updatedTenant = await saveTenantOnboardingDraft(supabase, {
+      tenantId: tenant.id,
+      input: normalizedInput,
+      idNumberCiphertext: protectIdNumber(normalizedInput.idNumber),
+      kycAnswers,
+      kycReviewFlags,
+    });
+
+    await writeTenantOnboardingAuditLog({
+      tenantId: tenant.id,
+      landlordId: tenant.landlord_id,
+      unitId: tenant.unit_id,
+      actorRole: "tenant",
+      actorProfileId: null,
+      eventType: agentSourced
+        ? AUDIT_EVENT_TYPES.agentKycDraftSaved
+        : AUDIT_EVENT_TYPES.tenantKycSubmitted,
+      description: agentSourced
+        ? "Agent-sourced tenant saved KYC draft for verification."
+        : "Landlord-sourced tenant saved KYC draft for verification.",
+      metadata: {
+        full_name: updatedTenant.full_name,
+        phone_number: updatedTenant.phone_number,
+        email: updatedTenant.email,
+        id_type: normalizedInput.idType,
+        id_document_uploaded: Boolean(normalizedInput.idDocumentPath),
+        passport_photo_uploaded: Boolean(normalizedInput.passportPhotoPath),
+        kyc_review_flags: kycReviewFlags,
+        agent_property_listing_id: tenant.agent_property_listing_id,
+        invited_by_agent_id: tenant.invited_by_agent_id,
+        onboarding_source: agentSourced ? "agent" : "landlord",
+      },
+    });
+
+    return updatedTenant;
+  }
+
+  throw new AppError(
+    "TENANT_ONBOARDING_SOURCE_UNKNOWN",
+    "This onboarding link cannot be processed.",
+    400,
+  );
+}
+
+export async function officiallySubmitAgentTenantOnboardingAfterPayment(params: {
+  tenantId: string;
+  verificationFeeIntentId: string;
+  verificationFeePaidAt: string;
+}) {
+  const supabase = createSupabaseAdminClient();
+
+  const submission = await officiallySubmitTenantOnboardingAfterPayment(
+    supabase,
+    {
+      tenantId: params.tenantId,
+      verificationFeeIntentId: params.verificationFeeIntentId,
+      verificationFeePaidAt: params.verificationFeePaidAt,
+      verificationFeeSource: "agent",
+    },
+  );
+
+  if (submission.alreadySubmitted) {
+    return submission.tenant;
+  }
 
   await writeTenantOnboardingAuditLog({
-    tenantId: tenant.id,
-    landlordId: tenant.landlord_id,
-    unitId: tenant.unit_id,
+    tenantId: submission.tenant.id,
+    landlordId: submission.tenant.landlord_id,
+    unitId: submission.tenant.unit_id,
     actorRole: "tenant",
     actorProfileId: null,
-    eventType: "tenant_onboarding_profile_submitted",
-    description: "Tenant submitted onboarding profile.",
+    eventType: AUDIT_EVENT_TYPES.agentOnboardingSubmitted,
+    description:
+      "Agent-sourced tenant onboarding officially submitted after verification fee payment.",
     metadata: {
-      full_name: updatedTenant.full_name,
-      phone_number: updatedTenant.phone_number,
-      email: updatedTenant.email,
-      id_type: normalizedInput.idType,
-      id_document_uploaded: Boolean(normalizedInput.idDocumentPath),
-      passport_photo_uploaded: Boolean(normalizedInput.passportPhotoPath),
-      kyc_review_flags: kycReviewFlags,
-      agent_property_listing_id: tenant.agent_property_listing_id,
-      invited_by_agent_id: tenant.invited_by_agent_id,
+      verification_fee_intent_id: params.verificationFeeIntentId,
+      verification_fee_paid_at: params.verificationFeePaidAt,
+      onboarding_status: submission.tenant.onboarding_status,
+      agent_property_listing_id: submission.tenant.agent_property_listing_id,
+      invited_by_agent_id: submission.tenant.invited_by_agent_id,
+      payment_does_not_guarantee_approval: true,
     },
   });
 
-  return updatedTenant;
+  return submission.tenant;
+}
+
+export async function officiallySubmitLandlordTenantOnboardingAfterPayment(params: {
+  tenantId: string;
+  verificationFeeIntentId: string;
+  verificationFeePaidAt: string;
+}) {
+  const supabase = createSupabaseAdminClient();
+
+  const submission = await officiallySubmitTenantOnboardingAfterPayment(
+    supabase,
+    {
+      tenantId: params.tenantId,
+      verificationFeeIntentId: params.verificationFeeIntentId,
+      verificationFeePaidAt: params.verificationFeePaidAt,
+      verificationFeeSource: "landlord",
+    },
+  );
+
+  if (submission.alreadySubmitted) {
+    return submission.tenant;
+  }
+
+  await writeTenantOnboardingAuditLog({
+    tenantId: submission.tenant.id,
+    landlordId: submission.tenant.landlord_id,
+    unitId: submission.tenant.unit_id,
+    actorRole: "tenant",
+    actorProfileId: null,
+    eventType: AUDIT_EVENT_TYPES.landlordOnboardingSubmitted,
+    description:
+      "Landlord-sourced tenant onboarding officially submitted after verification fee payment.",
+    metadata: {
+      verification_fee_intent_id: params.verificationFeeIntentId,
+      verification_fee_paid_at: params.verificationFeePaidAt,
+      onboarding_status: submission.tenant.onboarding_status,
+      payment_does_not_guarantee_approval: true,
+    },
+  });
+
+  return submission.tenant;
+}
+
+export function isTenantOnboardingSubmittedForReview(onboardingStatus: string) {
+  return isSubmittedForLandlordReview(onboardingStatus);
 }

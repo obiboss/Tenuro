@@ -89,7 +89,8 @@ export async function submitTenantOnboardingAction(
     return {
       ok: true,
       message:
-        "Your tenant profile has been submitted successfully. The landlord will review it and contact you with the next step.",
+        "Your application has been saved. Continue to verification and processing.",
+      nextStep: "verification_summary",
     };
   } catch (error) {
     const result = errorResult(error);

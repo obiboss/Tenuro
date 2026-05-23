@@ -14,6 +14,7 @@ import {
   getTenantsForLandlord,
   rejectTenant,
   updateTenant,
+  waitlistTenant,
 } from "@/server/repositories/tenants.repository";
 import {
   getActiveTenancyForUnit,
@@ -32,9 +33,11 @@ import type {
   CreateTenantShellInput,
   RejectTenantInput,
   UpdateTenantInput,
+  WaitlistTenantInput,
 } from "@/server/validators/tenant.schema";
 import { resolveTenantPipelineStatus } from "@/lib/tenant-pipeline-status";
-import { requireLandlord } from "./auth.service";
+import { isSubmittedForLandlordReview } from "@/server/constants/onboarding-lifecycle";
+import { requireLandlordPlatformOperator } from "./auth.service";
 
 export type TenantPipelineSummary = {
   isAgreementSetup: boolean;
@@ -50,14 +53,14 @@ export type TenantPipelineSummary = {
 };
 
 export async function getCurrentLandlordTenants() {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   return getTenantsForLandlord(supabase, landlord.id);
 }
 
 export async function getCurrentLandlordTenantPipelineSummaries() {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
   const summaries = await getTenancyPipelineSummariesForLandlord(
     supabase,
@@ -124,7 +127,7 @@ export async function getCurrentLandlordTenantsWithPipeline() {
 }
 
 export async function getCurrentLandlordTenant(tenantId: string) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const tenant = await getTenantById(supabase, tenantId);
@@ -141,7 +144,7 @@ export async function getCurrentLandlordTenant(tenantId: string) {
 }
 
 export async function getCurrentLandlordTenantGuarantor(tenantId: string) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const tenant = await getTenantById(supabase, tenantId);
@@ -160,7 +163,7 @@ export async function getCurrentLandlordTenantGuarantor(tenantId: string) {
 export async function getCurrentLandlordTenantKycDocumentLinks(
   tenantId: string,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const tenant = await getTenantById(supabase, tenantId);
@@ -183,7 +186,7 @@ export async function getCurrentLandlordTenantKycDocumentLinks(
 }
 
 export async function getCurrentLandlordVacantUnits() {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   return getVacantUnitsForLandlord(supabase, landlord.id);
@@ -233,7 +236,7 @@ async function releaseUnitIfNoActiveTenancy(params: {
 export async function createTenantShellForCurrentLandlord(
   input: CreateTenantShellInput,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const unit = await getUnitById(supabase, input.unitId);
@@ -305,7 +308,7 @@ export async function updateTenantForCurrentLandlord(
   tenantId: string,
   input: UpdateTenantInput,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const tenant = await getTenantById(supabase, tenantId);
@@ -343,7 +346,7 @@ export async function updateTenantForCurrentLandlord(
 }
 
 export async function approveTenantForCurrentLandlord(tenantId: string) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const tenant = await getTenantById(supabase, tenantId);
@@ -356,7 +359,7 @@ export async function approveTenantForCurrentLandlord(tenantId: string) {
     );
   }
 
-  if (tenant.onboarding_status !== "profile_complete") {
+  if (!isSubmittedForLandlordReview(tenant.onboarding_status)) {
     throw new AppError(
       "TENANT_NOT_READY_FOR_APPROVAL",
       "This tenant has not completed their profile yet.",
@@ -395,7 +398,7 @@ export async function rejectTenantForCurrentLandlord(
   tenantId: string,
   input: RejectTenantInput,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const tenant = await getTenantById(supabase, tenantId);
@@ -410,7 +413,8 @@ export async function rejectTenantForCurrentLandlord(
 
   if (
     tenant.onboarding_status !== "invited" &&
-    tenant.onboarding_status !== "profile_complete"
+    !isSubmittedForLandlordReview(tenant.onboarding_status) &&
+    tenant.onboarding_status !== "waitlisted"
   ) {
     throw new AppError(
       "TENANT_REVIEW_CLOSED",
@@ -457,8 +461,60 @@ export async function rejectTenantForCurrentLandlord(
   return rejectedTenant;
 }
 
+export async function waitlistTenantForCurrentLandlord(
+  tenantId: string,
+  input: WaitlistTenantInput,
+) {
+  const landlord = await requireLandlordPlatformOperator();
+  const supabase = await createSupabaseServerClient();
+
+  const tenant = await getTenantById(supabase, tenantId);
+
+  if (tenant.landlord_id !== landlord.id) {
+    throw new AppError(
+      "FORBIDDEN",
+      "You do not have permission to waitlist this tenant.",
+      403,
+    );
+  }
+
+  if (!isSubmittedForLandlordReview(tenant.onboarding_status)) {
+    throw new AppError(
+      "TENANT_NOT_READY_FOR_WAITLIST",
+      "This tenant has not completed their application for review yet.",
+      400,
+    );
+  }
+
+  const waitlistedTenant = await waitlistTenant(supabase, {
+    tenantId,
+    reason: input.reason,
+  });
+
+  await writeAuditLog({
+    landlordId: landlord.id,
+    tenantId,
+    unitId: tenant.unit_id,
+    propertyId: tenant.units?.properties?.id ?? null,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.landlordWaitlisted,
+    entityType: AUDIT_ENTITY_TYPES.tenant,
+    entityId: tenantId,
+    description: `${tenant.full_name} was waitlisted during tenant onboarding review.`,
+    metadata: {
+      tenant_name: tenant.full_name,
+      previous_status: tenant.onboarding_status,
+      new_status: waitlistedTenant.onboarding_status,
+      waitlist_reason: input.reason,
+    },
+  });
+
+  return waitlistedTenant;
+}
+
 export async function archiveTenantForCurrentLandlord(tenantId: string) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const tenant = await getTenantById(supabase, tenantId);

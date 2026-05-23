@@ -9,7 +9,10 @@ export type AgentTenantOnboardingTenantRow = {
   email: string | null;
   onboarding_status:
     | "invited"
+    | "documents_submitted"
     | "profile_complete"
+    | "submitted_for_landlord_review"
+    | "waitlisted"
     | "approved"
     | "rejected"
     | "token_expired";

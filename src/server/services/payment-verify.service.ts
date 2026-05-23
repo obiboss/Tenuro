@@ -5,10 +5,10 @@ import { getGatewayPaymentIntentByReference } from "@/server/repositories/gatewa
 import { shouldVerifyGatewayIntentWithPaystack } from "@/server/services/gateway-payment-idempotency.service";
 import { processVerifiedGatewayPaymentReference } from "@/server/services/gateway-payment-webhook.service";
 import { createSupabaseServerClient } from "@/server/supabase/server";
-import { requireLandlord } from "./auth.service";
+import { requireLandlordPlatformOperator } from "./auth.service";
 
 export async function getCurrentLandlordPaymentVerification(reference: string) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const initialIntent = await getGatewayPaymentIntentByReference(

@@ -37,7 +37,7 @@ import type {
   RenewTenancyInput,
   TerminateTenancyInput,
 } from "@/server/validators/tenancy.schema";
-import { requireLandlord } from "./auth.service";
+import { requireLandlordPlatformOperator } from "./auth.service";
 
 export type RenewalUrgency =
   | "overdue"
@@ -91,14 +91,14 @@ function getRenewalUrgency(daysUntilDue: number | null): RenewalUrgency {
 }
 
 export async function getCurrentLandlordTenancies() {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   return getTenanciesForLandlord(supabase, landlord.id);
 }
 
 export async function getCurrentLandlordRenewalOverview() {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const tenancies = await getRenewalTenanciesForLandlord(supabase, landlord.id);
@@ -134,7 +134,7 @@ export async function getCurrentLandlordRenewalOverview() {
 }
 
 export async function getCurrentTenantActiveTenancy(tenantId: string) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const tenant = await getTenantById(supabase, tenantId);
@@ -151,7 +151,7 @@ export async function getCurrentTenantActiveTenancy(tenantId: string) {
 }
 
 export async function getCurrentTenantSetupTenancy(tenantId: string) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const tenant = await getTenantById(supabase, tenantId);
@@ -168,7 +168,7 @@ export async function getCurrentTenantSetupTenancy(tenantId: string) {
 }
 
 export async function confirmTenancyChargesForCurrentLandlord(tenancyId: string) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const tenancy = await getTenancyById(supabase, tenancyId);
@@ -217,7 +217,7 @@ export async function activateTenancyAfterAgreementAcceptance(tenancyId: string)
 export async function createTenancyForCurrentLandlord(
   input: CreateTenancyInput,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const tenant = await getTenantById(supabase, input.tenantId);
@@ -337,7 +337,7 @@ export async function createTenancyForCurrentLandlord(
 }
 
 export async function renewTenancyForCurrentLandlord(input: RenewTenancyInput) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const tenancy = await getTenancyById(supabase, input.tenancyId);
@@ -361,7 +361,7 @@ export async function renewTenancyForCurrentLandlord(input: RenewTenancyInput) {
 export async function terminateTenancyForCurrentLandlord(
   input: TerminateTenancyInput,
 ) {
-  await requireLandlord();
+  await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   return terminateTenancy(supabase, {

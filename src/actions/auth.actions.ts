@@ -10,6 +10,7 @@ import {
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import type { AuthActionState } from "@/server/types/auth.types";
+import { startLandlordTrialIfEligible } from "@/server/services/landlord-trial.service";
 import { normalisePhoneNumber } from "@/server/utils/phone";
 import {
   emailPasswordLoginSchema,
@@ -104,6 +105,10 @@ async function registerPhonePasswordUser(params: {
     phoneNumber: normalizedPhone.e164,
     email: data.user.email?.trim() ? data.user.email.trim() : null,
   });
+
+  if (params.role === "landlord") {
+    await startLandlordTrialIfEligible(data.user.id);
+  }
 
   return {
     ok: true,

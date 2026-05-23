@@ -1,6 +1,7 @@
 import "server-only";
 
 import crypto from "node:crypto";
+import { isOnboardingTokenFlowActive } from "@/server/constants/onboarding-lifecycle";
 import { AppError } from "@/server/errors/app-error";
 import {
   createAgentTenantOnboardingTenant,
@@ -248,10 +249,7 @@ export async function getPublicTenantOnboardingByToken(token: string) {
     );
   }
 
-  if (
-    tenant.onboarding_status !== "invited" &&
-    tenant.onboarding_status !== "profile_complete"
-  ) {
+  if (!isOnboardingTokenFlowActive(tenant.onboarding_status)) {
     throw new AppError(
       "TENANT_ONBOARDING_NOT_AVAILABLE",
       "This tenant onboarding link is no longer available.",

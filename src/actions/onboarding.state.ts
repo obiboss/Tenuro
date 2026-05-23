@@ -1,6 +1,7 @@
 export type TenantOnboardingActionState = {
   ok: boolean;
   message: string;
+  nextStep?: "verification_summary" | "submitted";
   fieldErrors?: Record<string, string[]>;
 };
 

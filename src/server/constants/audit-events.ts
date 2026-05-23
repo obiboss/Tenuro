@@ -3,6 +3,7 @@ export const AUDIT_ACTOR_ROLES = {
   landlord: "landlord",
   tenant: "tenant",
   agent: "agent",
+  platformAdmin: "platform_admin",
 } as const;
 
 export const AUDIT_ENTITY_TYPES = {
@@ -19,6 +20,7 @@ export const AUDIT_ENTITY_TYPES = {
   onboarding: "onboarding",
   activation: "activation",
   quitNotice: "quit_notice",
+  platformSettings: "platform_settings",
 } as const;
 
 export const AUDIT_EVENT_TYPES = {
@@ -29,6 +31,18 @@ export const AUDIT_EVENT_TYPES = {
   tenantKycFlaggedForReview: "tenant.kyc_flagged_for_review",
   tenantApproved: "tenant.approved",
   tenantRejected: "tenant.rejected",
+  tenantWaitlisted: "tenant.waitlisted",
+
+  agentKycDraftSaved: "agent.kyc_draft_saved",
+  agentVerificationFeeInitialized: "agent.verification_fee_initialized",
+  agentVerificationFeePaid: "agent.verification_fee_paid",
+  agentOnboardingSubmitted: "agent.onboarding_submitted",
+
+  landlordTrialStarted: "landlord.trial_started",
+  landlordVerificationFeeInitialized: "landlord.verification_fee_initialized",
+  landlordVerificationFeePaid: "landlord.verification_fee_paid",
+  landlordOnboardingSubmitted: "landlord.onboarding_submitted",
+  landlordWaitlisted: "landlord.waitlisted",
   tenantUpdated: "tenant.updated",
   tenantArchived: "tenant.archived",
   tenantAccountActivated: "tenant.account_activated",
@@ -51,6 +65,8 @@ export const AUDIT_EVENT_TYPES = {
   gatewayPaymentVerified: "payment.gateway_verified",
   gatewayPaymentFailed: "payment.gateway_failed",
   gatewayPaymentIgnored: "payment.gateway_ignored",
+
+  platformPaymentSettingsUpdated: "platform.payment_settings_updated",
 
   receiptGenerated: "receipt.generated",
   receiptWhatsappPrepared: "receipt.whatsapp_prepared",

@@ -4,12 +4,12 @@ import { AppError } from "@/server/errors/app-error";
 import { getAgentPropertyListingById } from "@/server/repositories/agent-property-listings.repository";
 import { getTenantById } from "@/server/repositories/tenants.repository";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
-import { requireLandlord } from "./auth.service";
+import { requireLandlordPlatformOperator } from "./auth.service";
 
 export async function getCurrentLandlordTenantAgentCommissionAmount(
   tenantId: string,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = createSupabaseAdminClient();
 
   const tenant = await getTenantById(supabase, tenantId);

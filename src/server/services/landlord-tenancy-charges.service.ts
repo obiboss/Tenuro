@@ -21,7 +21,7 @@ import type {
   CreateLandlordTenancyChargeInput,
   UpdateLandlordTenancyChargeInput,
 } from "@/server/validators/landlord-tenancy-charges.schema";
-import { requireLandlord } from "./auth.service";
+import { requireLandlordPlatformOperator } from "./auth.service";
 
 function getPropertyIdFromTenancyContext(
   tenancy: Awaited<ReturnType<typeof getTenancyPaymentContext>>,
@@ -86,7 +86,7 @@ async function assertUniqueActiveChargeName(params: {
 }
 
 export async function getLandlordChargesForCurrentLandlord(tenancyId: string) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = createSupabaseAdminClient();
 
   await getAuthorizedTenancyForLandlord({
@@ -103,7 +103,7 @@ export async function getLandlordChargesForCurrentLandlord(tenancyId: string) {
 export async function createLandlordChargeForCurrentLandlord(
   input: CreateLandlordTenancyChargeInput,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = createSupabaseAdminClient();
 
   const tenancy = await getAuthorizedTenancyForLandlord({
@@ -164,7 +164,7 @@ export async function createLandlordChargeForCurrentLandlord(
 export async function updateLandlordChargeForCurrentLandlord(
   input: UpdateLandlordTenancyChargeInput,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = createSupabaseAdminClient();
 
   const tenancy = await getAuthorizedTenancyForLandlord({
@@ -220,7 +220,7 @@ export async function updateLandlordChargeForCurrentLandlord(
 export async function archiveLandlordChargeForCurrentLandlord(
   input: ArchiveLandlordTenancyChargeInput,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = createSupabaseAdminClient();
 
   const tenancy = await getAuthorizedTenancyForLandlord({

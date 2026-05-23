@@ -22,6 +22,8 @@ type TenantOnboardingFormProps = {
   phoneNumber: string;
   email: string | null;
   isSubmitted: boolean;
+  isAgentSourced?: boolean;
+  requiresVerificationSummary?: boolean;
   propertyRules: PropertyRuleDetailRow[];
 };
 
@@ -255,6 +257,8 @@ export function TenantOnboardingForm({
   phoneNumber,
   email,
   isSubmitted,
+  isAgentSourced = false,
+  requiresVerificationSummary = false,
   propertyRules,
 }: TenantOnboardingFormProps) {
   const [state, formAction, isPending] = useActionState(
@@ -262,7 +266,8 @@ export function TenantOnboardingForm({
     initialTenantOnboardingActionState,
   );
 
-  const submitted = isSubmitted || state.ok;
+  const submitted =
+    isSubmitted || (state.ok && state.nextStep === "submitted");
 
   if (submitted) {
     return (
@@ -277,12 +282,27 @@ export function TenantOnboardingForm({
     );
   }
 
+  if (state.ok && state.nextStep === "verification_summary") {
+    return (
+      <Card>
+        <CardContent>
+          <TrustNotice
+            title="Application saved"
+            description="Your KYC details have been saved. Continue below to complete verification and processing."
+          />
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <form action={formAction}>
       <ActionResultToast
         ok={state.ok}
         message={state.message}
-        successTitle="Profile submitted"
+        successTitle={
+          isAgentSourced ? "Application saved" : "Profile submitted"
+        }
         errorTitle="Please check this form"
       />
 
@@ -416,7 +436,9 @@ export function TenantOnboardingForm({
 
         <CardFooter>
           <Button type="submit" isLoading={isPending} fullWidth>
-            Submit Tenant Profile
+            {requiresVerificationSummary || isAgentSourced
+              ? "Save and Continue to Verification"
+              : "Submit Tenant Profile"}
           </Button>
         </CardFooter>
       </Card>

@@ -5,6 +5,7 @@ import {
   AUDIT_ENTITY_TYPES,
   AUDIT_EVENT_TYPES,
 } from "@/server/constants/audit-events";
+import { TENANT_ONBOARDING_STATUSES } from "@/server/constants/onboarding-lifecycle";
 import { AppError } from "@/server/errors/app-error";
 import { getActiveAgentPaystackAccount } from "@/server/repositories/agent-paystack.repository";
 import {
@@ -17,6 +18,11 @@ import {
 } from "@/server/repositories/agent-processing-fee.repository";
 import type { TenantOnboardingResolvedRecord } from "@/server/repositories/onboarding.repository";
 import { writeSystemAuditLog } from "@/server/services/audit-log.service";
+import { officiallySubmitAgentTenantOnboardingAfterPayment } from "@/server/services/onboarding.service";
+import {
+  assertAgentProcessingFeeEnabled,
+  getAgentProcessingFeeConfiguration,
+} from "@/server/services/platform-payment-settings.service";
 import {
   convertNairaToKobo,
   createTransactionSplit,
@@ -26,9 +32,6 @@ import {
 import { assertAgentPayoutVerified } from "@/server/services/paystack-verification.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 
-const AGENT_PROCESSING_TOTAL_AMOUNT = 15_000;
-const AGENT_PROCESSING_AGENT_SHARE = 10_000;
-const AGENT_PROCESSING_TENURO_SHARE = 5_000;
 const AGENT_PROCESSING_CURRENCY = "NGN";
 
 function createPaymentReference() {
@@ -121,8 +124,33 @@ export async function resolveAgentTenantProcessingFeeForOnboarding(params: {
       authorizationUrl: null,
       reference: null,
       processingFeeAmount: 0,
-      agentShareAmount: 0,
-      tenuroShareAmount: 0,
+      currencyCode: AGENT_PROCESSING_CURRENCY,
+    };
+  }
+
+  const feeConfiguration = await getAgentProcessingFeeConfiguration();
+
+  if (
+    params.tenant.onboarding_status !==
+    TENANT_ONBOARDING_STATUSES.documentsSubmitted
+  ) {
+    return {
+      required: true as const,
+      status: "awaiting_kyc" as const,
+      authorizationUrl: null,
+      reference: null,
+      processingFeeAmount: feeConfiguration.totalAmount,
+      currencyCode: AGENT_PROCESSING_CURRENCY,
+    };
+  }
+
+  if (!feeConfiguration.isEnabled) {
+    return {
+      required: true as const,
+      status: "disabled" as const,
+      authorizationUrl: null,
+      reference: null,
+      processingFeeAmount: feeConfiguration.totalAmount,
       currencyCode: AGENT_PROCESSING_CURRENCY,
     };
   }
@@ -141,8 +169,6 @@ export async function resolveAgentTenantProcessingFeeForOnboarding(params: {
       authorizationUrl: null,
       reference: paidIntent.paystack_reference,
       processingFeeAmount: Number(paidIntent.processing_fee_amount),
-      agentShareAmount: Number(paidIntent.agent_share_amount),
-      tenuroShareAmount: Number(paidIntent.tenuro_share_amount),
       currencyCode: paidIntent.currency_code,
     };
   }
@@ -167,30 +193,31 @@ export async function resolveAgentTenantProcessingFeeForOnboarding(params: {
       authorizationUrl: latestIntent.authorization_url,
       reference: latestIntent.paystack_reference,
       processingFeeAmount: Number(latestIntent.processing_fee_amount),
-      agentShareAmount: Number(latestIntent.agent_share_amount),
-      tenuroShareAmount: Number(latestIntent.tenuro_share_amount),
       currencyCode: latestIntent.currency_code,
     };
   }
+
+  assertAgentProcessingFeeEnabled(feeConfiguration);
 
   const reference = createPaymentReference();
   const split = await createTransactionSplit({
     name: `BOPA Agent Processing Fee ${reference}`,
     landlordSubaccountCode:
       verifiedAgentPaystackAccount.paystack_subaccount_code,
-    landlordShareKobo: convertNairaToKobo(AGENT_PROCESSING_AGENT_SHARE),
+    landlordShareKobo: convertNairaToKobo(feeConfiguration.agentShareAmount),
     currencyCode: AGENT_PROCESSING_CURRENCY,
   });
 
   const metadata = {
-    payment_purpose: "agent_tenant_processing_fee",
+    payment_purpose: "agent_verification_processing_fee",
     tenant_id: params.tenant.id,
     landlord_id: params.tenant.landlord_id,
     agent_id: agentSource.agentId,
     agent_property_listing_id: agentSource.agentPropertyListingId,
-    processing_fee_amount: AGENT_PROCESSING_TOTAL_AMOUNT,
-    agent_share_amount: AGENT_PROCESSING_AGENT_SHARE,
-    tenuro_share_amount: AGENT_PROCESSING_TENURO_SHARE,
+    processing_fee_amount: feeConfiguration.totalAmount,
+    agent_share_amount: feeConfiguration.agentShareAmount,
+    tenuro_share_amount: feeConfiguration.platformShareAmount,
+    platform_payment_settings_id: feeConfiguration.settingsId,
     split_code: split.split_code,
     split_id: split.id,
   };
@@ -200,7 +227,7 @@ export async function resolveAgentTenantProcessingFeeForOnboarding(params: {
       email: params.tenant.email,
       phoneNumber: params.tenant.phone_number,
     }),
-    amountKobo: convertNairaToKobo(AGENT_PROCESSING_TOTAL_AMOUNT),
+    amountKobo: convertNairaToKobo(feeConfiguration.totalAmount),
     reference,
     callbackUrl: buildCallbackUrl({
       token: params.token,
@@ -219,10 +246,10 @@ export async function resolveAgentTenantProcessingFeeForOnboarding(params: {
     paystackReference: initializedTransaction.reference,
     paystackAccessCode: initializedTransaction.access_code,
     authorizationUrl: initializedTransaction.authorization_url,
-    processingFeeAmount: AGENT_PROCESSING_TOTAL_AMOUNT,
-    agentShareAmount: AGENT_PROCESSING_AGENT_SHARE,
-    tenuroShareAmount: AGENT_PROCESSING_TENURO_SHARE,
-    totalAmount: AGENT_PROCESSING_TOTAL_AMOUNT,
+    processingFeeAmount: feeConfiguration.totalAmount,
+    agentShareAmount: feeConfiguration.agentShareAmount,
+    tenuroShareAmount: feeConfiguration.platformShareAmount,
+    totalAmount: feeConfiguration.totalAmount,
     currencyCode: AGENT_PROCESSING_CURRENCY,
     idempotencyKey: createIdempotencyKey(),
     paystackSplitCode: split.split_code,
@@ -233,18 +260,16 @@ export async function resolveAgentTenantProcessingFeeForOnboarding(params: {
   await writeSystemAuditLog({
     landlordId: params.tenant.landlord_id,
     tenantId: params.tenant.id,
-    eventType: AUDIT_EVENT_TYPES.paymentLinkSent,
+    eventType: AUDIT_EVENT_TYPES.agentVerificationFeeInitialized,
     entityType: AUDIT_ENTITY_TYPES.payment,
     entityId: intent.id,
-    description: "Agent tenant processing fee payment initialized.",
+    description: "Agent tenant verification fee payment initialized.",
     metadata: {
-      audit_subtype: "agent_tenant_processing_fee_initialized",
+      audit_subtype: "agent_verification_fee_initialized",
       agent_id: agentSource.agentId,
       agent_property_listing_id: agentSource.agentPropertyListingId,
       paystack_reference: intent.paystack_reference,
       processing_fee_amount: intent.processing_fee_amount,
-      agent_share_amount: intent.agent_share_amount,
-      tenuro_share_amount: intent.tenuro_share_amount,
       split_code: intent.paystack_split_code,
     },
   });
@@ -255,8 +280,6 @@ export async function resolveAgentTenantProcessingFeeForOnboarding(params: {
     authorizationUrl: intent.authorization_url,
     reference: intent.paystack_reference,
     processingFeeAmount: Number(intent.processing_fee_amount),
-    agentShareAmount: Number(intent.agent_share_amount),
-    tenuroShareAmount: Number(intent.tenuro_share_amount),
     currencyCode: intent.currency_code,
   };
 }
@@ -280,6 +303,12 @@ export async function verifyAgentTenantProcessingFeeReference(
   }
 
   if (intent.status === "paid") {
+    await officiallySubmitAgentTenantOnboardingAfterPayment({
+      tenantId: intent.tenant_id,
+      verificationFeeIntentId: intent.id,
+      verificationFeePaidAt: intent.paid_at ?? new Date().toISOString(),
+    });
+
     return intent;
   }
 
@@ -337,20 +366,25 @@ export async function verifyAgentTenantProcessingFeeReference(
   await writeSystemAuditLog({
     landlordId: paidIntent.landlord_id,
     tenantId: paidIntent.tenant_id,
-    eventType: AUDIT_EVENT_TYPES.gatewayPaymentVerified,
+    eventType: AUDIT_EVENT_TYPES.agentVerificationFeePaid,
     entityType: AUDIT_ENTITY_TYPES.payment,
     entityId: paidIntent.id,
-    description: "Agent tenant processing fee payment confirmed.",
+    description: "Agent tenant verification fee payment confirmed.",
     metadata: {
-      audit_subtype: "agent_tenant_processing_fee_paid",
+      audit_subtype: "agent_verification_fee_paid",
       agent_id: paidIntent.agent_id,
       agent_property_listing_id: paidIntent.agent_property_listing_id,
       paystack_reference: paidIntent.paystack_reference,
       processing_fee_amount: paidIntent.processing_fee_amount,
-      agent_share_amount: paidIntent.agent_share_amount,
-      tenuro_share_amount: paidIntent.tenuro_share_amount,
       paid_at: paidIntent.paid_at,
+      payment_does_not_guarantee_approval: true,
     },
+  });
+
+  await officiallySubmitAgentTenantOnboardingAfterPayment({
+    tenantId: paidIntent.tenant_id,
+    verificationFeeIntentId: paidIntent.id,
+    verificationFeePaidAt: paidIntent.paid_at ?? new Date().toISOString(),
   });
 
   return paidIntent;

@@ -17,12 +17,12 @@ import type {
   CreatePropertyInput,
   UpdatePropertyInput,
 } from "@/server/validators/property.schema";
-import { requireLandlord } from "./auth.service";
+import { requireLandlordPlatformOperator } from "./auth.service";
 
 export async function createPropertyForCurrentLandlord(
   input: CreatePropertyInput,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const property = await createProperty(supabase, landlord.id, input);
@@ -51,7 +51,7 @@ export async function updatePropertyForCurrentLandlord(
   propertyId: string,
   input: UpdatePropertyInput,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const property = await getPropertyById(supabase, propertyId);
@@ -86,7 +86,7 @@ export async function updatePropertyForCurrentLandlord(
 }
 
 export async function archivePropertyForCurrentLandlord(propertyId: string) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const property = await getPropertyById(supabase, propertyId);
@@ -120,14 +120,14 @@ export async function archivePropertyForCurrentLandlord(propertyId: string) {
 }
 
 export async function getCurrentLandlordProperties() {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   return getPropertiesForLandlord(supabase, landlord.id);
 }
 
 export async function getCurrentLandlordProperty(propertyId: string) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const property = await getPropertyById(supabase, propertyId);

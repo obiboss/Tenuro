@@ -19,12 +19,28 @@ import { LogoutButton } from "@/components/auth/logout-button";
 import { MobileMoreMenu } from "@/components/layout/mobile-more-menu";
 import { Badge } from "@/components/ui/badge";
 import { ToastProvider } from "@/components/ui/toast-provider";
+import { GATED_LANDLORD_PATH_PREFIXES } from "@/server/constants/landlord-subscription-gating";
 import { cn } from "@/lib/cn";
 
 type LandlordShellProps = {
   children: React.ReactNode;
   landlordName: string;
+  platformAccessLocked?: boolean;
 };
+
+function isSubscriptionGatedNavHref(href: string) {
+  return GATED_LANDLORD_PATH_PREFIXES.some(
+    (prefix) => href === prefix || href.startsWith(`${prefix}/`),
+  );
+}
+
+function resolveNavHref(href: string, platformAccessLocked: boolean) {
+  if (platformAccessLocked && isSubscriptionGatedNavHref(href)) {
+    return "/settings?subscription=required#bopa-plans";
+  }
+
+  return href;
+}
 
 const desktopNavItems = [
   {
@@ -141,7 +157,11 @@ function BoldverseBrand({ subtitle }: { subtitle: string }) {
   );
 }
 
-export function LandlordShell({ children, landlordName }: LandlordShellProps) {
+export function LandlordShell({
+  children,
+  landlordName,
+  platformAccessLocked = false,
+}: LandlordShellProps) {
   const pathname = usePathname();
   const firstName = getFirstName(landlordName);
 
@@ -157,11 +177,14 @@ export function LandlordShell({ children, landlordName }: LandlordShellProps) {
               const active =
                 pathname === item.href || pathname.startsWith(`${item.href}/`);
               const comingSoon = item.status === "coming_soon";
+              const subscriptionLocked =
+                platformAccessLocked && isSubscriptionGatedNavHref(item.href);
+              const href = resolveNavHref(item.href, platformAccessLocked);
 
               return (
                 <Link
                   key={item.href}
-                  href={item.href}
+                  href={href}
                   className={cn(
                     "flex min-h-12 items-center justify-between rounded-button px-4 text-sm font-extrabold transition",
                     active
@@ -187,6 +210,20 @@ export function LandlordShell({ children, landlordName }: LandlordShellProps) {
                         strokeWidth={2.6}
                       />
                       Soon
+                    </span>
+                  ) : subscriptionLocked ? (
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide",
+                        active ? "text-white/75" : "text-text-muted/70",
+                      )}
+                    >
+                      <LockKeyhole
+                        aria-hidden="true"
+                        size={11}
+                        strokeWidth={2.6}
+                      />
+                      Plan
                     </span>
                   ) : null}
                 </Link>
@@ -249,10 +286,12 @@ export function LandlordShell({ children, landlordName }: LandlordShellProps) {
               const active =
                 pathname === item.href || pathname.startsWith(`${item.href}/`);
 
+              const href = resolveNavHref(item.href, platformAccessLocked);
+
               return (
                 <Link
                   key={item.href}
-                  href={item.href}
+                  href={href}
                   className={cn(
                     "flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-xs font-bold transition",
                     active
@@ -266,7 +305,7 @@ export function LandlordShell({ children, landlordName }: LandlordShellProps) {
               );
             })}
 
-            <MobileMoreMenu />
+            <MobileMoreMenu platformAccessLocked={platformAccessLocked} />
           </div>
         </nav>
       </div>

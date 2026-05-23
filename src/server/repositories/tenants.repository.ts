@@ -6,7 +6,10 @@ import type {
 
 export type TenantOnboardingStatus =
   | "invited"
+  | "documents_submitted"
   | "profile_complete"
+  | "submitted_for_landlord_review"
+  | "waitlisted"
   | "approved"
   | "rejected"
   | "token_expired";
@@ -29,6 +32,8 @@ export type TenantRow = {
   onboarding_status: TenantOnboardingStatus;
   landlord_notes: string | null;
   rejected_reason: string | null;
+  waitlist_reason: string | null;
+  waitlisted_at: string | null;
   kyc_answers: Record<string, unknown>;
   kyc_review_flags: Record<string, unknown>[];
   approved_at: string | null;
@@ -74,6 +79,8 @@ const TENANT_SELECT = `
   onboarding_status,
   landlord_notes,
   rejected_reason,
+  waitlist_reason,
+  waitlisted_at,
   kyc_answers,
   kyc_review_flags,
   approved_at,
@@ -116,6 +123,8 @@ const TENANT_BASE_SELECT = `
   onboarding_status,
   landlord_notes,
   rejected_reason,
+  waitlist_reason,
+  waitlisted_at,
   kyc_answers,
   kyc_review_flags,
   approved_at,
@@ -276,7 +285,11 @@ export async function approveTenant(
       rejected_reason: null,
     })
     .eq("id", params.tenantId)
-    .eq("onboarding_status", "profile_complete")
+    .in("onboarding_status", [
+      "profile_complete",
+      "submitted_for_landlord_review",
+      "waitlisted",
+    ])
     .is("deleted_at", null)
     .select(TENANT_BASE_SELECT)
     .single<TenantRow>();
@@ -304,7 +317,43 @@ export async function rejectTenant(
       approved_by: null,
     })
     .eq("id", params.tenantId)
-    .in("onboarding_status", ["invited", "profile_complete"])
+    .in("onboarding_status", [
+      "invited",
+      "profile_complete",
+      "submitted_for_landlord_review",
+      "waitlisted",
+    ])
+    .is("deleted_at", null)
+    .select(TENANT_BASE_SELECT)
+    .single<TenantRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function waitlistTenant(
+  supabase: SupabaseClient,
+  params: {
+    tenantId: string;
+    reason: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("tenants")
+    .update({
+      onboarding_status: "waitlisted",
+      waitlist_reason: params.reason,
+      waitlisted_at: new Date().toISOString(),
+      rejected_reason: null,
+    })
+    .eq("id", params.tenantId)
+    .in("onboarding_status", [
+      "profile_complete",
+      "submitted_for_landlord_review",
+    ])
     .is("deleted_at", null)
     .select(TENANT_BASE_SELECT)
     .single<TenantRow>();

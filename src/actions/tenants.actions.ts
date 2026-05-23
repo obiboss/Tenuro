@@ -8,6 +8,7 @@ import {
   createTenantShellSchema,
   rejectTenantSchema,
   updateTenantSchema,
+  waitlistTenantSchema,
 } from "@/server/validators/tenant.schema";
 import {
   approveTenantForCurrentLandlord,
@@ -15,6 +16,7 @@ import {
   createTenantShellForCurrentLandlord,
   rejectTenantForCurrentLandlord,
   updateTenantForCurrentLandlord,
+  waitlistTenantForCurrentLandlord,
 } from "@/server/services/tenants.service";
 
 export type TenantActionState = {
@@ -157,6 +159,38 @@ export async function rejectTenantAction(
     return successResult("Tenant rejected.");
   } catch (error) {
     console.error("rejectTenantAction failed:", error);
+
+    const result = errorResult(error);
+
+    return {
+      ok: false,
+      message: result.message,
+      fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
+    };
+  }
+}
+
+export async function waitlistTenantAction(
+  _previousState: TenantActionState,
+  formData: FormData,
+): Promise<TenantActionState> {
+  try {
+    const parsed = waitlistTenantSchema.parse({
+      tenantId: formData.get("tenantId"),
+      reason: formData.get("reason"),
+    });
+
+    await waitlistTenantForCurrentLandlord(parsed.tenantId, {
+      tenantId: parsed.tenantId,
+      reason: parsed.reason,
+    });
+
+    revalidatePath("/tenants");
+    revalidatePath(`/tenants/${parsed.tenantId}`);
+
+    return successResult("Tenant waitlisted.");
+  } catch (error) {
+    console.error("waitlistTenantAction failed:", error);
 
     const result = errorResult(error);
 

@@ -5,7 +5,15 @@ import {
   getLandlordPaymentGateUiStateFromErrorCode,
   type LandlordPaymentGateUiState,
 } from "@/lib/landlord-payment-gate";
+import type {
+  PaystackPayoutVerificationState,
+  PayoutVerificationStatusPayload,
+} from "@/lib/payout-verification";
 import { AppError } from "@/server/errors/app-error";
+import { getActiveAgentPaystackAccount } from "@/server/repositories/agent-paystack.repository";
+import { getActiveLandlordPaystackAccount } from "@/server/repositories/landlord-paystack.repository";
+import { getSessionUser } from "@/server/services/auth.service";
+import { createSupabaseServerClient } from "@/server/supabase/server";
 import type {
   AgentPaystackAccount,
   LandlordPaystackAccount,
@@ -14,11 +22,7 @@ import type {
 
 export type { LandlordPaymentGateUiState };
 
-export type PaystackPayoutVerificationState =
-  | "missing"
-  | "unverified"
-  | "verified"
-  | "failed";
+export type { PaystackPayoutVerificationState, PayoutVerificationStatusPayload };
 
 export type PaystackPayoutVerificationAudience =
   | "landlord"
@@ -41,6 +45,40 @@ type PaystackPayoutAccountVerificationFields = {
   verification_status: PaystackVerificationStatus;
   verified_at: string | null;
 };
+
+export function buildPayoutVerificationStatusPayload(
+  account:
+    | (PaystackPayoutAccountVerificationFields & {
+        updated_at?: string | null;
+      })
+    | null,
+): PayoutVerificationStatusPayload {
+  return {
+    state: getPaystackPayoutVerificationState(account),
+    verifiedAt: account?.verified_at ?? null,
+    updatedAt: account?.updated_at ?? null,
+  };
+}
+
+export async function getCurrentPayoutVerificationStatus(): Promise<PayoutVerificationStatusPayload> {
+  const user = await getSessionUser();
+
+  if (!user || (user.role !== "landlord" && user.role !== "agent")) {
+    throw new AppError(
+      "UNAUTHORIZED",
+      "You must be signed in as a landlord or agent to check payout verification status.",
+      401,
+    );
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const account =
+    user.role === "agent"
+      ? await getActiveAgentPaystackAccount(supabase, user.id)
+      : await getActiveLandlordPaystackAccount(supabase, user.id);
+
+  return buildPayoutVerificationStatusPayload(account);
+}
 
 export function getPaystackPayoutVerificationState(
   account: PaystackPayoutAccountVerificationFields | null,

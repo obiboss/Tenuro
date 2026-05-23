@@ -21,6 +21,7 @@ import {
 } from "@/server/repositories/units.repository";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
+import { startLandlordTrialIfEligible } from "@/server/services/landlord-trial.service";
 import { hashPublicAgreementToken } from "@/server/services/public-agreement-generator.service";
 import { hashPublicReceiptToken } from "@/server/services/public-receipt-generator.service";
 import { normalisePhoneNumber } from "@/server/utils/phone";
@@ -268,6 +269,8 @@ export async function createLandlordAccountFromPublicReceipt(
     email: cleanOptional(input.email),
   });
 
+  await startLandlordTrialIfEligible(data.user.id);
+
   const location = splitCityState(receipt.city_state);
 
   const property = await createProperty(adminSupabase, data.user.id, {
@@ -402,6 +405,8 @@ export async function createLandlordAccountFromPublicAgreement(
     phoneNumber: normalizedLandlordPhone.e164,
     email: cleanOptional(input.email),
   });
+
+  await startLandlordTrialIfEligible(data.user.id);
 
   const location = splitCityState(agreement.city_state);
 

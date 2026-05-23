@@ -25,7 +25,7 @@ import {
   getExpiryDateFromNow,
 } from "@/server/utils/tokens";
 import type { ActivateTenantAccountInput } from "@/server/validators/tenant-activation.schema";
-import { requireLandlord } from "./auth.service";
+import { requireLandlordPlatformOperator } from "./auth.service";
 
 function getAppBaseUrl() {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
@@ -84,7 +84,7 @@ async function assertFirstRentPaymentCompleted(tenantId: string) {
 }
 
 export async function generateTenantActivationLink(tenantId: string) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const tenant = await getTenantById(supabase, tenantId);

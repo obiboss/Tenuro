@@ -23,7 +23,7 @@ import type {
   CreatePropertyRuleInput,
   UpdatePropertyRuleInput,
 } from "@/server/validators/property-rule.schema";
-import { requireLandlord } from "./auth.service";
+import { requireLandlordPlatformOperator } from "./auth.service";
 
 async function assertCurrentLandlordOwnsProperty(params: {
   landlordId: string;
@@ -68,7 +68,7 @@ async function assertUnitBelongsToProperty(params: {
 export async function createPropertyRuleForCurrentLandlord(
   input: CreatePropertyRuleInput,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const property = await assertCurrentLandlordOwnsProperty({
@@ -119,7 +119,7 @@ export async function updatePropertyRuleForCurrentLandlord(
   propertyRuleId: string,
   input: UpdatePropertyRuleInput,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const existingRule = await getPropertyRuleById(supabase, propertyRuleId);
@@ -168,7 +168,7 @@ export async function updatePropertyRuleForCurrentLandlord(
 export async function archivePropertyRuleForCurrentLandlord(
   input: ArchivePropertyRuleInput,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const existingRule = await getPropertyRuleById(
@@ -212,7 +212,7 @@ export async function archivePropertyRuleForCurrentLandlord(
 }
 
 export async function getCurrentLandlordPropertyRules(propertyId: string) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
 
   await assertCurrentLandlordOwnsProperty({
     landlordId: landlord.id,
@@ -228,7 +228,7 @@ export async function getCurrentLandlordPropertyRules(propertyId: string) {
 }
 
 export async function getCurrentLandlordPropertyRule(propertyRuleId: string) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const propertyRule = await getPropertyRuleById(supabase, propertyRuleId);

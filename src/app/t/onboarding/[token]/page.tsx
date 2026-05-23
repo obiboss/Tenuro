@@ -2,25 +2,30 @@ import Link from "next/link";
 import {
   AlertTriangle,
   CalendarClock,
-  CreditCard,
   Home,
   Phone,
   ShieldCheck,
   UserRound,
 } from "lucide-react";
 import { TenantOnboardingForm } from "@/components/tenant/tenant-onboarding-form";
+import { VerificationProcessingSummary } from "@/components/tenant/verification-processing-summary";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { ToastProvider } from "@/components/ui/toast-provider";
 import { TrustNotice } from "@/components/ui/trust-notice";
+import {
+  isAgentSourcedTenant,
+  isOnboardingDraftStatus,
+  isOnboardingTokenFlowActive,
+  isSubmittedForLandlordReview,
+} from "@/server/constants/onboarding-lifecycle";
 import { errorResult } from "@/server/errors/result";
 import {
-  resolveAgentTenantProcessingFeeForOnboarding,
-  verifyAgentTenantProcessingFeeReference,
-} from "@/server/services/agent-processing-fee.service";
+  resolveTenantProcessingFeeForOnboarding,
+  verifyTenantProcessingFeeReference,
+} from "@/server/services/tenant-verification-processing-fee.service";
 import { resolveTenantOnboardingToken } from "@/server/services/onboarding.service";
 
 type TenantOnboardingPageProps = {
@@ -38,7 +43,7 @@ type TenantOnboardingPageState =
       ok: true;
       tenant: Awaited<ReturnType<typeof resolveTenantOnboardingToken>>;
       processingFee: Awaited<
-        ReturnType<typeof resolveAgentTenantProcessingFeeForOnboarding>
+        ReturnType<typeof resolveTenantProcessingFeeForOnboarding>
       >;
       processingFeeNotice: string | null;
     }
@@ -57,12 +62,12 @@ async function getTenantOnboardingPageState(params: {
 
     if (params.shouldVerifyProcessingFee && params.processingFeeReference) {
       try {
-        await verifyAgentTenantProcessingFeeReference(
+        await verifyTenantProcessingFeeReference(
           params.processingFeeReference,
         );
 
         processingFeeNotice =
-          "Processing fee payment confirmed. You can now complete your KYC form.";
+          "Verification fee payment confirmed. Your application has been submitted for landlord review.";
       } catch (error) {
         processingFeeNotice = errorResult(error).message;
       }
@@ -70,7 +75,7 @@ async function getTenantOnboardingPageState(params: {
 
     const tenant = await resolveTenantOnboardingToken(params.token);
 
-    const processingFee = await resolveAgentTenantProcessingFeeForOnboarding({
+    const processingFee = await resolveTenantProcessingFeeForOnboarding({
       tenant,
       token: params.token,
     });
@@ -156,75 +161,6 @@ function OnboardingUnavailable({ message }: { message: string }) {
   );
 }
 
-function ProcessingFeeGate({
-  authorizationUrl,
-  processingFeeAmount,
-  agentShareAmount,
-  tenuroShareAmount,
-  currencyCode,
-  notice,
-}: {
-  authorizationUrl: string;
-  processingFeeAmount: number;
-  agentShareAmount: number;
-  tenuroShareAmount: number;
-  currencyCode: string;
-  notice: string | null;
-}) {
-  return (
-    <SectionCard
-      title="Pay tenant processing fee"
-      description="This apartment was introduced by an agent. Pay the processing fee first, then the KYC form will open automatically."
-    >
-      <div className="space-y-5">
-        {notice ? (
-          <div
-            role="alert"
-            className="rounded-button bg-warning-soft px-4 py-3 text-sm font-semibold leading-6 text-warning"
-          >
-            {notice}
-          </div>
-        ) : null}
-
-        <TrustNotice
-          title="Processing fee required before KYC"
-          description="This ₦15,000 processing fee is separate from your rent. The agent receives ₦10,000 and BOPA receives ₦5,000."
-          icon={<ShieldCheck aria-hidden="true" size={22} strokeWidth={2.6} />}
-        />
-
-        <div className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-button bg-background p-4">
-            <p className="text-sm font-bold text-text-muted">Total fee</p>
-            <p className="mt-2 font-extrabold text-text-strong">
-              {formatMoney(processingFeeAmount, currencyCode)}
-            </p>
-          </div>
-
-          <div className="rounded-button bg-background p-4">
-            <p className="text-sm font-bold text-text-muted">Agent receives</p>
-            <p className="mt-2 font-extrabold text-text-strong">
-              {formatMoney(agentShareAmount, currencyCode)}
-            </p>
-          </div>
-
-          <div className="rounded-button bg-background p-4">
-            <p className="text-sm font-bold text-text-muted">BOPA receives</p>
-            <p className="mt-2 font-extrabold text-text-strong">
-              {formatMoney(tenuroShareAmount, currencyCode)}
-            </p>
-          </div>
-        </div>
-
-        <Link href={authorizationUrl}>
-          <Button type="button" fullWidth>
-            Pay Processing Fee
-          </Button>
-        </Link>
-      </div>
-    </SectionCard>
-  );
-}
-
 export default async function TenantOnboardingPage({
   params,
   searchParams,
@@ -245,9 +181,42 @@ export default async function TenantOnboardingPage({
   const unit = tenant.units;
   const property = unit?.properties;
   const landlord = tenant.profiles;
-  const isSubmitted = tenant.onboarding_status === "profile_complete";
-  const mustPayProcessingFee =
-    state.processingFee.required && state.processingFee.status !== "paid";
+  const agentSourced = isAgentSourcedTenant({
+    agentPropertyListingId: tenant.agent_property_listing_id,
+    invitedByAgentId: tenant.invited_by_agent_id,
+  });
+  const isDraftSaved = isOnboardingDraftStatus(tenant.onboarding_status);
+  const isOfficiallySubmitted = isSubmittedForLandlordReview(
+    tenant.onboarding_status,
+  );
+  const showVerificationSummary =
+    isDraftSaved ||
+    isOfficiallySubmitted ||
+    state.processingFee.status === "paid";
+
+  const pageTitle = isOfficiallySubmitted
+    ? "Application submitted"
+    : showVerificationSummary
+      ? "Verification & Processing Summary"
+      : "Complete your tenant profile";
+
+  const pageDescription = isOfficiallySubmitted
+    ? "Your application has been submitted for landlord review."
+    : showVerificationSummary
+      ? "Complete verification and processing to activate your tenant profile for landlord review."
+      : "Review the rental details and complete your KYC information.";
+
+  const badgeLabel = isOfficiallySubmitted
+    ? "Submitted"
+    : showVerificationSummary
+      ? "Payment Required"
+      : "Secure Link";
+
+  const badgeTone = isOfficiallySubmitted
+    ? "success"
+    : showVerificationSummary
+      ? "warning"
+      : "primary";
 
   return (
     <ToastProvider>
@@ -256,37 +225,9 @@ export default async function TenantOnboardingPage({
           <TenantOnboardingLogo />
 
           <PageHeader
-            title={
-              isSubmitted
-                ? "Tenant profile submitted"
-                : mustPayProcessingFee
-                  ? "Pay processing fee"
-                  : "Complete your tenant profile"
-            }
-            description={
-              isSubmitted
-                ? "Your profile has been submitted for landlord review."
-                : mustPayProcessingFee
-                  ? "Pay the agent processing fee to unlock your tenant KYC form."
-                  : "Review the rental details and complete your KYC information for the landlord’s approval."
-            }
-            action={
-              <Badge
-                tone={
-                  isSubmitted
-                    ? "success"
-                    : mustPayProcessingFee
-                      ? "warning"
-                      : "primary"
-                }
-              >
-                {isSubmitted
-                  ? "Submitted"
-                  : mustPayProcessingFee
-                    ? "Payment Required"
-                    : "Secure Link"}
-              </Badge>
-            }
+            title={pageTitle}
+            description={pageDescription}
+            action={<Badge tone={badgeTone}>{badgeLabel}</Badge>}
           />
 
           <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
@@ -368,36 +309,48 @@ export default async function TenantOnboardingPage({
                 </CardContent>
               </Card>
 
-              {mustPayProcessingFee ? (
-                <ProcessingFeeGate
-                  authorizationUrl={state.processingFee.authorizationUrl ?? "#"}
-                  processingFeeAmount={state.processingFee.processingFeeAmount}
-                  agentShareAmount={state.processingFee.agentShareAmount}
-                  tenuroShareAmount={state.processingFee.tenuroShareAmount}
+              {showVerificationSummary ? (
+                <VerificationProcessingSummary
+                  fullName={tenant.full_name}
+                  phoneNumber={tenant.phone_number}
+                  email={tenant.email}
+                  occupation={tenant.occupation}
+                  homeAddress={tenant.home_address}
+                  propertyName={property?.property_name ?? "Not available"}
+                  unitIdentifier={unit?.unit_identifier ?? "Not available"}
+                  processingFeeAmount={
+                    state.processingFee.processingFeeAmount || 15_000
+                  }
                   currencyCode={state.processingFee.currencyCode}
-                  notice={state.processingFeeNotice}
+                  authorizationUrl={state.processingFee.authorizationUrl}
+                  paymentNotice={state.processingFeeNotice}
+                  isOfficiallySubmitted={isOfficiallySubmitted}
+                  isPaymentDisabled={state.processingFee.status === "disabled"}
                 />
+              ) : isOfficiallySubmitted ? (
+                <SectionCard
+                  title="Application submitted"
+                  description="Your tenant profile has been submitted for landlord review."
+                >
+                  <TrustNotice
+                    title="Submitted for review"
+                    description="The landlord will review your details and contact you with the next step."
+                  />
+                </SectionCard>
               ) : (
                 <SectionCard
                   title="Tenant KYC Form"
-                  description="Complete your personal details, ID document, and passport photo for landlord review."
+                  description="Complete your personal details, ID document, and passport photo."
                 >
-                  {state.processingFeeNotice ? (
-                    <div
-                      role="alert"
-                      className="mb-4 rounded-button bg-success-soft px-4 py-3 text-sm font-semibold leading-6 text-success"
-                    >
-                      {state.processingFeeNotice}
-                    </div>
-                  ) : null}
-
                   <TenantOnboardingForm
                     token={token}
                     fullName={tenant.full_name}
                     phoneNumber={tenant.phone_number}
                     email={tenant.email}
-                    isSubmitted={isSubmitted}
+                    isSubmitted={false}
                     propertyRules={tenant.property_rules}
+                    isAgentSourced={agentSourced}
+                    requiresVerificationSummary
                   />
                 </SectionCard>
               )}
@@ -409,12 +362,12 @@ export default async function TenantOnboardingPage({
                 description="This link was created for you and expires automatically. Do not share it with anyone else."
               />
 
-              {state.processingFee.required ? (
+              {showVerificationSummary ? (
                 <TrustNotice
-                  title="Agent processing fee"
-                  description="This fee is required before KYC because this apartment was introduced through an agent."
+                  title="Verification & processing"
+                  description="Payment activates verification processing and landlord review eligibility. It does not guarantee tenancy approval."
                   icon={
-                    <CreditCard
+                    <ShieldCheck
                       aria-hidden="true"
                       size={22}
                       strokeWidth={2.6}

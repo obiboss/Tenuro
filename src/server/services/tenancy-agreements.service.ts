@@ -52,7 +52,7 @@ import type {
   SaveTenancyAgreementDraftInput,
   SubmitAgreementGuarantorInput,
 } from "@/server/validators/tenancy-agreement.schema";
-import { requireLandlord } from "./auth.service";
+import { requireLandlordPlatformOperator } from "./auth.service";
 import {
   buildAgreementFromTemplate,
   resolveAgreementTemplateBody,
@@ -267,7 +267,7 @@ async function prepareFirstPaymentAfterAgreement(params: {
 }
 
 export async function getCurrentTenancyAgreementByTenancyId(tenancyId: string) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const tenancy = await getTenancyById(supabase, tenancyId);
@@ -286,7 +286,7 @@ export async function getCurrentTenancyAgreementByTenancyId(tenancyId: string) {
 export async function generateTenancyAgreementForCurrentLandlord(
   input: GenerateTenancyAgreementInput,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const tenancy = await getTenancyById(supabase, input.tenancyId);
@@ -388,7 +388,7 @@ export async function generateTenancyAgreementForCurrentLandlord(
 export async function saveTenancyAgreementDraftForCurrentLandlord(
   input: SaveTenancyAgreementDraftInput,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const agreement = await getTenancyAgreementById(supabase, input.agreementId);
@@ -436,7 +436,7 @@ export async function saveTenancyAgreementDraftForCurrentLandlord(
 export async function finalizeTenancyAgreementForCurrentLandlord(
   input: FinalizeTenancyAgreementInput,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const agreement = await getTenancyAgreementById(supabase, input.agreementId);
@@ -500,7 +500,7 @@ export async function finalizeTenancyAgreementForCurrentLandlord(
 export async function refreshTenancyAgreementAcceptanceLinkForCurrentLandlord(
   input: RefreshTenancyAgreementAcceptanceLinkInput,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const agreement = await getTenancyAgreementById(supabase, input.agreementId);
@@ -786,7 +786,7 @@ export async function submitAgreementGuarantorAndPreparePayment(
 export async function generateTenancyAgreementPdfForCurrentLandlord(
   input: GenerateTenancyAgreementPdfInput,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const agreement = await getTenancyAgreementById(supabase, input.agreementId);
@@ -817,7 +817,7 @@ export async function generateTenancyAgreementPdfForCurrentLandlord(
 export async function getCurrentTenancyAgreementPdfDownloadUrl(
   agreementId: string,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const agreement = await getTenancyAgreementById(supabase, agreementId);

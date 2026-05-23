@@ -57,9 +57,21 @@ export const TENANT_ONBOARDING_STATUS_COPY: Record<
     label: "Waiting for tenant",
     tone: "warning",
   },
+  documents_submitted: {
+    label: "Awaiting verification payment",
+    tone: "warning",
+  },
   profile_complete: {
     label: "Waiting for your review",
     tone: "primary",
+  },
+  submitted_for_landlord_review: {
+    label: "Waiting for your review",
+    tone: "primary",
+  },
+  waitlisted: {
+    label: "Waitlisted",
+    tone: "neutral",
   },
   approved: {
     label: "Approved",

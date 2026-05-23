@@ -5,6 +5,7 @@ import { ExternalLink, FileText } from "lucide-react";
 import {
   approveTenantAction,
   rejectTenantAction,
+  waitlistTenantAction,
 } from "@/actions/tenants.actions";
 import { initialTenantActionState } from "@/actions/tenant.state";
 import { ActionResultToast } from "@/components/ui/action-result-toast";
@@ -21,6 +22,10 @@ import { Textarea } from "@/components/ui/textarea";
 import type { GuarantorRow } from "@/server/repositories/guarantors.repository";
 import type { TenantListRow } from "@/server/repositories/tenants.repository";
 import type { SignedKycDocument } from "@/server/services/storage.service";
+import {
+  isSubmittedForLandlordReview,
+  TENANT_ONBOARDING_STATUSES,
+} from "@/server/constants/onboarding-lifecycle";
 
 type KycDocumentLinks = {
   tenantIdDocument: SignedKycDocument;
@@ -135,11 +140,20 @@ export function TenantReviewCard({
     initialTenantActionState,
   );
 
-  const canReview = tenant.onboarding_status === "profile_complete";
-  const isApproved = tenant.onboarding_status === "approved";
-  const isRejected = tenant.onboarding_status === "rejected";
+  const [waitlistState, waitlistFormAction, isWaitlisting] = useActionState(
+    waitlistTenantAction,
+    initialTenantActionState,
+  );
 
-  if (tenant.onboarding_status === "invited") {
+  const canReview =
+    isSubmittedForLandlordReview(tenant.onboarding_status) ||
+    tenant.onboarding_status === TENANT_ONBOARDING_STATUSES.waitlisted;
+  const isApproved = tenant.onboarding_status === TENANT_ONBOARDING_STATUSES.approved;
+  const isRejected = tenant.onboarding_status === TENANT_ONBOARDING_STATUSES.rejected;
+  const isWaitlisted =
+    tenant.onboarding_status === TENANT_ONBOARDING_STATUSES.waitlisted;
+
+  if (tenant.onboarding_status === TENANT_ONBOARDING_STATUSES.invited) {
     return (
       <Card>
         <CardHeader>
@@ -172,6 +186,13 @@ export function TenantReviewCard({
         errorTitle="Rejection failed"
       />
 
+      <ActionResultToast
+        ok={waitlistState.ok}
+        message={waitlistState.message}
+        successTitle="Tenant waitlisted"
+        errorTitle="Waitlist failed"
+      />
+
       <CardHeader>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -189,7 +210,9 @@ export function TenantReviewCard({
               ? "Approved"
               : isRejected
                 ? "Rejected"
-                : "Ready for review"}
+                : isWaitlisted
+                  ? "Waitlisted"
+                  : "Ready for review"}
           </Badge>
         </div>
       </CardHeader>
@@ -198,6 +221,12 @@ export function TenantReviewCard({
         {isRejected && tenant.rejected_reason ? (
           <div className="mb-5 rounded-button bg-danger-soft p-4 text-sm font-semibold leading-6 text-danger">
             Rejection reason: {tenant.rejected_reason}
+          </div>
+        ) : null}
+
+        {isWaitlisted && tenant.waitlist_reason ? (
+          <div className="mb-5 rounded-button bg-warning-soft p-4 text-sm font-semibold leading-6 text-warning">
+            Waitlist reason: {tenant.waitlist_reason}
           </div>
         ) : null}
 
@@ -261,33 +290,56 @@ export function TenantReviewCard({
           </div>
 
           {canReview ? (
-            <div className="grid gap-4 lg:grid-cols-2">
-              <form action={approveFormAction}>
-                <input type="hidden" name="tenantId" value={tenant.id} />
+            <div className="space-y-4">
+              <div className="grid gap-4 lg:grid-cols-2">
+                <form action={approveFormAction}>
+                  <input type="hidden" name="tenantId" value={tenant.id} />
 
-                <Button type="submit" isLoading={isApproving} fullWidth>
-                  Approve Tenant
-                </Button>
-              </form>
+                  <Button type="submit" isLoading={isApproving} fullWidth>
+                    Approve Tenant
+                  </Button>
+                </form>
 
-              <form action={rejectFormAction} className="space-y-3">
+                <form action={rejectFormAction} className="space-y-3">
+                  <input type="hidden" name="tenantId" value={tenant.id} />
+
+                  <Textarea
+                    label="Reason for rejection"
+                    name="reason"
+                    placeholder="Example: ID details could not be verified."
+                    error={rejectState.fieldErrors?.reason?.[0]}
+                    required
+                  />
+
+                  <Button
+                    type="submit"
+                    variant="secondary"
+                    isLoading={isRejecting}
+                    fullWidth
+                  >
+                    Reject Tenant
+                  </Button>
+                </form>
+              </div>
+
+              <form action={waitlistFormAction} className="space-y-3">
                 <input type="hidden" name="tenantId" value={tenant.id} />
 
                 <Textarea
-                  label="Reason for rejection"
+                  label="Reason for waitlist"
                   name="reason"
-                  placeholder="Example: ID details could not be verified."
-                  error={rejectState.fieldErrors?.reason?.[0]}
+                  placeholder="Example: Strong candidate, pending unit availability."
+                  error={waitlistState.fieldErrors?.reason?.[0]}
                   required
                 />
 
                 <Button
                   type="submit"
-                  variant="secondary"
-                  isLoading={isRejecting}
+                  variant="ghost"
+                  isLoading={isWaitlisting}
                   fullWidth
                 >
-                  Reject Tenant
+                  Waitlist Tenant
                 </Button>
               </form>
             </div>

@@ -9,6 +9,7 @@ import {
   RefreshCcw,
   Settings,
   ShieldCheck,
+  SlidersHorizontal,
   type LucideIcon,
   Users,
 } from "lucide-react";
@@ -86,6 +87,12 @@ export const PLATFORM_ADMIN_NAVIGATION: readonly PlatformAdminNavigationItem[] =
       label: "Payout Verifications",
       href: "/admin/payout-verifications",
       icon: CreditCard,
+      status: "available",
+    },
+    {
+      label: "Payment Settings",
+      href: "/admin/payment-settings",
+      icon: SlidersHorizontal,
       status: "available",
     },
   ];

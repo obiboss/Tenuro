@@ -8,10 +8,10 @@ import {
 import { getActiveTenancyForTenant } from "@/server/repositories/tenancies.repository";
 import { getTenantById } from "@/server/repositories/tenants.repository";
 import { createSupabaseServerClient } from "@/server/supabase/server";
-import { requireLandlord } from "./auth.service";
+import { requireLandlordPlatformOperator } from "./auth.service";
 
 export async function getCurrentTenantLedgerSummary(tenantId: string) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const tenant = await getTenantById(supabase, tenantId);

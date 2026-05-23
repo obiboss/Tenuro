@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 
 function applySecurityHeaders(response: NextResponse) {
   response.headers.set("X-Frame-Options", "DENY");
@@ -13,8 +13,11 @@ function applySecurityHeaders(response: NextResponse) {
   return response;
 }
 
-export function proxy() {
-  return applySecurityHeaders(NextResponse.next());
+export function proxy(request: NextRequest) {
+  const response = applySecurityHeaders(NextResponse.next());
+  response.headers.set("x-pathname", request.nextUrl.pathname);
+
+  return response;
 }
 
 export const config = {

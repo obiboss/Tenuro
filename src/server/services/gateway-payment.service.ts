@@ -47,7 +47,7 @@ import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { normalisePhoneNumber } from "@/server/utils/phone";
 import type { InitializeRentPaymentInput } from "@/server/validators/payment.schema";
-import { requireLandlord, requireTenant } from "./auth.service";
+import { requireLandlordPlatformOperator, requireTenant } from "./auth.service";
 import { processVerifiedGatewayPaymentReference } from "./gateway-payment-webhook.service";
 import {
   convertNairaToKobo,
@@ -941,7 +941,7 @@ async function initializeGatewayPaymentForTenancy(params: {
 }
 
 export async function initializeRentPayment(input: InitializeRentPaymentInput) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const tenancy = await getTenancyPaymentContext(supabase, input.tenancyId);

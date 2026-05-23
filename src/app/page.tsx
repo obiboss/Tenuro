@@ -1,7 +1,6 @@
 import Link from "next/link";
 import {
   ArrowRight,
-  BadgeCheck,
   Building2,
   FileCheck2,
   FileText,
@@ -9,8 +8,9 @@ import {
   ShieldCheck,
   Users,
 } from "lucide-react";
+import { LandingHeaderLogin } from "@/components/landing/landing-header-login";
+import { LandingHeroActions } from "@/components/landing/landing-hero-actions";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardDescription,
@@ -92,14 +92,8 @@ export default function HomePage() {
             </div>
           </Link>
 
-          <div className="flex shrink-0 items-center gap-2">
-            <Link href="/agent/login" className="hidden sm:block">
-              <Button variant="secondary">Agent Login</Button>
-            </Link>
-
-            <Link href="/login">
-              <Button>Login</Button>
-            </Link>
+          <div className="flex shrink-0 items-center">
+            <LandingHeaderLogin />
           </div>
         </header>
 
@@ -120,47 +114,7 @@ export default function HomePage() {
               messages.
             </p>
 
-            <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:max-w-2xl">
-              <Link href="/receipt-generator">
-                <Button size="lg" fullWidth>
-                  Generate Free Receipt
-                  <ReceiptText aria-hidden="true" size={18} strokeWidth={2.6} />
-                </Button>
-              </Link>
-
-              <Link href="/agreement-generator">
-                <Button size="lg" variant="secondary" fullWidth>
-                  Generate Agreement
-                  <FileText aria-hidden="true" size={18} strokeWidth={2.6} />
-                </Button>
-              </Link>
-
-              <Link href="/register">
-                <Button size="lg" variant="secondary" fullWidth>
-                  Register as Landlord
-                  <ArrowRight aria-hidden="true" size={18} strokeWidth={2.6} />
-                </Button>
-              </Link>
-
-              <Link href="/agent/register">
-                <Button size="lg" variant="ghost" fullWidth>
-                  Register as Agent
-                  <BadgeCheck aria-hidden="true" size={18} strokeWidth={2.6} />
-                </Button>
-              </Link>
-
-              <Link href="/login">
-                <Button size="lg" variant="ghost" fullWidth>
-                  Landlord Login
-                </Button>
-              </Link>
-
-              <Link href="/agent/login">
-                <Button size="lg" variant="ghost" fullWidth>
-                  Agent Login
-                </Button>
-              </Link>
-            </div>
+            <LandingHeroActions />
 
             <div className="mt-8">
               <TrustNotice

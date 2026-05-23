@@ -27,6 +27,10 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { TrustNotice } from "@/components/ui/trust-notice";
 import { resolveTenantPipelineStatus } from "@/lib/tenant-pipeline-status";
+import {
+  isSubmittedForLandlordReview,
+  TENANT_ONBOARDING_STATUSES,
+} from "@/server/constants/onboarding-lifecycle";
 import { isTenancyInAgreementSetup } from "@/server/repositories/tenancies.repository";
 import { getLandlordChargesForCurrentLandlord } from "@/server/services/landlord-tenancy-charges.service";
 import { getCurrentTenantLedgerSummary } from "@/server/services/ledger.service";
@@ -196,8 +200,9 @@ export default async function TenantDetailPage({
   });
 
   const shouldShowKycReview =
-    tenant.onboarding_status === "profile_complete" ||
-    tenant.onboarding_status === "rejected";
+    isSubmittedForLandlordReview(tenant.onboarding_status) ||
+    tenant.onboarding_status === TENANT_ONBOARDING_STATUSES.waitlisted ||
+    tenant.onboarding_status === TENANT_ONBOARDING_STATUSES.rejected;
 
   const canIssueQuitNotice = Boolean(
     activeTenancy && activeTenancy.tenancy_status === "active",
@@ -217,9 +222,11 @@ export default async function TenantDetailPage({
 
   const nextStepDescription = tenant.profile_id
     ? "This tenant already has an active tenant account."
-    : tenant.onboarding_status === "profile_complete"
+    : isSubmittedForLandlordReview(tenant.onboarding_status)
       ? "Review the tenant KYC submission and approve the tenant to start agreement setup."
-      : !isTenantApproved
+      : tenant.onboarding_status === TENANT_ONBOARDING_STATUSES.documentsSubmitted
+        ? "The tenant has saved their application and must complete verification payment before you can review."
+        : !isTenantApproved
         ? "Send the tenant onboarding link so they can complete their profile, ID document, and guarantor details."
         : agreementStep === "agreement-setup"
           ? "Confirm rent, tenancy dates, and renewal reminder interval to begin agreement setup."

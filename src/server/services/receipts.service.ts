@@ -24,7 +24,7 @@ import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { formatNaira } from "@/server/utils/money";
 import { buildWaMeUrl } from "@/server/utils/whatsapp";
-import { requireLandlord } from "./auth.service";
+import { requireLandlordPlatformOperator } from "./auth.service";
 
 function formatReceiptDate(value: string) {
   return new Intl.DateTimeFormat("en-NG", {
@@ -84,7 +84,7 @@ async function generateRentReceiptWithClient(params: {
 }
 
 export async function generateRentReceiptForCurrentLandlord(paymentId: string) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
 
   const userSupabase = await createSupabaseServerClient();
   const adminSupabase = createSupabaseAdminClient();
@@ -118,7 +118,7 @@ export async function generateRentReceiptSystem(paymentId: string) {
 export async function getRentReceiptDownloadUrlForCurrentLandlord(
   paymentId: string,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const payment = await getRentPaymentById(supabase, paymentId);
@@ -145,7 +145,7 @@ export async function getRentReceiptDownloadUrlForCurrentLandlord(
 export async function prepareRentReceiptWhatsAppForCurrentLandlord(
   paymentId: string,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const receipt = await generateRentReceiptForCurrentLandlord(paymentId);
 
   if (!receipt.receiptDownloadUrl) {

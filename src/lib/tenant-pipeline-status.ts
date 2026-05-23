@@ -1,4 +1,5 @@
 import type { StatusTone } from "@/lib/status-copy";
+import { isSubmittedForLandlordReview } from "@/server/constants/onboarding-lifecycle";
 import type { TenantOnboardingStatus } from "@/server/repositories/tenants.repository";
 
 export type TenantPipelinePhase =
@@ -37,10 +38,26 @@ export function resolveTenantPipelineStatus(params: {
     };
   }
 
-  if (params.onboardingStatus === "profile_complete") {
+  if (params.onboardingStatus === "documents_submitted") {
+    return {
+      label: "Awaiting verification payment",
+      tone: "warning",
+      phase: "onboarding",
+    };
+  }
+
+  if (isSubmittedForLandlordReview(params.onboardingStatus)) {
     return {
       label: "Waiting for your review",
       tone: "primary",
+      phase: "review",
+    };
+  }
+
+  if (params.onboardingStatus === "waitlisted") {
+    return {
+      label: "Waitlisted",
+      tone: "neutral",
       phase: "review",
     };
   }

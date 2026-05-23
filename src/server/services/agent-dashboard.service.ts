@@ -131,7 +131,15 @@ export async function getCurrentAgentDashboardOverview() {
     tenants: {
       totalInvited: tenantRows.length,
       profileComplete: tenantRows.filter(
-        (tenant) => tenant.onboarding_status === "profile_complete",
+        (tenant) =>
+          tenant.onboarding_status === "profile_complete" ||
+          tenant.onboarding_status === "submitted_for_landlord_review",
+      ).length,
+      awaitingVerificationPayment: tenantRows.filter(
+        (tenant) => tenant.onboarding_status === "documents_submitted",
+      ).length,
+      waitlisted: tenantRows.filter(
+        (tenant) => tenant.onboarding_status === "waitlisted",
       ).length,
       approved: tenantRows.filter(
         (tenant) => tenant.onboarding_status === "approved",

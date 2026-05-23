@@ -24,6 +24,7 @@ import {
 } from "@/server/repositories/units.repository";
 import { writeSystemAuditLog } from "@/server/services/audit-log.service";
 import { verifyAgentTenantProcessingFeeReference } from "@/server/services/agent-processing-fee.service";
+import { verifyLandlordTenantProcessingFeeReference } from "@/server/services/landlord-processing-fee.service";
 import {
   auditGatewayPaymentReplayIgnored,
   buildPaystackRentPaymentIdempotencyKey,
@@ -425,6 +426,14 @@ export async function processVerifiedGatewayPaymentReference(
   };
 }
 
+function isProcessingFeeNotFoundError(error: unknown) {
+  return (
+    isAppError(error) &&
+    (error.code === "AGENT_PROCESSING_FEE_NOT_FOUND" ||
+      error.code === "LANDLORD_PROCESSING_FEE_NOT_FOUND")
+  );
+}
+
 async function processVerifiedPaystackReferenceWithFallback(
   reference: string,
   options?: {
@@ -438,13 +447,28 @@ async function processVerifiedPaystackReferenceWithFallback(
       throw error;
     }
 
-    const processingFeeIntent =
-      await verifyAgentTenantProcessingFeeReference(reference);
+    try {
+      const processingFeeIntent =
+        await verifyAgentTenantProcessingFeeReference(reference);
+
+      return {
+        status: "processed" as const,
+        message: "Agent tenant processing fee confirmed.",
+        paymentId: processingFeeIntent.id,
+      };
+    } catch (agentError) {
+      if (!isProcessingFeeNotFoundError(agentError)) {
+        throw agentError;
+      }
+    }
+
+    const landlordProcessingFeeIntent =
+      await verifyLandlordTenantProcessingFeeReference(reference);
 
     return {
       status: "processed" as const,
-      message: "Agent tenant processing fee confirmed.",
-      paymentId: processingFeeIntent.id,
+      message: "Landlord-sourced tenant processing fee confirmed.",
+      paymentId: landlordProcessingFeeIntent.id,
     };
   }
 }

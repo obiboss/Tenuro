@@ -2,6 +2,7 @@ import "server-only";
 
 import crypto from "node:crypto";
 import { AppError } from "@/server/errors/app-error";
+import { isOnboardingEditable } from "@/server/constants/onboarding-lifecycle";
 import { resolveTenantOnboardingToken } from "@/server/services/onboarding.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import type { TenantKycDocumentType } from "@/server/validators/file.schema";
@@ -52,7 +53,7 @@ export async function uploadTenantKycDocument(params: {
 }) {
   const tenant = await resolveTenantOnboardingToken(params.token);
 
-  if (tenant.onboarding_status === "profile_complete") {
+  if (!isOnboardingEditable(tenant.onboarding_status)) {
     throw new AppError(
       "ONBOARDING_ALREADY_SUBMITTED",
       "This profile has already been submitted. Please contact the landlord if you need to make changes.",

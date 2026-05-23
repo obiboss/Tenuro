@@ -35,7 +35,7 @@ import { createSignedQuitNoticePdfUrl } from "@/server/services/storage.service"
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { buildWaMeUrl } from "@/server/utils/whatsapp";
-import { requireLandlord, requireTenant } from "./auth.service";
+import { requireLandlordPlatformOperator, requireTenant } from "./auth.service";
 
 export type CreateQuitNoticeDraftInput = {
   tenancyId: string;
@@ -222,7 +222,7 @@ function buildQuitNoticeWhatsAppMessage(params: {
 export async function createQuitNoticeDraftForCurrentLandlord(
   input: CreateQuitNoticeDraftInput,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   validateQuitNoticeDates({
@@ -563,7 +563,7 @@ export async function createTenantMoveOutNoticeForCurrentTenant(
 export async function confirmTenantMoveOutForCurrentLandlord(
   input: ConfirmTenantMoveOutInput,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const quitNotice = await getQuitNoticeById(supabase, input.quitNoticeId);
@@ -717,7 +717,7 @@ export async function confirmTenantMoveOutForCurrentLandlord(
 export async function issueQuitNoticeForCurrentLandlord(
   input: IssueQuitNoticeInput,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const existingNotice = await getQuitNoticeById(supabase, input.quitNoticeId);
@@ -799,7 +799,7 @@ export async function issueQuitNoticeForCurrentLandlord(
 export async function withdrawQuitNoticeForCurrentLandlord(
   input: WithdrawQuitNoticeInput,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   assertTextLength({
@@ -863,7 +863,7 @@ export async function withdrawQuitNoticeForCurrentLandlord(
 export async function generateQuitNoticePdfForCurrentLandlord(
   input: GenerateQuitNoticePdfInput,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const userSupabase = await createSupabaseServerClient();
   const adminSupabase = createSupabaseAdminClient();
 
@@ -915,7 +915,7 @@ export async function generateQuitNoticePdfForCurrentLandlord(
 export async function prepareQuitNoticeDeliveryForCurrentLandlord(
   quitNoticeId: string,
 ): Promise<PreparedQuitNoticeDelivery> {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const quitNotice = await getQuitNoticeById(supabase, quitNoticeId);
@@ -991,7 +991,7 @@ export async function prepareQuitNoticeDeliveryForCurrentLandlord(
 export async function getQuitNoticePdfDownloadUrlForCurrentLandlord(
   quitNoticeId: string,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const quitNotice = await getQuitNoticeById(supabase, quitNoticeId);
@@ -1016,14 +1016,14 @@ export async function getQuitNoticePdfDownloadUrlForCurrentLandlord(
 }
 
 export async function getCurrentLandlordQuitNotices() {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   return getQuitNoticesForLandlord(supabase, landlord.id);
 }
 
 export async function getCurrentLandlordQuitNotice(quitNoticeId: string) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const quitNotice = await getQuitNoticeById(supabase, quitNoticeId);
@@ -1042,7 +1042,7 @@ export async function getCurrentLandlordQuitNotice(quitNoticeId: string) {
 export async function getCurrentLandlordQuitNoticesForTenancy(
   tenancyId: string,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const tenancy = await getTenancyById(supabase, tenancyId);

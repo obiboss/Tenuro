@@ -10,7 +10,7 @@ import {
 } from "@/server/repositories/audit-log.repository";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
-import { requireLandlord } from "@/server/services/auth.service";
+import { requireLandlordPlatformOperator } from "@/server/services/auth.service";
 
 type WriteAuditLogInput = Omit<AuditLogInsert, "ipAddress" | "userAgent"> & {
   ipAddress?: string | null;
@@ -57,14 +57,14 @@ export async function writeSystemAuditLog(
 }
 
 export async function getCurrentLandlordAuditLogs() {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   return listAuditLogsForLandlord(supabase, landlord.id);
 }
 
 export async function getCurrentLandlordRenewalReminderAuditLogs() {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   return listRenewalReminderAuditLogsForLandlord(supabase, landlord.id);

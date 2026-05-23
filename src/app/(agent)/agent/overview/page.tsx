@@ -25,7 +25,7 @@ import {
   getCurrentAgentWorkspace,
   getPaystackBanksForAgentSetup,
 } from "@/server/services/agent-profile.service";
-import { PaymentVerificationAutoRefresh } from "@/components/payment/payment-verification-auto-refresh";
+import { PayoutVerificationAutoRefresh } from "@/components/payment/payout-verification-auto-refresh";
 import { getListingVerificationStatusCopy } from "@/server/services/agent-property-listings.service";
 import { getPaystackPayoutVerificationUiState } from "@/server/services/paystack-verification.service";
 
@@ -185,7 +185,7 @@ export default async function AgentOverviewPage() {
 
   return (
     <div>
-      <PaymentVerificationAutoRefresh
+      <PayoutVerificationAutoRefresh
         enabled={shouldAutoRefreshPayoutVerification}
       />
 

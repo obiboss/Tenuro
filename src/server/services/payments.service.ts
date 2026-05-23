@@ -20,7 +20,7 @@ import {
 } from "@/server/services/tenancy-financial-integrity.service";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import type { RecordManualPaymentInput } from "@/server/validators/payment.schema";
-import { requireLandlord } from "./auth.service";
+import { requireLandlordPlatformOperator } from "./auth.service";
 
 export function getThisYearPaymentFilter(): Required<RentPaymentFilter> {
   const now = new Date();
@@ -36,7 +36,7 @@ export function getThisYearPaymentFilter(): Required<RentPaymentFilter> {
 export async function getCurrentLandlordRentPayments(
   filter: RentPaymentFilter = {},
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   return getRentPaymentsForLandlord(supabase, landlord.id, filter);
@@ -45,7 +45,7 @@ export async function getCurrentLandlordRentPayments(
 export async function recordManualPaymentForCurrentLandlord(
   input: RecordManualPaymentInput,
 ) {
-  const landlord = await requireLandlord();
+  const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
 
   const tenancy = await getTenancyPaymentContext(supabase, input.tenancyId);

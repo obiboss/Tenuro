@@ -29,7 +29,7 @@ function mapProfileToSessionUser(profile: ProfileRow): ServerSessionUser {
   };
 }
 
-export async function requireUser(): Promise<ServerSessionUser> {
+async function fetchSessionUserProfile() {
   const supabase = await createSupabaseServerClient();
 
   const {
@@ -38,7 +38,7 @@ export async function requireUser(): Promise<ServerSessionUser> {
   } = await supabase.auth.getUser();
 
   if (userError || !user) {
-    redirect("/login");
+    return null;
   }
 
   const { data: profile, error: profileError } = await supabase
@@ -47,22 +47,25 @@ export async function requireUser(): Promise<ServerSessionUser> {
     .eq("id", user.id)
     .single<ProfileRow>();
 
-  if (profileError || !profile) {
-    await supabase.auth.signOut();
-    redirect("/login");
-  }
-
-  if (!profile.is_active) {
-    await supabase.auth.signOut();
-
-    throw new AppError(
-      "FORBIDDEN",
-      "This BOPA account is inactive. Please contact support.",
-      403,
-    );
+  if (profileError || !profile || !profile.is_active) {
+    return null;
   }
 
   return mapProfileToSessionUser(profile);
+}
+
+export async function getSessionUser(): Promise<ServerSessionUser | null> {
+  return fetchSessionUserProfile();
+}
+
+export async function requireUser(): Promise<ServerSessionUser> {
+  const user = await fetchSessionUserProfile();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  return user;
 }
 
 export async function requireRole(params: {
@@ -95,6 +98,17 @@ export async function requireLandlord() {
     allowedRoles: ["landlord"],
     message: "You do not have permission to view this landlord page.",
   });
+}
+
+export async function requireLandlordPlatformOperator() {
+  const landlord = await requireLandlord();
+  const { assertLandlordPlatformAccessForProfile } = await import(
+    "@/server/services/landlord-subscription-access.service"
+  );
+
+  await assertLandlordPlatformAccessForProfile(landlord.id);
+
+  return landlord;
 }
 
 export async function requireTenant() {

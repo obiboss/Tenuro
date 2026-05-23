@@ -34,7 +34,13 @@ export const rejectTenantSchema = z.object({
   reason: z.string().trim().min(3, "Enter the reason.").max(500),
 });
 
+export const waitlistTenantSchema = z.object({
+  tenantId: uuidSchema,
+  reason: z.string().trim().min(3, "Enter the reason.").max(500),
+});
+
 export type CreateTenantShellInput = z.infer<typeof createTenantShellSchema>;
 export type UpdateTenantInput = z.infer<typeof updateTenantSchema>;
 export type ApproveTenantInput = z.infer<typeof approveTenantSchema>;
 export type RejectTenantInput = z.infer<typeof rejectTenantSchema>;
+export type WaitlistTenantInput = z.infer<typeof waitlistTenantSchema>;
