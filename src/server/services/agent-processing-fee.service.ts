@@ -25,8 +25,7 @@ import {
 } from "@/server/services/platform-payment-settings.service";
 import {
   convertNairaToKobo,
-  createTransactionSplit,
-  initializePaystackMultiSplitTransaction,
+  initializePaystackTransaction,
   verifyPaystackTransaction,
 } from "@/server/services/paystack.service";
 import { assertAgentPayoutVerified } from "@/server/services/paystack-verification.service";
@@ -200,13 +199,10 @@ export async function resolveAgentTenantProcessingFeeForOnboarding(params: {
   assertAgentProcessingFeeEnabled(feeConfiguration);
 
   const reference = createPaymentReference();
-  const split = await createTransactionSplit({
-    name: `BOPA Agent Processing Fee ${reference}`,
-    landlordSubaccountCode:
-      verifiedAgentPaystackAccount.paystack_subaccount_code,
-    landlordShareKobo: convertNairaToKobo(feeConfiguration.agentShareAmount),
-    currencyCode: AGENT_PROCESSING_CURRENCY,
-  });
+  const totalAmountKobo = convertNairaToKobo(feeConfiguration.totalAmount);
+  const platformShareKobo = convertNairaToKobo(
+    feeConfiguration.platformShareAmount,
+  );
 
   const metadata = {
     payment_purpose: "agent_verification_processing_fee",
@@ -218,22 +214,23 @@ export async function resolveAgentTenantProcessingFeeForOnboarding(params: {
     agent_share_amount: feeConfiguration.agentShareAmount,
     tenuro_share_amount: feeConfiguration.platformShareAmount,
     platform_payment_settings_id: feeConfiguration.settingsId,
-    split_code: split.split_code,
-    split_id: split.id,
+    paystack_mode: "subaccount_transaction_charge",
+    subaccount_code: verifiedAgentPaystackAccount.paystack_subaccount_code,
   };
 
-  const initializedTransaction = await initializePaystackMultiSplitTransaction({
+  const initializedTransaction = await initializePaystackTransaction({
     email: getTenantPaymentEmail({
       email: params.tenant.email,
       phoneNumber: params.tenant.phone_number,
     }),
-    amountKobo: convertNairaToKobo(feeConfiguration.totalAmount),
+    amountKobo: totalAmountKobo,
     reference,
     callbackUrl: buildCallbackUrl({
       token: params.token,
       reference,
     }),
-    splitCode: split.split_code,
+    subaccountCode: verifiedAgentPaystackAccount.paystack_subaccount_code,
+    transactionChargeKobo: platformShareKobo,
     currencyCode: AGENT_PROCESSING_CURRENCY,
     metadata,
   });
@@ -252,8 +249,8 @@ export async function resolveAgentTenantProcessingFeeForOnboarding(params: {
     totalAmount: feeConfiguration.totalAmount,
     currencyCode: AGENT_PROCESSING_CURRENCY,
     idempotencyKey: createIdempotencyKey(),
-    paystackSplitCode: split.split_code,
-    paystackSplitId: split.id,
+    paystackSplitCode: null,
+    paystackSplitId: null,
     metadata,
   });
 
@@ -270,7 +267,7 @@ export async function resolveAgentTenantProcessingFeeForOnboarding(params: {
       agent_property_listing_id: agentSource.agentPropertyListingId,
       paystack_reference: intent.paystack_reference,
       processing_fee_amount: intent.processing_fee_amount,
-      split_code: intent.paystack_split_code,
+      subaccount_code: verifiedAgentPaystackAccount.paystack_subaccount_code,
     },
   });
 

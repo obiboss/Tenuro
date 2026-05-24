@@ -54,15 +54,15 @@ export function getFriendlyProcessingFeeInitErrorMessage(error: unknown) {
       const paystackMessage = error.userMessage.toLowerCase();
 
       if (paystackMessage.includes("subaccount")) {
-        return "Online payment is temporarily unavailable because the payout account could not be verified with Paystack. Your application has been saved. Please ask your landlord or agent to reconnect their payout account, then reopen this link.";
+        return "We could not start online payment with Paystack right now. Your application has been saved. Please ask your landlord or agent to confirm their payout account is connected to the same Paystack environment as BOPA, then reopen this link.";
       }
     }
   }
 
   const mappedMessage = errorResult(error).message;
 
-  if (mappedMessage.includes("subaccount")) {
-    return "Online payment is temporarily unavailable because the payout account could not be verified with Paystack. Your application has been saved. Please ask your landlord or agent to reconnect their payout account, then reopen this link.";
+  if (mappedMessage.toLowerCase().includes("subaccount")) {
+    return "We could not start online payment with Paystack right now. Your application has been saved. Please ask your landlord or agent to confirm their payout account is connected to the same Paystack environment as BOPA, then reopen this link.";
   }
 
   return "We could not prepare your verification payment right now, but your application has been saved. Please try again shortly or ask your landlord or agent for help.";

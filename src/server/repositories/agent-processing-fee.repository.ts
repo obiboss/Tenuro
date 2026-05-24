@@ -131,7 +131,7 @@ export async function createAgentProcessingFeeIntent(
     totalAmount: number;
     currencyCode: string;
     idempotencyKey: string;
-    paystackSplitCode: string;
+    paystackSplitCode: string | null;
     paystackSplitId: number | null;
     metadata: Record<string, unknown>;
   },

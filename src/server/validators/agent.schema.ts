@@ -11,12 +11,12 @@ export const setupAgentProfileSchema = z.object({
   serviceState: z
     .string()
     .trim()
-    .min(2, "Enter the state where this agent operates.")
+    .min(2, "Select the state where this agent operates.")
     .max(80, "State name is too long."),
   serviceLga: z
     .string()
     .trim()
-    .min(2, "Enter the LGA where this agent operates.")
+    .min(2, "Select the LGA where this agent operates.")
     .max(120, "LGA name is too long."),
   businessAddress: z.string().trim().max(300).optional().or(z.literal("")),
 });

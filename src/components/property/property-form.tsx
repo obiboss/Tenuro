@@ -7,6 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import {
+  getNigeriaLgaOptions,
+  getNigeriaStateOptions,
+} from "@/lib/nigeria-state-lga";
 
 const propertyTypeOptions = [
   {
@@ -23,70 +27,6 @@ const propertyTypeOptions = [
   },
 ];
 
-const stateLgaMap: Record<string, string[]> = {
-  Lagos: [
-    "Agege",
-    "Ajeromi-Ifelodun",
-    "Alimosho",
-    "Amuwo-Odofin",
-    "Apapa",
-    "Badagry",
-    "Epe",
-    "Eti-Osa",
-    "Ibeju-Lekki",
-    "Ifako-Ijaiye",
-    "Ikeja",
-    "Ikorodu",
-    "Kosofe",
-    "Lagos Island",
-    "Lagos Mainland",
-    "Mushin",
-    "Ojo",
-    "Oshodi-Isolo",
-    "Shomolu",
-    "Surulere",
-  ],
-  Abuja: [
-    "Abaji",
-    "Bwari",
-    "Gwagwalada",
-    "Kuje",
-    "Kwali",
-    "Municipal Area Council",
-  ],
-  Ogun: [
-    "Abeokuta North",
-    "Abeokuta South",
-    "Ado-Odo/Ota",
-    "Ewekoro",
-    "Ifo",
-    "Ijebu East",
-    "Ijebu North",
-    "Ijebu Ode",
-    "Obafemi Owode",
-    "Odeda",
-    "Sagamu",
-  ],
-  Oyo: [
-    "Akinyele",
-    "Egbeda",
-    "Ibadan North",
-    "Ibadan North-East",
-    "Ibadan North-West",
-    "Ibadan South-East",
-    "Ibadan South-West",
-    "Lagelu",
-    "Oluyole",
-    "Ona Ara",
-  ],
-  Rivers: ["Obio-Akpor", "Okrika", "Okrika", "Oyigbo", "Port Harcourt"],
-};
-
-const stateOptions = Object.keys(stateLgaMap).map((state) => ({
-  label: state,
-  value: state,
-}));
-
 export function PropertyForm() {
   const [selectedState, setSelectedState] = useState("");
   const [state, formAction, isPending] = useActionState(
@@ -94,12 +34,12 @@ export function PropertyForm() {
     initialPropertyActionState,
   );
 
-  const lgaOptions = useMemo(() => {
-    return (stateLgaMap[selectedState] ?? []).map((lga) => ({
-      label: lga,
-      value: lga,
-    }));
-  }, [selectedState]);
+  const lgaOptions = useMemo(
+    () => getNigeriaLgaOptions(selectedState),
+    [selectedState],
+  );
+
+  const stateOptions = useMemo(() => getNigeriaStateOptions(), []);
 
   return (
     <form action={formAction}>

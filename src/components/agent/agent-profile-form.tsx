@@ -1,13 +1,18 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { setupAgentProfileAction } from "@/actions/agent-profile.actions";
 import { initialAgentProfileActionState } from "@/actions/agent-profile.state";
 import type { AgentProfileRow } from "@/server/repositories/agent-profile.repository";
 import { ActionResultToast } from "@/components/ui/action-result-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  getNigeriaLgaOptions,
+  getNigeriaStateOptions,
+} from "@/lib/nigeria-state-lga";
 
 type AgentProfileFormProps = {
   profile: AgentProfileRow | null;
@@ -18,9 +23,19 @@ export function AgentProfileForm({
   profile,
   agentPhoneNumber,
 }: AgentProfileFormProps) {
+  const [selectedState, setSelectedState] = useState(profile?.service_state ?? "");
+  const [selectedLga, setSelectedLga] = useState(profile?.service_lga ?? "");
+
   const [state, formAction, isPending] = useActionState(
     setupAgentProfileAction,
     initialAgentProfileActionState,
+  );
+
+  const stateOptions = useMemo(() => getNigeriaStateOptions(), []);
+
+  const lgaOptions = useMemo(
+    () => getNigeriaLgaOptions(selectedState),
+    [selectedState],
   );
 
   return (
@@ -64,20 +79,28 @@ export function AgentProfileForm({
       />
 
       <div className="grid gap-4 md:grid-cols-2">
-        <Input
+        <Select
           label="Service state"
           name="serviceState"
-          defaultValue={profile?.service_state ?? ""}
-          placeholder="Lagos"
+          placeholder="Select state"
+          options={stateOptions}
+          value={selectedState}
+          onChange={(event) => {
+            setSelectedState(event.target.value);
+            setSelectedLga("");
+          }}
           error={state.fieldErrors?.serviceState?.[0]}
           required
         />
 
-        <Input
+        <Select
           label="Service LGA"
           name="serviceLga"
-          defaultValue={profile?.service_lga ?? ""}
-          placeholder="Ikeja"
+          placeholder={selectedState ? "Select LGA" : "Select state first"}
+          options={lgaOptions}
+          value={selectedLga}
+          onChange={(event) => setSelectedLga(event.target.value)}
+          disabled={!selectedState}
           error={state.fieldErrors?.serviceLga?.[0]}
           required
         />
