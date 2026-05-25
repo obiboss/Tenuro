@@ -21,6 +21,7 @@ import { createUnit } from "@/server/repositories/units.repository";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { normalisePhoneNumber } from "@/server/utils/phone";
+import { buildWaMeUrl } from "@/server/utils/whatsapp";
 import type { AgentPropertyListingInput } from "@/server/validators/agent-property-listing.schema";
 import { requireAgent } from "./auth.service";
 
@@ -57,13 +58,12 @@ function buildLandlordClaimUrl(token: string) {
   )}`;
 }
 
-function buildWhatsAppUrl(params: {
+function buildLandlordVerificationWhatsAppUrl(params: {
   phoneNumber: string;
   landlordName: string;
   propertyName: string;
   verificationUrl: string;
 }) {
-  const phoneDigits = params.phoneNumber.replace(/\D/g, "");
   const message = [
     `Hello ${params.landlordName},`,
     "",
@@ -76,7 +76,10 @@ function buildWhatsAppUrl(params: {
     "BOPA - Property records made simple.",
   ].join("\n");
 
-  return `https://wa.me/${phoneDigits}?text=${encodeURIComponent(message)}`;
+  return buildWaMeUrl({
+    phoneNumber: params.phoneNumber,
+    message,
+  });
 }
 
 async function writeAgentPropertyListingAuditLog(params: {
@@ -272,7 +275,7 @@ export async function createLandlordVerificationLinkForCurrentAgent(
   );
 
   const verificationUrl = buildLandlordVerificationUrl(token);
-  const whatsappUrl = buildWhatsAppUrl({
+  const whatsappUrl = buildLandlordVerificationWhatsAppUrl({
     phoneNumber: updatedListing.landlord_phone_number,
     landlordName: updatedListing.landlord_full_name,
     propertyName: updatedListing.property_name,

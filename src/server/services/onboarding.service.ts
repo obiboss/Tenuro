@@ -252,6 +252,8 @@ export async function generateTenantOnboardingLink(tenantId: string) {
     "BOPA - Property Management for Modern Landlords.",
   ].join("\n");
 
+  const tenantPhone = normalisePhoneNumber(tenant.phone_number);
+
   await writeTenantOnboardingAuditLog({
     tenantId: tenant.id,
     landlordId: tenant.landlord_id,
@@ -275,7 +277,7 @@ export async function generateTenantOnboardingLink(tenantId: string) {
     tenant,
     onboardingUrl,
     whatsappMessage,
-    tenantWhatsappNumber: tenant.phone_number,
+    tenantWhatsappNumber: tenantPhone.national,
   };
 }
 

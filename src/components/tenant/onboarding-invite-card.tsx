@@ -12,12 +12,7 @@ type OnboardingInviteCardProps = {
   tenantId: string;
 };
 
-function buildWhatsAppUrl(phoneNumber: string, message: string) {
-  const digitsOnly = phoneNumber.replace(/\D/g, "");
-  const encodedMessage = encodeURIComponent(message);
-
-  return `https://wa.me/${digitsOnly}?text=${encodedMessage}`;
-}
+import { buildWaMeUrl } from "@/lib/whatsapp";
 
 export function OnboardingInviteCard({ tenantId }: OnboardingInviteCardProps) {
   const sentMessageRef = useRef<string | null>(null);
@@ -40,7 +35,10 @@ export function OnboardingInviteCard({ tenantId }: OnboardingInviteCardProps) {
     sentMessageRef.current = state.whatsappMessage;
 
     window.location.assign(
-      buildWhatsAppUrl(state.tenantWhatsappNumber, state.whatsappMessage),
+      buildWaMeUrl({
+        phoneNumber: state.tenantWhatsappNumber,
+        message: state.whatsappMessage,
+      }),
     );
   }, [state.ok, state.tenantWhatsappNumber, state.whatsappMessage]);
 

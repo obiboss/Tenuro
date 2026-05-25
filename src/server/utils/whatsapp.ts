@@ -1,3 +1,5 @@
+import { buildWaMeUrl as buildWaMeUrlLib } from "@/lib/whatsapp";
+import { tryNormalisePhoneNumber } from "@/lib/phone";
 import { AppError, isAppError } from "@/server/errors/app-error";
 import { normalisePhoneNumber } from "@/server/utils/phone";
 
@@ -36,27 +38,12 @@ export function getRequiredWhatsAppRecipient(
 export function getOptionalWhatsAppRecipient(
   phoneNumber: string | null | undefined,
 ): WhatsAppRecipient | null {
-  if (!phoneNumber?.trim()) {
-    return null;
-  }
-
-  try {
-    return normalisePhoneNumber(phoneNumber);
-  } catch {
-    return null;
-  }
+  return tryNormalisePhoneNumber(phoneNumber);
 }
 
 export function buildWaMeUrl(params: {
   phoneNumber?: string | null;
   message: string;
 }) {
-  const encodedMessage = encodeURIComponent(params.message);
-  const recipient = getOptionalWhatsAppRecipient(params.phoneNumber);
-
-  if (!recipient) {
-    return `https://wa.me/?text=${encodedMessage}`;
-  }
-
-  return `https://wa.me/${recipient.national}?text=${encodedMessage}`;
+  return buildWaMeUrlLib(params);
 }

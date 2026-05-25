@@ -29,6 +29,7 @@ import {
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { writeAuditLog } from "@/server/services/audit-log.service";
 import { createTenantKycDocumentLinks } from "@/server/services/storage.service";
+import { normalisePhoneNumber } from "@/server/utils/phone";
 import type {
   CreateTenantShellInput,
   RejectTenantInput,
@@ -258,7 +259,12 @@ export async function createTenantShellForCurrentLandlord(
     );
   }
 
-  const tenant = await createTenantShell(supabase, landlord.id, input);
+  const normalizedPhone = normalisePhoneNumber(input.phoneNumber);
+
+  const tenant = await createTenantShell(supabase, landlord.id, {
+    ...input,
+    phoneNumber: normalizedPhone.e164,
+  });
   const reservedUnit = await markUnitReserved(supabase, input.unitId);
 
   await writeAuditLog({
@@ -321,7 +327,13 @@ export async function updateTenantForCurrentLandlord(
     );
   }
 
-  const updatedTenant = await updateTenant(supabase, tenantId, input);
+  const updateInput: UpdateTenantInput = { ...input };
+
+  if (input.phoneNumber !== undefined) {
+    updateInput.phoneNumber = normalisePhoneNumber(input.phoneNumber).e164;
+  }
+
+  const updatedTenant = await updateTenant(supabase, tenantId, updateInput);
 
   await writeAuditLog({
     landlordId: landlord.id,

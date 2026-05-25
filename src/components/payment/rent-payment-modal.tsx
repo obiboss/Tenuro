@@ -20,12 +20,7 @@ type RentPaymentModalProps = {
   periodEnd: string | null;
 };
 
-function buildWhatsAppUrl(phoneNumber: string, message: string) {
-  const digitsOnly = phoneNumber.replace(/\D/g, "");
-  const encodedMessage = encodeURIComponent(message);
-
-  return `https://wa.me/${digitsOnly}?text=${encodedMessage}`;
-}
+import { buildWaMeUrl } from "@/lib/whatsapp";
 
 function formatMoney(amount: number) {
   return new Intl.NumberFormat("en-NG", {
@@ -71,7 +66,10 @@ export function RentPaymentModal({
     sentMessageRef.current = state.whatsappMessage;
 
     window.location.assign(
-      buildWhatsAppUrl(state.tenantWhatsappNumber, state.whatsappMessage),
+      buildWaMeUrl({
+        phoneNumber: state.tenantWhatsappNumber,
+        message: state.whatsappMessage,
+      }),
     );
   }, [state.ok, state.tenantWhatsappNumber, state.whatsappMessage]);
 

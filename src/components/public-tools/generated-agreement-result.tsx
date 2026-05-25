@@ -1,6 +1,6 @@
 "use client";
 
-import { buildWaMeUrl } from "@/server/utils/whatsapp";
+import { buildWaMeUrl } from "@/lib/whatsapp";
 
 type GeneratedAgreementResultProps = {
   agreement: {

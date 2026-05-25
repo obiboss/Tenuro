@@ -9,19 +9,14 @@ type WhatsAppSendButtonProps = {
   label?: string;
 };
 
-function buildWhatsAppUrl(phoneNumber: string, message: string) {
-  const digitsOnly = phoneNumber.replace(/\D/g, "");
-  const encodedMessage = encodeURIComponent(message);
-
-  return `https://wa.me/${digitsOnly}?text=${encodedMessage}`;
-}
+import { buildWaMeUrl } from "@/lib/whatsapp";
 
 export function WhatsAppSendButton({
   phoneNumber,
   message,
   label = "Send via WhatsApp",
 }: WhatsAppSendButtonProps) {
-  const whatsappUrl = buildWhatsAppUrl(phoneNumber, message);
+  const whatsappUrl = buildWaMeUrl({ phoneNumber, message });
 
   return (
     <a href={whatsappUrl} target="_blank" rel="noreferrer" className="block">

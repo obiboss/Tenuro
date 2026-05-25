@@ -12,12 +12,7 @@ type TenantActivationInviteCardProps = {
   tenantId: string;
 };
 
-function buildWhatsAppUrl(phoneNumber: string, message: string) {
-  const digitsOnly = phoneNumber.replace(/\D/g, "");
-  const encodedMessage = encodeURIComponent(message);
-
-  return `https://wa.me/${digitsOnly}?text=${encodedMessage}`;
-}
+import { buildWaMeUrl } from "@/lib/whatsapp";
 
 export function TenantActivationInviteCard({
   tenantId,
@@ -42,7 +37,10 @@ export function TenantActivationInviteCard({
     sentMessageRef.current = state.whatsappMessage;
 
     window.location.assign(
-      buildWhatsAppUrl(state.tenantWhatsappNumber, state.whatsappMessage),
+      buildWaMeUrl({
+        phoneNumber: state.tenantWhatsappNumber,
+        message: state.whatsappMessage,
+      }),
     );
   }, [state.ok, state.tenantWhatsappNumber, state.whatsappMessage]);
 

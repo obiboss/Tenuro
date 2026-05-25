@@ -17,6 +17,7 @@ import { assertAgentPayoutVerified } from "@/server/services/paystack-verificati
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { normalisePhoneNumber } from "@/server/utils/phone";
+import { buildWaMeUrl } from "@/server/utils/whatsapp";
 import type { CreateAgentTenantOnboardingLinkInput } from "@/server/validators/agent-tenant-onboarding.schema";
 import { requireAgent } from "./auth.service";
 
@@ -47,15 +48,13 @@ function buildTenantOnboardingUrl(token: string) {
   return `${getAppBaseUrl()}/t/onboarding/${encodeURIComponent(token)}`;
 }
 
-function buildWhatsAppUrl(params: {
+function buildTenantOnboardingWhatsAppUrl(params: {
   phoneNumber: string;
   tenantName: string;
   propertyName: string;
   unitIdentifier: string;
   onboardingUrl: string;
 }) {
-  const phoneDigits = params.phoneNumber.replace(/\D/g, "");
-
   const message = [
     `Hello ${params.tenantName},`,
     "",
@@ -66,7 +65,10 @@ function buildWhatsAppUrl(params: {
     "BOPA - Property records made simple.",
   ].join("\n");
 
-  return `https://wa.me/${phoneDigits}?text=${encodeURIComponent(message)}`;
+  return buildWaMeUrl({
+    phoneNumber: params.phoneNumber,
+    message,
+  });
 }
 
 function assertListingReadyForTenantOnboarding(
@@ -201,7 +203,7 @@ export async function createTenantOnboardingLinkForCurrentAgent(
   });
 
   const onboardingUrl = buildTenantOnboardingUrl(token);
-  const whatsappUrl = buildWhatsAppUrl({
+  const whatsappUrl = buildTenantOnboardingWhatsAppUrl({
     phoneNumber: tenant.phone_number,
     tenantName: tenant.full_name,
     propertyName: listing.property_name,

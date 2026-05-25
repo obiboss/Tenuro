@@ -29,12 +29,7 @@ type TenancyAgreementDocumentCardProps = {
   pdfDownloadUrl: string | null;
 };
 
-function buildWhatsAppUrl(phoneNumber: string, message: string) {
-  const digitsOnly = phoneNumber.replace(/\D/g, "");
-  const encodedMessage = encodeURIComponent(message);
-
-  return `https://wa.me/${digitsOnly}?text=${encodedMessage}`;
-}
+import { buildWaMeUrl } from "@/lib/whatsapp";
 
 function getStatusLabel(
   status: TenancyAgreementDocumentRow["document_status"],
@@ -142,7 +137,10 @@ export function TenancyAgreementDocumentCard({
     sentAgreementMessageRef.current = agreementWhatsAppMessage;
 
     window.location.assign(
-      buildWhatsAppUrl(agreementWhatsappNumber, agreementWhatsAppMessage),
+      buildWaMeUrl({
+        phoneNumber: agreementWhatsappNumber,
+        message: agreementWhatsAppMessage,
+      }),
     );
   }, [agreementWhatsappNumber, agreementWhatsAppMessage]);
 
