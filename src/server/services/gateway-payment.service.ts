@@ -166,7 +166,7 @@ function getTenuroGatewayAdminFee() {
 }
 
 function createPaymentReference() {
-  return `tenuro_${crypto.randomUUID().replaceAll("-", "")}`;
+  return `bopa_${crypto.randomUUID().replaceAll("-", "")}`;
 }
 
 function createPaymentIdempotencyKey() {
@@ -1096,7 +1096,8 @@ export async function getPublicTenantPaymentCheckout(params: {
     if (
       intentForVerify &&
       (intentForVerify.status === "initialized" ||
-        (intentForVerify.status === "paid" && !intentForVerify.processed_payment_id))
+        (intentForVerify.status === "paid" &&
+          !intentForVerify.processed_payment_id))
     ) {
       try {
         await processVerifiedGatewayPaymentReference(params.reference, {
