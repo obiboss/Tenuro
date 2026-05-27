@@ -249,6 +249,33 @@ export async function getTenantBySourcePropertyApplicationId(
   return data;
 }
 
+export async function markTenantRejectedAfterInspection(
+  supabase: SupabaseClient,
+  params: {
+    tenantId: string;
+    reason: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("tenants")
+    .update({
+      onboarding_status: "rejected",
+      rejected_reason: params.reason,
+      approved_at: null,
+      approved_by: null,
+    })
+    .eq("id", params.tenantId)
+    .is("deleted_at", null)
+    .select(TENANT_BASE_SELECT)
+    .single<TenantRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 export async function updateTenant(
   supabase: SupabaseClient,
   tenantId: string,

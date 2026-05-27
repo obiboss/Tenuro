@@ -11,12 +11,16 @@ import {
 } from "@/server/repositories/tenant-applications.repository";
 import {
   createTenantFromPropertyApplication,
+  getTenantById,
   getTenantBySourcePropertyApplicationId,
+  markTenantRejectedAfterInspection,
   type TenantIdType,
 } from "@/server/repositories/tenants.repository";
+import { getActiveTenancyForUnit } from "@/server/repositories/tenancies.repository";
 import {
   getUnitById,
   markUnitReserved,
+  markUnitVacant,
 } from "@/server/repositories/units.repository";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
@@ -74,6 +78,45 @@ async function getReviewableApplicationForCurrentLandlord(
     landlord,
     supabase,
     application,
+  };
+}
+
+async function getAcceptedApplicationForCurrentLandlord(applicationId: string) {
+  const landlord = await requireLandlordPlatformOperator();
+  const supabase = createSupabaseAdminClient();
+  const application = await getPropertyApplicationById(supabase, applicationId);
+
+  if (application.landlord_id !== landlord.id) {
+    throw new AppError(
+      "FORBIDDEN",
+      "You do not have permission to update this application.",
+      403,
+    );
+  }
+
+  if (application.status !== "accepted") {
+    throw new AppError(
+      "APPLICATION_NOT_ACCEPTED",
+      "This application has not been accepted yet.",
+      400,
+    );
+  }
+
+  const convertedTenantId = application.converted_tenant_id;
+
+  if (!convertedTenantId) {
+    throw new AppError(
+      "APPLICATION_NOT_CONVERTED",
+      "This application has not been converted into the tenant pipeline.",
+      400,
+    );
+  }
+
+  return {
+    landlord,
+    supabase,
+    application,
+    convertedTenantId,
   };
 }
 
@@ -208,6 +251,61 @@ export async function waitlistPropertyApplicationForCurrentLandlord(params: {
     applicationId: application.id,
     status: "waitlisted",
     reason: params.reason,
+    decidedBy: landlord.id,
+  });
+}
+
+export async function markAcceptedPropertyApplicationRejectedByTenant(params: {
+  applicationId: string;
+  reason: string;
+}) {
+  const { landlord, supabase, application, convertedTenantId } =
+    await getAcceptedApplicationForCurrentLandlord(params.applicationId);
+
+  const tenant = await getTenantById(supabase, convertedTenantId);
+
+  if (tenant.landlord_id !== landlord.id) {
+    throw new AppError(
+      "TENANT_LANDLORD_MISMATCH",
+      "This tenant does not belong to your landlord account.",
+      403,
+    );
+  }
+
+  if (tenant.source_property_application_id !== application.id) {
+    throw new AppError(
+      "TENANT_APPLICATION_MISMATCH",
+      "This tenant was not created from this property application.",
+      400,
+    );
+  }
+
+  const activeTenancy = await getActiveTenancyForUnit(supabase, tenant.unit_id);
+
+  if (activeTenancy) {
+    throw new AppError(
+      "ACTIVE_TENANCY_EXISTS",
+      "This tenant already has an active tenancy. Cancel or terminate the tenancy before releasing this application.",
+      400,
+    );
+  }
+
+  await markTenantRejectedAfterInspection(supabase, {
+    tenantId: tenant.id,
+    reason: params.reason,
+  });
+
+  const unit = await getUnitById(supabase, tenant.unit_id);
+
+  if (unit.status === "reserved") {
+    await markUnitVacant(supabase, unit.id);
+  }
+
+  return updatePropertyApplicationStatus(supabase, {
+    applicationId: application.id,
+    status: "rejected_by_tenant_after_inspection",
+    convertedTenantId,
+    tenantDecisionReason: params.reason,
     decidedBy: landlord.id,
   });
 }

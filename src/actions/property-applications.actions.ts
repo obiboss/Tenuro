@@ -6,6 +6,7 @@ import type { PropertyApplicationDecisionActionState } from "@/actions/property-
 import { errorResult } from "@/server/errors/result";
 import {
   acceptPropertyApplicationForCurrentLandlord,
+  markAcceptedPropertyApplicationRejectedByTenant,
   rejectPropertyApplicationForCurrentLandlord,
   waitlistPropertyApplicationForCurrentLandlord,
 } from "@/server/services/property-application-review.service";
@@ -15,10 +16,26 @@ const decisionSchema = z.object({
   reason: z.string().trim().max(500).optional(),
 });
 
+const tenantRejectionSchema = z.object({
+  applicationId: z.string().uuid(),
+  reason: z
+    .string()
+    .trim()
+    .min(3, "Enter why the tenant rejected this apartment.")
+    .max(500),
+});
+
 function parseDecisionForm(formData: FormData) {
   return decisionSchema.parse({
     applicationId: formData.get("applicationId"),
     reason: formData.get("reason") || undefined,
+  });
+}
+
+function parseTenantRejectionForm(formData: FormData) {
+  return tenantRejectionSchema.parse({
+    applicationId: formData.get("applicationId"),
+    reason: formData.get("reason"),
   });
 }
 
@@ -97,6 +114,38 @@ export async function waitlistPropertyApplicationAction(
     return {
       ok: true,
       message: "Application waitlisted.",
+    };
+  } catch (error) {
+    const result = errorResult(error);
+
+    return {
+      ok: false,
+      message: result.message,
+      fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
+    };
+  }
+}
+
+export async function markTenantRejectedApartmentAction(
+  _previousState: PropertyApplicationDecisionActionState,
+  formData: FormData,
+): Promise<PropertyApplicationDecisionActionState> {
+  try {
+    const parsed = parseTenantRejectionForm(formData);
+
+    await markAcceptedPropertyApplicationRejectedByTenant({
+      applicationId: parsed.applicationId,
+      reason: parsed.reason,
+    });
+
+    revalidatePath("/applications");
+    revalidatePath("/tenants");
+    revalidatePath("/overview");
+
+    return {
+      ok: true,
+      message:
+        "Tenant rejection recorded. The application is closed and the unit has been released if it was only reserved.",
     };
   } catch (error) {
     const result = errorResult(error);

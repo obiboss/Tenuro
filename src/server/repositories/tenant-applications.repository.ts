@@ -431,6 +431,7 @@ export async function updatePropertyApplicationStatus(
     processingFeeAccessId?: string | null;
     convertedTenantId?: string | null;
     reason?: string | null;
+    tenantDecisionReason?: string | null;
     decidedBy?: string | null;
   },
 ) {
@@ -452,6 +453,7 @@ export async function updatePropertyApplicationStatus(
       processing_fee_access_id: params.processingFeeAccessId,
       converted_tenant_id: params.convertedTenantId,
       landlord_decision_reason: params.reason ?? null,
+      tenant_decision_reason: params.tenantDecisionReason ?? null,
       submitted_at:
         params.status === "submitted_for_landlord_review" ? now : undefined,
       decided_at: terminalStatuses.includes(params.status) ? now : null,

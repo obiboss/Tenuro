@@ -49,6 +49,7 @@ export type LandlordPropertyApplicationReviewRow = {
   landlord_phone_number: string | null;
   acquisition_context_key: string;
   processing_fee_access_id: string | null;
+  converted_tenant_id: string | null;
   status: PropertyApplicationStatus;
   inspection_status: string;
   landlord_decision_reason: string | null;
@@ -72,6 +73,7 @@ const LANDLORD_PROPERTY_APPLICATION_REVIEW_SELECT = `
   landlord_phone_number,
   acquisition_context_key,
   processing_fee_access_id,
+  converted_tenant_id,
   status,
   inspection_status,
   landlord_decision_reason,

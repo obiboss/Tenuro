@@ -1,5 +1,6 @@
-import { Building2, FileText, UserRoundCheck } from "lucide-react";
-import { PropertyApplicationDecisionForms } from "./property-application-decision-forms";
+import Link from "next/link";
+import { ArrowRight, Building2, FileText, UserRoundCheck } from "lucide-react";
+import { PropertyApplicationDecisionForms } from "@/components/applications/property-application-decision-forms";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
@@ -73,6 +74,44 @@ function getGuarantorAnswer(answers: Record<string, unknown>) {
   return "Not answered";
 }
 
+function ApplicationPipelineStatus({
+  status,
+  convertedTenantId,
+}: {
+  status: string;
+  convertedTenantId: string | null;
+}) {
+  if (convertedTenantId) {
+    return (
+      <div className="mt-4 rounded-button bg-success-soft px-4 py-3 text-sm font-semibold leading-6 text-success">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <p>
+            This application has been converted into the normal tenant pipeline.
+          </p>
+
+          <Link
+            href={`/tenants/${convertedTenantId}`}
+            className="inline-flex items-center justify-center gap-2 rounded-button bg-success px-4 py-2 text-xs font-black text-white transition hover:opacity-95"
+          >
+            Open tenant
+            <ArrowRight aria-hidden="true" size={14} strokeWidth={2.6} />
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "accepted") {
+    return (
+      <div className="mt-4 rounded-button bg-warning-soft px-4 py-3 text-sm font-semibold leading-6 text-warning">
+        Application accepted, but tenant pipeline conversion is not linked yet.
+      </div>
+    );
+  }
+
+  return null;
+}
+
 export default async function LandlordApplicationsPage() {
   const applications = await getCurrentLandlordPropertyApplicationsForReview();
 
@@ -126,6 +165,11 @@ export default async function LandlordApplicationsPage() {
                       </p>
                     </div>
                   </div>
+
+                  <ApplicationPipelineStatus
+                    status={application.status}
+                    convertedTenantId={application.converted_tenant_id}
+                  />
 
                   <div className="mt-4 grid gap-4 lg:grid-cols-2">
                     <div className="rounded-card bg-white p-4">
