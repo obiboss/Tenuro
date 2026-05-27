@@ -1,5 +1,6 @@
 import { Building2, CreditCard, Send } from "lucide-react";
 import { AgentPropertyListingForm } from "@/components/agent/agent-property-listing-form";
+import { AgentPropertyListingMediaUploader } from "@/components/agent/agent-property-listing-media-uploader";
 import { LandlordVerificationLinkForm } from "@/components/agent/landlord-verification-link-form";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -54,7 +55,7 @@ export default async function AgentListingsPage() {
     <div>
       <PageHeader
         title="Agent listings"
-        description="Submit landlord properties and send review links directly to landlords on WhatsApp."
+        description="Submit landlord properties, upload listing media, and send review links directly to landlords on WhatsApp."
       />
 
       <div className="mb-6 grid gap-4 md:grid-cols-3">
@@ -191,6 +192,10 @@ export default async function AgentListingsPage() {
                         )}
                       </p>
                     </div>
+                  </div>
+
+                  <div className="mt-4">
+                    <AgentPropertyListingMediaUploader listingId={listing.id} />
                   </div>
 
                   <div className="mt-4 rounded-button bg-white p-3">
