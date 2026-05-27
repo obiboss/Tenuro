@@ -1,4 +1,5 @@
 import { Building2, CreditCard, Send } from "lucide-react";
+import { AgentListingsShareCard } from "@/components/agent/agent-listings-share-card";
 import { AgentPropertyListingForm } from "@/components/agent/agent-property-listing-form";
 import { AgentPropertyListingMediaUploader } from "@/components/agent/agent-property-listing-media-uploader";
 import { LandlordVerificationLinkForm } from "@/components/agent/landlord-verification-link-form";
@@ -43,8 +44,18 @@ function canCreateVerificationLink(status: string) {
   return status === "submitted" || status === "landlord_verification_sent";
 }
 
+function getAppBaseUrl() {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+
+  if (!appUrl) {
+    return "";
+  }
+
+  return appUrl.replace(/\/$/, "");
+}
+
 export default async function AgentListingsPage() {
-  const { profile, paystackAccount, listings } =
+  const { agent, profile, paystackAccount, listings } =
     await getCurrentAgentListingsWorkspace();
 
   const mediaByListingId = await getAgentListingMediaByListingId(
@@ -57,11 +68,22 @@ export default async function AgentListingsPage() {
     "agent",
   );
 
+  const appBaseUrl = getAppBaseUrl();
+  const publicListingPath = `/agent-listings/${agent.id}`;
+  const publicListingUrl = appBaseUrl
+    ? `${appBaseUrl}${publicListingPath}`
+    : publicListingPath;
+
   return (
     <div>
       <PageHeader
         title="Agent listings"
-        description="Submit landlord properties, upload listing media, and send review links directly to landlords on WhatsApp."
+        description="Submit landlord properties, upload listing media, and share available listings with prospective tenants."
+      />
+
+      <AgentListingsShareCard
+        listingUrl={publicListingUrl}
+        agentName={profile?.business_name ?? agent.fullName ?? null}
       />
 
       <div className="mb-6 grid gap-4 md:grid-cols-3">
@@ -83,10 +105,8 @@ export default async function AgentListingsPage() {
               <Send aria-hidden="true" size={22} strokeWidth={2.6} />
             </div>
             <div>
-              <p className="text-sm font-bold text-text-muted">Profile</p>
-              <p className="font-black text-text-strong">
-                {profile ? "Ready" : "Required"}
-              </p>
+              <p className="text-sm font-bold text-text-muted">Share link</p>
+              <p className="font-black text-text-strong">Active</p>
             </div>
           </div>
         </div>
