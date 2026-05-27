@@ -467,3 +467,21 @@ export async function updatePropertyApplicationStatus(
 
   return data;
 }
+
+export async function getPropertyApplicationById(
+  supabase: SupabaseClient,
+  applicationId: string,
+) {
+  const { data, error } = await supabase
+    .from("property_applications")
+    .select(PROPERTY_APPLICATION_SELECT)
+    .eq("id", applicationId)
+    .is("deleted_at", null)
+    .single<PropertyApplicationRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
