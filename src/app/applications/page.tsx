@@ -1,4 +1,5 @@
-import { Building2, FileText, ShieldCheck, UserRoundCheck } from "lucide-react";
+import { Building2, FileText, UserRoundCheck } from "lucide-react";
+import { PropertyApplicationDecisionForms } from "./property-application-decision-forms";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
@@ -30,7 +31,7 @@ function formatDate(value: string | null) {
 }
 
 function getApplicationBadgeTone(status: string) {
-  if (status === "submitted_for_landlord_review") {
+  if (status === "submitted_for_landlord_review" || status === "waitlisted") {
     return "warning" as const;
   }
 
@@ -47,7 +48,7 @@ function getApplicationBadgeTone(status: string) {
     return "danger" as const;
   }
 
-  return "neutral" as const;
+  return "warning" as const;
 }
 
 function formatStatus(status: string) {
@@ -79,12 +80,12 @@ export default async function LandlordApplicationsPage() {
     <div>
       <PageHeader
         title="Tenant applications"
-        description="Review applications submitted through agent property listings."
+        description="Review tenant KYC details and selected property context from agent listing applications."
       />
 
       <SectionCard
         title="Applications for review"
-        description="Each application is tied to a selected property listing, reusable tenant KYC, and processing-fee status."
+        description="Each application is tied to a selected property listing and reusable tenant KYC profile."
       >
         {applications.length === 0 ? (
           <EmptyState
@@ -109,6 +110,7 @@ export default async function LandlordApplicationsPage() {
                         <h2 className="font-black text-text-strong">
                           {tenant?.full_name ?? "Tenant profile unavailable"}
                         </h2>
+
                         <Badge
                           tone={getApplicationBadgeTone(application.status)}
                         >
@@ -135,6 +137,7 @@ export default async function LandlordApplicationsPage() {
                             strokeWidth={2.6}
                           />
                         </div>
+
                         <h3 className="font-black text-text-strong">
                           Tenant KYC
                         </h3>
@@ -147,30 +150,35 @@ export default async function LandlordApplicationsPage() {
                           </span>{" "}
                           {tenant?.phone_number ?? "Not available"}
                         </p>
+
                         <p>
                           <span className="font-black text-text-strong">
                             Email:
                           </span>{" "}
                           {tenant?.email ?? "Not provided"}
                         </p>
+
                         <p>
                           <span className="font-black text-text-strong">
                             Occupation:
                           </span>{" "}
                           {tenant?.occupation ?? "Not provided"}
                         </p>
+
                         <p>
                           <span className="font-black text-text-strong">
                             Employer:
                           </span>{" "}
                           {tenant?.employer ?? "Not provided"}
                         </p>
+
                         <p>
                           <span className="font-black text-text-strong">
                             Home address:
                           </span>{" "}
                           {tenant?.home_address ?? "Not provided"}
                         </p>
+
                         <p>
                           <span className="font-black text-text-strong">
                             Can provide guarantor:
@@ -198,6 +206,7 @@ export default async function LandlordApplicationsPage() {
                             strokeWidth={2.6}
                           />
                         </div>
+
                         <h3 className="font-black text-text-strong">
                           Selected listing
                         </h3>
@@ -210,6 +219,7 @@ export default async function LandlordApplicationsPage() {
                           </span>{" "}
                           {listing?.property_name ?? "Not available"}
                         </p>
+
                         <p>
                           <span className="font-black text-text-strong">
                             Address:
@@ -218,12 +228,14 @@ export default async function LandlordApplicationsPage() {
                             ? `${listing.address}, ${listing.lga}, ${listing.state}`
                             : "Not available"}
                         </p>
+
                         <p>
                           <span className="font-black text-text-strong">
                             Unit:
                           </span>{" "}
                           {listing?.unit_identifier ?? "Not available"}
                         </p>
+
                         <p>
                           <span className="font-black text-text-strong">
                             Type:
@@ -231,6 +243,7 @@ export default async function LandlordApplicationsPage() {
                           {listing?.unit_type.replaceAll("_", " ") ??
                             "Not available"}
                         </p>
+
                         <p>
                           <span className="font-black text-text-strong">
                             Rent:
@@ -242,6 +255,7 @@ export default async function LandlordApplicationsPage() {
                               )
                             : "Not available"}
                         </p>
+
                         <p>
                           <span className="font-black text-text-strong">
                             Agent commission:
@@ -256,17 +270,21 @@ export default async function LandlordApplicationsPage() {
                       </div>
 
                       <div className="mt-4 rounded-button bg-gold-soft px-4 py-3 text-sm font-semibold leading-6 text-gold-deep">
-                        <ShieldCheck
-                          aria-hidden="true"
-                          className="mr-2 inline"
-                          size={16}
-                          strokeWidth={2.6}
-                        />
-                        Processing fee confirms application processing only. It
-                        does not guarantee tenant approval or apartment
-                        availability.
+                        Review the tenant against the selected property before
+                        accepting, rejecting, or waitlisting the application.
                       </div>
                     </div>
+                  </div>
+
+                  <div className="mt-4 rounded-card bg-white p-4">
+                    <h3 className="mb-3 font-black text-text-strong">
+                      Landlord decision
+                    </h3>
+
+                    <PropertyApplicationDecisionForms
+                      applicationId={application.id}
+                      status={application.status}
+                    />
                   </div>
                 </article>
               );
