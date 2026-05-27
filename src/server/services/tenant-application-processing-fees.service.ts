@@ -5,16 +5,26 @@ import { AppError } from "@/server/errors/app-error";
 import {
   createTenantApplicationProcessingFeeIntent,
   getLatestTenantApplicationProcessingFeeIntent,
+  getTenantApplicationProcessingFeeIntentByReference,
+  markTenantApplicationProcessingFeeIntentFailed,
+  markTenantApplicationProcessingFeeIntentPaid,
 } from "@/server/repositories/tenant-application-processing-fees.repository";
 import {
+  createProcessingFeeAccess,
   getActiveProcessingFeeAccess,
   getPropertyApplicationById,
+  updatePropertyApplicationStatus,
 } from "@/server/repositories/tenant-applications.repository";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import {
   convertNairaToKobo,
   initializeStandardPaystackTransaction,
+  verifyPaystackTransaction,
 } from "@/server/services/paystack.service";
+import {
+  getProcessingFeeValidUntil,
+  PROCESSING_FEE_VALIDITY_DAYS,
+} from "@/server/services/tenant-applications.service";
 
 const DEFAULT_PROCESSING_FEE_NAIRA = 5000;
 
@@ -64,6 +74,42 @@ function getTenantEmail(metadata: Record<string, unknown>) {
   return "tenant@bopa.local";
 }
 
+function toRecord(value: unknown): Record<string, unknown> {
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  return {};
+}
+
+function mapPaystackStatusToProcessingFeeStatus(status: string) {
+  if (status === "failed") {
+    return "failed" as const;
+  }
+
+  if (status === "abandoned") {
+    return "abandoned" as const;
+  }
+
+  return "failed" as const;
+}
+
+function assertProcessingFeeAmountMatches(params: {
+  verifiedAmountKobo: number;
+  expectedAmountNaira: number;
+}) {
+  const expectedKobo = convertNairaToKobo(params.expectedAmountNaira);
+  const difference = Math.abs(params.verifiedAmountKobo - expectedKobo);
+
+  if (difference >= 1) {
+    throw new AppError(
+      "TENANT_APPLICATION_PROCESSING_FEE_AMOUNT_MISMATCH",
+      "Processing fee amount does not match the initialized payment.",
+      400,
+    );
+  }
+}
+
 export async function initializeTenantApplicationProcessingFee(
   propertyApplicationId: string,
 ) {
@@ -88,6 +134,12 @@ export async function initializeTenantApplicationProcessingFee(
   });
 
   if (activeFeeAccess) {
+    await updatePropertyApplicationStatus(supabase, {
+      applicationId: application.id,
+      status: "submitted_for_landlord_review",
+      processingFeeAccessId: activeFeeAccess.id,
+    });
+
     throw new AppError(
       "PROCESSING_FEE_ALREADY_VALID",
       "This tenant already has a valid processing fee for this agent/landlord context.",
@@ -151,9 +203,11 @@ export async function initializeTenantApplicationProcessingFee(
     currencyCode: "NGN",
     idempotencyKey: createIdempotencyKey(application.id),
     metadata: {
+      payment_type: "tenant_application_processing_fee",
       property_application_id: application.id,
       tenant_kyc_profile_id: application.tenant_kyc_profile_id,
       acquisition_context_key: application.acquisition_context_key,
+      validity_days: PROCESSING_FEE_VALIDITY_DAYS,
     },
   });
 
@@ -161,4 +215,111 @@ export async function initializeTenantApplicationProcessingFee(
     intent,
     authorizationUrl: intent.authorization_url,
   };
+}
+
+export async function verifyTenantApplicationProcessingFeeReference(
+  reference: string,
+) {
+  const supabase = createSupabaseAdminClient();
+
+  const intent = await getTenantApplicationProcessingFeeIntentByReference(
+    supabase,
+    reference,
+  );
+
+  if (!intent) {
+    throw new AppError(
+      "TENANT_APPLICATION_PROCESSING_FEE_NOT_FOUND",
+      "Tenant application processing fee reference was not found.",
+      404,
+    );
+  }
+
+  const verifiedTransaction = await verifyPaystackTransaction(reference);
+  const verifiedPayload = toRecord(verifiedTransaction);
+
+  if (verifiedTransaction.reference !== intent.paystack_reference) {
+    throw new AppError(
+      "TENANT_APPLICATION_PROCESSING_FEE_REFERENCE_MISMATCH",
+      "Processing fee reference does not match the initialized payment.",
+      400,
+    );
+  }
+
+  if (verifiedTransaction.currency !== intent.currency_code) {
+    throw new AppError(
+      "TENANT_APPLICATION_PROCESSING_FEE_CURRENCY_MISMATCH",
+      "Processing fee currency does not match the initialized payment.",
+      400,
+    );
+  }
+
+  if (verifiedTransaction.status !== "success") {
+    await markTenantApplicationProcessingFeeIntentFailed(supabase, {
+      intentId: intent.id,
+      status: mapPaystackStatusToProcessingFeeStatus(
+        verifiedTransaction.status,
+      ),
+      failureReason: `Paystack transaction status: ${verifiedTransaction.status}`,
+      verifiedPayload,
+    });
+
+    throw new AppError(
+      "TENANT_APPLICATION_PROCESSING_FEE_NOT_SUCCESSFUL",
+      "Processing fee payment was not successful.",
+      400,
+    );
+  }
+
+  assertProcessingFeeAmountMatches({
+    verifiedAmountKobo: verifiedTransaction.amount,
+    expectedAmountNaira: intent.total_amount,
+  });
+
+  const paidAt = verifiedTransaction.paid_at ?? new Date().toISOString();
+
+  const paidIntent = await markTenantApplicationProcessingFeeIntentPaid(
+    supabase,
+    {
+      intentId: intent.id,
+      paidAt,
+      verifiedPayload,
+    },
+  );
+
+  const existingAccess = await getActiveProcessingFeeAccess(supabase, {
+    tenantKycProfileId: paidIntent.tenant_kyc_profile_id,
+    acquisitionContextKey: paidIntent.acquisition_context_key,
+    nowIso: new Date().toISOString(),
+  });
+
+  const feeAccess =
+    existingAccess ??
+    (await createProcessingFeeAccess(supabase, {
+      tenantKycProfileId: paidIntent.tenant_kyc_profile_id,
+      agentId: paidIntent.agent_id,
+      landlordId: paidIntent.landlord_id,
+      landlordPhoneNumber: paidIntent.landlord_phone_number,
+      acquisitionContextKey: paidIntent.acquisition_context_key,
+      sourceIntentTable: "tenant_application_processing_fee_intents",
+      sourceIntentId: paidIntent.id,
+      amountPaid: paidIntent.total_amount,
+      currencyCode: paidIntent.currency_code,
+      paidAt,
+      validUntil: getProcessingFeeValidUntil(new Date(paidAt)).toISOString(),
+      metadata: {
+        property_application_id: paidIntent.property_application_id,
+        agent_property_listing_id: paidIntent.agent_property_listing_id,
+        paystack_reference: paidIntent.paystack_reference,
+        validity_days: PROCESSING_FEE_VALIDITY_DAYS,
+      },
+    }));
+
+  await updatePropertyApplicationStatus(supabase, {
+    applicationId: paidIntent.property_application_id,
+    status: "submitted_for_landlord_review",
+    processingFeeAccessId: feeAccess.id,
+  });
+
+  return paidIntent;
 }

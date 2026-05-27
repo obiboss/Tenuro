@@ -25,6 +25,7 @@ import {
 import { writeSystemAuditLog } from "@/server/services/audit-log.service";
 import { verifyAgentTenantProcessingFeeReference } from "@/server/services/agent-processing-fee.service";
 import { verifyLandlordTenantProcessingFeeReference } from "@/server/services/landlord-processing-fee.service";
+import { verifyTenantApplicationProcessingFeeReference } from "@/server/services/tenant-application-processing-fees.service";
 import {
   auditGatewayPaymentReplayIgnored,
   buildPaystackRentPaymentIdempotencyKey,
@@ -184,7 +185,11 @@ async function finalizeGatewayPaymentSettlement(params: {
   intent: Awaited<ReturnType<typeof getGatewayPaymentIntentByReference>>;
   paymentId: string;
   isReplay: boolean;
-  replaySource?: "webhook" | "verify_page" | "landlord_verify" | "reconciliation";
+  replaySource?:
+    | "webhook"
+    | "verify_page"
+    | "landlord_verify"
+    | "reconciliation";
 }) {
   if (!params.intent) {
     return;
@@ -216,9 +221,15 @@ async function finalizeGatewayPaymentSettlement(params: {
 }
 
 async function returnDuplicateGatewayPaymentResult(params: {
-  intent: NonNullable<Awaited<ReturnType<typeof getGatewayPaymentIntentByReference>>>;
+  intent: NonNullable<
+    Awaited<ReturnType<typeof getGatewayPaymentIntentByReference>>
+  >;
   paymentId: string;
-  replaySource?: "webhook" | "verify_page" | "landlord_verify" | "reconciliation";
+  replaySource?:
+    | "webhook"
+    | "verify_page"
+    | "landlord_verify"
+    | "reconciliation";
 }) {
   await finalizeGatewayPaymentSettlement({
     intent: params.intent,
@@ -237,7 +248,11 @@ async function returnDuplicateGatewayPaymentResult(params: {
 export async function processVerifiedGatewayPaymentReference(
   reference: string,
   options?: {
-    replaySource?: "webhook" | "verify_page" | "landlord_verify" | "reconciliation";
+    replaySource?:
+      | "webhook"
+      | "verify_page"
+      | "landlord_verify"
+      | "reconciliation";
   },
 ): Promise<GatewayPaymentWebhookResult> {
   const supabase = createSupabaseAdminClient();
@@ -268,7 +283,10 @@ export async function processVerifiedGatewayPaymentReference(
   });
 
   if (existingPayment) {
-    if (intent.status !== "paid" || intent.processed_payment_id !== existingPayment.id) {
+    if (
+      intent.status !== "paid" ||
+      intent.processed_payment_id !== existingPayment.id
+    ) {
       await markGatewayPaymentIntentPaid(supabase, {
         intentId: intent.id,
         paymentId: existingPayment.id,
@@ -430,14 +448,19 @@ function isProcessingFeeNotFoundError(error: unknown) {
   return (
     isAppError(error) &&
     (error.code === "AGENT_PROCESSING_FEE_NOT_FOUND" ||
-      error.code === "LANDLORD_PROCESSING_FEE_NOT_FOUND")
+      error.code === "LANDLORD_PROCESSING_FEE_NOT_FOUND" ||
+      error.code === "TENANT_APPLICATION_PROCESSING_FEE_NOT_FOUND")
   );
 }
 
 async function processVerifiedPaystackReferenceWithFallback(
   reference: string,
   options?: {
-    replaySource?: "webhook" | "verify_page" | "landlord_verify" | "reconciliation";
+    replaySource?:
+      | "webhook"
+      | "verify_page"
+      | "landlord_verify"
+      | "reconciliation";
   },
 ) {
   try {
@@ -462,13 +485,28 @@ async function processVerifiedPaystackReferenceWithFallback(
       }
     }
 
-    const landlordProcessingFeeIntent =
-      await verifyLandlordTenantProcessingFeeReference(reference);
+    try {
+      const landlordProcessingFeeIntent =
+        await verifyLandlordTenantProcessingFeeReference(reference);
+
+      return {
+        status: "processed" as const,
+        message: "Landlord-sourced tenant processing fee confirmed.",
+        paymentId: landlordProcessingFeeIntent.id,
+      };
+    } catch (landlordError) {
+      if (!isProcessingFeeNotFoundError(landlordError)) {
+        throw landlordError;
+      }
+    }
+
+    const tenantApplicationProcessingFeeIntent =
+      await verifyTenantApplicationProcessingFeeReference(reference);
 
     return {
       status: "processed" as const,
-      message: "Landlord-sourced tenant processing fee confirmed.",
-      paymentId: landlordProcessingFeeIntent.id,
+      message: "Tenant application processing fee confirmed.",
+      paymentId: tenantApplicationProcessingFeeIntent.id,
     };
   }
 }
@@ -505,10 +543,7 @@ async function resolveDuplicateWebhookEvent(params: {
     params.paymentReference,
   );
 
-  if (
-    intent?.status === "paid" &&
-    intent.processed_payment_id
-  ) {
+  if (intent?.status === "paid" && intent.processed_payment_id) {
     await markGatewayPaymentEventProcessed(params.supabase, {
       eventId: params.registeredEvent.event.id,
       gatewayPaymentIntentId: intent.id,
