@@ -2,11 +2,13 @@ import { Building2, CreditCard, Send } from "lucide-react";
 import { AgentPropertyListingForm } from "@/components/agent/agent-property-listing-form";
 import { AgentPropertyListingMediaUploader } from "@/components/agent/agent-property-listing-media-uploader";
 import { LandlordVerificationLinkForm } from "@/components/agent/landlord-verification-link-form";
+import { ListingMediaGallery } from "@/components/listings/listing-media-gallery";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { TrustNotice } from "@/components/ui/trust-notice";
+import { getAgentListingMediaByListingId } from "@/server/services/agent-property-listing-media-read.service";
 import {
   getCurrentAgentListingsWorkspace,
   getListingVerificationStatusCopy,
@@ -44,6 +46,10 @@ function canCreateVerificationLink(status: string) {
 export default async function AgentListingsPage() {
   const { profile, paystackAccount, listings } =
     await getCurrentAgentListingsWorkspace();
+
+  const mediaByListingId = await getAgentListingMediaByListingId(
+    listings.map((listing) => listing.id),
+  );
 
   const canSubmitListing = Boolean(profile);
   const payoutVerification = getPaystackPayoutVerificationUiState(
@@ -129,91 +135,101 @@ export default async function AgentListingsPage() {
             />
           ) : (
             <div className="space-y-4">
-              {listings.map((listing) => (
-                <article
-                  key={listing.id}
-                  className="rounded-card border border-border-soft bg-background p-4"
-                >
-                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="font-black text-text-strong">
-                          {listing.property_name}
-                        </h2>
-                        <Badge tone={getStatusTone(listing.status)}>
-                          {getListingVerificationStatusCopy(listing)}
-                        </Badge>
+              {listings.map((listing) => {
+                const listingMedia = mediaByListingId.get(listing.id) ?? [];
+
+                return (
+                  <article
+                    key={listing.id}
+                    className="rounded-card border border-border-soft bg-background p-4"
+                  >
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h2 className="font-black text-text-strong">
+                            {listing.property_name}
+                          </h2>
+                          <Badge tone={getStatusTone(listing.status)}>
+                            {getListingVerificationStatusCopy(listing)}
+                          </Badge>
+                        </div>
+
+                        <p className="mt-1 text-sm leading-6 text-text-muted">
+                          {listing.address}, {listing.lga}, {listing.state}
+                        </p>
                       </div>
 
-                      <p className="mt-1 text-sm leading-6 text-text-muted">
-                        {listing.address}, {listing.lga}, {listing.state}
-                      </p>
-                    </div>
-
-                    <p className="text-sm font-bold text-text-muted">
-                      {new Date(listing.created_at).toLocaleDateString(
-                        "en-NG",
-                        {
-                          year: "numeric",
-                          month: "short",
-                          day: "numeric",
-                        },
-                      )}
-                    </p>
-                  </div>
-
-                  <div className="mt-4 grid gap-3 md:grid-cols-3">
-                    <div className="rounded-button bg-white p-3">
-                      <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
-                        Landlord
-                      </p>
-                      <p className="mt-1 font-bold text-text-strong">
-                        {listing.landlord_full_name}
-                      </p>
-                    </div>
-
-                    <div className="rounded-button bg-white p-3">
-                      <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
-                        Unit
-                      </p>
-                      <p className="mt-1 font-bold text-text-strong">
-                        {listing.unit_identifier}
-                      </p>
-                    </div>
-
-                    <div className="rounded-button bg-white p-3">
-                      <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
-                        Rent
-                      </p>
-                      <p className="mt-1 font-bold text-text-strong">
-                        {formatMoney(
-                          listing.annual_rent ?? listing.monthly_rent,
-                          listing.currency_code,
+                      <p className="text-sm font-bold text-text-muted">
+                        {new Date(listing.created_at).toLocaleDateString(
+                          "en-NG",
+                          {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                          },
                         )}
                       </p>
                     </div>
-                  </div>
 
-                  <div className="mt-4">
-                    <AgentPropertyListingMediaUploader listingId={listing.id} />
-                  </div>
+                    <div className="mt-4 grid gap-3 md:grid-cols-3">
+                      <div className="rounded-button bg-white p-3">
+                        <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+                          Landlord
+                        </p>
+                        <p className="mt-1 font-bold text-text-strong">
+                          {listing.landlord_full_name}
+                        </p>
+                      </div>
 
-                  <div className="mt-4 rounded-button bg-white p-3">
-                    {listing.status === "landlord_verified" ? (
-                      <p className="text-sm font-semibold leading-6 text-success">
-                        This listing has been reviewed and approved by the
-                        landlord. The final approved details are now locked for
-                        the agent workflow.
-                      </p>
-                    ) : (
-                      <LandlordVerificationLinkForm
+                      <div className="rounded-button bg-white p-3">
+                        <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+                          Unit
+                        </p>
+                        <p className="mt-1 font-bold text-text-strong">
+                          {listing.unit_identifier}
+                        </p>
+                      </div>
+
+                      <div className="rounded-button bg-white p-3">
+                        <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+                          Rent
+                        </p>
+                        <p className="mt-1 font-bold text-text-strong">
+                          {formatMoney(
+                            listing.annual_rent ?? listing.monthly_rent,
+                            listing.currency_code,
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4">
+                      <ListingMediaGallery media={listingMedia} compact />
+                    </div>
+
+                    <div className="mt-4">
+                      <AgentPropertyListingMediaUploader
                         listingId={listing.id}
-                        disabled={!canCreateVerificationLink(listing.status)}
                       />
-                    )}
-                  </div>
-                </article>
-              ))}
+                    </div>
+
+                    <div className="mt-4 rounded-button bg-white p-3">
+                      {listing.status === "landlord_verified" ? (
+                        <p className="text-sm font-semibold leading-6 text-success">
+                          This listing has been reviewed and approved by the
+                          landlord. The final approved details are now locked
+                          for the agent workflow.
+                        </p>
+                      ) : (
+                        <LandlordVerificationLinkForm
+                          listingId={listing.id}
+                          disabled={!canCreateVerificationLink(listing.status)}
+                        />
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           )}
         </SectionCard>
