@@ -72,6 +72,7 @@ export type PropertyApplicationRow = {
   landlord_phone_number: string | null;
   acquisition_context_key: string;
   processing_fee_access_id: string | null;
+  converted_tenant_id: string | null;
   status: PropertyApplicationStatus;
   inspection_status: string;
   landlord_decision_reason: string | null;
@@ -152,6 +153,7 @@ const PROPERTY_APPLICATION_SELECT = `
   landlord_phone_number,
   acquisition_context_key,
   processing_fee_access_id,
+  converted_tenant_id,
   status,
   inspection_status,
   landlord_decision_reason,
@@ -427,6 +429,7 @@ export async function updatePropertyApplicationStatus(
     applicationId: string;
     status: PropertyApplicationStatus;
     processingFeeAccessId?: string | null;
+    convertedTenantId?: string | null;
     reason?: string | null;
     decidedBy?: string | null;
   },
@@ -447,6 +450,7 @@ export async function updatePropertyApplicationStatus(
     .update({
       status: params.status,
       processing_fee_access_id: params.processingFeeAccessId,
+      converted_tenant_id: params.convertedTenantId,
       landlord_decision_reason: params.reason ?? null,
       submitted_at:
         params.status === "submitted_for_landlord_review" ? now : undefined,

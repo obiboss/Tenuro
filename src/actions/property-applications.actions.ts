@@ -32,11 +32,13 @@ export async function acceptPropertyApplicationAction(
     await acceptPropertyApplicationForCurrentLandlord(parsed.applicationId);
 
     revalidatePath("/applications");
+    revalidatePath("/tenants");
+    revalidatePath("/overview");
 
     return {
       ok: true,
       message:
-        "Application accepted. You can now continue the tenancy setup workflow.",
+        "Application accepted. The tenant has been added to your tenant pipeline.",
     };
   } catch (error) {
     const result = errorResult(error);

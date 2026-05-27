@@ -14,6 +14,13 @@ export type TenantOnboardingStatus =
   | "rejected"
   | "token_expired";
 
+export type TenantIdType =
+  | "nin"
+  | "passport"
+  | "drivers_license"
+  | "voters_card"
+  | null;
+
 export type TenantRow = {
   id: string;
   profile_id: string | null;
@@ -26,7 +33,7 @@ export type TenantRow = {
   home_address: string | null;
   occupation: string | null;
   employer: string | null;
-  id_type: "nin" | "passport" | "drivers_license" | "voters_card" | null;
+  id_type: TenantIdType;
   id_document_path: string | null;
   passport_photo_path: string | null;
   onboarding_status: TenantOnboardingStatus;
@@ -40,6 +47,7 @@ export type TenantRow = {
   approved_by: string | null;
   agent_property_listing_id: string | null;
   invited_by_agent_id: string | null;
+  source_property_application_id: string | null;
   created_at: string;
 };
 
@@ -59,6 +67,27 @@ export type TenantListRow = TenantRow & {
       property_name: string;
     } | null;
   } | null;
+};
+
+export type CreateTenantFromPropertyApplicationParams = {
+  landlordId: string;
+  unitId: string;
+  fullName: string;
+  phoneNumber: string;
+  email: string | null;
+  dateOfBirth: string | null;
+  homeAddress: string | null;
+  occupation: string | null;
+  employer: string | null;
+  idType: TenantIdType;
+  idDocumentPath: string | null;
+  passportPhotoPath: string | null;
+  kycAnswers: Record<string, unknown>;
+  kycReviewFlags: Record<string, unknown>[];
+  approvedBy: string;
+  agentPropertyListingId: string;
+  invitedByAgentId: string;
+  sourcePropertyApplicationId: string;
 };
 
 const TENANT_SELECT = `
@@ -87,6 +116,7 @@ const TENANT_SELECT = `
   approved_by,
   agent_property_listing_id,
   invited_by_agent_id,
+  source_property_application_id,
   created_at,
   units (
     id,
@@ -131,6 +161,7 @@ const TENANT_BASE_SELECT = `
   approved_by,
   agent_property_listing_id,
   invited_by_agent_id,
+  source_property_application_id,
   created_at
 `;
 
@@ -152,6 +183,64 @@ export async function createTenantShell(
     })
     .select(TENANT_BASE_SELECT)
     .single<TenantRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function createTenantFromPropertyApplication(
+  supabase: SupabaseClient,
+  params: CreateTenantFromPropertyApplicationParams,
+) {
+  const approvedAt = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("tenants")
+    .insert({
+      landlord_id: params.landlordId,
+      unit_id: params.unitId,
+      full_name: params.fullName,
+      phone_number: params.phoneNumber,
+      email: params.email,
+      date_of_birth: params.dateOfBirth,
+      home_address: params.homeAddress,
+      occupation: params.occupation,
+      employer: params.employer,
+      id_type: params.idType,
+      id_document_path: params.idDocumentPath,
+      passport_photo_path: params.passportPhotoPath,
+      kyc_answers: params.kycAnswers,
+      kyc_review_flags: params.kycReviewFlags,
+      onboarding_status: "approved",
+      approved_at: approvedAt,
+      approved_by: params.approvedBy,
+      agent_property_listing_id: params.agentPropertyListingId,
+      invited_by_agent_id: params.invitedByAgentId,
+      source_property_application_id: params.sourcePropertyApplicationId,
+    })
+    .select(TENANT_BASE_SELECT)
+    .single<TenantRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getTenantBySourcePropertyApplicationId(
+  supabase: SupabaseClient,
+  sourcePropertyApplicationId: string,
+) {
+  const { data, error } = await supabase
+    .from("tenants")
+    .select(TENANT_BASE_SELECT)
+    .eq("source_property_application_id", sourcePropertyApplicationId)
+    .is("deleted_at", null)
+    .maybeSingle<TenantRow>();
 
   if (error) {
     throw error;
