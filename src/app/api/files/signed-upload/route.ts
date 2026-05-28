@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { errorResult } from "@/server/errors/result";
-import { uploadTenantKycDocument } from "@/server/services/files.service";
+import {
+  uploadPublicTenantListingKycDocument,
+  uploadTenantKycDocument,
+} from "@/server/services/files.service";
 import { tenantKycUploadSchema } from "@/server/validators/file.schema";
 
 export const runtime = "nodejs";
@@ -12,6 +15,7 @@ export async function POST(request: Request) {
 
     const parsed = tenantKycUploadSchema.parse({
       token: formData.get("token"),
+      agentPropertyListingId: formData.get("agentPropertyListingId"),
       documentType: formData.get("documentType"),
     });
 
@@ -29,11 +33,18 @@ export async function POST(request: Request) {
       );
     }
 
-    const uploadedFile = await uploadTenantKycDocument({
-      token: parsed.token,
-      documentType: parsed.documentType,
-      file,
-    });
+    const uploadedFile =
+      parsed.uploadContext === "tenant_onboarding"
+        ? await uploadTenantKycDocument({
+            token: parsed.token,
+            documentType: parsed.documentType,
+            file,
+          })
+        : await uploadPublicTenantListingKycDocument({
+            agentPropertyListingId: parsed.agentPropertyListingId,
+            documentType: parsed.documentType,
+            file,
+          });
 
     return NextResponse.json({
       ok: true,

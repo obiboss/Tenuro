@@ -11,6 +11,7 @@ import {
 } from "@/actions/tenant-listing-applications.state";
 import { initializeTenantApplicationProcessingFeeAction } from "@/actions/tenant-application-processing-fees.actions";
 import { submitTenantListingApplicationAction } from "@/actions/tenant-listing-applications.actions";
+import { PublicTenantKycFileUpload } from "@/components/public/public-tenant-kyc-file-upload";
 
 function FieldError({
   field,
@@ -318,6 +319,27 @@ export function TenantListingApplicationForm({
               </p>
               <FieldError field="idNumber" state={applicationState} />
             </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <PublicTenantKycFileUpload
+              agentPropertyListingId={listingId}
+              documentType="tenant_id_document"
+              label="ID document"
+              name="idDocumentPath"
+              required
+              error={applicationState.fieldErrors?.idDocumentPath?.[0]}
+            />
+
+            <PublicTenantKycFileUpload
+              agentPropertyListingId={listingId}
+              documentType="tenant_passport_photo"
+              label="Passport photo"
+              name="passportPhotoPath"
+              required
+              helperText="Upload a clear passport photo or headshot."
+              error={applicationState.fieldErrors?.passportPhotoPath?.[0]}
+            />
           </div>
 
           <div>

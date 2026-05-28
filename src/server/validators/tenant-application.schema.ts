@@ -1,11 +1,26 @@
 import { z } from "zod";
 
-const optionalTextSchema = z
-  .string()
-  .trim()
-  .optional()
-  .or(z.literal(""))
-  .transform((value) => value?.trim() ?? "");
+const optionalTextSchema = z.preprocess((value) => {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value.trim();
+}, z.string().max(500));
+
+const optionalEmailSchema = z.preprocess(
+  (value) => {
+    if (typeof value !== "string") {
+      return "";
+    }
+
+    return value.trim().toLowerCase();
+  },
+  z.union([
+    z.literal(""),
+    z.string().email("Enter a valid email address.").max(254),
+  ]),
+);
 
 export const tenantKycApplicationSchema = z.object({
   agentPropertyListingId: z.string().uuid(),
@@ -22,12 +37,7 @@ export const tenantKycApplicationSchema = z.object({
     .min(8, "Enter a valid phone number.")
     .max(30, "Phone number is too long."),
 
-  email: z
-    .string()
-    .trim()
-    .email("Enter a valid email address.")
-    .optional()
-    .or(z.literal("")),
+  email: optionalEmailSchema,
 
   dateOfBirth: optionalTextSchema,
 
@@ -55,8 +65,17 @@ export const tenantKycApplicationSchema = z.object({
     .min(3, "Enter your ID number.")
     .max(80, "ID number is too long."),
 
-  idDocumentPath: optionalTextSchema,
-  passportPhotoPath: optionalTextSchema,
+  idDocumentPath: z
+    .string()
+    .trim()
+    .min(3, "Upload your ID document.")
+    .max(500, "Invalid ID document path."),
+
+  passportPhotoPath: z
+    .string()
+    .trim()
+    .min(3, "Upload your passport photo.")
+    .max(500, "Invalid passport photo path."),
 
   canProvideGuarantor: z.enum(["yes", "no", "not_sure"], {
     message: "Select whether you can provide a guarantor if required.",
