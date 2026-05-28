@@ -31,6 +31,7 @@ import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { requireLandlordPlatformOperator } from "@/server/services/auth.service";
 import { writeAuditLog } from "@/server/services/audit-log.service";
+import { queueLandlordPreparedWhatsappNotification } from "@/server/services/notification-queue.service";
 
 const REVIEWABLE_APPLICATION_STATUSES = [
   "submitted_for_landlord_review",
@@ -48,6 +49,32 @@ function toTenantIdType(value: string | null): TenantIdType {
   }
 
   return null;
+}
+
+function buildTenantAcceptedMessage(params: {
+  tenantName: string;
+  propertyName: string;
+  unitIdentifier: string;
+}) {
+  return `Hello ${params.tenantName}, your application for ${params.propertyName}, ${params.unitIdentifier} has been accepted for the next stage. This approval is subject to final inspection, agreement completion, and payment conditions. BOPA will guide the next step.`;
+}
+
+function buildTenantRejectedMessage(params: {
+  tenantName: string;
+  propertyName: string;
+  unitIdentifier: string;
+  reason: string;
+}) {
+  return `Hello ${params.tenantName}, your application for ${params.propertyName}, ${params.unitIdentifier} was not approved at this time. Reason: ${params.reason}. Your KYC profile can still be reused for another eligible listing.`;
+}
+
+function buildTenantWaitlistedMessage(params: {
+  tenantName: string;
+  propertyName: string;
+  unitIdentifier: string;
+  reason: string;
+}) {
+  return `Hello ${params.tenantName}, your application for ${params.propertyName}, ${params.unitIdentifier} has been waitlisted. Reason: ${params.reason}. The landlord or agent will contact you if the application can proceed.`;
 }
 
 export async function getCurrentLandlordPropertyApplicationsForReview() {
@@ -164,6 +191,18 @@ async function writeApplicationDecisionAudit(params: {
   });
 }
 
+async function queueTenantOutcomeWhatsapp(params: {
+  landlordId: string;
+  tenantId: string | null;
+  messageBody: string;
+}) {
+  await queueLandlordPreparedWhatsappNotification({
+    landlordId: params.landlordId,
+    tenantId: params.tenantId,
+    messageBody: params.messageBody,
+  });
+}
+
 export async function acceptPropertyApplicationForCurrentLandlord(
   applicationId: string,
 ) {
@@ -190,6 +229,16 @@ export async function acceptPropertyApplicationForCurrentLandlord(
       status: "accepted",
       convertedTenantId: existingTenant.id,
       decidedBy: landlord.id,
+    });
+
+    await queueTenantOutcomeWhatsapp({
+      landlordId: landlord.id,
+      tenantId: existingTenant.id,
+      messageBody: buildTenantAcceptedMessage({
+        tenantName: existingTenant.full_name,
+        propertyName: "the selected property",
+        unitIdentifier: "the selected unit",
+      }),
     });
 
     await writeApplicationDecisionAudit({
@@ -288,6 +337,16 @@ export async function acceptPropertyApplicationForCurrentLandlord(
     decidedBy: landlord.id,
   });
 
+  await queueTenantOutcomeWhatsapp({
+    landlordId: landlord.id,
+    tenantId: tenant.id,
+    messageBody: buildTenantAcceptedMessage({
+      tenantName: tenant.full_name,
+      propertyName: property.property_name,
+      unitIdentifier: unit.unit_identifier,
+    }),
+  });
+
   await writeApplicationDecisionAudit({
     landlordId: landlord.id,
     actorProfileId: landlord.id,
@@ -371,6 +430,17 @@ export async function rejectPropertyApplicationForCurrentLandlord(params: {
     decidedBy: landlord.id,
   });
 
+  await queueTenantOutcomeWhatsapp({
+    landlordId: landlord.id,
+    tenantId: null,
+    messageBody: buildTenantRejectedMessage({
+      tenantName: "Applicant",
+      propertyName: "the selected property",
+      unitIdentifier: "the selected unit",
+      reason: params.reason,
+    }),
+  });
+
   await writeApplicationDecisionAudit({
     landlordId: landlord.id,
     actorProfileId: landlord.id,
@@ -404,6 +474,17 @@ export async function waitlistPropertyApplicationForCurrentLandlord(params: {
     status: "waitlisted",
     reason: params.reason,
     decidedBy: landlord.id,
+  });
+
+  await queueTenantOutcomeWhatsapp({
+    landlordId: landlord.id,
+    tenantId: null,
+    messageBody: buildTenantWaitlistedMessage({
+      tenantName: "Applicant",
+      propertyName: "the selected property",
+      unitIdentifier: "the selected unit",
+      reason: params.reason,
+    }),
   });
 
   await writeApplicationDecisionAudit({

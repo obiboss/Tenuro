@@ -23,7 +23,7 @@ export async function createNotification(
   supabase: SupabaseClient,
   params: {
     landlordId: string;
-    tenantId?: string;
+    tenantId?: string | null;
     channel: NotificationRow["channel"];
     notificationType: NotificationRow["notification_type"];
     messageBody: string;
@@ -43,6 +43,28 @@ export async function createNotification(
       "id, landlord_id, tenant_id, channel, notification_type, message_body, status, created_at",
     )
     .single<NotificationRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function listRecentNotificationsForLandlord(
+  supabase: SupabaseClient,
+  landlordId: string,
+  limit = 30,
+) {
+  const { data, error } = await supabase
+    .from("notifications")
+    .select(
+      "id, landlord_id, tenant_id, channel, notification_type, message_body, status, created_at",
+    )
+    .eq("landlord_id", landlordId)
+    .order("created_at", { ascending: false })
+    .limit(limit)
+    .returns<NotificationRow[]>();
 
   if (error) {
     throw error;

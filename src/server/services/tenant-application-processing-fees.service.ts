@@ -22,6 +22,7 @@ import {
 } from "@/server/repositories/tenant-applications.repository";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { writeAuditLog } from "@/server/services/audit-log.service";
+import { queueLandlordInAppNotification } from "@/server/services/notification-queue.service";
 import {
   convertNairaToKobo,
   initializeStandardPaystackTransaction,
@@ -108,6 +109,16 @@ function toRecord(value: unknown): Record<string, unknown> {
   return {};
 }
 
+function getMetadataString(
+  metadata: Record<string, unknown>,
+  key: string,
+  fallback: string,
+) {
+  const value = metadata[key];
+
+  return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
+
 function mapPaystackStatusToProcessingFeeStatus(status: string) {
   if (status === "failed") {
     return "failed" as const;
@@ -176,6 +187,37 @@ async function writeProcessingFeeConfirmedAudit(params: {
   });
 }
 
+async function notifyLandlordApplicationReady(params: {
+  landlordId: string | null;
+  propertyApplicationId: string;
+  metadata: Record<string, unknown>;
+}) {
+  if (!params.landlordId) {
+    return;
+  }
+
+  const tenantName = getMetadataString(
+    params.metadata,
+    "tenant_name",
+    "A prospective tenant",
+  );
+  const propertyName = getMetadataString(
+    params.metadata,
+    "property_name",
+    "your property",
+  );
+  const unitIdentifier = getMetadataString(
+    params.metadata,
+    "unit_identifier",
+    "the selected unit",
+  );
+
+  await queueLandlordInAppNotification({
+    landlordId: params.landlordId,
+    messageBody: `${tenantName}'s application for ${propertyName}, ${unitIdentifier} is ready for your review.`,
+  });
+}
+
 export async function initializeTenantApplicationProcessingFee(
   propertyApplicationId: string,
 ) {
@@ -204,6 +246,12 @@ export async function initializeTenantApplicationProcessingFee(
       applicationId: application.id,
       status: "submitted_for_landlord_review",
       processingFeeAccessId: activeFeeAccess.id,
+    });
+
+    await notifyLandlordApplicationReady({
+      landlordId: application.landlord_id,
+      propertyApplicationId: application.id,
+      metadata: application.metadata,
     });
 
     throw new AppError(
@@ -386,10 +434,21 @@ export async function verifyTenantApplicationProcessingFeeReference(
       },
     }));
 
+  const application = await getPropertyApplicationById(
+    supabase,
+    paidIntent.property_application_id,
+  );
+
   await updatePropertyApplicationStatus(supabase, {
     applicationId: paidIntent.property_application_id,
     status: "submitted_for_landlord_review",
     processingFeeAccessId: feeAccess.id,
+  });
+
+  await notifyLandlordApplicationReady({
+    landlordId: paidIntent.landlord_id,
+    propertyApplicationId: paidIntent.property_application_id,
+    metadata: application.metadata,
   });
 
   await writeProcessingFeeConfirmedAudit({
