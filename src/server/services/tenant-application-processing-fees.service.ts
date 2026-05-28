@@ -33,6 +33,7 @@ import {
 } from "@/server/services/tenant-applications.service";
 
 const DEFAULT_PROCESSING_FEE_NAIRA = 5000;
+const FALLBACK_PAYSTACK_EMAIL_DOMAIN = "boldverseproperty.com";
 
 function getAppBaseUrl() {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
@@ -70,14 +71,33 @@ function createIdempotencyKey(applicationId: string) {
   return `tenant_application_processing_fee:${applicationId}`;
 }
 
-function getTenantEmail(metadata: Record<string, unknown>) {
-  const email = metadata.tenant_email;
+function normaliseEmail(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function isValidPaystackEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value);
+}
+
+function createFallbackPaystackEmail(propertyApplicationId: string) {
+  return `tenant-application-${propertyApplicationId}@${FALLBACK_PAYSTACK_EMAIL_DOMAIN}`;
+}
+
+function getTenantEmail(params: {
+  propertyApplicationId: string;
+  metadata: Record<string, unknown>;
+}) {
+  const email = params.metadata.tenant_email;
 
   if (typeof email === "string" && email.trim()) {
-    return email.trim().toLowerCase();
+    const normalizedEmail = normaliseEmail(email);
+
+    if (isValidPaystackEmail(normalizedEmail)) {
+      return normalizedEmail;
+    }
   }
 
-  return "tenant@bopa.local";
+  return createFallbackPaystackEmail(params.propertyApplicationId);
 }
 
 function toRecord(value: unknown): Record<string, unknown> {
@@ -212,7 +232,10 @@ export async function initializeTenantApplicationProcessingFee(
   )}`;
 
   const initializedTransaction = await initializeStandardPaystackTransaction({
-    email: getTenantEmail(application.metadata),
+    email: getTenantEmail({
+      propertyApplicationId: application.id,
+      metadata: application.metadata,
+    }),
     amountKobo: convertNairaToKobo(processingFeeAmount),
     reference,
     callbackUrl,

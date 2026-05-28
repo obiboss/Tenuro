@@ -117,6 +117,7 @@ async function writePropertyApplicationCreatedAudit(params: {
       tenant_kyc_profile_id: params.kycProfile.id,
       tenant_name: params.kycProfile.full_name,
       tenant_phone_number: params.kycProfile.phone_number,
+      tenant_email: params.kycProfile.email,
       agent_id: params.listing.agent_id,
       agent_property_listing_id: params.listing.id,
       property_name: params.listing.property_name,
@@ -187,6 +188,9 @@ export async function createOrReuseTenantListingApplication(params: {
     metadata: {
       source: "agent_listing_application",
       listing_status_at_application: listing.status,
+      tenant_email: kycProfile.email,
+      tenant_name: kycProfile.full_name,
+      tenant_phone_number: kycProfile.phone_number,
       property_name: listing.property_name,
       unit_identifier: listing.unit_identifier,
       annual_rent: listing.annual_rent,
