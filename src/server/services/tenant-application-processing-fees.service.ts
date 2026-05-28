@@ -1,6 +1,11 @@
 import "server-only";
 
 import crypto from "node:crypto";
+import {
+  AUDIT_ACTOR_ROLES,
+  AUDIT_ENTITY_TYPES,
+  AUDIT_EVENT_TYPES,
+} from "@/server/constants/audit-events";
 import { AppError } from "@/server/errors/app-error";
 import {
   createTenantApplicationProcessingFeeIntent,
@@ -16,6 +21,7 @@ import {
   updatePropertyApplicationStatus,
 } from "@/server/repositories/tenant-applications.repository";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
+import { writeAuditLog } from "@/server/services/audit-log.service";
 import {
   convertNairaToKobo,
   initializeStandardPaystackTransaction,
@@ -108,6 +114,46 @@ function assertProcessingFeeAmountMatches(params: {
       400,
     );
   }
+}
+
+async function writeProcessingFeeConfirmedAudit(params: {
+  landlordId: string | null;
+  propertyApplicationId: string;
+  tenantKycProfileId: string;
+  agentPropertyListingId: string;
+  agentId: string;
+  paystackReference: string;
+  amountPaid: number;
+  currencyCode: string;
+  validUntil: string;
+}) {
+  if (!params.landlordId) {
+    return;
+  }
+
+  await writeAuditLog({
+    landlordId: params.landlordId,
+    tenantId: null,
+    unitId: null,
+    propertyId: null,
+    actorProfileId: null,
+    actorRole: AUDIT_ACTOR_ROLES.system,
+    eventType: AUDIT_EVENT_TYPES.propertyApplicationFeeConfirmed,
+    entityType: AUDIT_ENTITY_TYPES.propertyApplication,
+    entityId: params.propertyApplicationId,
+    description:
+      "Tenant application processing fee was confirmed and the application was submitted for landlord review.",
+    metadata: {
+      tenant_kyc_profile_id: params.tenantKycProfileId,
+      agent_property_listing_id: params.agentPropertyListingId,
+      agent_id: params.agentId,
+      paystack_reference: params.paystackReference,
+      amount_paid: params.amountPaid,
+      currency_code: params.currencyCode,
+      valid_until: params.validUntil,
+      validity_days: PROCESSING_FEE_VALIDITY_DAYS,
+    },
+  });
 }
 
 export async function initializeTenantApplicationProcessingFee(
@@ -293,6 +339,8 @@ export async function verifyTenantApplicationProcessingFeeReference(
     nowIso: new Date().toISOString(),
   });
 
+  const validUntil = getProcessingFeeValidUntil(new Date(paidAt)).toISOString();
+
   const feeAccess =
     existingAccess ??
     (await createProcessingFeeAccess(supabase, {
@@ -306,7 +354,7 @@ export async function verifyTenantApplicationProcessingFeeReference(
       amountPaid: paidIntent.total_amount,
       currencyCode: paidIntent.currency_code,
       paidAt,
-      validUntil: getProcessingFeeValidUntil(new Date(paidAt)).toISOString(),
+      validUntil,
       metadata: {
         property_application_id: paidIntent.property_application_id,
         agent_property_listing_id: paidIntent.agent_property_listing_id,
@@ -319,6 +367,18 @@ export async function verifyTenantApplicationProcessingFeeReference(
     applicationId: paidIntent.property_application_id,
     status: "submitted_for_landlord_review",
     processingFeeAccessId: feeAccess.id,
+  });
+
+  await writeProcessingFeeConfirmedAudit({
+    landlordId: paidIntent.landlord_id,
+    propertyApplicationId: paidIntent.property_application_id,
+    tenantKycProfileId: paidIntent.tenant_kyc_profile_id,
+    agentPropertyListingId: paidIntent.agent_property_listing_id,
+    agentId: paidIntent.agent_id,
+    paystackReference: paidIntent.paystack_reference,
+    amountPaid: paidIntent.total_amount,
+    currencyCode: paidIntent.currency_code,
+    validUntil: feeAccess.valid_until,
   });
 
   return paidIntent;

@@ -1,5 +1,10 @@
 import "server-only";
 
+import {
+  AUDIT_ACTOR_ROLES,
+  AUDIT_ENTITY_TYPES,
+  AUDIT_EVENT_TYPES,
+} from "@/server/constants/audit-events";
 import { AppError } from "@/server/errors/app-error";
 import { getAgentPropertyListingById } from "@/server/repositories/agent-property-listings.repository";
 import { getPropertyApplicationsForLandlordReview } from "@/server/repositories/property-application-review.repository";
@@ -25,6 +30,7 @@ import {
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { requireLandlordPlatformOperator } from "@/server/services/auth.service";
+import { writeAuditLog } from "@/server/services/audit-log.service";
 
 const REVIEWABLE_APPLICATION_STATUSES = [
   "submitted_for_landlord_review",
@@ -120,6 +126,44 @@ async function getAcceptedApplicationForCurrentLandlord(applicationId: string) {
   };
 }
 
+async function writeApplicationDecisionAudit(params: {
+  landlordId: string;
+  actorProfileId: string;
+  applicationId: string;
+  tenantId?: string | null;
+  unitId?: string | null;
+  propertyId?: string | null;
+  eventType:
+    | typeof AUDIT_EVENT_TYPES.propertyApplicationAccepted
+    | typeof AUDIT_EVENT_TYPES.propertyApplicationRejected
+    | typeof AUDIT_EVENT_TYPES.propertyApplicationWaitlisted
+    | typeof AUDIT_EVENT_TYPES.propertyApplicationTenantRejected
+    | typeof AUDIT_EVENT_TYPES.propertyApplicationConvertedToTenant
+    | typeof AUDIT_EVENT_TYPES.unitStatusChanged
+    | typeof AUDIT_EVENT_TYPES.tenantCreated;
+  entityType:
+    | typeof AUDIT_ENTITY_TYPES.propertyApplication
+    | typeof AUDIT_ENTITY_TYPES.tenant
+    | typeof AUDIT_ENTITY_TYPES.unit;
+  entityId: string;
+  description: string;
+  metadata: Record<string, unknown>;
+}) {
+  await writeAuditLog({
+    landlordId: params.landlordId,
+    tenantId: params.tenantId ?? null,
+    unitId: params.unitId ?? null,
+    propertyId: params.propertyId ?? null,
+    actorProfileId: params.actorProfileId,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: params.eventType,
+    entityType: params.entityType,
+    entityId: params.entityId,
+    description: params.description,
+    metadata: params.metadata,
+  });
+}
+
 export async function acceptPropertyApplicationForCurrentLandlord(
   applicationId: string,
 ) {
@@ -141,12 +185,32 @@ export async function acceptPropertyApplicationForCurrentLandlord(
   );
 
   if (existingTenant) {
-    return updatePropertyApplicationStatus(supabase, {
+    const updatedApplication = await updatePropertyApplicationStatus(supabase, {
       applicationId: application.id,
       status: "accepted",
       convertedTenantId: existingTenant.id,
       decidedBy: landlord.id,
     });
+
+    await writeApplicationDecisionAudit({
+      landlordId: landlord.id,
+      actorProfileId: landlord.id,
+      applicationId: application.id,
+      tenantId: existingTenant.id,
+      unitId: existingTenant.unit_id,
+      propertyId: null,
+      eventType: AUDIT_EVENT_TYPES.propertyApplicationAccepted,
+      entityType: AUDIT_ENTITY_TYPES.propertyApplication,
+      entityId: application.id,
+      description:
+        "Property application accepted using an existing converted tenant record.",
+      metadata: {
+        tenant_id: existingTenant.id,
+        application_status: updatedApplication.status,
+      },
+    });
+
+    return updatedApplication;
   }
 
   const listing = await getAgentPropertyListingById(
@@ -215,14 +279,82 @@ export async function acceptPropertyApplicationForCurrentLandlord(
     sourcePropertyApplicationId: application.id,
   });
 
-  await markUnitReserved(supabase, unit.id);
+  const reservedUnit = await markUnitReserved(supabase, unit.id);
 
-  return updatePropertyApplicationStatus(supabase, {
+  const updatedApplication = await updatePropertyApplicationStatus(supabase, {
     applicationId: application.id,
     status: "accepted",
     convertedTenantId: tenant.id,
     decidedBy: landlord.id,
   });
+
+  await writeApplicationDecisionAudit({
+    landlordId: landlord.id,
+    actorProfileId: landlord.id,
+    applicationId: application.id,
+    tenantId: tenant.id,
+    unitId: unit.id,
+    propertyId: property.id,
+    eventType: AUDIT_EVENT_TYPES.tenantCreated,
+    entityType: AUDIT_ENTITY_TYPES.tenant,
+    entityId: tenant.id,
+    description: `Tenant record created from accepted property application for ${tenant.full_name}.`,
+    metadata: {
+      tenant_name: tenant.full_name,
+      tenant_phone_number: tenant.phone_number,
+      property_application_id: application.id,
+      agent_property_listing_id: listing.id,
+      agent_id: listing.agent_id,
+      unit_identifier: unit.unit_identifier,
+      property_name: property.property_name,
+    },
+  });
+
+  await writeApplicationDecisionAudit({
+    landlordId: landlord.id,
+    actorProfileId: landlord.id,
+    applicationId: application.id,
+    tenantId: tenant.id,
+    unitId: unit.id,
+    propertyId: property.id,
+    eventType: AUDIT_EVENT_TYPES.unitStatusChanged,
+    entityType: AUDIT_ENTITY_TYPES.unit,
+    entityId: unit.id,
+    description: `${unit.unit_identifier} was reserved after property application acceptance.`,
+    metadata: {
+      tenant_id: tenant.id,
+      tenant_name: tenant.full_name,
+      previous_unit_status: unit.status,
+      new_unit_status: reservedUnit.status,
+      property_application_id: application.id,
+      reason: "property_application_accepted",
+    },
+  });
+
+  await writeApplicationDecisionAudit({
+    landlordId: landlord.id,
+    actorProfileId: landlord.id,
+    applicationId: application.id,
+    tenantId: tenant.id,
+    unitId: unit.id,
+    propertyId: property.id,
+    eventType: AUDIT_EVENT_TYPES.propertyApplicationConvertedToTenant,
+    entityType: AUDIT_ENTITY_TYPES.propertyApplication,
+    entityId: application.id,
+    description:
+      "Accepted property application was converted into the tenant pipeline.",
+    metadata: {
+      tenant_id: tenant.id,
+      converted_tenant_id: updatedApplication.converted_tenant_id,
+      property_application_id: application.id,
+      agent_property_listing_id: listing.id,
+      unit_id: unit.id,
+      property_id: property.id,
+      application_status: updatedApplication.status,
+    },
+  });
+
+  return updatedApplication;
 }
 
 export async function rejectPropertyApplicationForCurrentLandlord(params: {
@@ -232,12 +364,32 @@ export async function rejectPropertyApplicationForCurrentLandlord(params: {
   const { landlord, supabase, application } =
     await getReviewableApplicationForCurrentLandlord(params.applicationId);
 
-  return updatePropertyApplicationStatus(supabase, {
+  const updatedApplication = await updatePropertyApplicationStatus(supabase, {
     applicationId: application.id,
     status: "rejected_by_landlord",
     reason: params.reason,
     decidedBy: landlord.id,
   });
+
+  await writeApplicationDecisionAudit({
+    landlordId: landlord.id,
+    actorProfileId: landlord.id,
+    applicationId: application.id,
+    eventType: AUDIT_EVENT_TYPES.propertyApplicationRejected,
+    entityType: AUDIT_ENTITY_TYPES.propertyApplication,
+    entityId: application.id,
+    description: "Property application was rejected by landlord.",
+    metadata: {
+      reason: params.reason,
+      tenant_kyc_profile_id: application.tenant_kyc_profile_id,
+      agent_property_listing_id: application.agent_property_listing_id,
+      agent_id: application.agent_id,
+      previous_status: application.status,
+      new_status: updatedApplication.status,
+    },
+  });
+
+  return updatedApplication;
 }
 
 export async function waitlistPropertyApplicationForCurrentLandlord(params: {
@@ -247,12 +399,32 @@ export async function waitlistPropertyApplicationForCurrentLandlord(params: {
   const { landlord, supabase, application } =
     await getReviewableApplicationForCurrentLandlord(params.applicationId);
 
-  return updatePropertyApplicationStatus(supabase, {
+  const updatedApplication = await updatePropertyApplicationStatus(supabase, {
     applicationId: application.id,
     status: "waitlisted",
     reason: params.reason,
     decidedBy: landlord.id,
   });
+
+  await writeApplicationDecisionAudit({
+    landlordId: landlord.id,
+    actorProfileId: landlord.id,
+    applicationId: application.id,
+    eventType: AUDIT_EVENT_TYPES.propertyApplicationWaitlisted,
+    entityType: AUDIT_ENTITY_TYPES.propertyApplication,
+    entityId: application.id,
+    description: "Property application was waitlisted by landlord.",
+    metadata: {
+      reason: params.reason,
+      tenant_kyc_profile_id: application.tenant_kyc_profile_id,
+      agent_property_listing_id: application.agent_property_listing_id,
+      agent_id: application.agent_id,
+      previous_status: application.status,
+      new_status: updatedApplication.status,
+    },
+  });
+
+  return updatedApplication;
 }
 
 export async function markAcceptedPropertyApplicationRejectedByTenant(params: {
@@ -290,22 +462,68 @@ export async function markAcceptedPropertyApplicationRejectedByTenant(params: {
     );
   }
 
-  await markTenantRejectedAfterInspection(supabase, {
+  const rejectedTenant = await markTenantRejectedAfterInspection(supabase, {
     tenantId: tenant.id,
     reason: params.reason,
   });
 
   const unit = await getUnitById(supabase, tenant.unit_id);
+  const releasedUnit =
+    unit.status === "reserved" ? await markUnitVacant(supabase, unit.id) : null;
 
-  if (unit.status === "reserved") {
-    await markUnitVacant(supabase, unit.id);
-  }
-
-  return updatePropertyApplicationStatus(supabase, {
+  const updatedApplication = await updatePropertyApplicationStatus(supabase, {
     applicationId: application.id,
     status: "rejected_by_tenant_after_inspection",
     convertedTenantId,
     tenantDecisionReason: params.reason,
     decidedBy: landlord.id,
   });
+
+  await writeApplicationDecisionAudit({
+    landlordId: landlord.id,
+    actorProfileId: landlord.id,
+    applicationId: application.id,
+    tenantId: tenant.id,
+    unitId: tenant.unit_id,
+    propertyId: tenant.units?.properties?.id ?? null,
+    eventType: AUDIT_EVENT_TYPES.propertyApplicationTenantRejected,
+    entityType: AUDIT_ENTITY_TYPES.propertyApplication,
+    entityId: application.id,
+    description:
+      "Tenant rejected the apartment after inspection or agreement review.",
+    metadata: {
+      reason: params.reason,
+      tenant_id: tenant.id,
+      previous_tenant_status: tenant.onboarding_status,
+      new_tenant_status: rejectedTenant.onboarding_status,
+      previous_application_status: application.status,
+      new_application_status: updatedApplication.status,
+      unit_released: Boolean(releasedUnit),
+    },
+  });
+
+  if (releasedUnit) {
+    await writeApplicationDecisionAudit({
+      landlordId: landlord.id,
+      actorProfileId: landlord.id,
+      applicationId: application.id,
+      tenantId: tenant.id,
+      unitId: unit.id,
+      propertyId: tenant.units?.properties?.id ?? null,
+      eventType: AUDIT_EVENT_TYPES.unitStatusChanged,
+      entityType: AUDIT_ENTITY_TYPES.unit,
+      entityId: unit.id,
+      description: `${unit.unit_identifier} was released after tenant rejected the apartment.`,
+      metadata: {
+        reason: "tenant_rejected_apartment",
+        tenant_id: tenant.id,
+        tenant_name: tenant.full_name,
+        previous_unit_status: unit.status,
+        new_unit_status: releasedUnit.status,
+        property_application_id: application.id,
+      },
+    });
+  }
+
+  return updatedApplication;
 }

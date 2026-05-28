@@ -1,5 +1,10 @@
 import "server-only";
 
+import {
+  AUDIT_ACTOR_ROLES,
+  AUDIT_ENTITY_TYPES,
+  AUDIT_EVENT_TYPES,
+} from "@/server/constants/audit-events";
 import { AppError } from "@/server/errors/app-error";
 import { getAgentPropertyListingById } from "@/server/repositories/agent-property-listings.repository";
 import {
@@ -15,6 +20,7 @@ import {
   type TenantProcessingFeeAccessRow,
 } from "@/server/repositories/tenant-applications.repository";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
+import { writeAuditLog } from "@/server/services/audit-log.service";
 import { normalisePhoneNumber } from "@/server/utils/phone";
 
 export const PROCESSING_FEE_VALIDITY_DAYS = 60;
@@ -74,6 +80,53 @@ async function upsertTenantKycProfile(
   }
 
   return updateTenantKycProfile(supabase, existingProfile.id, finalInput);
+}
+
+async function writePropertyApplicationCreatedAudit(params: {
+  landlordId: string | null;
+  application: PropertyApplicationRow;
+  kycProfile: TenantKycProfileRow;
+  listing: {
+    id: string;
+    agent_id: string;
+    property_name: string;
+    unit_identifier: string;
+    annual_rent: number | null;
+    monthly_rent: number | null;
+  };
+  reusedFeeAccess: boolean;
+}) {
+  if (!params.landlordId) {
+    return;
+  }
+
+  await writeAuditLog({
+    landlordId: params.landlordId,
+    tenantId: null,
+    unitId: null,
+    propertyId: null,
+    actorProfileId: null,
+    actorRole: AUDIT_ACTOR_ROLES.tenant,
+    eventType: params.reusedFeeAccess
+      ? AUDIT_EVENT_TYPES.propertyApplicationSubmitted
+      : AUDIT_EVENT_TYPES.propertyApplicationCreated,
+    entityType: AUDIT_ENTITY_TYPES.propertyApplication,
+    entityId: params.application.id,
+    description: `${params.kycProfile.full_name} submitted an application for ${params.listing.property_name}, ${params.listing.unit_identifier}.`,
+    metadata: {
+      tenant_kyc_profile_id: params.kycProfile.id,
+      tenant_name: params.kycProfile.full_name,
+      tenant_phone_number: params.kycProfile.phone_number,
+      agent_id: params.listing.agent_id,
+      agent_property_listing_id: params.listing.id,
+      property_name: params.listing.property_name,
+      unit_identifier: params.listing.unit_identifier,
+      annual_rent: params.listing.annual_rent,
+      monthly_rent: params.listing.monthly_rent,
+      application_status: params.application.status,
+      reused_processing_fee_access: params.reusedFeeAccess,
+    },
+  });
 }
 
 export async function createOrReuseTenantListingApplication(params: {
@@ -139,6 +192,21 @@ export async function createOrReuseTenantListingApplication(params: {
       annual_rent: listing.annual_rent,
       monthly_rent: listing.monthly_rent,
     },
+  });
+
+  await writePropertyApplicationCreatedAudit({
+    landlordId: listing.matched_landlord_id,
+    application,
+    kycProfile,
+    listing: {
+      id: listing.id,
+      agent_id: listing.agent_id,
+      property_name: listing.property_name,
+      unit_identifier: listing.unit_identifier,
+      annual_rent: listing.annual_rent,
+      monthly_rent: listing.monthly_rent,
+    },
+    reusedFeeAccess: Boolean(feeAccess),
   });
 
   return {

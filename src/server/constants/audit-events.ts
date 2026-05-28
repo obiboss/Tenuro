@@ -12,6 +12,8 @@ export const AUDIT_ENTITY_TYPES = {
   unit: "unit",
   property: "property",
   propertyRule: "property_rule",
+  propertyApplication: "property_application",
+  agentPropertyListing: "agent_property_listing",
   payment: "payment",
   agreement: "agreement",
   agreementTemplate: "agreement_template",
@@ -32,6 +34,17 @@ export const AUDIT_EVENT_TYPES = {
   tenantApproved: "tenant.approved",
   tenantRejected: "tenant.rejected",
   tenantWaitlisted: "tenant.waitlisted",
+
+  propertyApplicationCreated: "property_application.created",
+  propertyApplicationSubmitted: "property_application.submitted",
+  propertyApplicationFeeConfirmed: "property_application.fee_confirmed",
+  propertyApplicationAccepted: "property_application.accepted",
+  propertyApplicationRejected: "property_application.rejected",
+  propertyApplicationWaitlisted: "property_application.waitlisted",
+  propertyApplicationTenantRejected:
+    "property_application.tenant_rejected_apartment",
+  propertyApplicationConvertedToTenant:
+    "property_application.converted_to_tenant",
 
   agentKycDraftSaved: "agent.kyc_draft_saved",
   agentVerificationFeeInitialized: "agent.verification_fee_initialized",
