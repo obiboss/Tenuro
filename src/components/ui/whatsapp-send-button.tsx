@@ -1,18 +1,17 @@
 "use client";
 
 import { MessageCircle } from "lucide-react";
+import { buildWaMeUrl } from "@/lib/whatsapp";
 import { Button } from "@/components/ui/button";
 
 type WhatsAppSendButtonProps = {
-  phoneNumber: string;
+  phoneNumber?: string | null;
   message: string;
   label?: string;
 };
 
-import { buildWaMeUrl } from "@/lib/whatsapp";
-
 export function WhatsAppSendButton({
-  phoneNumber,
+  phoneNumber = null,
   message,
   label = "Send via WhatsApp",
 }: WhatsAppSendButtonProps) {
