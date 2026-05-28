@@ -1,25 +1,66 @@
 import { z } from "zod";
 
+const optionalTextSchema = z
+  .string()
+  .trim()
+  .optional()
+  .or(z.literal(""))
+  .transform((value) => value?.trim() ?? "");
+
 export const tenantKycApplicationSchema = z.object({
   agentPropertyListingId: z.string().uuid(),
-  fullName: z.string().trim().min(2, "Enter your full name."),
-  phoneNumber: z.string().trim().min(8, "Enter a valid phone number."),
+
+  fullName: z
+    .string()
+    .trim()
+    .min(2, "Enter your full name.")
+    .max(120, "Name is too long."),
+
+  phoneNumber: z
+    .string()
+    .trim()
+    .min(8, "Enter a valid phone number.")
+    .max(30, "Phone number is too long."),
+
   email: z
     .string()
     .trim()
     .email("Enter a valid email address.")
     .optional()
     .or(z.literal("")),
-  dateOfBirth: z.string().trim().optional().or(z.literal("")),
-  homeAddress: z.string().trim().min(5, "Enter your current home address."),
-  occupation: z.string().trim().min(2, "Enter your occupation."),
-  employer: z.string().trim().optional().or(z.literal("")),
-  idType: z
-    .enum(["nin", "passport", "drivers_license", "voters_card"])
-    .optional(),
-  idDocumentPath: z.string().trim().optional().or(z.literal("")),
-  passportPhotoPath: z.string().trim().optional().or(z.literal("")),
-  canProvideGuarantor: z.enum(["yes", "no", "not_sure"]),
+
+  dateOfBirth: optionalTextSchema,
+
+  homeAddress: z
+    .string()
+    .trim()
+    .min(5, "Enter your current home address.")
+    .max(300, "Home address is too long."),
+
+  occupation: z
+    .string()
+    .trim()
+    .min(2, "Enter your occupation.")
+    .max(120, "Occupation is too long."),
+
+  employer: optionalTextSchema,
+
+  idType: z.enum(["nin", "passport", "drivers_license", "voters_card"], {
+    message: "Select your ID type.",
+  }),
+
+  idNumber: z
+    .string()
+    .trim()
+    .min(3, "Enter your ID number.")
+    .max(80, "ID number is too long."),
+
+  idDocumentPath: optionalTextSchema,
+  passportPhotoPath: optionalTextSchema,
+
+  canProvideGuarantor: z.enum(["yes", "no", "not_sure"], {
+    message: "Select whether you can provide a guarantor if required.",
+  }),
 });
 
 export type TenantKycApplicationInput = z.infer<

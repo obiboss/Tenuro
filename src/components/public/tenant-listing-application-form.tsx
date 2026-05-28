@@ -175,11 +175,15 @@ export function TenantListingApplicationForm({
               id="phoneNumber"
               name="phoneNumber"
               type="tel"
+              inputMode="tel"
               autoComplete="tel"
-              placeholder="+234..."
+              placeholder="08012345678 or +2348012345678"
               className="mt-2 w-full rounded-button border border-border-soft bg-white px-4 py-3 text-sm font-semibold text-text-strong outline-none focus:border-primary"
               required
             />
+            <p className="mt-1 text-xs font-semibold text-text-muted">
+              Use your Nigerian phone number. BOPA will format it securely.
+            </p>
             <FieldError field="phoneNumber" state={applicationState} />
           </div>
 
@@ -195,6 +199,7 @@ export function TenantListingApplicationForm({
               name="email"
               type="email"
               autoComplete="email"
+              placeholder="Optional"
               className="mt-2 w-full rounded-button border border-border-soft bg-white px-4 py-3 text-sm font-semibold text-text-strong outline-none focus:border-primary"
             />
             <FieldError field="email" state={applicationState} />
@@ -262,31 +267,57 @@ export function TenantListingApplicationForm({
                 id="employer"
                 name="employer"
                 type="text"
+                placeholder="Optional"
                 className="mt-2 w-full rounded-button border border-border-soft bg-white px-4 py-3 text-sm font-semibold text-text-strong outline-none focus:border-primary"
               />
               <FieldError field="employer" state={applicationState} />
             </div>
           </div>
 
-          <div>
-            <label
-              htmlFor="idType"
-              className="text-sm font-bold text-text-strong"
-            >
-              ID type
-            </label>
-            <select
-              id="idType"
-              name="idType"
-              className="mt-2 w-full rounded-button border border-border-soft bg-white px-4 py-3 text-sm font-semibold text-text-strong outline-none focus:border-primary"
-            >
-              <option value="">Select ID type</option>
-              <option value="nin">NIN</option>
-              <option value="passport">Passport</option>
-              <option value="drivers_license">Driver&apos;s license</option>
-              <option value="voters_card">Voter&apos;s card</option>
-            </select>
-            <FieldError field="idType" state={applicationState} />
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label
+                htmlFor="idType"
+                className="text-sm font-bold text-text-strong"
+              >
+                ID type
+              </label>
+              <select
+                id="idType"
+                name="idType"
+                className="mt-2 w-full rounded-button border border-border-soft bg-white px-4 py-3 text-sm font-semibold text-text-strong outline-none focus:border-primary"
+                required
+              >
+                <option value="">Select ID type</option>
+                <option value="nin">NIN</option>
+                <option value="passport">International Passport</option>
+                <option value="drivers_license">Driver&apos;s License</option>
+                <option value="voters_card">Voter&apos;s Card</option>
+              </select>
+              <FieldError field="idType" state={applicationState} />
+            </div>
+
+            <div>
+              <label
+                htmlFor="idNumber"
+                className="text-sm font-bold text-text-strong"
+              >
+                ID number
+              </label>
+              <input
+                id="idNumber"
+                name="idNumber"
+                type="text"
+                autoComplete="off"
+                placeholder="Enter your selected ID number"
+                className="mt-2 w-full rounded-button border border-border-soft bg-white px-4 py-3 text-sm font-semibold text-text-strong outline-none focus:border-primary"
+                required
+              />
+              <p className="mt-1 text-xs font-semibold text-text-muted">
+                This is saved with your reusable KYC answers.
+              </p>
+              <FieldError field="idNumber" state={applicationState} />
+            </div>
           </div>
 
           <div>
@@ -307,6 +338,9 @@ export function TenantListingApplicationForm({
               <option value="no">No</option>
               <option value="not_sure">Not sure</option>
             </select>
+            <p className="mt-1 text-xs font-semibold text-text-muted">
+              You do not need to fill guarantor details now.
+            </p>
             <FieldError field="canProvideGuarantor" state={applicationState} />
           </div>
 

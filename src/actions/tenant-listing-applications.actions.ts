@@ -6,6 +6,12 @@ import { errorResult } from "@/server/errors/result";
 import { createOrReuseTenantListingApplication } from "@/server/services/tenant-applications.service";
 import { tenantKycApplicationSchema } from "@/server/validators/tenant-application.schema";
 
+function getOptionalFormText(formData: FormData, key: string) {
+  const value = formData.get(key);
+
+  return typeof value === "string" ? value : "";
+}
+
 export async function submitTenantListingApplicationAction(
   _previousState: TenantListingApplicationActionState,
   formData: FormData,
@@ -15,14 +21,15 @@ export async function submitTenantListingApplicationAction(
       agentPropertyListingId: formData.get("agentPropertyListingId"),
       fullName: formData.get("fullName"),
       phoneNumber: formData.get("phoneNumber"),
-      email: formData.get("email"),
-      dateOfBirth: formData.get("dateOfBirth"),
+      email: getOptionalFormText(formData, "email"),
+      dateOfBirth: getOptionalFormText(formData, "dateOfBirth"),
       homeAddress: formData.get("homeAddress"),
       occupation: formData.get("occupation"),
-      employer: formData.get("employer"),
-      idType: formData.get("idType") || undefined,
-      idDocumentPath: formData.get("idDocumentPath"),
-      passportPhotoPath: formData.get("passportPhotoPath"),
+      employer: getOptionalFormText(formData, "employer"),
+      idType: formData.get("idType"),
+      idNumber: formData.get("idNumber"),
+      idDocumentPath: getOptionalFormText(formData, "idDocumentPath"),
+      passportPhotoPath: getOptionalFormText(formData, "passportPhotoPath"),
       canProvideGuarantor: formData.get("canProvideGuarantor"),
     });
 
@@ -36,10 +43,11 @@ export async function submitTenantListingApplicationAction(
         homeAddress: parsed.homeAddress,
         occupation: parsed.occupation,
         employer: parsed.employer || null,
-        idType: parsed.idType ?? null,
+        idType: parsed.idType,
         idDocumentPath: parsed.idDocumentPath || null,
         passportPhotoPath: parsed.passportPhotoPath || null,
         kycAnswers: {
+          id_number: parsed.idNumber,
           can_provide_guarantor: parsed.canProvideGuarantor,
         },
         kycReviewFlags:
