@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { Building2, MapPin, ShieldCheck } from "lucide-react";
-import { ListingMediaGallery } from "@/components/listings/listing-media-gallery";
+import { ArrowRight, Building2, MapPin } from "lucide-react";
+import { ListingCoverPreview } from "@/components/listings/listing-media-gallery";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
@@ -32,15 +32,15 @@ export default async function PublicAgentListingsPage({
   );
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 py-8 md:px-6">
+    <main className="mx-auto w-full max-w-7xl px-4 py-8 md:px-6">
       <PageHeader
         title="Available apartments"
-        description="View available listings first. Apply only for the apartment you are interested in."
+        description="Browse available apartments first. Open only the property you are interested in before applying."
       />
 
       <SectionCard
-        title="Listings"
-        description="Each application is reviewed by the landlord. Processing fee does not guarantee approval or availability."
+        title="Apartment gallery"
+        description="Choose an apartment to view full details, pictures, videos, and the application form."
       >
         {listings.length === 0 ? (
           <EmptyState
@@ -49,104 +49,89 @@ export default async function PublicAgentListingsPage({
             icon={<Building2 aria-hidden="true" size={24} strokeWidth={2.6} />}
           />
         ) : (
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {listings.map((listing) => {
               const listingMedia = mediaByListingId.get(listing.id) ?? [];
+              const rent = formatMoney(
+                listing.annual_rent ?? listing.monthly_rent,
+                listing.currency_code,
+              );
 
               return (
-                <article
+                <Link
                   key={listing.id}
-                  className="rounded-card border border-border-soft bg-background p-4"
+                  href={`/agent-listings/${agentId}/${listing.id}/apply`}
+                  className="group overflow-hidden rounded-card border border-border-soft bg-background p-3 shadow-card transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg"
                 >
-                  <div className="mb-4">
-                    <ListingMediaGallery media={listingMedia} compact />
-                  </div>
+                  <ListingCoverPreview media={listingMedia} />
 
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
+                  <div className="p-2">
+                    <div className="mt-3 flex items-center justify-between gap-3">
                       <Badge tone="success">Available</Badge>
-                      <h2 className="mt-3 text-lg font-black text-text-strong">
-                        {listing.property_name}
-                      </h2>
+
+                      <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary transition group-hover:bg-primary group-hover:text-white">
+                        <ArrowRight
+                          aria-hidden="true"
+                          size={18}
+                          strokeWidth={2.6}
+                        />
+                      </span>
                     </div>
 
-                    <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary">
-                      <Building2
+                    <h2 className="mt-3 line-clamp-1 text-lg font-black text-text-strong">
+                      {listing.property_name}
+                    </h2>
+
+                    <p className="mt-2 flex gap-2 text-sm font-semibold leading-6 text-text-muted">
+                      <MapPin
                         aria-hidden="true"
-                        size={22}
+                        className="mt-1 shrink-0"
+                        size={16}
                         strokeWidth={2.6}
                       />
+                      <span className="line-clamp-2">
+                        {listing.lga}, {listing.state}
+                      </span>
+                    </p>
+
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                      <div className="rounded-button bg-white px-3 py-2">
+                        <p className="text-[11px] font-black uppercase tracking-wide text-text-muted">
+                          Type
+                        </p>
+                        <p className="mt-1 line-clamp-1 text-sm font-bold capitalize text-text-strong">
+                          {listing.unit_type.replaceAll("_", " ")}
+                        </p>
+                      </div>
+
+                      <div className="rounded-button bg-white px-3 py-2">
+                        <p className="text-[11px] font-black uppercase tracking-wide text-text-muted">
+                          Rent
+                        </p>
+                        <p className="mt-1 line-clamp-1 text-sm font-bold text-text-strong">
+                          {rent}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 rounded-button bg-primary px-4 py-3 text-center text-sm font-black text-white transition group-hover:opacity-95">
+                      View details
                     </div>
                   </div>
-
-                  <p className="mt-3 flex gap-2 text-sm font-semibold leading-6 text-text-muted">
-                    <MapPin
-                      aria-hidden="true"
-                      className="mt-1 shrink-0"
-                      size={16}
-                      strokeWidth={2.6}
-                    />
-                    <span>
-                      {listing.address}, {listing.lga}, {listing.state}
-                    </span>
-                  </p>
-
-                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-button bg-white p-3">
-                      <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
-                        Unit
-                      </p>
-                      <p className="mt-1 font-bold text-text-strong">
-                        {listing.unit_identifier}
-                      </p>
-                    </div>
-
-                    <div className="rounded-button bg-white p-3">
-                      <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
-                        Type
-                      </p>
-                      <p className="mt-1 font-bold capitalize text-text-strong">
-                        {listing.unit_type.replaceAll("_", " ")}
-                      </p>
-                    </div>
-
-                    <div className="rounded-button bg-white p-3">
-                      <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
-                        Rent
-                      </p>
-                      <p className="mt-1 font-bold text-text-strong">
-                        {formatMoney(
-                          listing.annual_rent ?? listing.monthly_rent,
-                          listing.currency_code,
-                        )}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 rounded-button bg-gold-soft px-4 py-3 text-sm font-semibold leading-6 text-gold-deep">
-                    <ShieldCheck
-                      aria-hidden="true"
-                      className="mr-2 inline"
-                      size={16}
-                      strokeWidth={2.6}
-                    />
-                    You only fill KYC once. If your processing fee is still
-                    valid within this same agent/landlord context, you will not
-                    pay again.
-                  </div>
-
-                  <Link
-                    href={`/agent-listings/${agentId}/${listing.id}/apply`}
-                    className="mt-4 inline-flex w-full items-center justify-center rounded-button bg-primary px-5 py-3 text-sm font-black text-white shadow-card transition hover:opacity-95"
-                  >
-                    Apply for this apartment
-                  </Link>
-                </article>
+                </Link>
               );
             })}
           </div>
         )}
       </SectionCard>
+
+      {listings.length > 0 ? (
+        <div className="mt-6 rounded-card bg-gold-soft px-5 py-4 text-sm font-semibold leading-6 text-gold-deep">
+          You only fill KYC after choosing a specific apartment. Processing fee
+          does not guarantee approval or availability, and a valid fee can be
+          reused within the same agent/landlord context.
+        </div>
+      ) : null}
     </main>
   );
 }

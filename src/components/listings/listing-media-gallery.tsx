@@ -17,6 +17,56 @@ function getCoverMedia(media: AgentPropertyListingMediaView[]) {
   );
 }
 
+export function ListingCoverPreview({
+  media,
+  label = "View apartment",
+}: {
+  media: AgentPropertyListingMediaView[];
+  label?: string;
+}) {
+  const cover = getCoverMedia(media);
+  const counts = getMediaCounts(media);
+
+  return (
+    <div className="relative overflow-hidden rounded-2xl bg-background">
+      {cover?.publicUrl && cover.media_type === "image" ? (
+        <div
+          aria-label={cover.original_filename}
+          role="img"
+          className="aspect-4/3 w-full bg-cover bg-center"
+          style={{
+            backgroundImage: `url(${cover.publicUrl})`,
+          }}
+        />
+      ) : cover?.publicUrl && cover.media_type === "video" ? (
+        <video
+          muted
+          playsInline
+          preload="metadata"
+          className="aspect-4/3 w-full bg-black object-cover"
+        >
+          <source src={cover.publicUrl} type={cover.mime_type} />
+        </video>
+      ) : (
+        <div className="flex aspect-4/3 w-full items-center justify-center bg-primary-soft text-primary">
+          <ImageIcon aria-hidden="true" size={34} strokeWidth={2.6} />
+        </div>
+      )}
+
+      <div className="absolute left-3 top-3 rounded-full bg-white/95 px-3 py-1 text-xs font-black text-text-strong shadow-card">
+        {label}
+      </div>
+
+      {media.length > 0 ? (
+        <div className="absolute bottom-3 right-3 rounded-full bg-black/70 px-3 py-1 text-xs font-black text-white">
+          {counts.images} photo{counts.images === 1 ? "" : "s"} ·{" "}
+          {counts.videos} video{counts.videos === 1 ? "" : "s"}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function ListingMediaSummary({
   media,
 }: {
