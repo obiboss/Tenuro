@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { BarChart3, ShieldCheck, Settings, X } from "lucide-react";
+import { BarChart3, Bell, ShieldCheck, Settings, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
@@ -10,22 +10,32 @@ import { GATED_LANDLORD_PATH_PREFIXES } from "@/server/constants/landlord-subscr
 
 const moreItems = [
   {
+    label: "Notifications",
+    href: "/notifications",
+    icon: Bell,
+    status: "available",
+    description: "View alerts and prepared WhatsApp messages.",
+  },
+  {
     label: "Settings",
     href: "/settings",
     icon: Settings,
     status: "available",
+    description: "Manage your account setup.",
   },
   {
     label: "Reports",
     href: "/reports",
     icon: BarChart3,
     status: "coming_soon",
+    description: "This section is not active yet.",
   },
   {
     label: "Caretakers",
     href: "/caretakers",
     icon: ShieldCheck,
     status: "coming_soon",
+    description: "This section is not active yet.",
   },
 ];
 
@@ -119,9 +129,7 @@ export function MobileMoreMenu({
                           {item.label}
                         </span>
                         <span className="text-sm text-text-muted">
-                          {comingSoon
-                            ? "This section is not active yet."
-                            : "Manage your account setup."}
+                          {item.description}
                         </span>
                       </span>
                     </span>
