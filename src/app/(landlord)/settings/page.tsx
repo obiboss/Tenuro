@@ -2,8 +2,6 @@ import { Settings } from "lucide-react";
 import { AgreementTemplateEditor } from "@/components/agreement/agreement-template-editor";
 import { BankSetupForm } from "@/components/payment/bank-setup-form";
 import { PayoutVerificationAutoRefresh } from "@/components/payment/payout-verification-auto-refresh";
-import { LandlordPricingPlans } from "@/components/subscription/landlord-pricing-plans";
-import { LandlordSubscriptionRequiredNotice } from "@/components/subscription/landlord-subscription-required-notice";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
@@ -12,27 +10,15 @@ import {
   getCurrentLandlordBankSetup,
   getPaystackBanksForSetup,
 } from "@/server/services/landlord-bank.service";
-import { getCurrentLandlordPricingContext } from "@/server/services/landlord-trial.service";
-import { getCurrentLandlordPlatformAccessContext } from "@/server/services/landlord-subscription-access.service";
 import { getPaystackPayoutVerificationUiState } from "@/server/services/paystack-verification.service";
 
-type SettingsPageProps = {
-  searchParams?: Promise<{
-    subscription?: string;
-  }>;
-};
+export default async function SettingsPage() {
+  const [bankSetup, banks, agreementTemplate] = await Promise.all([
+    getCurrentLandlordBankSetup(),
+    getPaystackBanksForSetup(),
+    getLandlordAgreementTemplateEditorState(),
+  ]);
 
-export default async function SettingsPage({ searchParams }: SettingsPageProps) {
-  const resolvedSearchParams = searchParams ? await searchParams : {};
-  const [bankSetup, banks, agreementTemplate, pricingContext, platformContext] =
-    await Promise.all([
-      getCurrentLandlordBankSetup(),
-      getPaystackBanksForSetup(),
-      getLandlordAgreementTemplateEditorState(),
-      getCurrentLandlordPricingContext(),
-      getCurrentLandlordPlatformAccessContext(),
-    ]);
-  const platformAccess = platformContext.access;
   const payoutVerification = getPaystackPayoutVerificationUiState(
     bankSetup,
     "landlord",
@@ -40,9 +26,6 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
 
   const shouldAutoRefreshPayoutVerification =
     Boolean(bankSetup) && payoutVerification.state === "unverified";
-  const showSubscriptionNotice =
-    resolvedSearchParams.subscription === "required" ||
-    !platformAccess.hasAccess;
 
   return (
     <div>
@@ -52,20 +35,8 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
 
       <PageHeader
         title="Settings"
-        description="Manage landlord profile, payout bank account, and notification preferences."
+        description="Manage landlord profile, payout bank account, and agreement templates."
       />
-
-      {showSubscriptionNotice && !platformAccess.hasAccess ? (
-        <div className="mb-6">
-          <LandlordSubscriptionRequiredNotice
-            reason={
-              platformAccess.reason === "trial_expired"
-                ? "trial_expired"
-                : "subscription_inactive"
-            }
-          />
-        </div>
-      ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
         <SectionCard
@@ -153,21 +124,6 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
         </SectionCard>
       </div>
 
-      <div id="bopa-plans" className="mt-6 scroll-mt-28">
-        <SectionCard
-          title="BOPA Plans"
-          description="Subscription pricing shown during your first-month trial."
-        >
-          <LandlordPricingPlans
-            basicAnnualPriceNaira={pricingContext.basicAnnualPrice}
-            proAnnualPriceNaira={pricingContext.proAnnualPrice}
-            isTrialing={pricingContext.isTrialing}
-            trialExpiresAt={pricingContext.trialExpiresAt}
-            subscriptionRequired={!platformAccess.hasAccess}
-          />
-        </SectionCard>
-      </div>
-
       <div className="mt-6 rounded-card bg-surface p-5 shadow-card">
         <div className="flex items-start gap-3">
           <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary">
@@ -177,8 +133,8 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
           <div>
             <p className="font-bold text-text-strong">Payment rule</p>
             <p className="mt-1 text-sm leading-6 text-text-muted">
-              Gateway payments will use Paystack split settlement. Manual
-              payments recorded by landlords do not generate BOPA fees.
+              Gateway payments use Paystack split settlement. Manual payments
+              recorded by landlords do not generate BOPA service fees.
             </p>
           </div>
         </div>

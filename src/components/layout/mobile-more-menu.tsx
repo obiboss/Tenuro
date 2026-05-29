@@ -6,7 +6,6 @@ import { BarChart3, Bell, ShieldCheck, Settings, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
-import { GATED_LANDLORD_PATH_PREFIXES } from "@/server/constants/landlord-subscription-gating";
 
 const moreItems = [
   {
@@ -39,20 +38,6 @@ const moreItems = [
   },
 ];
 
-function isSubscriptionGatedNavHref(href: string) {
-  return GATED_LANDLORD_PATH_PREFIXES.some(
-    (prefix) => href === prefix || href.startsWith(`${prefix}/`),
-  );
-}
-
-function resolveNavHref(href: string, platformAccessLocked: boolean) {
-  if (platformAccessLocked && isSubscriptionGatedNavHref(href)) {
-    return "/settings?subscription=required#bopa-plans";
-  }
-
-  return href;
-}
-
 type MobileMoreMenuProps = {
   platformAccessLocked?: boolean;
 };
@@ -61,6 +46,8 @@ export function MobileMoreMenu({
   platformAccessLocked = false,
 }: MobileMoreMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
+
+  void platformAccessLocked;
 
   return (
     <>
@@ -112,7 +99,7 @@ export function MobileMoreMenu({
                 return (
                   <Link
                     key={item.href}
-                    href={resolveNavHref(item.href, platformAccessLocked)}
+                    href={item.href}
                     onClick={() => setIsOpen(false)}
                     className={cn(
                       "flex items-center justify-between rounded-card border border-border-soft bg-surface p-4 transition",

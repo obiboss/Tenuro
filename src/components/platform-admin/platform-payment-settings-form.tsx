@@ -9,7 +9,13 @@ import {
 } from "@/actions/platform-admin-payment-settings.actions";
 import { ActionResultToast } from "@/components/ui/action-result-toast";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { TrustNotice } from "@/components/ui/trust-notice";
 import type { PlatformPaymentSettings } from "@/server/types/platform-payment-settings.types";
@@ -61,6 +67,21 @@ export function PlatformPaymentSettingsForm({
         type="hidden"
         name="expectedUpdatedAt"
         value={settings.updatedAt}
+      />
+      <input
+        type="hidden"
+        name="bopaBasicAnnualPriceNaira"
+        value={settings.bopaBasicAnnualPriceNaira}
+      />
+      <input
+        type="hidden"
+        name="bopaProAnnualPriceNaira"
+        value={settings.bopaProAnnualPriceNaira}
+      />
+      <input
+        type="hidden"
+        name="landlordTrialDays"
+        value={settings.landlordTrialDays}
       />
 
       <Card>
@@ -166,9 +187,7 @@ export function PlatformPaymentSettingsForm({
               min={0}
               step={1}
               defaultValue={String(settings.landlordProcessingFeePlatformShare)}
-              error={
-                state.fieldErrors?.landlordProcessingFeePlatformShare?.[0]
-              }
+              error={state.fieldErrors?.landlordProcessingFeePlatformShare?.[0]}
               required
             />
           </div>
@@ -191,49 +210,6 @@ export function PlatformPaymentSettingsForm({
               </span>
             </span>
           </label>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Landlord subscription pricing</CardTitle>
-        </CardHeader>
-
-        <CardContent className="space-y-5">
-          <div className="grid gap-4 md:grid-cols-3">
-            <Input
-              label="BOPA Basic annual price (NGN)"
-              name="bopaBasicAnnualPriceNaira"
-              type="number"
-              min={0}
-              step={1}
-              defaultValue={String(settings.bopaBasicAnnualPriceNaira)}
-              error={state.fieldErrors?.bopaBasicAnnualPriceNaira?.[0]}
-              required
-            />
-
-            <Input
-              label="BOPA Pro annual price (NGN)"
-              name="bopaProAnnualPriceNaira"
-              type="number"
-              min={0}
-              step={1}
-              defaultValue={String(settings.bopaProAnnualPriceNaira)}
-              error={state.fieldErrors?.bopaProAnnualPriceNaira?.[0]}
-              required
-            />
-
-            <Input
-              label="Landlord trial days"
-              name="landlordTrialDays"
-              type="number"
-              min={0}
-              step={1}
-              defaultValue={String(settings.landlordTrialDays)}
-              error={state.fieldErrors?.landlordTrialDays?.[0]}
-              required
-            />
-          </div>
         </CardContent>
 
         <CardFooter className="flex-col items-stretch gap-4">
