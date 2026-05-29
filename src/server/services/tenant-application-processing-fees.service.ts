@@ -33,8 +33,17 @@ import {
   PROCESSING_FEE_VALIDITY_DAYS,
 } from "@/server/services/tenant-applications.service";
 
-const DEFAULT_PROCESSING_FEE_NAIRA = 5000;
+const DEFAULT_PROCESSING_FEE_NAIRA = 15000;
+const AGENT_PROCESSING_FEE_SHARE_NAIRA = 10000;
 const FALLBACK_PAYSTACK_EMAIL_DOMAIN = "boldverseproperty.com";
+
+type TenantApplicationProcessingFeeBreakdown = {
+  processingFeeAmount: number;
+  platformShareAmount: number;
+  agentShareAmount: number;
+  totalAmount: number;
+  splitMode: "agent_sourced" | "direct_landlord";
+};
 
 function getAppBaseUrl() {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
@@ -62,6 +71,43 @@ function getTenantApplicationProcessingFeeAmount() {
   }
 
   return Math.round(configuredAmount);
+}
+
+function hasAgentSource(agentId: string | null) {
+  return typeof agentId === "string" && agentId.trim().length > 0;
+}
+
+function getTenantApplicationProcessingFeeBreakdown(params: {
+  agentId: string | null;
+}): TenantApplicationProcessingFeeBreakdown {
+  const processingFeeAmount = getTenantApplicationProcessingFeeAmount();
+  const isAgentSourced = hasAgentSource(params.agentId);
+
+  if (!isAgentSourced) {
+    return {
+      processingFeeAmount,
+      platformShareAmount: processingFeeAmount,
+      agentShareAmount: 0,
+      totalAmount: processingFeeAmount,
+      splitMode: "direct_landlord",
+    };
+  }
+
+  if (AGENT_PROCESSING_FEE_SHARE_NAIRA >= processingFeeAmount) {
+    throw new AppError(
+      "PROCESSING_FEE_SPLIT_INVALID",
+      "Agent processing fee share cannot be equal to or higher than the tenant processing fee.",
+      500,
+    );
+  }
+
+  return {
+    processingFeeAmount,
+    platformShareAmount: processingFeeAmount - AGENT_PROCESSING_FEE_SHARE_NAIRA,
+    agentShareAmount: AGENT_PROCESSING_FEE_SHARE_NAIRA,
+    totalAmount: processingFeeAmount,
+    splitMode: "agent_sourced",
+  };
 }
 
 function createProcessingFeeReference() {
@@ -152,11 +198,14 @@ async function writeProcessingFeeConfirmedAudit(params: {
   propertyApplicationId: string;
   tenantKycProfileId: string;
   agentPropertyListingId: string;
-  agentId: string;
+  agentId: string | null;
   paystackReference: string;
   amountPaid: number;
+  platformShareAmount: number;
+  agentShareAmount: number;
   currencyCode: string;
   validUntil: string;
+  splitMode: TenantApplicationProcessingFeeBreakdown["splitMode"];
 }) {
   if (!params.landlordId) {
     return;
@@ -180,6 +229,9 @@ async function writeProcessingFeeConfirmedAudit(params: {
       agent_id: params.agentId,
       paystack_reference: params.paystackReference,
       amount_paid: params.amountPaid,
+      platform_share_amount: params.platformShareAmount,
+      agent_share_amount: params.agentShareAmount,
+      split_mode: params.splitMode,
       currency_code: params.currencyCode,
       valid_until: params.validUntil,
       validity_days: PROCESSING_FEE_VALIDITY_DAYS,
@@ -273,7 +325,9 @@ export async function initializeTenantApplicationProcessingFee(
     };
   }
 
-  const processingFeeAmount = getTenantApplicationProcessingFeeAmount();
+  const feeBreakdown = getTenantApplicationProcessingFeeBreakdown({
+    agentId: application.agent_id,
+  });
   const reference = createProcessingFeeReference();
   const callbackUrl = `${getAppBaseUrl()}/agent-listings/application-fee/callback?reference=${encodeURIComponent(
     reference,
@@ -284,7 +338,7 @@ export async function initializeTenantApplicationProcessingFee(
       propertyApplicationId: application.id,
       metadata: application.metadata,
     }),
-    amountKobo: convertNairaToKobo(processingFeeAmount),
+    amountKobo: convertNairaToKobo(feeBreakdown.totalAmount),
     reference,
     callbackUrl,
     currencyCode: "NGN",
@@ -297,7 +351,11 @@ export async function initializeTenantApplicationProcessingFee(
       landlord_id: application.landlord_id,
       landlord_phone_number: application.landlord_phone_number,
       acquisition_context_key: application.acquisition_context_key,
-      expected_amount_naira: processingFeeAmount,
+      processing_fee_amount_naira: feeBreakdown.processingFeeAmount,
+      platform_share_amount_naira: feeBreakdown.platformShareAmount,
+      agent_share_amount_naira: feeBreakdown.agentShareAmount,
+      split_mode: feeBreakdown.splitMode,
+      expected_amount_naira: feeBreakdown.totalAmount,
       currency_code: "NGN",
     },
   });
@@ -313,10 +371,10 @@ export async function initializeTenantApplicationProcessingFee(
     paystackReference: reference,
     paystackAccessCode: initializedTransaction.access_code,
     authorizationUrl: initializedTransaction.authorization_url,
-    processingFeeAmount,
-    platformShareAmount: processingFeeAmount,
-    agentShareAmount: 0,
-    totalAmount: processingFeeAmount,
+    processingFeeAmount: feeBreakdown.processingFeeAmount,
+    platformShareAmount: feeBreakdown.platformShareAmount,
+    agentShareAmount: feeBreakdown.agentShareAmount,
+    totalAmount: feeBreakdown.totalAmount,
     currencyCode: "NGN",
     idempotencyKey: createIdempotencyKey(application.id),
     metadata: {
@@ -324,6 +382,11 @@ export async function initializeTenantApplicationProcessingFee(
       property_application_id: application.id,
       tenant_kyc_profile_id: application.tenant_kyc_profile_id,
       acquisition_context_key: application.acquisition_context_key,
+      processing_fee_amount_naira: feeBreakdown.processingFeeAmount,
+      platform_share_amount_naira: feeBreakdown.platformShareAmount,
+      agent_share_amount_naira: feeBreakdown.agentShareAmount,
+      split_mode: feeBreakdown.splitMode,
+      total_amount_naira: feeBreakdown.totalAmount,
       validity_days: PROCESSING_FEE_VALIDITY_DAYS,
     },
   });
@@ -430,6 +493,10 @@ export async function verifyTenantApplicationProcessingFeeReference(
         property_application_id: paidIntent.property_application_id,
         agent_property_listing_id: paidIntent.agent_property_listing_id,
         paystack_reference: paidIntent.paystack_reference,
+        processing_fee_amount_naira: paidIntent.processing_fee_amount,
+        platform_share_amount_naira: paidIntent.platform_share_amount,
+        agent_share_amount_naira: paidIntent.agent_share_amount,
+        total_amount_naira: paidIntent.total_amount,
         validity_days: PROCESSING_FEE_VALIDITY_DAYS,
       },
     }));
@@ -459,8 +526,12 @@ export async function verifyTenantApplicationProcessingFeeReference(
     agentId: paidIntent.agent_id,
     paystackReference: paidIntent.paystack_reference,
     amountPaid: paidIntent.total_amount,
+    platformShareAmount: paidIntent.platform_share_amount,
+    agentShareAmount: paidIntent.agent_share_amount,
     currencyCode: paidIntent.currency_code,
     validUntil: feeAccess.valid_until,
+    splitMode:
+      paidIntent.agent_share_amount > 0 ? "agent_sourced" : "direct_landlord",
   });
 
   return paidIntent;
