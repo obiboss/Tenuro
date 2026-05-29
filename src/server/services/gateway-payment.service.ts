@@ -61,6 +61,7 @@ const PAYMENT_LINK_EXPIRY_HOURS = 24;
 const PAYMENT_PURPOSE_NEW_TENANT_FIRST_RENT = "new_tenant_first_rent";
 const PAYMENT_PURPOSE_TENANT_DASHBOARD_RENT = "tenant_dashboard_rent";
 const PAYMENT_PURPOSE_LANDLORD_PREPARED_RENT = "landlord_prepared_rent_payment";
+const DEFAULT_BOPA_RENT_SERVICE_FEE_PERCENTAGE = 10;
 
 type GatewayPaymentInitializerActorRole =
   | typeof AUDIT_ACTOR_ROLES.landlord
@@ -101,7 +102,7 @@ function buildTenantPaymentMessage(params: {
   rentAmount: number;
   landlordChargesAmount: number;
   agentCommissionAmount: number;
-  tenuroFeeAmount: number;
+  bopaServiceFeeAmount: number;
   totalAmount: number;
   paymentUrl: string;
   expiresAt: string;
@@ -130,7 +131,7 @@ function buildTenantPaymentMessage(params: {
     `Rent amount: ${formatNairaAmount(params.rentAmount)}`,
     ...chargeLines,
     ...agentLines,
-    `BOPA fee: ${formatNairaAmount(params.tenuroFeeAmount)}`,
+    `BOPA Service Fee: ${formatNairaAmount(params.bopaServiceFeeAmount)}`,
     `Total payable: ${formatNairaAmount(params.totalAmount)}`,
     `Link expires: ${expiryText}`,
     "",
@@ -141,28 +142,31 @@ function buildTenantPaymentMessage(params: {
   ].join("\n");
 }
 
-function getTenuroGatewayAdminFee() {
-  const value = process.env.TENURO_GATEWAY_ADMIN_FEE_NAIRA;
+function getBopaRentServiceFeePercentage() {
+  const configuredPercentage = Number(
+    process.env.BOPA_RENT_SERVICE_FEE_PERCENTAGE ??
+      DEFAULT_BOPA_RENT_SERVICE_FEE_PERCENTAGE,
+  );
 
-  if (!value) {
+  if (
+    !Number.isFinite(configuredPercentage) ||
+    configuredPercentage < 0 ||
+    configuredPercentage >= 100
+  ) {
     throw new AppError(
-      "TENURO_GATEWAY_FEE_MISSING",
-      "Gateway fee is not configured.",
+      "BOPA_RENT_SERVICE_FEE_PERCENTAGE_INVALID",
+      "BOPA Service Fee percentage is not configured correctly.",
       500,
     );
   }
 
-  const fee = Number(value);
+  return configuredPercentage;
+}
 
-  if (!Number.isFinite(fee) || fee < 0) {
-    throw new AppError(
-      "TENURO_GATEWAY_FEE_INVALID",
-      "Gateway fee is not configured correctly.",
-      500,
-    );
-  }
+function calculateBopaRentServiceFee(rentAmount: number) {
+  const percentage = getBopaRentServiceFeePercentage();
 
-  return fee;
+  return Math.round(rentAmount * (percentage / 100));
 }
 
 function createPaymentReference() {
@@ -232,7 +236,7 @@ function getTenantPaymentEmail(params: {
   const sanitizedPhone = params.tenantPhoneNumber.replace(/\D/g, "");
 
   if (sanitizedPhone.length >= 7) {
-    return `tenant-${sanitizedPhone}@tenuro.app`;
+    return `tenant-${sanitizedPhone}@boldverseproperty.com`;
   }
 
   return "payments@boldverseproperty.com";
@@ -242,7 +246,7 @@ function assertGatewayAmountStructure(params: {
   rentAmount: number;
   landlordChargesAmount: number;
   agentCommissionAmount: number;
-  tenuroFeeAmount: number;
+  bopaServiceFeeAmount: number;
   landlordShareAmount: number;
   totalAmount: number;
 }) {
@@ -270,10 +274,10 @@ function assertGatewayAmountStructure(params: {
     );
   }
 
-  if (params.tenuroFeeAmount < 0) {
+  if (params.bopaServiceFeeAmount < 0) {
     throw new AppError(
-      "GATEWAY_FEE_INVALID",
-      "Gateway fee cannot be negative.",
+      "BOPA_SERVICE_FEE_INVALID",
+      "BOPA Service Fee cannot be negative.",
       500,
     );
   }
@@ -293,11 +297,11 @@ function assertGatewayAmountStructure(params: {
     params.totalAmount !==
     params.landlordShareAmount +
       params.agentCommissionAmount +
-      params.tenuroFeeAmount
+      params.bopaServiceFeeAmount
   ) {
     throw new AppError(
       "GATEWAY_TOTAL_MISMATCH",
-      "Payment total does not match landlord share, agent commission, and gateway fee.",
+      "Payment total does not match landlord share, agent commission, and BOPA Service Fee.",
       500,
     );
   }
@@ -614,6 +618,9 @@ async function initializeGatewayPaymentForTenancy(params: {
     const tenantPaymentUrl = getTenantPaymentUrl(
       reusableIntent.paystack_reference,
     );
+    const bopaServiceFeeAmount =
+      readMetadataNumber(metadata, "bopa_service_fee_amount") ||
+      Number(reusableIntent.tenuro_fee_amount);
 
     return {
       tenantId: tenancy.tenant_id,
@@ -637,7 +644,7 @@ async function initializeGatewayPaymentForTenancy(params: {
           metadata,
           "agent_commission_amount",
         ),
-        tenuroFeeAmount: Number(reusableIntent.tenuro_fee_amount),
+        bopaServiceFeeAmount,
         totalAmount: Number(reusableIntent.total_amount),
         paymentUrl: tenantPaymentUrl,
         expiresAt: reusableExpiry ?? reusableIntent.created_at,
@@ -652,7 +659,8 @@ async function initializeGatewayPaymentForTenancy(params: {
 
   const rentAmount = params.amount;
   const landlordChargesAmount = sumActiveLandlordChargeAmount(landlordCharges);
-  const tenuroFeeAmount = getTenuroGatewayAdminFee();
+  const bopaServiceFeeAmount = calculateBopaRentServiceFee(rentAmount);
+  const bopaServiceFeePercentage = getBopaRentServiceFeePercentage();
   const expiresAt = createPaymentLinkExpiry();
 
   const agentDealAllocation = await resolveAgentDealPaymentAllocation({
@@ -663,18 +671,18 @@ async function initializeGatewayPaymentForTenancy(params: {
   const agentCommissionAmount = agentDealAllocation?.commissionAmount ?? 0;
   const landlordShareAmount = rentAmount + landlordChargesAmount;
   const totalAmount =
-    landlordShareAmount + agentCommissionAmount + tenuroFeeAmount;
+    landlordShareAmount + agentCommissionAmount + bopaServiceFeeAmount;
 
   assertGatewayAmountStructure({
     rentAmount,
     landlordChargesAmount,
     agentCommissionAmount,
-    tenuroFeeAmount,
+    bopaServiceFeeAmount,
     landlordShareAmount,
     totalAmount,
   });
 
-  const tenuroFeeKobo = convertNairaToKobo(tenuroFeeAmount);
+  const bopaServiceFeeKobo = convertNairaToKobo(bopaServiceFeeAmount);
   const totalAmountKobo = convertNairaToKobo(totalAmount);
   const reference = createPaymentReference();
 
@@ -709,11 +717,13 @@ async function initializeGatewayPaymentForTenancy(params: {
     tenancy_id: tenancy.id,
     tenant_id: tenancy.tenant_id,
     landlord_id: tenancy.landlord_id,
-    expected_amount_naira: rentAmount,
+    expected_amount_naira: totalAmount,
     rent_amount_naira: rentAmount,
     landlord_charges_amount: landlordChargesAmount,
     agent_commission_amount: agentCommissionAmount,
-    tenuro_fee_naira: tenuroFeeAmount,
+    bopa_service_fee_amount: bopaServiceFeeAmount,
+    bopa_service_fee_percentage: bopaServiceFeePercentage,
+    tenuro_fee_naira: bopaServiceFeeAmount,
     landlord_share_amount: landlordShareAmount,
     total_amount_naira: totalAmount,
     currency_code: tenancy.currency_code,
@@ -752,7 +762,9 @@ async function initializeGatewayPaymentForTenancy(params: {
         agent_property_listing_id: agentDealAllocation?.listing.id ?? null,
       },
       platform: {
-        amount: tenuroFeeAmount,
+        amount: bopaServiceFeeAmount,
+        fee_type: "bopa_service_fee",
+        fee_percentage: bopaServiceFeePercentage,
       },
     },
     paystack_split: agentDealSplit
@@ -766,13 +778,13 @@ async function initializeGatewayPaymentForTenancy(params: {
             agentDealAllocation?.agentPaystackAccount
               ?.paystack_subaccount_code ?? null,
           agent_share_kobo: convertNairaToKobo(agentCommissionAmount),
-          platform_remainder_kobo: tenuroFeeKobo,
+          platform_remainder_kobo: bopaServiceFeeKobo,
           bearer: "account",
         }
       : {
-          mode: "subaccount_flat_fee",
+          mode: "subaccount_bopa_service_fee",
           subaccount: verifiedPaystackAccount.paystack_subaccount_code,
-          transaction_charge_kobo: tenuroFeeKobo,
+          transaction_charge_kobo: bopaServiceFeeKobo,
           landlord_share_amount: landlordShareAmount,
           bearer: "subaccount",
         },
@@ -800,7 +812,7 @@ async function initializeGatewayPaymentForTenancy(params: {
         reference,
         callbackUrl: getTenantPaymentVerifyUrl(reference),
         subaccountCode: verifiedPaystackAccount.paystack_subaccount_code,
-        transactionChargeKobo: tenuroFeeKobo,
+        transactionChargeKobo: bopaServiceFeeKobo,
         currencyCode: tenancy.currency_code,
         metadata,
       });
@@ -813,7 +825,7 @@ async function initializeGatewayPaymentForTenancy(params: {
     paystackAccessCode: initializedTransaction.access_code,
     authorizationUrl: initializedTransaction.authorization_url,
     rentAmount,
-    tenuroFeeAmount,
+    tenuroFeeAmount: bopaServiceFeeAmount,
     totalAmount,
     currencyCode: tenancy.currency_code,
     periodStart: params.periodStart,
@@ -872,12 +884,14 @@ async function initializeGatewayPaymentForTenancy(params: {
       recipientType: "platform",
       recipientProfileId: null,
       agentPropertyListingId: agentDealAllocation?.listing.id ?? null,
-      amount: tenuroFeeAmount,
+      amount: bopaServiceFeeAmount,
       currencyCode: tenancy.currency_code,
       metadata: {
         source: "gateway_payment_intent_initialized",
         payment_purpose: params.paymentPurpose,
-        fee_type: "tenuro_gateway_admin_fee",
+        fee_type: "bopa_service_fee",
+        fee_percentage: bopaServiceFeePercentage,
+        fee_basis: "rent_amount_only",
       },
     },
   ]);
@@ -900,7 +914,8 @@ async function initializeGatewayPaymentForTenancy(params: {
       rent_amount: rentAmount,
       landlord_charges_amount: landlordChargesAmount,
       agent_commission_amount: agentCommissionAmount,
-      tenuro_fee_amount: tenuroFeeAmount,
+      bopa_service_fee_amount: bopaServiceFeeAmount,
+      bopa_service_fee_percentage: bopaServiceFeePercentage,
       landlord_share_amount: landlordShareAmount,
       total_amount: totalAmount,
       period_start: params.periodStart,
@@ -932,7 +947,7 @@ async function initializeGatewayPaymentForTenancy(params: {
       rentAmount,
       landlordChargesAmount,
       agentCommissionAmount,
-      tenuroFeeAmount,
+      bopaServiceFeeAmount,
       totalAmount,
       paymentUrl: tenantPaymentUrl,
       expiresAt,
@@ -1176,6 +1191,13 @@ export async function getPublicTenantPaymentCheckout(params: {
       "agent_commission_amount",
     ),
     landlordShareAmount: readMetadataNumber(metadata, "landlord_share_amount"),
+    bopaServiceFeeAmount:
+      readMetadataNumber(metadata, "bopa_service_fee_amount") ||
+      Number(intent.tenuro_fee_amount),
+    bopaServiceFeePercentage: readMetadataNumber(
+      metadata,
+      "bopa_service_fee_percentage",
+    ),
     tenuroFeeAmount: Number(intent.tenuro_fee_amount),
     totalAmount: Number(intent.total_amount),
     currencyCode: intent.currency_code,
