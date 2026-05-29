@@ -4,9 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  Bell,
   Building2,
   CreditCard,
-  FileText,
   History,
   Home,
   LockKeyhole,
@@ -68,15 +68,9 @@ const desktopNavItems = [
     status: "available",
   },
   {
-    label: "Imported Receipts",
-    href: "/public-receipts",
-    icon: FileText,
-    status: "available",
-  },
-  {
-    label: "Imported Agreements",
-    href: "/public-agreements",
-    icon: FileText,
+    label: "Notifications",
+    href: "/notifications",
+    icon: Bell,
     status: "available",
   },
   {
