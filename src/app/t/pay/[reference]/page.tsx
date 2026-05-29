@@ -146,7 +146,7 @@ function getStatusCopy(params: { status: string; isExpired: boolean }): {
   return {
     title: "Review rent payment",
     description:
-      "Confirm the rent amount, landlord charges, agent commission, BOPA fee, and total before continuing to Paystack.",
+      "Confirm the rent amount, landlord charges, agent commission, BOPA Service Fee, and total before continuing to Paystack.",
     badge: "Awaiting Payment",
     tone: "primary",
     icon: <CreditCard aria-hidden="true" size={24} strokeWidth={2.6} />,
@@ -297,10 +297,13 @@ export default async function TenantPaymentPage({
 
                   <div className="rounded-button bg-background p-4">
                     <p className="text-sm font-bold text-text-muted">
-                      BOPA Fee
+                      BOPA Service Fee
                     </p>
                     <p className="mt-2 text-xl font-extrabold text-text-strong">
-                      {formatNaira(checkout.tenuroFeeAmount)}
+                      {formatNaira(checkout.bopaServiceFeeAmount)}
+                    </p>
+                    <p className="mt-1 text-xs font-semibold leading-5 text-text-muted">
+                      10% service fee added to the rent payment.
                     </p>
                   </div>
 
