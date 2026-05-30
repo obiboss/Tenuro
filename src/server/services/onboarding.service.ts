@@ -19,6 +19,7 @@ import {
   getTenantForOnboardingInvite,
   officiallySubmitTenantOnboardingAfterPayment,
   saveTenantOnboardingDraft,
+  submitTenantOnboardingProfile,
   updateTenantOnboardingToken,
 } from "@/server/repositories/onboarding.repository";
 import { getActivePropertyRulesForOnboarding } from "@/server/repositories/property-rules.repository";
@@ -323,7 +324,7 @@ export async function submitTenantOnboarding(
     invitedByAgentId: tenant.invited_by_agent_id,
   });
 
-  if (agentSourced || landlordSourced) {
+  if (agentSourced) {
     const updatedTenant = await saveTenantOnboardingDraft(supabase, {
       tenantId: tenant.id,
       input: normalizedInput,
@@ -338,12 +339,8 @@ export async function submitTenantOnboarding(
       unitId: tenant.unit_id,
       actorRole: "tenant",
       actorProfileId: null,
-      eventType: agentSourced
-        ? AUDIT_EVENT_TYPES.agentKycDraftSaved
-        : AUDIT_EVENT_TYPES.tenantKycSubmitted,
-      description: agentSourced
-        ? "Agent-sourced tenant saved KYC draft for verification."
-        : "Landlord-sourced tenant saved KYC draft for verification.",
+      eventType: AUDIT_EVENT_TYPES.agentKycDraftSaved,
+      description: "Agent-sourced tenant saved KYC draft for verification.",
       metadata: {
         full_name: updatedTenant.full_name,
         phone_number: updatedTenant.phone_number,
@@ -354,7 +351,43 @@ export async function submitTenantOnboarding(
         kyc_review_flags: kycReviewFlags,
         agent_property_listing_id: tenant.agent_property_listing_id,
         invited_by_agent_id: tenant.invited_by_agent_id,
-        onboarding_source: agentSourced ? "agent" : "landlord",
+        onboarding_source: "agent",
+      },
+    });
+
+    return updatedTenant;
+  }
+
+  if (landlordSourced) {
+    const updatedTenant = await submitTenantOnboardingProfile(supabase, {
+      tenantId: tenant.id,
+      input: normalizedInput,
+      idNumberCiphertext: protectIdNumber(normalizedInput.idNumber),
+      kycAnswers,
+      kycReviewFlags,
+    });
+
+    await writeTenantOnboardingAuditLog({
+      tenantId: tenant.id,
+      landlordId: tenant.landlord_id,
+      unitId: tenant.unit_id,
+      actorRole: "tenant",
+      actorProfileId: null,
+      eventType: AUDIT_EVENT_TYPES.tenantKycSubmitted,
+      description:
+        "Landlord-sourced tenant submitted KYC for landlord review.",
+      metadata: {
+        full_name: updatedTenant.full_name,
+        phone_number: updatedTenant.phone_number,
+        email: updatedTenant.email,
+        id_type: normalizedInput.idType,
+        id_document_uploaded: Boolean(normalizedInput.idDocumentPath),
+        passport_photo_uploaded: Boolean(normalizedInput.passportPhotoPath),
+        kyc_review_flags: kycReviewFlags,
+        agent_property_listing_id: tenant.agent_property_listing_id,
+        invited_by_agent_id: tenant.invited_by_agent_id,
+        onboarding_source: "landlord",
+        processing_fee_required: false,
       },
     });
 

@@ -22,6 +22,7 @@ import {
 } from "@/server/constants/onboarding-lifecycle";
 import { errorResult } from "@/server/errors/result";
 import {
+  getDirectLandlordTenantProcessingFeeState,
   safeResolveTenantProcessingFeeForOnboarding,
   verifyTenantProcessingFeeReference,
 } from "@/server/services/tenant-verification-processing-fee.service";
@@ -57,19 +58,6 @@ async function getTenantOnboardingPageState(params: {
   shouldVerifyProcessingFee: boolean;
   processingFeeReference: string | undefined;
 }): Promise<TenantOnboardingPageState> {
-  let processingFeeNotice: string | null = null;
-
-  if (params.shouldVerifyProcessingFee && params.processingFeeReference) {
-    try {
-      await verifyTenantProcessingFeeReference(params.processingFeeReference);
-
-      processingFeeNotice =
-        "Verification fee payment confirmed. Your application has been submitted for landlord review.";
-    } catch (error) {
-      processingFeeNotice = errorResult(error).message;
-    }
-  }
-
   let tenant: Awaited<ReturnType<typeof resolveTenantOnboardingToken>>;
 
   try {
@@ -81,11 +69,36 @@ async function getTenantOnboardingPageState(params: {
     };
   }
 
-  const { processingFee, paymentInitError } =
-    await safeResolveTenantProcessingFeeForOnboarding({
-      tenant,
-      token: params.token,
-    });
+  const agentSourced = isAgentSourcedTenant({
+    agentPropertyListingId: tenant.agent_property_listing_id,
+    invitedByAgentId: tenant.invited_by_agent_id,
+  });
+
+  let processingFeeNotice: string | null = null;
+  let processingFee = getDirectLandlordTenantProcessingFeeState();
+  let paymentInitError: string | null = null;
+
+  if (agentSourced) {
+    if (params.shouldVerifyProcessingFee && params.processingFeeReference) {
+      try {
+        await verifyTenantProcessingFeeReference(params.processingFeeReference);
+
+        processingFeeNotice =
+          "Verification fee payment confirmed. Your application has been submitted for landlord review.";
+      } catch (error) {
+        processingFeeNotice = errorResult(error).message;
+      }
+    }
+
+    const resolvedProcessingFee =
+      await safeResolveTenantProcessingFeeForOnboarding({
+        tenant,
+        token: params.token,
+      });
+
+    processingFee = resolvedProcessingFee.processingFee;
+    paymentInitError = resolvedProcessingFee.paymentInitError;
+  }
 
   return {
     ok: true,
@@ -212,7 +225,7 @@ export default async function TenantOnboardingPage({
     ? "Your application has been submitted for landlord review."
     : shouldShowAgentVerificationSummary
       ? "Complete the agent processing fee to submit your application for landlord review."
-      : "Review the rental details and complete your KYC information.";
+      : "Review the rental details and complete your KYC information. After you submit, your details will be sent to the landlord for review.";
 
   const badgeLabel = isOfficiallySubmitted
     ? "Submitted"
@@ -350,7 +363,7 @@ export default async function TenantOnboardingPage({
               ) : (
                 <SectionCard
                   title="Tenant KYC Form"
-                  description="Complete your personal details, ID document, and passport photo."
+                  description="Complete your personal details, ID document, and passport photo. After you submit, your details will be sent to the landlord for review."
                 >
                   <TenantOnboardingForm
                     token={token}

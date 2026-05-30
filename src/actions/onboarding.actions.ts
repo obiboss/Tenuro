@@ -5,6 +5,7 @@ import {
   type OnboardingInviteActionState,
   type TenantOnboardingActionState,
 } from "@/actions/onboarding.state";
+import { isSubmittedForLandlordReview } from "@/server/constants/onboarding-lifecycle";
 import { errorResult } from "@/server/errors/result";
 import {
   generateTenantOnboardingLink,
@@ -80,6 +81,9 @@ export async function submitTenantOnboardingAction(
     });
 
     const tenant = await submitTenantOnboarding(parsed);
+    const submittedForLandlordReview = isSubmittedForLandlordReview(
+      tenant.onboarding_status,
+    );
 
     revalidatePath(`/t/onboarding/${parsed.token}`);
     revalidatePath(`/onboarding/${parsed.token}`);
@@ -88,9 +92,10 @@ export async function submitTenantOnboardingAction(
 
     return {
       ok: true,
-      message:
-        "Your application has been saved. Continue to verification and processing.",
-      nextStep: "verification_summary",
+      message: submittedForLandlordReview
+        ? "Your tenant profile has been submitted for landlord review."
+        : "Your application has been saved. Continue to verification and processing.",
+      nextStep: submittedForLandlordReview ? "submitted" : "verification_summary",
     };
   } catch (error) {
     const result = errorResult(error);

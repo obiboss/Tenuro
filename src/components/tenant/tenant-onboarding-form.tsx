@@ -432,6 +432,13 @@ export function TenantOnboardingForm({
             rules={propertyRules}
             fieldErrors={state.fieldErrors}
           />
+
+          {!isAgentSourced && !requiresVerificationSummary ? (
+            <TrustNotice
+              title="What happens next"
+              description="After you submit, your details will be sent to the landlord for review."
+            />
+          ) : null}
         </CardContent>
 
         <CardFooter>

@@ -8,10 +8,20 @@ import {
   resolveAgentTenantProcessingFeeForOnboarding,
   verifyAgentTenantProcessingFeeReference,
 } from "@/server/services/agent-processing-fee.service";
-import { resolveLandlordTenantProcessingFeeForOnboarding } from "@/server/services/landlord-processing-fee.service";
 import { getAgentProcessingFeeConfiguration } from "@/server/services/platform-payment-settings.service";
 
 const PROCESSING_FEE_CURRENCY = "NGN";
+
+export function getDirectLandlordTenantProcessingFeeState() {
+  return {
+    required: false as const,
+    status: "not_required" as const,
+    authorizationUrl: null,
+    reference: null,
+    processingFeeAmount: 0,
+    currencyCode: PROCESSING_FEE_CURRENCY,
+  };
+}
 
 function isProcessingFeeNotFoundError(error: unknown) {
   return (
@@ -73,14 +83,7 @@ async function getFallbackProcessingFeeDisplayState(
   });
 
   if (!agentSourced) {
-    return {
-      required: false as const,
-      status: "not_required" as const,
-      authorizationUrl: null,
-      reference: null,
-      processingFeeAmount: 0,
-      currencyCode: PROCESSING_FEE_CURRENCY,
-    };
+    return getDirectLandlordTenantProcessingFeeState();
   }
 
   const feeConfiguration = await getAgentProcessingFeeConfiguration();
@@ -127,7 +130,7 @@ export async function resolveTenantProcessingFeeForOnboarding(params: {
     return resolveAgentTenantProcessingFeeForOnboarding(params);
   }
 
-  return resolveLandlordTenantProcessingFeeForOnboarding(params);
+  return getDirectLandlordTenantProcessingFeeState();
 }
 
 export async function verifyTenantProcessingFeeReference(reference: string) {
