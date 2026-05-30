@@ -8,53 +8,49 @@ import {
   resolveAgentTenantProcessingFeeForOnboarding,
   verifyAgentTenantProcessingFeeReference,
 } from "@/server/services/agent-processing-fee.service";
-import {
-  resolveLandlordTenantProcessingFeeForOnboarding,
-  verifyLandlordTenantProcessingFeeReference,
-} from "@/server/services/landlord-processing-fee.service";
-import {
-  getAgentProcessingFeeConfiguration,
-  getLandlordProcessingFeeConfiguration,
-} from "@/server/services/platform-payment-settings.service";
+import { resolveLandlordTenantProcessingFeeForOnboarding } from "@/server/services/landlord-processing-fee.service";
+import { getAgentProcessingFeeConfiguration } from "@/server/services/platform-payment-settings.service";
 
 const PROCESSING_FEE_CURRENCY = "NGN";
 
 function isProcessingFeeNotFoundError(error: unknown) {
   return (
-    error instanceof AppError &&
-    (error.code === "AGENT_PROCESSING_FEE_NOT_FOUND" ||
-      error.code === "LANDLORD_PROCESSING_FEE_NOT_FOUND")
+    error instanceof AppError && error.code === "AGENT_PROCESSING_FEE_NOT_FOUND"
   );
 }
 
 export function getFriendlyProcessingFeeInitErrorMessage(error: unknown) {
   if (isAppError(error)) {
+    if (error.code === "PROCESSING_FEE_NOT_REQUIRED") {
+      return "No verification payment is required for this direct landlord application.";
+    }
+
     if (
       error.code === "PAYOUT_ACCOUNT_PENDING_VERIFICATION" ||
       error.code === "AGENT_PAYOUT_ACCOUNT_PENDING_VERIFICATION"
     ) {
-      return "Online payment is not ready yet because the payout account is still pending verification. Your application has been saved. Please ask your landlord or agent to complete payout verification, then reopen this link.";
+      return "Online payment is not ready yet because the payout account is still pending verification. Your application has been saved. Please ask your agent to complete payout verification, then reopen this link.";
     }
 
     if (
       error.code === "BANK_ACCOUNT_REQUIRED" ||
       error.code === "AGENT_BANK_ACCOUNT_REQUIRED"
     ) {
-      return "Online payment is not ready yet because a payout account has not been connected. Your application has been saved. Please ask your landlord or agent to connect a payout account, then reopen this link.";
+      return "Online payment is not ready yet because a payout account has not been connected. Your application has been saved. Please ask your agent to connect a payout account, then reopen this link.";
     }
 
     if (
       error.code === "PAYOUT_ACCOUNT_VERIFICATION_FAILED" ||
       error.code === "AGENT_PAYOUT_ACCOUNT_VERIFICATION_FAILED"
     ) {
-      return "Online payment is unavailable because payout verification failed. Your application has been saved. Please ask your landlord or agent to update their payout details, then reopen this link.";
+      return "Online payment is unavailable because payout verification failed. Your application has been saved. Please ask your agent to update their payout details, then reopen this link.";
     }
 
     if (error.code === "PAYSTACK_REQUEST_FAILED") {
       const paystackMessage = error.userMessage.toLowerCase();
 
       if (paystackMessage.includes("subaccount")) {
-        return "We could not start online payment with Paystack right now. Your application has been saved. Please ask your landlord or agent to confirm their payout account is connected to the same Paystack environment as BOPA, then reopen this link.";
+        return "We could not start online payment with Paystack right now. Your application has been saved. Please ask your agent to confirm their payout account is connected to the same Paystack environment as BOPA, then reopen this link.";
       }
     }
   }
@@ -62,10 +58,10 @@ export function getFriendlyProcessingFeeInitErrorMessage(error: unknown) {
   const mappedMessage = errorResult(error).message;
 
   if (mappedMessage.toLowerCase().includes("subaccount")) {
-    return "We could not start online payment with Paystack right now. Your application has been saved. Please ask your landlord or agent to confirm their payout account is connected to the same Paystack environment as BOPA, then reopen this link.";
+    return "We could not start online payment with Paystack right now. Your application has been saved. Please ask your agent to confirm their payout account is connected to the same Paystack environment as BOPA, then reopen this link.";
   }
 
-  return "We could not prepare your verification payment right now, but your application has been saved. Please try again shortly or ask your landlord or agent for help.";
+  return "We could not prepare your verification payment right now, but your application has been saved. Please try again shortly or ask your agent for help.";
 }
 
 async function getFallbackProcessingFeeDisplayState(
@@ -76,9 +72,18 @@ async function getFallbackProcessingFeeDisplayState(
     invitedByAgentId: tenant.invited_by_agent_id,
   });
 
-  const feeConfiguration = agentSourced
-    ? await getAgentProcessingFeeConfiguration()
-    : await getLandlordProcessingFeeConfiguration();
+  if (!agentSourced) {
+    return {
+      required: false as const,
+      status: "not_required" as const,
+      authorizationUrl: null,
+      reference: null,
+      processingFeeAmount: 0,
+      currencyCode: PROCESSING_FEE_CURRENCY,
+    };
+  }
+
+  const feeConfiguration = await getAgentProcessingFeeConfiguration();
 
   return {
     required: true as const,
@@ -134,5 +139,9 @@ export async function verifyTenantProcessingFeeReference(reference: string) {
     }
   }
 
-  return verifyLandlordTenantProcessingFeeReference(reference);
+  throw new AppError(
+    "PROCESSING_FEE_NOT_FOUND",
+    "Processing fee payment reference was not found.",
+    404,
+  );
 }
