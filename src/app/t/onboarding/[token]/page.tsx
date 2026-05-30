@@ -18,7 +18,6 @@ import { TrustNotice } from "@/components/ui/trust-notice";
 import {
   isAgentSourcedTenant,
   isOnboardingDraftStatus,
-  isOnboardingTokenFlowActive,
   isSubmittedForLandlordReview,
 } from "@/server/constants/onboarding-lifecycle";
 import { errorResult } from "@/server/errors/result";
@@ -184,40 +183,46 @@ export default async function TenantOnboardingPage({
   const unit = tenant.units;
   const property = unit?.properties;
   const landlord = tenant.profiles;
+
   const agentSourced = isAgentSourcedTenant({
     agentPropertyListingId: tenant.agent_property_listing_id,
     invitedByAgentId: tenant.invited_by_agent_id,
   });
+
   const isDraftSaved = isOnboardingDraftStatus(tenant.onboarding_status);
   const isOfficiallySubmitted = isSubmittedForLandlordReview(
     tenant.onboarding_status,
   );
-  const showVerificationSummary =
-    isDraftSaved ||
-    isOfficiallySubmitted ||
-    state.processingFee.status === "paid";
+
+  const shouldShowAgentVerificationSummary =
+    agentSourced &&
+    (isDraftSaved ||
+      state.processingFee.status === "paid" ||
+      state.processingFee.status === "initialized" ||
+      state.processingFee.status === "disabled" ||
+      state.processingFee.status === "payment_unavailable");
 
   const pageTitle = isOfficiallySubmitted
     ? "Application submitted"
-    : showVerificationSummary
+    : shouldShowAgentVerificationSummary
       ? "Verification & Processing Summary"
       : "Complete your tenant profile";
 
   const pageDescription = isOfficiallySubmitted
     ? "Your application has been submitted for landlord review."
-    : showVerificationSummary
-      ? "Complete verification and processing to activate your tenant profile for landlord review."
+    : shouldShowAgentVerificationSummary
+      ? "Complete the agent processing fee to submit your application for landlord review."
       : "Review the rental details and complete your KYC information.";
 
   const badgeLabel = isOfficiallySubmitted
     ? "Submitted"
-    : showVerificationSummary
-      ? "Payment Required"
+    : shouldShowAgentVerificationSummary
+      ? "Agent Fee Required"
       : "Secure Link";
 
   const badgeTone = isOfficiallySubmitted
     ? "success"
-    : showVerificationSummary
+    : shouldShowAgentVerificationSummary
       ? "warning"
       : "primary";
 
@@ -312,7 +317,7 @@ export default async function TenantOnboardingPage({
                 </CardContent>
               </Card>
 
-              {showVerificationSummary ? (
+              {shouldShowAgentVerificationSummary ? (
                 <VerificationProcessingSummary
                   fullName={tenant.full_name}
                   phoneNumber={tenant.phone_number}
@@ -321,9 +326,7 @@ export default async function TenantOnboardingPage({
                   homeAddress={tenant.home_address}
                   propertyName={property?.property_name ?? "Not available"}
                   unitIdentifier={unit?.unit_identifier ?? "Not available"}
-                  processingFeeAmount={
-                    state.processingFee.processingFeeAmount || 15_000
-                  }
+                  processingFeeAmount={state.processingFee.processingFeeAmount}
                   currencyCode={state.processingFee.currencyCode}
                   authorizationUrl={state.processingFee.authorizationUrl}
                   paymentNotice={state.processingFeeNotice}
@@ -357,7 +360,7 @@ export default async function TenantOnboardingPage({
                     isSubmitted={false}
                     propertyRules={tenant.property_rules}
                     isAgentSourced={agentSourced}
-                    requiresVerificationSummary
+                    requiresVerificationSummary={agentSourced}
                   />
                 </SectionCard>
               )}
@@ -369,10 +372,10 @@ export default async function TenantOnboardingPage({
                 description="This link was created for you and expires automatically. Do not share it with anyone else."
               />
 
-              {showVerificationSummary ? (
+              {shouldShowAgentVerificationSummary ? (
                 <TrustNotice
-                  title="Verification & processing"
-                  description="Payment activates verification processing and landlord review eligibility. It does not guarantee tenancy approval."
+                  title="Agent processing"
+                  description="The processing fee applies only because this application came through an agent. It does not guarantee tenancy approval."
                   icon={
                     <ShieldCheck
                       aria-hidden="true"
