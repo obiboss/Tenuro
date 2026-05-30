@@ -53,6 +53,10 @@ type TenantOnboardingPageState =
       message: string;
     };
 
+type TenantProcessingFeeState = Awaited<
+  ReturnType<typeof safeResolveTenantProcessingFeeForOnboarding>
+>["processingFee"];
+
 async function getTenantOnboardingPageState(params: {
   token: string;
   shouldVerifyProcessingFee: boolean;
@@ -75,7 +79,8 @@ async function getTenantOnboardingPageState(params: {
   });
 
   let processingFeeNotice: string | null = null;
-  let processingFee = getDirectLandlordTenantProcessingFeeState();
+  let processingFee: TenantProcessingFeeState =
+    getDirectLandlordTenantProcessingFeeState();
   let paymentInitError: string | null = null;
 
   if (agentSourced) {
