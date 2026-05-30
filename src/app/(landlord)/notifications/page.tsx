@@ -1,246 +1,291 @@
+import Link from "next/link";
 import {
-  Bell,
-  CheckCircle2,
-  Clock3,
+  AlertTriangle,
+  BellRing,
+  CalendarClock,
   MessageCircle,
-  MessageSquareText,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { WhatsAppSendButton } from "@/components/ui/whatsapp-send-button";
-import { getCurrentLandlordNotifications } from "@/server/services/notification-queue.service";
-import type { NotificationRow } from "@/server/repositories/notifications.repository";
+import {
+  getCurrentLandlordRentAlerts,
+  type LandlordRentAlertItem,
+  type RentAlertStatus,
+} from "@/server/services/renewals.service";
+import { formatNaira } from "@/server/utils/money";
 
-function formatNotificationDate(value: string) {
+const statusCopy: Record<
+  RentAlertStatus,
+  {
+    label: string;
+    tone: "warning" | "danger";
+  }
+> = {
+  due_soon: {
+    label: "Due Soon",
+    tone: "warning",
+  },
+  owing: {
+    label: "Owing",
+    tone: "danger",
+  },
+};
+
+function formatDate(value: string | null) {
+  if (!value) {
+    return "Not set";
+  }
+
   return new Intl.DateTimeFormat("en-NG", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(`${value}T00:00:00`));
 }
 
-function getChannelLabel(channel: NotificationRow["channel"]) {
-  if (channel === "whatsapp") {
-    return "WhatsApp message";
+function getDaysLabel(item: LandlordRentAlertItem) {
+  if (item.status === "owing") {
+    if (item.daysUntilDue === null) {
+      return "Outstanding";
+    }
+
+    if (item.daysUntilDue < 0) {
+      const overdueDays = Math.abs(item.daysUntilDue);
+
+      return `${overdueDays} day${overdueDays === 1 ? "" : "s"} overdue`;
+    }
+
+    return "Outstanding";
   }
 
-  if (channel === "in_app") {
-    return "In-app notification";
+  if (item.daysUntilDue === 0) {
+    return "Due today";
   }
 
-  if (channel === "sms") {
-    return "SMS";
+  if (item.daysUntilDue === 1) {
+    return "Due in 1 day";
   }
 
-  return "Email";
+  if (item.daysUntilDue !== null) {
+    return `Due in ${item.daysUntilDue} days`;
+  }
+
+  return "Due soon";
 }
 
-function getStatusLabel(status: NotificationRow["status"]) {
-  if (status === "sent") {
-    return "Sent";
-  }
+function getPropertyUnitLabel(item: LandlordRentAlertItem) {
+  const propertyName =
+    item.tenancy.units?.properties?.property_name ?? "Property";
+  const unitIdentifier = item.tenancy.units?.unit_identifier ?? "Unit";
 
-  if (status === "delivered") {
-    return "Delivered";
-  }
-
-  if (status === "failed") {
-    return "Failed";
-  }
-
-  return "Pending";
+  return `${propertyName} · ${unitIdentifier}`;
 }
 
-function getTenantLabel(notification: NotificationRow) {
-  if (!notification.tenants) {
-    return null;
-  }
-
-  return `${notification.tenants.full_name} · ${notification.tenants.phone_number}`;
+function getBuildingLabel(item: LandlordRentAlertItem) {
+  return item.tenancy.units?.building_name ?? null;
 }
 
-function NotificationStatusBadge({
-  status,
-}: {
-  status: NotificationRow["status"];
-}) {
-  if (status === "failed") {
-    return (
-      <span className="rounded-full bg-danger-soft px-3 py-1 text-xs font-black text-danger">
-        Failed
-      </span>
-    );
-  }
+function RentAlertStatusBadge({ status }: { status: RentAlertStatus }) {
+  const copy = statusCopy[status];
 
-  if (status === "sent" || status === "delivered") {
-    return (
-      <span className="rounded-full bg-success-soft px-3 py-1 text-xs font-black text-success">
-        {getStatusLabel(status)}
-      </span>
-    );
-  }
+  return <Badge tone={copy.tone}>{copy.label}</Badge>;
+}
 
+function DesktopRentAlertsTable({ items }: { items: LandlordRentAlertItem[] }) {
   return (
-    <span className="rounded-full bg-warning-soft px-3 py-1 text-xs font-black text-warning">
-      Pending
-    </span>
-  );
-}
+    <div className="hidden overflow-hidden rounded-card border border-border-soft md:block">
+      <table className="w-full border-collapse bg-white text-sm">
+        <thead className="bg-background text-left text-xs font-black uppercase tracking-wide text-text-muted">
+          <tr>
+            <th className="px-4 py-3">Tenant</th>
+            <th className="px-4 py-3">Property / Unit</th>
+            <th className="px-4 py-3">Due Date</th>
+            <th className="px-4 py-3">Amount Due</th>
+            <th className="px-4 py-3">Status</th>
+            <th className="px-4 py-3 text-right">Action</th>
+          </tr>
+        </thead>
 
-function NotificationIcon({
-  channel,
-}: {
-  channel: NotificationRow["channel"];
-}) {
-  if (channel === "whatsapp") {
-    return (
-      <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-success-soft text-success">
-        <MessageCircle aria-hidden="true" size={22} strokeWidth={2.6} />
-      </div>
-    );
-  }
+        <tbody className="divide-y divide-border-soft">
+          {items.map((item) => (
+            <tr key={item.tenancy.id} className="align-top">
+              <td className="px-4 py-4">
+                <p className="font-extrabold text-text-strong">
+                  {item.tenancy.tenants?.full_name ?? "Tenant"}
+                </p>
+                <p className="mt-1 text-xs font-semibold text-text-muted">
+                  {item.tenancy.tenants?.phone_number ?? "No phone number"}
+                </p>
+              </td>
 
-  return (
-    <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary">
-      <Bell aria-hidden="true" size={22} strokeWidth={2.6} />
+              <td className="px-4 py-4">
+                <p className="font-bold text-text-strong">
+                  {getPropertyUnitLabel(item)}
+                </p>
+                {getBuildingLabel(item) ? (
+                  <p className="mt-1 text-xs font-semibold text-text-muted">
+                    {getBuildingLabel(item)}
+                  </p>
+                ) : null}
+              </td>
+
+              <td className="px-4 py-4">
+                <p className="font-bold text-text-strong">
+                  {formatDate(item.dueDate)}
+                </p>
+                <p className="mt-1 text-xs font-semibold text-text-muted">
+                  {getDaysLabel(item)}
+                </p>
+              </td>
+
+              <td className="px-4 py-4">
+                <p className="font-black text-text-strong">
+                  {formatNaira(item.amountDue)}
+                </p>
+              </td>
+
+              <td className="px-4 py-4">
+                <RentAlertStatusBadge status={item.status} />
+              </td>
+
+              <td className="px-4 py-4 text-right">
+                <div className="ml-auto flex max-w-44 flex-col gap-2">
+                  <WhatsAppSendButton
+                    phoneNumber={item.tenancy.tenants?.phone_number ?? null}
+                    message={item.whatsappMessage}
+                    label="WhatsApp"
+                  />
+
+                  <Link
+                    href={`/tenants/${item.tenancy.tenant_id}`}
+                    className="inline-flex min-h-10 items-center justify-center rounded-button border border-border-soft bg-white px-3 py-2 text-xs font-extrabold text-text-strong hover:bg-background"
+                  >
+                    View Tenant
+                  </Link>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
 
-function NotificationCard({ notification }: { notification: NotificationRow }) {
-  const isWhatsapp = notification.channel === "whatsapp";
-  const tenantLabel = getTenantLabel(notification);
-
+function MobileRentAlertsList({ items }: { items: LandlordRentAlertItem[] }) {
   return (
-    <article className="rounded-card border border-border-soft bg-background p-4">
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div className="flex gap-3">
-          <NotificationIcon channel={notification.channel} />
-
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-black text-text-strong">
-                {getChannelLabel(notification.channel)}
+    <div className="space-y-3 md:hidden">
+      {items.map((item) => (
+        <article
+          key={item.tenancy.id}
+          className="rounded-card border border-border-soft bg-white p-4"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="font-extrabold text-text-strong">
+                {item.tenancy.tenants?.full_name ?? "Tenant"}
               </p>
-              <NotificationStatusBadge status={notification.status} />
+              <p className="mt-1 text-xs font-semibold text-text-muted">
+                {item.tenancy.tenants?.phone_number ?? "No phone number"}
+              </p>
             </div>
 
-            {tenantLabel ? (
-              <p className="mt-2 text-xs font-bold text-text-muted">
-                {tenantLabel}
-              </p>
-            ) : null}
-
-            <p className="mt-2 text-sm font-semibold leading-6 text-text-strong">
-              {notification.message_body}
-            </p>
-
-            <p className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-text-muted">
-              <Clock3 aria-hidden="true" size={14} strokeWidth={2.6} />
-              {formatNotificationDate(notification.created_at)}
-            </p>
+            <RentAlertStatusBadge status={item.status} />
           </div>
-        </div>
 
-        {isWhatsapp ? (
-          <div className="w-full md:w-56">
+          <div className="mt-4 space-y-2 rounded-button bg-background p-3 text-sm">
+            <div className="flex justify-between gap-3">
+              <span className="font-bold text-text-muted">Property</span>
+              <span className="text-right font-extrabold text-text-strong">
+                {getPropertyUnitLabel(item)}
+              </span>
+            </div>
+
+            <div className="flex justify-between gap-3">
+              <span className="font-bold text-text-muted">Due Date</span>
+              <span className="text-right font-extrabold text-text-strong">
+                {formatDate(item.dueDate)}
+              </span>
+            </div>
+
+            <div className="flex justify-between gap-3">
+              <span className="font-bold text-text-muted">Amount Due</span>
+              <span className="text-right font-black text-text-strong">
+                {formatNaira(item.amountDue)}
+              </span>
+            </div>
+
+            <div className="flex justify-between gap-3">
+              <span className="font-bold text-text-muted">Timing</span>
+              <span className="text-right font-bold text-text-strong">
+                {getDaysLabel(item)}
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-2">
             <WhatsAppSendButton
-              phoneNumber={notification.tenants?.phone_number ?? null}
-              message={notification.message_body}
-              label={
-                notification.tenants?.phone_number
-                  ? "Message Tenant"
-                  : "Open WhatsApp"
-              }
+              phoneNumber={item.tenancy.tenants?.phone_number ?? null}
+              message={item.whatsappMessage}
+              label="Message Tenant"
             />
+
+            <Link
+              href={`/tenants/${item.tenancy.tenant_id}`}
+              className="inline-flex min-h-11 items-center justify-center rounded-button border border-border-soft bg-white px-4 py-2 text-sm font-extrabold text-text-strong hover:bg-background"
+            >
+              View Tenant
+            </Link>
           </div>
-        ) : null}
-      </div>
-    </article>
+        </article>
+      ))}
+    </div>
   );
 }
 
 export default async function NotificationsPage() {
-  const notifications = await getCurrentLandlordNotifications();
-  const whatsappCount = notifications.filter(
-    (notification) => notification.channel === "whatsapp",
-  ).length;
-  const inAppCount = notifications.filter(
-    (notification) => notification.channel === "in_app",
-  ).length;
+  const rentAlerts = await getCurrentLandlordRentAlerts();
 
   return (
     <main>
       <PageHeader
-        title="Notifications"
-        description="Review application updates and manually send prepared WhatsApp outcome messages."
+        title="Rent Alerts"
+        description="See tenants whose rent is due within 30 days or who currently have an outstanding balance."
       />
 
-      <div className="mb-6 grid gap-4 md:grid-cols-3">
-        <div className="rounded-card bg-surface p-5 shadow-card">
-          <div className="flex items-center gap-3">
-            <div className="flex size-11 items-center justify-center rounded-2xl bg-primary-soft text-primary">
-              <Bell aria-hidden="true" size={22} strokeWidth={2.6} />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-text-muted">Total</p>
-              <p className="font-black text-text-strong">
-                {notifications.length}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-card bg-surface p-5 shadow-card">
-          <div className="flex items-center gap-3">
-            <div className="flex size-11 items-center justify-center rounded-2xl bg-success-soft text-success">
-              <MessageCircle aria-hidden="true" size={22} strokeWidth={2.6} />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-text-muted">WhatsApp</p>
-              <p className="font-black text-text-strong">{whatsappCount}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-card bg-surface p-5 shadow-card">
-          <div className="flex items-center gap-3">
-            <div className="flex size-11 items-center justify-center rounded-2xl bg-gold-soft text-gold-deep">
-              <CheckCircle2 aria-hidden="true" size={22} strokeWidth={2.6} />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-text-muted">In-app</p>
-              <p className="font-black text-text-strong">{inAppCount}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <SectionCard
-        title="Recent notifications"
-        description="WhatsApp messages are prepared only. They are not sent automatically."
+        title="Due soon and owing tenants"
+        description={`${rentAlerts.owingCount} owing · ${rentAlerts.dueSoonCount} due within 30 days`}
       >
-        {notifications.length === 0 ? (
+        {rentAlerts.items.length === 0 ? (
           <EmptyState
-            title="No notifications yet"
-            description="Application updates and prepared WhatsApp messages will appear here."
-            icon={
-              <MessageSquareText
-                aria-hidden="true"
-                size={24}
-                strokeWidth={2.6}
-              />
-            }
+            title="No rent alerts"
+            description="Tenants who are owing or whose rent is due within 30 days will appear here."
+            icon={<BellRing aria-hidden="true" size={24} strokeWidth={2.6} />}
           />
         ) : (
-          <div className="space-y-3">
-            {notifications.map((notification) => (
-              <NotificationCard
-                key={notification.id}
-                notification={notification}
-              />
-            ))}
-          </div>
+          <>
+            <div className="mb-4 flex flex-wrap gap-2 text-sm font-bold text-text-muted">
+              <span className="inline-flex items-center gap-2 rounded-full bg-danger-soft px-3 py-1 text-danger">
+                <AlertTriangle aria-hidden="true" size={15} strokeWidth={2.6} />
+                {rentAlerts.owingCount} owing
+              </span>
+              <span className="inline-flex items-center gap-2 rounded-full bg-warning-soft px-3 py-1 text-warning">
+                <CalendarClock aria-hidden="true" size={15} strokeWidth={2.6} />
+                {rentAlerts.dueSoonCount} due soon
+              </span>
+              <span className="inline-flex items-center gap-2 rounded-full bg-primary-soft px-3 py-1 text-primary">
+                <MessageCircle aria-hidden="true" size={15} strokeWidth={2.6} />
+                WhatsApp opens tenant chat manually
+              </span>
+            </div>
+
+            <DesktopRentAlertsTable items={rentAlerts.items} />
+            <MobileRentAlertsList items={rentAlerts.items} />
+          </>
         )}
       </SectionCard>
     </main>
