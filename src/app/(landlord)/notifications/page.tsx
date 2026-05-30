@@ -5,10 +5,10 @@ import {
   MessageCircle,
   MessageSquareText,
 } from "lucide-react";
-import { WhatsAppSendButton } from "@/components/ui/whatsapp-send-button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
+import { WhatsAppSendButton } from "@/components/ui/whatsapp-send-button";
 import { getCurrentLandlordNotifications } from "@/server/services/notification-queue.service";
 import type { NotificationRow } from "@/server/repositories/notifications.repository";
 
@@ -49,6 +49,14 @@ function getStatusLabel(status: NotificationRow["status"]) {
   }
 
   return "Pending";
+}
+
+function getTenantLabel(notification: NotificationRow) {
+  if (!notification.tenants) {
+    return null;
+  }
+
+  return `${notification.tenants.full_name} · ${notification.tenants.phone_number}`;
 }
 
 function NotificationStatusBadge({
@@ -101,6 +109,7 @@ function NotificationIcon({
 
 function NotificationCard({ notification }: { notification: NotificationRow }) {
   const isWhatsapp = notification.channel === "whatsapp";
+  const tenantLabel = getTenantLabel(notification);
 
   return (
     <article className="rounded-card border border-border-soft bg-background p-4">
@@ -116,6 +125,12 @@ function NotificationCard({ notification }: { notification: NotificationRow }) {
               <NotificationStatusBadge status={notification.status} />
             </div>
 
+            {tenantLabel ? (
+              <p className="mt-2 text-xs font-bold text-text-muted">
+                {tenantLabel}
+              </p>
+            ) : null}
+
             <p className="mt-2 text-sm font-semibold leading-6 text-text-strong">
               {notification.message_body}
             </p>
@@ -130,9 +145,13 @@ function NotificationCard({ notification }: { notification: NotificationRow }) {
         {isWhatsapp ? (
           <div className="w-full md:w-56">
             <WhatsAppSendButton
-              phoneNumber={null}
+              phoneNumber={notification.tenants?.phone_number ?? null}
               message={notification.message_body}
-              label="Open WhatsApp"
+              label={
+                notification.tenants?.phone_number
+                  ? "Message Tenant"
+                  : "Open WhatsApp"
+              }
             />
           </div>
         ) : null}

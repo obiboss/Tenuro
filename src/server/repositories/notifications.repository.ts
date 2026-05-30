@@ -17,7 +17,28 @@ export type NotificationRow = {
   message_body: string;
   status: "pending" | "sent" | "delivered" | "failed";
   created_at: string;
+  tenants: {
+    id: string;
+    full_name: string;
+    phone_number: string;
+  } | null;
 };
+
+const NOTIFICATION_SELECT = `
+  id,
+  landlord_id,
+  tenant_id,
+  channel,
+  notification_type,
+  message_body,
+  status,
+  created_at,
+  tenants (
+    id,
+    full_name,
+    phone_number
+  )
+`;
 
 export async function createNotification(
   supabase: SupabaseClient,
@@ -39,9 +60,7 @@ export async function createNotification(
       message_body: params.messageBody,
       status: "pending",
     })
-    .select(
-      "id, landlord_id, tenant_id, channel, notification_type, message_body, status, created_at",
-    )
+    .select(NOTIFICATION_SELECT)
     .single<NotificationRow>();
 
   if (error) {
@@ -58,9 +77,7 @@ export async function listRecentNotificationsForLandlord(
 ) {
   const { data, error } = await supabase
     .from("notifications")
-    .select(
-      "id, landlord_id, tenant_id, channel, notification_type, message_body, status, created_at",
-    )
+    .select(NOTIFICATION_SELECT)
     .eq("landlord_id", landlordId)
     .order("created_at", { ascending: false })
     .limit(limit)
