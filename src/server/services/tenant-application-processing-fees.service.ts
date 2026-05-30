@@ -42,7 +42,7 @@ type TenantApplicationProcessingFeeBreakdown = {
   platformShareAmount: number;
   agentShareAmount: number;
   totalAmount: number;
-  splitMode: "agent_sourced" | "direct_landlord";
+  splitMode: "agent_sourced";
 };
 
 function getAppBaseUrl() {
@@ -77,21 +77,8 @@ function hasAgentSource(agentId: string | null) {
   return typeof agentId === "string" && agentId.trim().length > 0;
 }
 
-function getTenantApplicationProcessingFeeBreakdown(params: {
-  agentId: string | null;
-}): TenantApplicationProcessingFeeBreakdown {
+function getTenantApplicationProcessingFeeBreakdown(): TenantApplicationProcessingFeeBreakdown {
   const processingFeeAmount = getTenantApplicationProcessingFeeAmount();
-  const isAgentSourced = hasAgentSource(params.agentId);
-
-  if (!isAgentSourced) {
-    return {
-      processingFeeAmount,
-      platformShareAmount: processingFeeAmount,
-      agentShareAmount: 0,
-      totalAmount: processingFeeAmount,
-      splitMode: "direct_landlord",
-    };
-  }
 
   if (AGENT_PROCESSING_FEE_SHARE_NAIRA >= processingFeeAmount) {
     throw new AppError(
@@ -222,7 +209,7 @@ async function writeProcessingFeeConfirmedAudit(params: {
     entityType: AUDIT_ENTITY_TYPES.propertyApplication,
     entityId: params.propertyApplicationId,
     description:
-      "Tenant application processing fee was confirmed and the application was submitted for landlord review.",
+      "Agent-sourced tenant application processing fee was confirmed and the application was submitted for landlord review.",
     metadata: {
       tenant_kyc_profile_id: params.tenantKycProfileId,
       agent_property_listing_id: params.agentPropertyListingId,
@@ -235,6 +222,37 @@ async function writeProcessingFeeConfirmedAudit(params: {
       currency_code: params.currencyCode,
       valid_until: params.validUntil,
       validity_days: PROCESSING_FEE_VALIDITY_DAYS,
+    },
+  });
+}
+
+async function writeDirectApplicationSubmittedAudit(params: {
+  landlordId: string | null;
+  propertyApplicationId: string;
+  tenantKycProfileId: string;
+  acquisitionContextKey: string;
+}) {
+  if (!params.landlordId) {
+    return;
+  }
+
+  await writeAuditLog({
+    landlordId: params.landlordId,
+    tenantId: null,
+    unitId: null,
+    propertyId: null,
+    actorProfileId: null,
+    actorRole: AUDIT_ACTOR_ROLES.system,
+    eventType: AUDIT_EVENT_TYPES.propertyApplicationFeeConfirmed,
+    entityType: AUDIT_ENTITY_TYPES.propertyApplication,
+    entityId: params.propertyApplicationId,
+    description:
+      "Direct landlord tenant application was submitted for landlord review without a processing fee.",
+    metadata: {
+      tenant_kyc_profile_id: params.tenantKycProfileId,
+      acquisition_context_key: params.acquisitionContextKey,
+      processing_fee_required: false,
+      reason: "direct_landlord_tenant_no_processing_fee",
     },
   });
 }
@@ -287,6 +305,33 @@ export async function initializeTenantApplicationProcessingFee(
     );
   }
 
+  if (!hasAgentSource(application.agent_id)) {
+    await updatePropertyApplicationStatus(supabase, {
+      applicationId: application.id,
+      status: "submitted_for_landlord_review",
+      processingFeeAccessId: null,
+    });
+
+    await notifyLandlordApplicationReady({
+      landlordId: application.landlord_id,
+      propertyApplicationId: application.id,
+      metadata: application.metadata,
+    });
+
+    await writeDirectApplicationSubmittedAudit({
+      landlordId: application.landlord_id,
+      propertyApplicationId: application.id,
+      tenantKycProfileId: application.tenant_kyc_profile_id,
+      acquisitionContextKey: application.acquisition_context_key,
+    });
+
+    throw new AppError(
+      "PROCESSING_FEE_NOT_REQUIRED",
+      "No processing fee is required for direct landlord applications.",
+      400,
+    );
+  }
+
   const activeFeeAccess = await getActiveProcessingFeeAccess(supabase, {
     tenantKycProfileId: application.tenant_kyc_profile_id,
     acquisitionContextKey: application.acquisition_context_key,
@@ -325,9 +370,7 @@ export async function initializeTenantApplicationProcessingFee(
     };
   }
 
-  const feeBreakdown = getTenantApplicationProcessingFeeBreakdown({
-    agentId: application.agent_id,
-  });
+  const feeBreakdown = getTenantApplicationProcessingFeeBreakdown();
   const reference = createProcessingFeeReference();
   const callbackUrl = `${getAppBaseUrl()}/agent-listings/application-fee/callback?reference=${encodeURIComponent(
     reference,
@@ -530,8 +573,7 @@ export async function verifyTenantApplicationProcessingFeeReference(
     agentShareAmount: paidIntent.agent_share_amount,
     currencyCode: paidIntent.currency_code,
     validUntil: feeAccess.valid_until,
-    splitMode:
-      paidIntent.agent_share_amount > 0 ? "agent_sourced" : "direct_landlord",
+    splitMode: "agent_sourced",
   });
 
   return paidIntent;

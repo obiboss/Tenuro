@@ -1,10 +1,12 @@
 "use client";
 
-import { useActionState, useEffect, useMemo } from "react";
-import { initializeManualRentAppFeePaymentAction } from "@/actions/app-fee-payment.actions";
-import { initialAppFeePaymentActionState } from "@/actions/app-fee-payment.state";
-import { recordManualPaymentAction } from "@/actions/payments.actions";
+import { useActionState, useMemo, useState } from "react";
+import {
+  initializeRentPaymentAction,
+  recordManualPaymentAction,
+} from "@/actions/payments.actions";
 import { initialPaymentActionState } from "@/actions/payment.state";
+import { WhatsAppSendButton } from "@/components/ui/whatsapp-send-button";
 import { ActionResultToast } from "@/components/ui/action-result-toast";
 import { Button } from "@/components/ui/button";
 import { CurrencyInput } from "@/components/ui/currency-input";
@@ -37,174 +39,243 @@ const paymentMethodOptions = [
 ];
 
 export function ManualPaymentForm({ tenancies }: ManualPaymentFormProps) {
+  const negotiatedPaymentIdempotencyKey = useMemo(
+    () => crypto.randomUUID(),
+    [],
+  );
   const manualPaymentIdempotencyKey = useMemo(() => crypto.randomUUID(), []);
-  const appFeeIdempotencyKey = useMemo(() => crypto.randomUUID(), []);
+  const [showOfflineRecordForm, setShowOfflineRecordForm] = useState(false);
 
-  const [paymentState, paymentFormAction, isRecordingPayment] = useActionState(
-    recordManualPaymentAction,
-    initialPaymentActionState,
-  );
+  const [
+    negotiatedPaymentState,
+    negotiatedPaymentFormAction,
+    isPreparingPaymentLink,
+  ] = useActionState(initializeRentPaymentAction, initialPaymentActionState);
 
-  const [appFeeState, appFeeFormAction, isPreparingAppFee] = useActionState(
-    initializeManualRentAppFeePaymentAction,
-    initialAppFeePaymentActionState,
-  );
-
-  useEffect(() => {
-    if (appFeeState.ok && appFeeState.authorizationUrl) {
-      window.location.href = appFeeState.authorizationUrl;
-    }
-  }, [appFeeState.ok, appFeeState.authorizationUrl]);
+  const [manualPaymentState, manualPaymentFormAction, isRecordingPayment] =
+    useActionState(recordManualPaymentAction, initialPaymentActionState);
 
   return (
     <div className="space-y-5">
-      <form action={paymentFormAction} className="space-y-5">
+      <form action={negotiatedPaymentFormAction} className="space-y-5">
         <ActionResultToast
-          ok={paymentState.ok}
-          message={paymentState.message}
-          successTitle="Manual payment recorded"
-          errorTitle="Manual payment failed"
+          ok={negotiatedPaymentState.ok}
+          message={negotiatedPaymentState.message}
+          successTitle="Payment link ready"
+          errorTitle="Payment link failed"
         />
 
         <TrustNotice
-          title="Offline rent payment"
-          description="Use this when rent was paid by bank transfer, cash, or another offline method. After recording rent, pay only the BOPA app fee separately."
+          title="Send tenant payment link"
+          description="Use this when a tenant agrees to pay full rent or a negotiated part payment. BOPA will record the payment automatically after the tenant pays through Paystack."
         />
 
-        {paymentState.message ? (
+        {negotiatedPaymentState.message ? (
           <div
             role="alert"
             className={
-              paymentState.ok
+              negotiatedPaymentState.ok
                 ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
                 : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
             }
           >
-            {paymentState.message}
+            {negotiatedPaymentState.message}
           </div>
         ) : null}
 
         <input
           type="hidden"
           name="idempotencyKey"
-          value={manualPaymentIdempotencyKey}
+          value={negotiatedPaymentIdempotencyKey}
         />
 
         <Select
           label="Tenancy"
           name="tenancyId"
           options={tenancies}
-          error={paymentState.fieldErrors?.tenancyId?.[0]}
+          error={negotiatedPaymentState.fieldErrors?.tenancyId?.[0]}
           required
         />
 
         <CurrencyInput
-          label="Amount paid"
-          name="amountPaid"
+          label="Agreed amount tenant should pay"
+          name="amount"
           placeholder="0.00"
-          error={paymentState.fieldErrors?.amountPaid?.[0]}
-          required
-        />
-
-        <Select
-          label="Payment method"
-          name="paymentMethod"
-          options={paymentMethodOptions}
-          error={paymentState.fieldErrors?.paymentMethod?.[0]}
-          required
-        />
-
-        <Input
-          label="Payment reference"
-          name="paymentReference"
-          placeholder="Bank narration, teller number, or receipt reference"
-          error={paymentState.fieldErrors?.paymentReference?.[0]}
-        />
-
-        <Input
-          label="Payment date"
-          name="paymentDate"
-          type="datetime-local"
-          error={paymentState.fieldErrors?.paymentDate?.[0]}
+          error={negotiatedPaymentState.fieldErrors?.amount?.[0]}
           required
         />
 
         <div className="grid gap-4 md:grid-cols-2">
           <Input
             label="Payment period start"
-            name="paymentForPeriodStart"
+            name="periodStart"
             type="date"
-            error={paymentState.fieldErrors?.paymentForPeriodStart?.[0]}
+            error={negotiatedPaymentState.fieldErrors?.periodStart?.[0]}
           />
 
           <Input
             label="Payment period end"
-            name="paymentForPeriodEnd"
+            name="periodEnd"
             type="date"
-            error={paymentState.fieldErrors?.paymentForPeriodEnd?.[0]}
+            error={negotiatedPaymentState.fieldErrors?.periodEnd?.[0]}
           />
         </div>
 
-        <Textarea
-          label="Notes"
-          name="notes"
-          placeholder="Optional internal note"
-          error={paymentState.fieldErrors?.notes?.[0]}
-        />
-
-        <Button type="submit" isLoading={isRecordingPayment} fullWidth>
-          Record Manual Rent Payment
+        <Button type="submit" isLoading={isPreparingPaymentLink} fullWidth>
+          Prepare Tenant Payment Link
         </Button>
+
+        {negotiatedPaymentState.ok &&
+        negotiatedPaymentState.whatsappMessage &&
+        negotiatedPaymentState.tenantPaymentUrl ? (
+          <div className="space-y-4 rounded-card border border-primary/15 bg-primary-soft/40 p-4">
+            <div>
+              <p className="text-sm font-extrabold text-text-strong">
+                Payment link prepared
+              </p>
+              <p className="mt-1 break-all text-sm font-semibold leading-6 text-text-muted">
+                {negotiatedPaymentState.tenantPaymentUrl}
+              </p>
+            </div>
+
+            <WhatsAppSendButton
+              phoneNumber={negotiatedPaymentState.tenantWhatsappNumber ?? null}
+              message={negotiatedPaymentState.whatsappMessage}
+              label="Send Link on WhatsApp"
+            />
+          </div>
+        ) : null}
       </form>
 
-      {paymentState.ok && paymentState.paymentId ? (
-        <form action={appFeeFormAction} className="space-y-4">
-          <ActionResultToast
-            ok={appFeeState.ok}
-            message={appFeeState.message}
-            successTitle="App fee checkout prepared"
-            errorTitle="App fee checkout failed"
-          />
-
-          <input
-            type="hidden"
-            name="rentPaymentId"
-            value={paymentState.paymentId}
-          />
-          <input
-            type="hidden"
-            name="idempotencyKey"
-            value={appFeeIdempotencyKey}
-          />
-
-          <TrustNotice
-            title="BOPA app fee required"
-            description="Because the rent was collected outside BOPA, the landlord should now pay only the BOPA app fee. This does not charge the tenant."
-          />
-
-          {appFeeState.message ? (
-            <div
-              role="alert"
-              className={
-                appFeeState.ok
-                  ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
-                  : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
-              }
-            >
-              {appFeeState.message}
-            </div>
-          ) : null}
+      <div className="rounded-card border border-border-soft bg-surface p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="font-extrabold text-text-strong">
+              Record an offline payment instead
+            </p>
+            <p className="mt-1 text-sm leading-6 text-text-muted">
+              Use this only when the tenant has already paid by cash, bank
+              transfer, or another method outside BOPA.
+            </p>
+          </div>
 
           <Button
-            type="submit"
+            type="button"
             variant="secondary"
-            isLoading={isPreparingAppFee}
-            fullWidth
+            onClick={() => setShowOfflineRecordForm((current) => !current)}
           >
-            Pay BOPA App Fee
+            {showOfflineRecordForm ? "Hide Offline Form" : "Record Offline"}
           </Button>
-        </form>
-      ) : null}
+        </div>
+
+        {showOfflineRecordForm ? (
+          <form action={manualPaymentFormAction} className="mt-5 space-y-5">
+            <ActionResultToast
+              ok={manualPaymentState.ok}
+              message={manualPaymentState.message}
+              successTitle="Offline payment recorded"
+              errorTitle="Offline payment failed"
+            />
+
+            <TrustNotice
+              title="Offline payment record"
+              description="This is only for payments already received outside BOPA. It does not send the tenant a Paystack link."
+            />
+
+            {manualPaymentState.message ? (
+              <div
+                role="alert"
+                className={
+                  manualPaymentState.ok
+                    ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
+                    : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
+                }
+              >
+                {manualPaymentState.message}
+              </div>
+            ) : null}
+
+            <input
+              type="hidden"
+              name="idempotencyKey"
+              value={manualPaymentIdempotencyKey}
+            />
+
+            <Select
+              label="Tenancy"
+              name="tenancyId"
+              options={tenancies}
+              error={manualPaymentState.fieldErrors?.tenancyId?.[0]}
+              required
+            />
+
+            <CurrencyInput
+              label="Amount already received"
+              name="amountPaid"
+              placeholder="0.00"
+              error={manualPaymentState.fieldErrors?.amountPaid?.[0]}
+              required
+            />
+
+            <Select
+              label="Payment method"
+              name="paymentMethod"
+              options={paymentMethodOptions}
+              error={manualPaymentState.fieldErrors?.paymentMethod?.[0]}
+              required
+            />
+
+            <Input
+              label="Payment reference"
+              name="paymentReference"
+              placeholder="Bank narration, teller number, or receipt reference"
+              error={manualPaymentState.fieldErrors?.paymentReference?.[0]}
+            />
+
+            <Input
+              label="Payment date"
+              name="paymentDate"
+              type="datetime-local"
+              error={manualPaymentState.fieldErrors?.paymentDate?.[0]}
+              required
+            />
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <Input
+                label="Payment period start"
+                name="paymentForPeriodStart"
+                type="date"
+                error={
+                  manualPaymentState.fieldErrors?.paymentForPeriodStart?.[0]
+                }
+              />
+
+              <Input
+                label="Payment period end"
+                name="paymentForPeriodEnd"
+                type="date"
+                error={manualPaymentState.fieldErrors?.paymentForPeriodEnd?.[0]}
+              />
+            </div>
+
+            <Textarea
+              label="Notes"
+              name="notes"
+              placeholder="Optional internal note"
+              error={manualPaymentState.fieldErrors?.notes?.[0]}
+            />
+
+            <Button
+              type="submit"
+              variant="secondary"
+              isLoading={isRecordingPayment}
+              fullWidth
+            >
+              Record Offline Payment
+            </Button>
+          </form>
+        ) : null}
+      </div>
     </div>
   );
 }
