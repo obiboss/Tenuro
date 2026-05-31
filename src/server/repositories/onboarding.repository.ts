@@ -357,7 +357,7 @@ export async function submitTenantOnboardingProfile(
       updated_at: new Date().toISOString(),
     })
     .eq("id", params.tenantId)
-    .in("onboarding_status", ["invited", "profile_complete"])
+    .in("onboarding_status", ["invited", "profile_complete", "documents_submitted"])
     .is("deleted_at", null)
     .select(TENANT_ONBOARDING_SELECT)
     .single<TenantOnboardingRecord>();
