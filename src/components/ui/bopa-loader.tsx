@@ -28,6 +28,24 @@ const sizeClasses = {
   },
 };
 
+export function BopaLoaderIcon({ className }: { className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "relative inline-flex size-4 shrink-0 items-center justify-center",
+        className,
+      )}
+    >
+      <span className="absolute inset-0 animate-spin rounded-full border-2 border-current/25 border-t-current border-r-gold-deep" />
+
+      <span className="relative flex size-3 items-center justify-center rounded-md bg-white text-[8px] font-black leading-none text-primary">
+        B
+      </span>
+    </span>
+  );
+}
+
 export function BopaLoader({
   label = "Loading securely...",
   size = "md",
@@ -38,12 +56,15 @@ export function BopaLoader({
 
   const loader = (
     <div
+      role="status"
+      aria-live="polite"
       className={cn(
         "flex flex-col items-center justify-center gap-4",
         className,
       )}
     >
       <div
+        aria-hidden="true"
         className={cn(
           "relative flex items-center justify-center",
           classes.wrapper,

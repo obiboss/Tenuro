@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { BopaLoaderIcon } from "@/components/ui/bopa-loader";
 import { cn } from "@/lib/cn";
 
 type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
@@ -54,12 +55,7 @@ export function Button({
       )}
       {...props}
     >
-      {isLoading ? (
-        <span
-          aria-hidden="true"
-          className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent"
-        />
-      ) : null}
+      {isLoading ? <BopaLoaderIcon /> : null}
 
       <span>{children}</span>
     </button>

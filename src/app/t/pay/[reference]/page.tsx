@@ -9,6 +9,7 @@ import {
 import { PaymentVerificationAutoRefresh } from "@/components/payment/payment-verification-auto-refresh";
 import { TenantReceiptDownloadCard } from "@/components/payment/tenant-receipt-download-card";
 import { Badge } from "@/components/ui/badge";
+import { BopaLoader } from "@/components/ui/bopa-loader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
@@ -433,12 +434,12 @@ export default async function TenantPaymentPage({
                 ) : null}
 
                 {shouldAutoRefresh ? (
-                  <div className="mt-6 rounded-button bg-warning-soft p-4 text-sm font-semibold leading-6 text-warning">
-                    <span className="inline-flex items-center gap-2">
-                      <Clock3 aria-hidden="true" size={18} strokeWidth={2.6} />
-                      BOPA is finishing confirmation and receipt preparation.
-                      This page will update automatically.
-                    </span>
+                  <div className="mt-6 rounded-button bg-warning-soft p-6">
+                    <BopaLoader
+                      size="sm"
+                      label="BOPA is finishing confirmation and receipt preparation. This page will update automatically."
+                      className="[&_p]:text-warning"
+                    />
                   </div>
                 ) : null}
 
