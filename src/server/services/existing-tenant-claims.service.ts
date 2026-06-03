@@ -37,6 +37,12 @@ type ExistingTenantClaimAuditEventType = Parameters<
   typeof writeAuditLog
 >[0]["eventType"];
 
+type ExistingTenantClaimUnitProperty = {
+  id: string;
+  property_name: string;
+  landlord_id: string;
+};
+
 export type ExistingTenantClaimUnitOption = {
   label: string;
   value: string;
@@ -85,6 +91,21 @@ function getTokenExpiry() {
   ).toISOString();
 }
 
+function resolveUnitProperty(
+  unitWithProperty: Awaited<ReturnType<typeof getUnitWithPropertyById>>,
+): ExistingTenantClaimUnitProperty | null {
+  const propertyRelation = unitWithProperty.properties as
+    | ExistingTenantClaimUnitProperty
+    | ExistingTenantClaimUnitProperty[]
+    | null;
+
+  if (Array.isArray(propertyRelation)) {
+    return propertyRelation[0] ?? null;
+  }
+
+  return propertyRelation;
+}
+
 function assertClaimPubliclySubmittable(params: {
   status: string;
   tokenExpiresAt: string;
@@ -107,16 +128,17 @@ function assertClaimPubliclySubmittable(params: {
 }
 
 function buildClaimWhatsappMessage(params: {
+  tenantName: string;
   propertyName: string;
   unitIdentifier: string;
   claimUrl: string;
 }) {
   return [
-    "Hello,",
+    `Hello ${params.tenantName},`,
     "",
     `Your landlord has invited you to confirm your tenancy details for ${params.unitIdentifier} at ${params.propertyName} on BOPA (Boldverse Property).`,
     "",
-    "Please use this secure link to confirm your name, phone number, rent amount, move-in date, and next rent due date:",
+    "Please use this secure link to confirm your rent amount, move-in date, and next rent due date:",
     params.claimUrl,
     "",
     "Your landlord will review and confirm the details before the tenancy record goes live.",
@@ -195,7 +217,9 @@ export async function getCurrentLandlordExistingTenantClaimUnitOptions() {
       typeof unit.building_name === "string" ? unit.building_name : null;
 
     return {
-      label: `${propertyName} · ${buildingName ? `${buildingName} · ` : ""}${unitIdentifier}`,
+      label: `${propertyName} · ${
+        buildingName ? `${buildingName} · ` : ""
+      }${unitIdentifier}`,
       value: String(unit.id),
       propertyName,
       unitIdentifier,
@@ -217,12 +241,16 @@ export async function createExistingTenantClaimForCurrentLandlord(
 ) {
   const landlord = await requireLandlordPlatformOperator();
   const supabase = await createSupabaseServerClient();
+  const adminSupabase = createSupabaseAdminClient();
+
   const [unit, unitWithProperty] = await Promise.all([
     getUnitById(supabase, input.unitId),
     getUnitWithPropertyById(supabase, input.unitId),
   ]);
 
-  if (unitWithProperty.properties?.landlord_id !== landlord.id) {
+  const property = resolveUnitProperty(unitWithProperty);
+
+  if (!property || property.landlord_id !== landlord.id) {
     throw new AppError(
       "FORBIDDEN",
       "You do not have permission to invite an existing tenant for this unit.",
@@ -247,7 +275,7 @@ export async function createExistingTenantClaimForCurrentLandlord(
   const tokenHash = hashToken(token);
   const tokenExpiresAt = getTokenExpiry();
 
-  const claim = await createExistingTenantClaim(supabase, {
+  const claim = await createExistingTenantClaim(adminSupabase, {
     landlordId: landlord.id,
     unitId: input.unitId,
     tokenHash,
@@ -261,11 +289,9 @@ export async function createExistingTenantClaimForCurrentLandlord(
   });
 
   const claimUrl = buildExistingTenantClaimUrl(token);
-  const propertyName =
-    unitWithProperty.properties?.property_name ?? "the property";
-
   const whatsappMessage = buildClaimWhatsappMessage({
-    propertyName,
+    tenantName: input.fullName,
+    propertyName: property.property_name,
     unitIdentifier: unitWithProperty.unit_identifier,
     claimUrl,
   });
@@ -273,7 +299,7 @@ export async function createExistingTenantClaimForCurrentLandlord(
   await writeExistingTenantClaimAudit({
     landlordId: landlord.id,
     unitId: unit.id,
-    propertyId: unitWithProperty.properties?.id ?? null,
+    propertyId: property.id,
     actorProfileId: landlord.id,
     actorRole: AUDIT_ACTOR_ROLES.landlord,
     eventType: AUDIT_EVENT_TYPES.onboardingLinkSent,
@@ -284,7 +310,7 @@ export async function createExistingTenantClaimForCurrentLandlord(
       invited_tenant_full_name: input.fullName,
       invited_tenant_phone_number: normalizedPhone.e164,
       unit_identifier: unitWithProperty.unit_identifier,
-      property_name: propertyName,
+      property_name: property.property_name,
       token_expires_at: tokenExpiresAt,
     },
   });
