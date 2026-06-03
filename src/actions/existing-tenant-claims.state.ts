@@ -5,6 +5,7 @@ export type ExistingTenantClaimActionState = {
   claimId?: string;
   claimUrl?: string;
   whatsappMessage?: string;
+  tenantWhatsappNumber?: string;
   expiresAt?: string;
 };
 

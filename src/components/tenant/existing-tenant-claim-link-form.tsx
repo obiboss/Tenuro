@@ -6,6 +6,7 @@ import { initialExistingTenantClaimActionState } from "@/actions/existing-tenant
 import { WhatsAppSendButton } from "@/components/ui/whatsapp-send-button";
 import { ActionResultToast } from "@/components/ui/action-result-toast";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { TrustNotice } from "@/components/ui/trust-notice";
@@ -51,7 +52,7 @@ export function ExistingTenantClaimLinkForm({
 
         <TrustNotice
           title="Existing tenant claim link"
-          description="Select the unit the tenant already occupies. The tenant will fill in their details, rent amount, move-in date, and next due date for your review."
+          description="Enter the tenant name and phone number you already know, then select the unit they occupy. BOPA will open WhatsApp with the claim link ready to send."
         />
 
         {state.message ? (
@@ -73,6 +74,32 @@ export function ExistingTenantClaimLinkForm({
           options={unitOptions}
           error={state.fieldErrors?.unitId?.[0]}
           required
+        />
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <Input
+            label="Tenant name"
+            name="fullName"
+            placeholder="Example: Chinedu Okafor"
+            error={state.fieldErrors?.fullName?.[0]}
+            required
+          />
+
+          <Input
+            label="Tenant phone number"
+            name="phoneNumber"
+            placeholder="Example: 08012345678"
+            error={state.fieldErrors?.phoneNumber?.[0]}
+            required
+          />
+        </div>
+
+        <Input
+          label="Tenant email"
+          name="email"
+          type="email"
+          placeholder="Optional"
+          error={state.fieldErrors?.email?.[0]}
         />
 
         <Textarea
@@ -111,9 +138,9 @@ export function ExistingTenantClaimLinkForm({
           </div>
 
           <WhatsAppSendButton
-            phoneNumber={null}
+            phoneNumber={state.tenantWhatsappNumber ?? null}
             message={state.whatsappMessage}
-            label="Open WhatsApp"
+            label="Send Link on WhatsApp"
           />
         </div>
       ) : null}

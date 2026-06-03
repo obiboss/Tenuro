@@ -16,6 +16,9 @@ export type ExistingTenantClaimRow = {
   token_expires_at: string;
   token_used_at: string | null;
   status: ExistingTenantClaimStatus;
+  invited_tenant_full_name: string | null;
+  invited_tenant_phone_number: string | null;
+  invited_tenant_email: string | null;
   tenant_full_name: string | null;
   tenant_phone_number: string | null;
   tenant_email: string | null;
@@ -68,6 +71,9 @@ const EXISTING_TENANT_CLAIM_SELECT = `
   token_expires_at,
   token_used_at,
   status,
+  invited_tenant_full_name,
+  invited_tenant_phone_number,
+  invited_tenant_email,
   tenant_full_name,
   tenant_phone_number,
   tenant_email,
@@ -120,6 +126,9 @@ export async function createExistingTenantClaim(
     unitId: string;
     tokenHash: string;
     tokenExpiresAt: string;
+    invitedTenantFullName: string;
+    invitedTenantPhoneNumber: string;
+    invitedTenantEmail: string | null;
     note: string | null;
   },
 ) {
@@ -130,6 +139,9 @@ export async function createExistingTenantClaim(
       unit_id: params.unitId,
       token_hash: params.tokenHash,
       token_expires_at: params.tokenExpiresAt,
+      invited_tenant_full_name: params.invitedTenantFullName,
+      invited_tenant_phone_number: params.invitedTenantPhoneNumber,
+      invited_tenant_email: params.invitedTenantEmail,
       status: "pending",
       landlord_review_notes: params.note,
     })

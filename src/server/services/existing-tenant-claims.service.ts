@@ -242,6 +242,7 @@ export async function createExistingTenantClaimForCurrentLandlord(
     );
   }
 
+  const normalizedPhone = normalisePhoneNumber(input.phoneNumber);
   const token = createSecureToken();
   const tokenHash = hashToken(token);
   const tokenExpiresAt = getTokenExpiry();
@@ -251,12 +252,18 @@ export async function createExistingTenantClaimForCurrentLandlord(
     unitId: input.unitId,
     tokenHash,
     tokenExpiresAt,
+    invitedTenantFullName: input.fullName,
+    invitedTenantPhoneNumber: normalizedPhone.e164,
+    invitedTenantEmail: input.email?.trim()
+      ? input.email.trim().toLowerCase()
+      : null,
     note: input.note?.trim() || null,
   });
 
   const claimUrl = buildExistingTenantClaimUrl(token);
   const propertyName =
     unitWithProperty.properties?.property_name ?? "the property";
+
   const whatsappMessage = buildClaimWhatsappMessage({
     propertyName,
     unitIdentifier: unitWithProperty.unit_identifier,
@@ -274,6 +281,8 @@ export async function createExistingTenantClaimForCurrentLandlord(
     description: `Existing tenant claim link created for ${unitWithProperty.unit_identifier}.`,
     metadata: {
       existing_tenant_claim_id: claim.id,
+      invited_tenant_full_name: input.fullName,
+      invited_tenant_phone_number: normalizedPhone.e164,
       unit_identifier: unitWithProperty.unit_identifier,
       property_name: propertyName,
       token_expires_at: tokenExpiresAt,
@@ -284,6 +293,7 @@ export async function createExistingTenantClaimForCurrentLandlord(
     claim,
     claimUrl,
     whatsappMessage,
+    tenantWhatsappNumber: normalizedPhone.national,
     expiresAt: tokenExpiresAt,
   };
 }

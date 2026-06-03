@@ -2,19 +2,23 @@ import { z } from "zod";
 import {
   dateStringSchema,
   optionalEmailSchema,
+  phoneSchema,
   positiveMoneySchema,
   uuidSchema,
 } from "./common.schema";
 
 export const createExistingTenantClaimSchema = z.object({
   unitId: uuidSchema,
+  fullName: z.string().trim().min(2, "Enter the tenant name.").max(120),
+  phoneNumber: phoneSchema,
+  email: optionalEmailSchema,
   note: z.string().trim().max(1000).optional().or(z.literal("")),
 });
 
 export const submitExistingTenantClaimSchema = z.object({
   token: z.string().trim().min(20, "Invalid claim link."),
   fullName: z.string().trim().min(2, "Enter your full name.").max(120),
-  phoneNumber: z.string().trim().min(7, "Enter your phone number.").max(30),
+  phoneNumber: phoneSchema,
   email: optionalEmailSchema,
   moveInDate: dateStringSchema,
   claimedRentAmount: positiveMoneySchema,
