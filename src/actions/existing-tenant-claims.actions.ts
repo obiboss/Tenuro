@@ -4,12 +4,14 @@ import { revalidatePath } from "next/cache";
 import type { ExistingTenantClaimActionState } from "@/actions/existing-tenant-claims.state";
 import { errorResult } from "@/server/errors/result";
 import {
+  approveExistingTenantClaimForCurrentLandlord,
   createExistingTenantClaimForCurrentLandlord,
   rejectExistingTenantClaimForCurrentLandlord,
   submitExistingTenantClaimByToken,
   updateExistingTenantClaimArrearsForCurrentLandlord,
 } from "@/server/services/existing-tenant-claims.service";
 import {
+  approveExistingTenantClaimSchema,
   createExistingTenantClaimSchema,
   rejectExistingTenantClaimSchema,
   submitExistingTenantClaimSchema,
@@ -114,6 +116,44 @@ export async function updateExistingTenantClaimArrearsAction(
     return {
       ok: true,
       message: "Arrears estimate updated.",
+    };
+  } catch (error) {
+    const result = errorResult(error);
+
+    return {
+      ok: false,
+      message: result.message,
+      fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
+    };
+  }
+}
+
+export async function approveExistingTenantClaimAction(
+  _previousState: ExistingTenantClaimActionState,
+  formData: FormData,
+): Promise<ExistingTenantClaimActionState> {
+  try {
+    const parsed = approveExistingTenantClaimSchema.parse({
+      claimId: formData.get("claimId"),
+      confirmedRentAmount: formData.get("confirmedRentAmount"),
+      confirmedMoveInDate: formData.get("confirmedMoveInDate"),
+      confirmedCurrentDueDate: formData.get("confirmedCurrentDueDate"),
+      openingBalance: formData.get("openingBalance"),
+      reviewNotes: formData.get("reviewNotes"),
+    });
+
+    await approveExistingTenantClaimForCurrentLandlord(parsed);
+
+    revalidatePath("/existing-tenant-claims");
+    revalidatePath("/tenants");
+    revalidatePath("/tenancies");
+    revalidatePath("/renewals");
+    revalidatePath("/notifications");
+    revalidatePath("/overview");
+
+    return {
+      ok: true,
+      message: "Existing tenant approved and tenancy created.",
     };
   } catch (error) {
     const result = errorResult(error);

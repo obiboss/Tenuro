@@ -48,6 +48,15 @@ export const updateExistingTenantClaimArrearsSchema = z.object({
   lastPaymentDate: dateStringSchema,
 });
 
+export const approveExistingTenantClaimSchema = z.object({
+  claimId: uuidSchema,
+  confirmedRentAmount: positiveMoneySchema,
+  confirmedMoveInDate: dateStringSchema,
+  confirmedCurrentDueDate: dateStringSchema,
+  openingBalance: moneySchema.default(0),
+  reviewNotes: z.string().trim().max(1000).optional().or(z.literal("")),
+});
+
 export const rejectExistingTenantClaimSchema = z.object({
   claimId: uuidSchema,
   reason: z.string().trim().min(3, "Enter the reason.").max(500),
@@ -63,6 +72,10 @@ export type SubmitExistingTenantClaimInput = z.infer<
 
 export type UpdateExistingTenantClaimArrearsInput = z.infer<
   typeof updateExistingTenantClaimArrearsSchema
+>;
+
+export type ApproveExistingTenantClaimInput = z.infer<
+  typeof approveExistingTenantClaimSchema
 >;
 
 export type RejectExistingTenantClaimInput = z.infer<

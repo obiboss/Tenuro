@@ -8,6 +8,7 @@ import {
 } from "@/server/constants/audit-events";
 import { AppError } from "@/server/errors/app-error";
 import {
+  approveExistingTenantClaim,
   createExistingTenantClaim,
   getExistingTenantClaimById,
   getExistingTenantClaimByTokenHash,
@@ -18,9 +19,17 @@ import {
   updateExistingTenantClaimArrears,
   type ExistingTenantClaimPaymentFrequency,
 } from "@/server/repositories/existing-tenant-claims.repository";
+import { postExistingTenantOpeningBalanceEntry } from "@/server/repositories/ledger.repository";
+import {
+  createLiveExistingTenantTenancy,
+  getActiveTenancyForUnit,
+  getPendingAgreementTenancyForUnit,
+} from "@/server/repositories/tenancies.repository";
+import { createTenantFromExistingClaim } from "@/server/repositories/tenants.repository";
 import {
   getUnitById,
   getUnitWithPropertyById,
+  markUnitOccupied,
   type UnitStatus,
   type UnitType,
 } from "@/server/repositories/units.repository";
@@ -29,6 +38,7 @@ import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { normalisePhoneNumber } from "@/server/utils/phone";
 import type {
+  ApproveExistingTenantClaimInput,
   CreateExistingTenantClaimInput,
   RejectExistingTenantClaimInput,
   SubmitExistingTenantClaimInput,
@@ -138,6 +148,18 @@ function getFrequencyMonths(frequency: ExistingTenantClaimPaymentFrequency) {
   }
 
   return 12;
+}
+
+function calculateCurrentPeriodEnd(params: {
+  currentPeriodStart: string;
+  paymentFrequency: ExistingTenantClaimPaymentFrequency;
+}) {
+  return toDateOnly(
+    addMonths(
+      parseDateOnly(params.currentPeriodStart),
+      getFrequencyMonths(params.paymentFrequency),
+    ),
+  );
 }
 
 function calculateExistingTenantArrears(params: {
@@ -602,6 +624,209 @@ export async function updateExistingTenantClaimArrearsForCurrentLandlord(
   });
 
   return updatedClaim;
+}
+
+export async function approveExistingTenantClaimForCurrentLandlord(
+  input: ApproveExistingTenantClaimInput,
+) {
+  const landlord = await requireLandlordPlatformOperator();
+  const supabase = await createSupabaseServerClient();
+  const adminSupabase = createSupabaseAdminClient();
+  const claim = await getExistingTenantClaimById(supabase, input.claimId);
+
+  if (claim.landlord_id !== landlord.id) {
+    throw new AppError(
+      "FORBIDDEN",
+      "You do not have permission to approve this existing tenant claim.",
+      403,
+    );
+  }
+
+  if (claim.status !== "submitted") {
+    throw new AppError(
+      "CLAIM_NOT_READY_FOR_APPROVAL",
+      "Only submitted existing tenant claims can be approved.",
+      400,
+    );
+  }
+
+  if (
+    !claim.tenant_full_name ||
+    !claim.tenant_phone_number ||
+    !claim.tenant_move_in_date ||
+    !claim.tenant_claimed_rent_amount ||
+    !claim.tenant_id_type
+  ) {
+    throw new AppError(
+      "CLAIM_DETAILS_INCOMPLETE",
+      "The tenant claim is missing required details.",
+      400,
+    );
+  }
+
+  const [unit, existingUnitTenancy, existingPendingUnitTenancy] =
+    await Promise.all([
+      getUnitById(supabase, claim.unit_id),
+      getActiveTenancyForUnit(supabase, claim.unit_id),
+      getPendingAgreementTenancyForUnit(supabase, claim.unit_id),
+    ]);
+
+  if (existingUnitTenancy || existingPendingUnitTenancy) {
+    throw new AppError(
+      "UNIT_ALREADY_HAS_TENANCY",
+      "This unit already has an active tenancy.",
+      400,
+    );
+  }
+
+  if (
+    unit.status === "archived" ||
+    unit.status === "unavailable" ||
+    unit.status === "under_renovation"
+  ) {
+    throw new AppError(
+      "UNIT_NOT_AVAILABLE_FOR_TENANCY",
+      "This unit is not available for tenancy approval.",
+      400,
+    );
+  }
+
+  const currentPeriodEnd = calculateCurrentPeriodEnd({
+    currentPeriodStart: input.confirmedCurrentDueDate,
+    paymentFrequency: claim.tenant_payment_frequency,
+  });
+
+  const tenant = await createTenantFromExistingClaim(adminSupabase, {
+    landlordId: landlord.id,
+    unitId: claim.unit_id,
+    fullName: claim.tenant_full_name,
+    phoneNumber: claim.tenant_phone_number,
+    email: claim.tenant_email,
+    occupation: claim.tenant_occupation,
+    idType: claim.tenant_id_type,
+    approvedBy: landlord.id,
+    sourceExistingTenantClaimId: claim.id,
+    kycAnswers: {
+      source: "existing_tenant_claim",
+      existing_tenant_claim_id: claim.id,
+      tenant_id_number: claim.tenant_id_number,
+      tenant_claimed_move_in_date: claim.tenant_move_in_date,
+      tenant_claimed_rent_amount: claim.tenant_claimed_rent_amount,
+      tenant_claimed_next_rent_due_date:
+        claim.tenant_claimed_next_rent_due_date,
+      landlord_confirmed_move_in_date: input.confirmedMoveInDate,
+      landlord_confirmed_current_due_date: input.confirmedCurrentDueDate,
+      landlord_confirmed_current_period_end: currentPeriodEnd,
+      landlord_confirmed_rent_amount: input.confirmedRentAmount,
+      landlord_confirmed_opening_balance: input.openingBalance,
+      landlord_review_notes: input.reviewNotes || null,
+    },
+  });
+
+  const tenancy = await createLiveExistingTenantTenancy(adminSupabase, {
+    landlordId: landlord.id,
+    tenantId: tenant.id,
+    unitId: claim.unit_id,
+    rentAmount: input.confirmedRentAmount,
+    paymentFrequency: claim.tenant_payment_frequency,
+    currencyCode: claim.units?.currency_code ?? "NGN",
+    moveInDate: input.confirmedMoveInDate,
+    currentPeriodStart: input.confirmedCurrentDueDate,
+    openingBalance: input.openingBalance,
+    openingBalanceNote:
+      input.openingBalance > 0
+        ? "Opening balance from existing tenant approval."
+        : null,
+    agreementNotes: input.reviewNotes || null,
+  });
+
+  await postExistingTenantOpeningBalanceEntry(adminSupabase, {
+    landlordId: landlord.id,
+    tenantId: tenant.id,
+    tenancyId: tenancy.id,
+    amount: input.openingBalance,
+    currencyCode: tenancy.currency_code,
+    description: "Opening balance from existing tenant onboarding.",
+    entryDate: input.confirmedCurrentDueDate,
+    metadata: {
+      source: "existing_tenant_claim",
+      existing_tenant_claim_id: claim.id,
+      claimed_rent_amount: claim.tenant_claimed_rent_amount,
+      confirmed_rent_amount: input.confirmedRentAmount,
+      confirmed_move_in_date: input.confirmedMoveInDate,
+      confirmed_current_due_date: input.confirmedCurrentDueDate,
+      current_period_end: currentPeriodEnd,
+      last_payment_amount: claim.landlord_last_payment_amount,
+      last_payment_date: claim.landlord_last_payment_date,
+      bopa_calculated_outstanding_balance:
+        claim.bopa_calculated_outstanding_balance,
+    },
+  });
+
+  await markUnitOccupied(adminSupabase, claim.unit_id);
+
+  const approvedClaim = await approveExistingTenantClaim(adminSupabase, {
+    claimId: claim.id,
+    landlordId: landlord.id,
+    reviewedBy: landlord.id,
+    confirmedRentAmount: input.confirmedRentAmount,
+    confirmedMoveInDate: input.confirmedMoveInDate,
+    confirmedCurrentDueDate: input.confirmedCurrentDueDate,
+    confirmedNextRentDueDate: tenancy.next_rent_charge_date ?? currentPeriodEnd,
+    openingBalance: input.openingBalance,
+    reviewNotes: input.reviewNotes?.trim() || null,
+    approvedTenantId: tenant.id,
+    approvedTenancyId: tenancy.id,
+  });
+
+  await writeExistingTenantClaimAudit({
+    landlordId: landlord.id,
+    unitId: claim.unit_id,
+    propertyId: claim.units?.properties?.id ?? null,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.tenantApproved,
+    entityId: claim.id,
+    description: "Existing tenant claim was approved and converted to tenancy.",
+    metadata: {
+      existing_tenant_claim_id: claim.id,
+      tenant_id: tenant.id,
+      tenancy_id: tenancy.id,
+      tenant_full_name: tenant.full_name,
+      confirmed_rent_amount: input.confirmedRentAmount,
+      confirmed_move_in_date: input.confirmedMoveInDate,
+      confirmed_current_due_date: input.confirmedCurrentDueDate,
+      opening_balance: input.openingBalance,
+    },
+  });
+
+  await writeAuditLog({
+    landlordId: landlord.id,
+    tenantId: tenant.id,
+    tenancyId: tenancy.id,
+    unitId: claim.unit_id,
+    propertyId: claim.units?.properties?.id ?? null,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.tenancyCreated,
+    entityType: AUDIT_ENTITY_TYPES.tenancy,
+    entityId: tenancy.id,
+    description: `Existing tenant tenancy created for ${tenant.full_name}.`,
+    metadata: {
+      source: "existing_tenant_claim",
+      existing_tenant_claim_id: claim.id,
+      tenancy_reference: tenancy.tenancy_reference,
+      rent_amount: tenancy.rent_amount,
+      payment_frequency: tenancy.payment_frequency,
+      start_date: tenancy.start_date,
+      current_period_start: tenancy.current_period_start,
+      current_period_end: tenancy.current_period_end,
+      next_rent_charge_date: tenancy.next_rent_charge_date,
+      opening_balance: input.openingBalance,
+    },
+  });
+
+  return approvedClaim;
 }
 
 export async function rejectExistingTenantClaimForCurrentLandlord(

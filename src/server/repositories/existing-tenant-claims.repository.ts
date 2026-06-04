@@ -50,6 +50,7 @@ export type ExistingTenantClaimRow = {
   landlord_confirmed_rent_amount: number | null;
   landlord_confirmed_move_in_date: string | null;
   landlord_confirmed_next_rent_due_date: string | null;
+  landlord_confirmed_current_due_date: string | null;
   landlord_review_notes: string | null;
   landlord_last_payment_amount: number | null;
   landlord_last_payment_date: string | null;
@@ -116,6 +117,7 @@ const EXISTING_TENANT_CLAIM_SELECT = `
   landlord_confirmed_rent_amount,
   landlord_confirmed_move_in_date,
   landlord_confirmed_next_rent_due_date,
+  landlord_confirmed_current_due_date,
   landlord_review_notes,
   landlord_last_payment_amount,
   landlord_last_payment_date,
@@ -320,6 +322,54 @@ export async function updateExistingTenantClaimArrears(
       bopa_calculated_months_owed: params.calculatedMonthsOwed,
       arrears_calculation_metadata: params.calculationMetadata,
       updated_at: new Date().toISOString(),
+    })
+    .eq("id", params.claimId)
+    .eq("landlord_id", params.landlordId)
+    .eq("status", "submitted")
+    .is("deleted_at", null)
+    .select(EXISTING_TENANT_CLAIM_DETAIL_SELECT)
+    .single<ExistingTenantClaimDetailRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function approveExistingTenantClaim(
+  supabase: SupabaseClient,
+  params: {
+    claimId: string;
+    landlordId: string;
+    reviewedBy: string;
+    confirmedRentAmount: number;
+    confirmedMoveInDate: string;
+    confirmedCurrentDueDate: string;
+    confirmedNextRentDueDate: string;
+    openingBalance: number;
+    reviewNotes: string | null;
+    approvedTenantId: string;
+    approvedTenancyId: string;
+  },
+) {
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("existing_tenant_claims")
+    .update({
+      status: "approved",
+      landlord_confirmed_rent_amount: params.confirmedRentAmount,
+      landlord_confirmed_move_in_date: params.confirmedMoveInDate,
+      landlord_confirmed_current_due_date: params.confirmedCurrentDueDate,
+      landlord_confirmed_next_rent_due_date: params.confirmedNextRentDueDate,
+      landlord_review_notes: params.reviewNotes,
+      bopa_calculated_outstanding_balance: params.openingBalance,
+      approved_tenant_id: params.approvedTenantId,
+      approved_tenancy_id: params.approvedTenancyId,
+      reviewed_at: now,
+      reviewed_by: params.reviewedBy,
+      updated_at: now,
     })
     .eq("id", params.claimId)
     .eq("landlord_id", params.landlordId)

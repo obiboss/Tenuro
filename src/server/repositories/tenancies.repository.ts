@@ -1,8 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   calculateNextRentChargeDate,
+  calculateTenancyEndDate,
   getRentAnchorDay,
   getRentAnchorMonth,
+  type TenancyPaymentFrequency,
 } from "@/lib/tenancy-period";
 import type { CreateTenancyInput } from "@/server/validators/tenancy.schema";
 
@@ -427,6 +429,75 @@ export async function createTenancy(
       opening_balance_note: params.input.openingBalanceNote || null,
       agreement_notes: params.input.agreementNotes || null,
       status: "active",
+    })
+    .select(TENANCY_DETAIL_SELECT)
+    .single<TenancyDetailRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function createLiveExistingTenantTenancy(
+  supabase: SupabaseClient,
+  params: {
+    landlordId: string;
+    tenantId: string;
+    unitId: string;
+    rentAmount: number;
+    paymentFrequency: "monthly" | "quarterly" | "biannual" | "annual";
+    currencyCode: string;
+    moveInDate: string;
+    currentPeriodStart: string;
+    openingBalance: number;
+    openingBalanceNote: string | null;
+    agreementNotes: string | null;
+  },
+) {
+  const currentPeriodEnd = calculateTenancyEndDate(
+    params.currentPeriodStart,
+    params.paymentFrequency as TenancyPaymentFrequency,
+  );
+  const nextRentChargeDate = calculateNextRentChargeDate(currentPeriodEnd);
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("tenancies")
+    .insert({
+      landlord_id: params.landlordId,
+      tenant_id: params.tenantId,
+      unit_id: params.unitId,
+      tenancy_reference: createTenancyReference(),
+
+      rent_amount: params.rentAmount,
+      payment_frequency: params.paymentFrequency,
+      currency_code: params.currencyCode,
+
+      start_date: params.moveInDate,
+      end_date: currentPeriodEnd,
+      renewal_notice_date: null,
+      reminder_interval_days: 90,
+
+      rent_due_day: getRentAnchorDay(params.moveInDate),
+      rent_anchor_month: getRentAnchorMonth(params.moveInDate),
+      current_period_start: params.currentPeriodStart,
+      current_period_end: currentPeriodEnd,
+      next_rent_charge_date: nextRentChargeDate,
+
+      move_in_date: params.moveInDate,
+      move_out_date: null,
+      next_renewal_date: nextRentChargeDate,
+
+      tenancy_status: "active",
+      agreement_live_at: now,
+      charges_confirmed_at: now,
+      status: "active",
+
+      opening_balance: params.openingBalance,
+      opening_balance_note: params.openingBalanceNote,
+      agreement_notes: params.agreementNotes,
     })
     .select(TENANCY_DETAIL_SELECT)
     .single<TenancyDetailRow>();

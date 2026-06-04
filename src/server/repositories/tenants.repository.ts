@@ -90,6 +90,19 @@ export type CreateTenantFromPropertyApplicationParams = {
   sourcePropertyApplicationId: string;
 };
 
+export type CreateTenantFromExistingClaimParams = {
+  landlordId: string;
+  unitId: string;
+  fullName: string;
+  phoneNumber: string;
+  email: string | null;
+  occupation: string | null;
+  idType: TenantIdType;
+  approvedBy: string;
+  sourceExistingTenantClaimId: string;
+  kycAnswers: Record<string, unknown>;
+};
+
 const TENANT_SELECT = `
   id,
   profile_id,
@@ -220,6 +233,42 @@ export async function createTenantFromPropertyApplication(
       agent_property_listing_id: params.agentPropertyListingId,
       invited_by_agent_id: params.invitedByAgentId,
       source_property_application_id: params.sourcePropertyApplicationId,
+    })
+    .select(TENANT_BASE_SELECT)
+    .single<TenantRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function createTenantFromExistingClaim(
+  supabase: SupabaseClient,
+  params: CreateTenantFromExistingClaimParams,
+) {
+  const approvedAt = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("tenants")
+    .insert({
+      landlord_id: params.landlordId,
+      unit_id: params.unitId,
+      full_name: params.fullName,
+      phone_number: params.phoneNumber,
+      email: params.email,
+      occupation: params.occupation,
+      id_type: params.idType,
+      kyc_answers: {
+        ...params.kycAnswers,
+        source_existing_tenant_claim_id: params.sourceExistingTenantClaimId,
+      },
+      kyc_review_flags: [],
+      onboarding_status: "approved",
+      approved_at: approvedAt,
+      approved_by: params.approvedBy,
+      landlord_notes: "Created from existing tenant claim.",
     })
     .select(TENANT_BASE_SELECT)
     .single<TenantRow>();

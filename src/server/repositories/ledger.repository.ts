@@ -57,6 +57,52 @@ export async function postInitialTenancyLedgerEntries(
   }
 }
 
+export async function postExistingTenantOpeningBalanceEntry(
+  supabase: SupabaseClient,
+  params: {
+    landlordId: string;
+    tenantId: string;
+    tenancyId: string;
+    amount: number;
+    currencyCode: string;
+    description: string;
+    entryDate: string;
+    metadata: Record<string, unknown>;
+  },
+) {
+  if (params.amount <= 0) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("ledger_entries")
+    .insert({
+      landlord_id: params.landlordId,
+      tenant_id: params.tenantId,
+      tenancy_id: params.tenancyId,
+      payment_id: null,
+      entry_type: "opening_balance",
+      direction: "debit",
+      amount: params.amount,
+      currency_code: params.currencyCode,
+      description: params.description,
+      entry_date: params.entryDate,
+      period_start: null,
+      period_end: null,
+      metadata: params.metadata,
+    })
+    .select(
+      "id, landlord_id, tenant_id, tenancy_id, payment_id, entry_type, direction, amount, currency_code, description, entry_date, period_start, period_end, metadata, created_at",
+    )
+    .single<LedgerEntryRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 export async function postDueRentCharges(
   supabase: SupabaseClient,
   runDate?: string,
