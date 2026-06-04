@@ -121,6 +121,13 @@ function getIdTypeLabel(value: ExistingTenantClaimIdType | null) {
   return value ? idTypeLabels[value] : "Not provided";
 }
 
+function getBopaDueDate(claim: ExistingTenantClaimDetailRow) {
+  return (
+    claim.landlord_confirmed_current_due_date ??
+    claim.bopa_calculated_current_due_date
+  );
+}
+
 function ExistingTenantClaimStatusBadge({
   status,
 }: {
@@ -157,7 +164,7 @@ function RejectExistingTenantClaimForm({
       <Textarea
         label="Rejection reason"
         name="reason"
-        placeholder="Example: The tenant selected the wrong unit or rent due date."
+        placeholder="Example: The tenant selected the wrong unit or submitted incorrect details."
         error={state.fieldErrors?.reason?.[0]}
       />
 
@@ -251,7 +258,7 @@ function ArrearsSummary({ claim }: { claim: ExistingTenantClaimDetailRow }) {
     <div className="grid gap-3 md:grid-cols-3">
       <div className="rounded-button bg-background p-4">
         <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-          Current Due Date
+          BOPA Calculated Due Date
         </p>
         <p className="mt-2 font-extrabold text-text-strong">
           {formatDate(claim.bopa_calculated_current_due_date)}
@@ -260,7 +267,7 @@ function ArrearsSummary({ claim }: { claim: ExistingTenantClaimDetailRow }) {
 
       <div className="rounded-button bg-background p-4">
         <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-          Months Owed
+          Months Owed After Payment
         </p>
         <p className="mt-2 font-extrabold text-text-strong">
           {claim.bopa_calculated_months_owed}
@@ -301,13 +308,18 @@ function ApproveExistingTenantClaimForm({
   const confirmedCurrentDueDate =
     claim.landlord_confirmed_current_due_date ??
     claim.bopa_calculated_current_due_date ??
-    claim.tenant_claimed_next_rent_due_date ??
     "";
 
-  const openingBalance =
-    claim.bopa_calculated_outstanding_balance ??
-    claim.landlord_last_payment_amount ??
-    0;
+  const openingBalance = claim.bopa_calculated_outstanding_balance ?? 0;
+
+  const formResetKey = [
+    claim.id,
+    confirmedRentAmount,
+    confirmedMoveInDate,
+    confirmedCurrentDueDate,
+    openingBalance,
+    claim.landlord_review_notes ?? "",
+  ].join(":");
 
   const canApprove =
     claim.status === "submitted" &&
@@ -316,7 +328,7 @@ function ApproveExistingTenantClaimForm({
     confirmedCurrentDueDate.length > 0;
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form key={formResetKey} action={formAction} className="space-y-4">
       <ActionResultToast
         ok={state.ok}
         message={state.message}
@@ -339,7 +351,7 @@ function ApproveExistingTenantClaimForm({
           label="Opening balance owed"
           name="openingBalance"
           defaultValue={openingBalance}
-          helperText="Use 0 if the tenant is not owing."
+          helperText="BOPA prefills this from the arrears estimate. Set to 0 only if the tenant is not owing."
           error={state.fieldErrors?.openingBalance?.[0]}
           required
         />
@@ -360,7 +372,7 @@ function ApproveExistingTenantClaimForm({
           name="confirmedCurrentDueDate"
           type="date"
           defaultValue={confirmedCurrentDueDate}
-          helperText="This becomes the current rent cycle start date."
+          helperText="BOPA calculates this from the move-in date and rent cycle. Override only if the landlord’s records differ."
           error={state.fieldErrors?.confirmedCurrentDueDate?.[0]}
           required
         />
@@ -400,7 +412,7 @@ function DesktopClaimsTable({
             <th className="px-4 py-3">Property / Unit</th>
             <th className="px-4 py-3">Claimed Rent</th>
             <th className="px-4 py-3">Move-in</th>
-            <th className="px-4 py-3">Next Due</th>
+            <th className="px-4 py-3">BOPA Due Date</th>
             <th className="px-4 py-3">Status</th>
           </tr>
         </thead>
@@ -442,7 +454,7 @@ function DesktopClaimsTable({
               </td>
 
               <td className="px-4 py-4 font-bold text-text-strong">
-                {formatDate(claim.tenant_claimed_next_rent_due_date)}
+                {formatDate(getBopaDueDate(claim))}
               </td>
 
               <td className="px-4 py-4">
@@ -506,9 +518,9 @@ function MobileClaimsList({
             </div>
 
             <div className="flex justify-between gap-3">
-              <span className="font-bold text-text-muted">Next due</span>
+              <span className="font-bold text-text-muted">BOPA due date</span>
               <span className="text-right font-bold text-text-strong">
-                {formatDate(claim.tenant_claimed_next_rent_due_date)}
+                {formatDate(getBopaDueDate(claim))}
               </span>
             </div>
           </div>
@@ -600,9 +612,11 @@ function ClaimReviewCard({ claim }: { claim: ExistingTenantClaimDetailRow }) {
               className="text-primary"
             />
             <div>
-              <p className="font-bold text-text-muted">Claimed due date</p>
+              <p className="font-bold text-text-muted">
+                BOPA calculated due date
+              </p>
               <p className="font-extrabold text-text-strong">
-                {formatDate(claim.tenant_claimed_next_rent_due_date)}
+                {formatDate(getBopaDueDate(claim))}
               </p>
             </div>
           </div>
@@ -641,8 +655,9 @@ function ClaimReviewCard({ claim }: { claim: ExistingTenantClaimDetailRow }) {
                 Final approval
               </h3>
               <p className="mt-1 text-sm leading-6 text-text-muted">
-                Confirm the official rent amount, move-in date, current due
-                date, and opening balance before creating the live tenancy.
+                Confirm the official rent amount, move-in date, BOPA-calculated
+                current due date, and opening balance before creating the live
+                tenancy.
               </p>
             </div>
           </div>
@@ -696,7 +711,7 @@ export function ExistingTenantClaimReviewList({
               Needs Review
             </p>
             <p className="mt-1 text-sm leading-6 text-text-muted">
-              These tenants have submitted rent and due-date details. Calculate
+              These tenants have submitted rent and move-in details. Calculate
               arrears, confirm the final values, then approve to create a live
               tenancy.
             </p>
