@@ -5,10 +5,12 @@ import {
   AlertTriangle,
   BriefcaseBusiness,
   CalendarClock,
+  CheckCircle2,
   CreditCard,
   Home,
 } from "lucide-react";
 import {
+  approveExistingTenantClaimAction,
   rejectExistingTenantClaimAction,
   updateExistingTenantClaimArrearsAction,
 } from "@/actions/existing-tenant-claims.actions";
@@ -277,6 +279,113 @@ function ArrearsSummary({ claim }: { claim: ExistingTenantClaimDetailRow }) {
   );
 }
 
+function ApproveExistingTenantClaimForm({
+  claim,
+}: {
+  claim: ExistingTenantClaimDetailRow;
+}) {
+  const [state, formAction, isPending] = useActionState(
+    approveExistingTenantClaimAction,
+    initialExistingTenantClaimActionState,
+  );
+
+  const confirmedRentAmount =
+    claim.landlord_confirmed_rent_amount ??
+    claim.tenant_claimed_rent_amount ??
+    claim.units?.annual_rent ??
+    0;
+
+  const confirmedMoveInDate =
+    claim.landlord_confirmed_move_in_date ?? claim.tenant_move_in_date ?? "";
+
+  const confirmedCurrentDueDate =
+    claim.landlord_confirmed_current_due_date ??
+    claim.bopa_calculated_current_due_date ??
+    claim.tenant_claimed_next_rent_due_date ??
+    "";
+
+  const openingBalance =
+    claim.bopa_calculated_outstanding_balance ??
+    claim.landlord_last_payment_amount ??
+    0;
+
+  const canApprove =
+    claim.status === "submitted" &&
+    confirmedRentAmount > 0 &&
+    confirmedMoveInDate.length > 0 &&
+    confirmedCurrentDueDate.length > 0;
+
+  return (
+    <form action={formAction} className="space-y-4">
+      <ActionResultToast
+        ok={state.ok}
+        message={state.message}
+        successTitle="Tenant approved"
+        errorTitle="Could not approve tenant"
+      />
+
+      <input type="hidden" name="claimId" value={claim.id} />
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <CurrencyInput
+          label="Confirmed rent amount"
+          name="confirmedRentAmount"
+          defaultValue={confirmedRentAmount}
+          error={state.fieldErrors?.confirmedRentAmount?.[0]}
+          required
+        />
+
+        <CurrencyInput
+          label="Opening balance owed"
+          name="openingBalance"
+          defaultValue={openingBalance}
+          helperText="Use 0 if the tenant is not owing."
+          error={state.fieldErrors?.openingBalance?.[0]}
+          required
+        />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Input
+          label="Confirmed move-in date"
+          name="confirmedMoveInDate"
+          type="date"
+          defaultValue={confirmedMoveInDate}
+          error={state.fieldErrors?.confirmedMoveInDate?.[0]}
+          required
+        />
+
+        <Input
+          label="Current due date"
+          name="confirmedCurrentDueDate"
+          type="date"
+          defaultValue={confirmedCurrentDueDate}
+          helperText="This becomes the current rent cycle start date."
+          error={state.fieldErrors?.confirmedCurrentDueDate?.[0]}
+          required
+        />
+      </div>
+
+      <Textarea
+        label="Review note"
+        name="reviewNotes"
+        placeholder="Optional note saved with the tenancy."
+        defaultValue={claim.landlord_review_notes ?? ""}
+        error={state.fieldErrors?.reviewNotes?.[0]}
+      />
+
+      <Button
+        type="submit"
+        isLoading={isPending}
+        disabled={!canApprove}
+        fullWidth
+      >
+        Approve and Create Tenancy
+      </Button>
+    </form>
+  );
+}
+
 function DesktopClaimsTable({
   claims,
 }: {
@@ -517,6 +626,31 @@ function ClaimReviewCard({ claim }: { claim: ExistingTenantClaimDetailRow }) {
         </div>
       ) : null}
 
+      {claim.status === "submitted" ? (
+        <div className="mt-5 space-y-4 rounded-card border border-primary/15 bg-primary-soft/30 p-4">
+          <div className="flex items-start gap-3">
+            <CheckCircle2
+              aria-hidden="true"
+              size={22}
+              strokeWidth={2.6}
+              className="mt-0.5 shrink-0 text-primary"
+            />
+
+            <div>
+              <h3 className="text-base font-black text-text-strong">
+                Final approval
+              </h3>
+              <p className="mt-1 text-sm leading-6 text-text-muted">
+                Confirm the official rent amount, move-in date, current due
+                date, and opening balance before creating the live tenancy.
+              </p>
+            </div>
+          </div>
+
+          <ApproveExistingTenantClaimForm claim={claim} />
+        </div>
+      ) : null}
+
       {canReject ? (
         <details className="mt-5 rounded-button bg-background p-4">
           <summary className="cursor-pointer text-sm font-extrabold text-danger">
@@ -563,8 +697,8 @@ export function ExistingTenantClaimReviewList({
             </p>
             <p className="mt-1 text-sm leading-6 text-text-muted">
               These tenants have submitted rent and due-date details. Calculate
-              arrears first, then final approval will be handled in the next
-              batch.
+              arrears, confirm the final values, then approve to create a live
+              tenancy.
             </p>
           </div>
 
