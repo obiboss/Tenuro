@@ -183,10 +183,22 @@ function normalizePaymentHistory(
       paidAt: payment.paidAt,
       note: payment.note?.trim() ?? "",
     }))
-    .filter((payment) => payment.amount > 0)
+    .filter((payment) => payment.amount > 0 && payment.paidAt.trim().length > 0)
     .sort((firstPayment, secondPayment) =>
       firstPayment.paidAt.localeCompare(secondPayment.paidAt),
     );
+}
+
+function filterCountedPayments(params: {
+  paymentHistory: NormalizedPaymentHistoryItem[];
+  arrearsStartDate: string;
+}) {
+  const arrearsStartDate = parseDateOnly(params.arrearsStartDate);
+
+  return params.paymentHistory.filter(
+    (payment) =>
+      parseDateOnly(payment.paidAt).getTime() >= arrearsStartDate.getTime(),
+  );
 }
 
 function buildRentChargeSchedule(params: {
@@ -265,6 +277,10 @@ function calculateExistingTenantArrears(params: {
 }) {
   const today = new Date();
   const normalizedPayments = normalizePaymentHistory(params.paymentHistory);
+  const countedPayments = filterCountedPayments({
+    paymentHistory: normalizedPayments,
+    arrearsStartDate: params.arrearsStartDate,
+  });
 
   const rentCharges = buildRentChargeSchedule({
     moveInDate: params.moveInDate,
@@ -279,9 +295,19 @@ function calculateExistingTenantArrears(params: {
     0,
   );
 
-  const totalPayments = normalizedPayments.reduce(
+  const totalPayments = countedPayments.reduce(
     (total, payment) => total + payment.amount,
     0,
+  );
+
+  const ignoredPayments = normalizedPayments.filter(
+    (payment) =>
+      !countedPayments.some(
+        (countedPayment) =>
+          countedPayment.paidAt === payment.paidAt &&
+          countedPayment.amount === payment.amount &&
+          countedPayment.note === payment.note,
+      ),
   );
 
   const outstandingBalance = Math.max(totalRentCharges - totalPayments, 0);
@@ -302,6 +328,7 @@ function calculateExistingTenantArrears(params: {
     calculatedOutstandingBalance: outstandingBalance,
     calculatedMonthsOwed,
     normalizedPayments,
+    countedPayments,
     metadata: {
       move_in_date: params.moveInDate,
       arrears_start_date: params.arrearsStartDate,
@@ -311,12 +338,14 @@ function calculateExistingTenantArrears(params: {
       rent_charges: rentCharges,
       total_rent_charges: totalRentCharges,
       payment_history: normalizedPayments,
+      counted_payment_history: countedPayments,
+      ignored_payment_history: ignoredPayments,
       total_payments: totalPayments,
       calculated_current_due_date: calculatedCurrentDueDate,
       calculated_months_owed: calculatedMonthsOwed,
       calculated_outstanding_balance: outstandingBalance,
       calculation_rule:
-        "Initial move-in cycle is assumed fully paid. Charges before landlord arrears start date are treated as fully paid.",
+        "Initial move-in cycle is assumed fully paid. Charges before landlord arrears start date are treated as fully paid. Only payments dated on or after the arrears start date reduce the selected arrears period.",
       calculated_at: new Date().toISOString(),
     },
   };
@@ -718,6 +747,7 @@ export async function updateExistingTenantClaimArrearsForCurrentLandlord(
       tenant_full_name: claim.tenant_full_name,
       arrears_start_date: input.arrearsStartDate,
       payment_history_count: calculation.normalizedPayments.length,
+      counted_payment_history_count: calculation.countedPayments.length,
       total_payments: calculation.metadata.total_payments,
       total_rent_charges: calculation.metadata.total_rent_charges,
       calculated_current_due_date: calculation.calculatedCurrentDueDate,

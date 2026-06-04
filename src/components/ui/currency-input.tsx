@@ -1,12 +1,13 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { cn } from "@/lib/cn";
 
 type CurrencyInputProps = {
   label: string;
   name: string;
   defaultValue?: number | string | null;
+  value?: number | string | null;
   resetKey?: number;
   helperText?: string;
   error?: string;
@@ -14,9 +15,10 @@ type CurrencyInputProps = {
   disabled?: boolean;
   placeholder?: string;
   id?: string;
+  onValueChange?: (value: string) => void;
 };
 
-function normaliseInitialValue(value: CurrencyInputProps["defaultValue"]) {
+function normaliseCurrencyValue(value: number | string | null | undefined) {
   if (value === null || value === undefined) {
     return "";
   }
@@ -69,27 +71,50 @@ function CurrencyInputField({
   label,
   name,
   defaultValue,
+  value,
   helperText,
   error,
   required = false,
   disabled = false,
   placeholder = "0.00",
   id,
+  onValueChange,
 }: Omit<CurrencyInputProps, "resetKey">) {
   const generatedId = useId();
   const inputId = id ?? generatedId;
   const helperId = `${inputId}-helper`;
   const errorId = `${inputId}-error`;
-  const [rawValue, setRawValue] = useState(() =>
-    normaliseInitialValue(defaultValue),
+  const isControlled = value !== undefined;
+
+  const initialUncontrolledValue = useMemo(
+    () => normaliseCurrencyValue(defaultValue),
+    [defaultValue],
+  );
+
+  const [uncontrolledRawValue, setUncontrolledRawValue] = useState(
+    initialUncontrolledValue,
   );
   const [isFocused, setIsFocused] = useState(false);
+
+  const rawValue = isControlled
+    ? normaliseCurrencyValue(value)
+    : uncontrolledRawValue;
 
   const displayValue = isFocused
     ? rawValue
     : rawValue
       ? formatCurrencyForDisplay(rawValue)
       : "";
+
+  function handleValueChange(nextValue: string) {
+    const sanitisedValue = sanitiseCurrencyValue(nextValue);
+
+    if (!isControlled) {
+      setUncontrolledRawValue(sanitisedValue);
+    }
+
+    onValueChange?.(sanitisedValue);
+  }
 
   return (
     <div className="space-y-2">
@@ -121,7 +146,7 @@ function CurrencyInputField({
             setIsFocused(true);
           }}
           onChange={(event) => {
-            setRawValue(sanitiseCurrencyValue(event.target.value));
+            handleValueChange(event.target.value);
           }}
           onBlur={() => {
             setIsFocused(false);
@@ -150,9 +175,6 @@ function CurrencyInputField({
   );
 }
 
-export function CurrencyInput({
-  resetKey = 0,
-  ...props
-}: CurrencyInputProps) {
+export function CurrencyInput({ resetKey = 0, ...props }: CurrencyInputProps) {
   return <CurrencyInputField key={resetKey} {...props} />;
 }

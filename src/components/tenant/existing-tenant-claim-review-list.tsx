@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import {
   AlertTriangle,
@@ -38,9 +38,19 @@ type ExistingTenantClaimReviewListProps = {
 
 type PaymentHistoryDraft = {
   id: string;
-  amount: number | null;
+  amount: string;
   paidAt: string;
   note: string;
+};
+
+type LiveArrearsPreview = {
+  arrearsStartDate: string;
+  currentDueDate: string;
+  paymentsCounted: number;
+  totalPaymentsCounted: number;
+  totalRentDue: number;
+  outstandingBalance: number;
+  monthsOwed: number;
 };
 
 const statusCopy: Record<
@@ -82,6 +92,9 @@ const idTypeLabels: Record<ExistingTenantClaimIdType, string> = {
   drivers_license: "Driver's License",
   voters_card: "Voter's Card",
 };
+
+const inputClassName =
+  "flex h-14 w-full rounded-button border border-border-soft bg-white px-4 text-base font-medium text-text-strong outline-none transition placeholder:text-text-muted/70 focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:bg-surface disabled:text-text-muted";
 
 function formatDate(value: string | null) {
   if (!value) {
@@ -158,9 +171,20 @@ function calculateCurrentDueDateFromMoveIn(
   return toDateOnly(currentDueDate);
 }
 
+function getDefaultArrearsStartDate(claim: ExistingTenantClaimDetailRow) {
+  return (
+    claim.landlord_arrears_start_date ??
+    claim.bopa_calculated_current_due_date ??
+    calculateCurrentDueDateFromMoveIn(
+      claim.tenant_move_in_date,
+      claim.tenant_payment_frequency,
+    )
+  );
+}
+
 function createPaymentRow(
   payment?: {
-    amount: number;
+    amount: number | string;
     paidAt: string;
     note?: string;
   },
@@ -168,9 +192,85 @@ function createPaymentRow(
 ): PaymentHistoryDraft {
   return {
     id: `${payment?.paidAt ?? "payment"}-${index}-${crypto.randomUUID()}`,
-    amount: payment?.amount ?? null,
+    amount:
+      payment?.amount === null || payment?.amount === undefined
+        ? ""
+        : String(payment.amount),
     paidAt: payment?.paidAt ?? "",
     note: payment?.note ?? "",
+  };
+}
+
+function calculateLiveArrearsPreview(params: {
+  moveInDate: string | null;
+  arrearsStartDate: string;
+  rentAmount: number;
+  paymentFrequency: ExistingTenantClaimPaymentFrequency;
+  paymentRows: PaymentHistoryDraft[];
+}): LiveArrearsPreview {
+  if (
+    !params.moveInDate ||
+    !params.arrearsStartDate ||
+    params.rentAmount <= 0
+  ) {
+    return {
+      arrearsStartDate: params.arrearsStartDate,
+      currentDueDate: params.arrearsStartDate,
+      paymentsCounted: 0,
+      totalPaymentsCounted: 0,
+      totalRentDue: 0,
+      outstandingBalance: 0,
+      monthsOwed: 0,
+    };
+  }
+
+  const today = new Date();
+  const frequencyMonths = getFrequencyMonths(params.paymentFrequency);
+  const arrearsStartDate = parseDateOnly(params.arrearsStartDate);
+  let dueDate = addMonths(parseDateOnly(params.moveInDate), frequencyMonths);
+  let totalRentDue = 0;
+  let currentDueDate = params.arrearsStartDate;
+
+  while (dueDate.getTime() <= today.getTime()) {
+    if (dueDate.getTime() >= arrearsStartDate.getTime()) {
+      totalRentDue += params.rentAmount;
+    }
+
+    currentDueDate = toDateOnly(dueDate);
+    dueDate = addMonths(dueDate, frequencyMonths);
+  }
+
+  const countedPayments = params.paymentRows
+    .map((payment) => ({
+      amount: Number(payment.amount || 0),
+      paidAt: payment.paidAt,
+    }))
+    .filter(
+      (payment) =>
+        payment.amount > 0 &&
+        payment.paidAt.length > 0 &&
+        parseDateOnly(payment.paidAt).getTime() >= arrearsStartDate.getTime(),
+    );
+
+  const totalPaymentsCounted = countedPayments.reduce(
+    (total, payment) => total + payment.amount,
+    0,
+  );
+
+  const outstandingBalance = Math.max(totalRentDue - totalPaymentsCounted, 0);
+  const monthsOwed =
+    outstandingBalance <= 0
+      ? 0
+      : Math.ceil((outstandingBalance / params.rentAmount) * frequencyMonths);
+
+  return {
+    arrearsStartDate: params.arrearsStartDate,
+    currentDueDate,
+    paymentsCounted: countedPayments.length,
+    totalPaymentsCounted,
+    totalRentDue,
+    outstandingBalance,
+    monthsOwed,
   };
 }
 
@@ -204,24 +304,6 @@ function getBopaDueDate(claim: ExistingTenantClaimDetailRow) {
   return (
     claim.landlord_confirmed_current_due_date ??
     claim.bopa_calculated_current_due_date
-  );
-}
-
-function getDefaultArrearsStartDate(claim: ExistingTenantClaimDetailRow) {
-  return (
-    claim.landlord_arrears_start_date ??
-    claim.bopa_calculated_current_due_date ??
-    calculateCurrentDueDateFromMoveIn(
-      claim.tenant_move_in_date,
-      claim.tenant_payment_frequency,
-    )
-  );
-}
-
-function getPaymentHistoryTotal(claim: ExistingTenantClaimDetailRow) {
-  return claim.landlord_payment_history.reduce(
-    (total, payment) => total + Number(payment.amount),
-    0,
   );
 }
 
@@ -301,6 +383,23 @@ function PaymentHistoryRows({
     });
   }
 
+  function updateRow(
+    rowId: string,
+    field: keyof Omit<PaymentHistoryDraft, "id">,
+    value: string,
+  ) {
+    setRows((currentRows) =>
+      currentRows.map((row) =>
+        row.id === rowId
+          ? {
+              ...row,
+              [field]: value,
+            }
+          : row,
+      ),
+    );
+  }
+
   return (
     <div className="space-y-3">
       {rows.map((row, index) => (
@@ -328,27 +427,45 @@ function PaymentHistoryRows({
             <CurrencyInput
               label="Amount paid"
               name="paymentAmount"
-              defaultValue={row.amount}
+              value={row.amount}
+              onValueChange={(value) => updateRow(row.id, "amount", value)}
               required
               disabled={disabled}
             />
 
-            <Input
-              label="Payment date"
-              name="paymentDate"
-              type="date"
-              defaultValue={row.paidAt}
-              required
-              disabled={disabled}
-            />
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-text-strong">
+                Payment date <span className="text-danger">*</span>
+              </label>
+              <input
+                name="paymentDate"
+                type="date"
+                value={row.paidAt}
+                required
+                disabled={disabled}
+                onChange={(event) =>
+                  updateRow(row.id, "paidAt", event.target.value)
+                }
+                className={inputClassName}
+              />
+            </div>
 
-            <Input
-              label="Note/reference"
-              name="paymentNote"
-              placeholder="Optional"
-              defaultValue={row.note}
-              disabled={disabled}
-            />
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-text-strong">
+                Note/reference
+              </label>
+              <input
+                name="paymentNote"
+                type="text"
+                value={row.note}
+                placeholder="Optional"
+                disabled={disabled}
+                onChange={(event) =>
+                  updateRow(row.id, "note", event.target.value)
+                }
+                className={inputClassName}
+              />
+            </div>
           </div>
         </div>
       ))}
@@ -362,9 +479,51 @@ function PaymentHistoryRows({
       >
         <span className="inline-flex items-center justify-center gap-2">
           <Plus aria-hidden="true" size={18} strokeWidth={2.6} />
-          Add Another Payment
+          Add Payment
         </span>
       </Button>
+    </div>
+  );
+}
+
+function ArrearsPreviewCards({ preview }: { preview: LiveArrearsPreview }) {
+  return (
+    <div className="grid gap-3 md:grid-cols-4">
+      <div className="rounded-button bg-background p-4">
+        <p className="text-xs font-black uppercase tracking-wide text-text-muted">
+          Rent Due
+        </p>
+        <p className="mt-2 font-extrabold text-text-strong">
+          {formatNaira(preview.totalRentDue)}
+        </p>
+      </div>
+
+      <div className="rounded-button bg-background p-4">
+        <p className="text-xs font-black uppercase tracking-wide text-text-muted">
+          Payments
+        </p>
+        <p className="mt-2 font-extrabold text-text-strong">
+          {formatNaira(preview.totalPaymentsCounted)}
+        </p>
+      </div>
+
+      <div className="rounded-button bg-background p-4">
+        <p className="text-xs font-black uppercase tracking-wide text-text-muted">
+          Months Owed
+        </p>
+        <p className="mt-2 font-extrabold text-text-strong">
+          {preview.monthsOwed}
+        </p>
+      </div>
+
+      <div className="rounded-button bg-warning-soft p-4">
+        <p className="text-xs font-black uppercase tracking-wide text-warning">
+          Outstanding
+        </p>
+        <p className="mt-2 font-black text-warning">
+          {formatNaira(preview.outstandingBalance)}
+        </p>
+      </div>
     </div>
   );
 }
@@ -377,6 +536,10 @@ function ArrearsEstimateForm({
   const [state, formAction, isPending] = useActionState(
     updateExistingTenantClaimArrearsAction,
     initialExistingTenantClaimActionState,
+  );
+
+  const [arrearsStartDate, setArrearsStartDate] = useState(() =>
+    getDefaultArrearsStartDate(claim),
   );
 
   const [paymentRows, setPaymentRows] = useState<PaymentHistoryDraft[]>(() => {
@@ -402,41 +565,61 @@ function ArrearsEstimateForm({
     return [createPaymentRow()];
   });
 
-  const canCalculate =
+  const canSave =
     claim.status === "submitted" &&
     claim.tenant_move_in_date !== null &&
     claim.tenant_claimed_rent_amount !== null;
 
-  const defaultArrearsStartDate = getDefaultArrearsStartDate(claim);
+  const preview = useMemo(
+    () =>
+      calculateLiveArrearsPreview({
+        moveInDate: claim.tenant_move_in_date,
+        arrearsStartDate,
+        rentAmount: Number(claim.tenant_claimed_rent_amount ?? 0),
+        paymentFrequency: claim.tenant_payment_frequency,
+        paymentRows,
+      }),
+    [
+      arrearsStartDate,
+      claim.tenant_claimed_rent_amount,
+      claim.tenant_move_in_date,
+      claim.tenant_payment_frequency,
+      paymentRows,
+    ],
+  );
 
   return (
     <form action={formAction} className="space-y-4">
       <ActionResultToast
         ok={state.ok}
         message={state.message}
-        successTitle="Arrears updated"
-        errorTitle="Could not update arrears"
+        successTitle="Arrears saved"
+        errorTitle="Could not save arrears"
       />
 
       <input type="hidden" name="claimId" value={claim.id} />
 
       <div className="rounded-card border border-primary/15 bg-primary-soft/30 p-4">
-        <Input
-          label="Start arrears calculation from"
-          name="arrearsStartDate"
-          type="date"
-          defaultValue={defaultArrearsStartDate}
-          helperText="BOPA assumes the initial move-in rent package and all earlier cycles were fully paid. Move this date backward only if the tenant owed from an earlier cycle."
-          error={state.fieldErrors?.arrearsStartDate?.[0]}
-          required
-          disabled={!canCalculate || isPending}
-        />
+        <div className="space-y-2">
+          <label className="block text-sm font-semibold text-text-strong">
+            Start from <span className="text-danger">*</span>
+          </label>
+          <input
+            name="arrearsStartDate"
+            type="date"
+            value={arrearsStartDate}
+            required
+            disabled={!canSave || isPending}
+            onChange={(event) => setArrearsStartDate(event.target.value)}
+            className={inputClassName}
+          />
+        </div>
       </div>
 
       <PaymentHistoryRows
         rows={paymentRows}
         setRows={setPaymentRows}
-        disabled={!canCalculate || isPending}
+        disabled={!canSave || isPending}
       />
 
       {state.fieldErrors?.paymentHistory?.[0] ? (
@@ -445,79 +628,24 @@ function ArrearsEstimateForm({
         </p>
       ) : null}
 
+      {state.fieldErrors?.arrearsStartDate?.[0] ? (
+        <p className="text-sm font-semibold text-danger">
+          {state.fieldErrors.arrearsStartDate[0]}
+        </p>
+      ) : null}
+
+      <ArrearsPreviewCards preview={preview} />
+
       <Button
         type="submit"
         variant="secondary"
         isLoading={isPending}
-        disabled={!canCalculate}
+        disabled={!canSave}
         fullWidth
       >
-        Calculate Arrears from Start Cycle
+        Save Arrears Record
       </Button>
     </form>
-  );
-}
-
-function ArrearsSummary({ claim }: { claim: ExistingTenantClaimDetailRow }) {
-  if (
-    claim.bopa_calculated_current_due_date === null &&
-    claim.bopa_calculated_outstanding_balance === null
-  ) {
-    return (
-      <div className="rounded-button bg-background p-4 text-sm leading-6 text-text-muted">
-        Choose the arrears start date and add payment history to estimate what
-        the tenant may be owing.
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid gap-3 md:grid-cols-5">
-      <div className="rounded-button bg-background p-4">
-        <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-          Arrears Start
-        </p>
-        <p className="mt-2 font-extrabold text-text-strong">
-          {formatDate(claim.landlord_arrears_start_date)}
-        </p>
-      </div>
-
-      <div className="rounded-button bg-background p-4">
-        <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-          BOPA Due Date
-        </p>
-        <p className="mt-2 font-extrabold text-text-strong">
-          {formatDate(claim.bopa_calculated_current_due_date)}
-        </p>
-      </div>
-
-      <div className="rounded-button bg-background p-4">
-        <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-          Payments Recorded
-        </p>
-        <p className="mt-2 font-extrabold text-text-strong">
-          {formatNaira(getPaymentHistoryTotal(claim))}
-        </p>
-      </div>
-
-      <div className="rounded-button bg-background p-4">
-        <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-          Months Owed
-        </p>
-        <p className="mt-2 font-extrabold text-text-strong">
-          {claim.bopa_calculated_months_owed}
-        </p>
-      </div>
-
-      <div className="rounded-button bg-warning-soft p-4">
-        <p className="text-xs font-black uppercase tracking-wide text-warning">
-          Estimated Balance
-        </p>
-        <p className="mt-2 font-black text-warning">
-          {formatNaira(Number(claim.bopa_calculated_outstanding_balance ?? 0))}
-        </p>
-      </div>
-    </div>
   );
 }
 
@@ -586,7 +714,7 @@ function ApproveExistingTenantClaimForm({
           label="Opening balance owed"
           name="openingBalance"
           defaultValue={openingBalance}
-          helperText="BOPA prefills this from the selected arrears start cycle. Set to 0 only if the tenant is not owing."
+          helperText="This comes from the saved arrears record. Set to 0 only if the tenant is not owing."
           error={state.fieldErrors?.openingBalance?.[0]}
           required
         />
@@ -607,7 +735,7 @@ function ApproveExistingTenantClaimForm({
           name="confirmedCurrentDueDate"
           type="date"
           defaultValue={confirmedCurrentDueDate}
-          helperText="BOPA calculates this from the move-in date and rent cycle. Override only if the landlord’s records differ."
+          helperText="Override only if the landlord’s records differ."
           error={state.fieldErrors?.confirmedCurrentDueDate?.[0]}
           required
         />
@@ -645,9 +773,9 @@ function DesktopClaimsTable({
           <tr>
             <th className="px-4 py-3">Tenant</th>
             <th className="px-4 py-3">Property / Unit</th>
-            <th className="px-4 py-3">Claimed Rent</th>
+            <th className="px-4 py-3">Rent</th>
             <th className="px-4 py-3">Move-in</th>
-            <th className="px-4 py-3">BOPA Due Date</th>
+            <th className="px-4 py-3">Due Date</th>
             <th className="px-4 py-3">Status</th>
           </tr>
         </thead>
@@ -753,7 +881,7 @@ function MobileClaimsList({
             </div>
 
             <div className="flex justify-between gap-3">
-              <span className="font-bold text-text-muted">BOPA due date</span>
+              <span className="font-bold text-text-muted">Due date</span>
               <span className="text-right font-bold text-text-strong">
                 {formatDate(getBopaDueDate(claim))}
               </span>
@@ -847,9 +975,7 @@ function ClaimReviewCard({ claim }: { claim: ExistingTenantClaimDetailRow }) {
               className="text-primary"
             />
             <div>
-              <p className="font-bold text-text-muted">
-                BOPA calculated due date
-              </p>
+              <p className="font-bold text-text-muted">Due date</p>
               <p className="font-extrabold text-text-strong">
                 {formatDate(getBopaDueDate(claim))}
               </p>
@@ -861,17 +987,14 @@ function ClaimReviewCard({ claim }: { claim: ExistingTenantClaimDetailRow }) {
       {claim.status === "submitted" ? (
         <div className="mt-5 space-y-4 rounded-card border border-border-soft bg-white p-4">
           <div>
-            <h3 className="text-base font-black text-text-strong">
-              Payment history & arrears estimate
-            </h3>
+            <h3 className="text-base font-black text-text-strong">Arrears</h3>
             <p className="mt-1 text-sm leading-6 text-text-muted">
-              Choose where arrears should start. BOPA assumes the move-in rent
-              package and all cycles before that start date were fully paid.
+              Enter the rent cycle to start from and record payments received.
+              The outstanding balance updates automatically.
             </p>
           </div>
 
           <ArrearsEstimateForm claim={claim} />
-          <ArrearsSummary claim={claim} />
         </div>
       ) : null}
 
@@ -890,9 +1013,8 @@ function ClaimReviewCard({ claim }: { claim: ExistingTenantClaimDetailRow }) {
                 Final approval
               </h3>
               <p className="mt-1 text-sm leading-6 text-text-muted">
-                Confirm the official rent amount, move-in date, BOPA-calculated
-                current due date, and opening balance before creating the live
-                tenancy.
+                Confirm the rent, move-in date, current due date, and opening
+                balance before creating the live tenancy.
               </p>
             </div>
           </div>
@@ -946,9 +1068,7 @@ export function ExistingTenantClaimReviewList({
               Needs Review
             </p>
             <p className="mt-1 text-sm leading-6 text-text-muted">
-              These tenants have submitted rent and move-in details. Select the
-              arrears start date, enter payment history, calculate arrears,
-              confirm the final values, then approve to create a live tenancy.
+              Review submitted details, save arrears, then approve the tenancy.
             </p>
           </div>
 
