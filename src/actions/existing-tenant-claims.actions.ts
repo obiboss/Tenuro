@@ -123,6 +123,7 @@ export async function updateExistingTenantClaimArrearsAction(
   try {
     const parsed = updateExistingTenantClaimArrearsSchema.parse({
       claimId: formData.get("claimId"),
+      arrearsStartDate: formData.get("arrearsStartDate"),
       paymentHistory: parsePaymentHistory(formData),
     });
 
@@ -132,7 +133,7 @@ export async function updateExistingTenantClaimArrearsAction(
 
     return {
       ok: true,
-      message: "Arrears estimate updated from payment history.",
+      message: "Arrears estimate updated from selected start cycle.",
     };
   } catch (error) {
     const result = errorResult(error);

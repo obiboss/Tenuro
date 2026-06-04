@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import {
   AlertTriangle,
   BriefcaseBusiness,
@@ -26,6 +27,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type {
   ExistingTenantClaimDetailRow,
   ExistingTenantClaimIdType,
+  ExistingTenantClaimPaymentFrequency,
   ExistingTenantClaimStatus,
 } from "@/server/repositories/existing-tenant-claims.repository";
 import { formatNaira } from "@/server/utils/money";
@@ -104,6 +106,58 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
+function parseDateOnly(value: string) {
+  return new Date(`${value}T00:00:00`);
+}
+
+function toDateOnly(value: Date) {
+  return value.toISOString().slice(0, 10);
+}
+
+function addMonths(value: Date, months: number) {
+  const nextDate = new Date(value);
+  nextDate.setMonth(nextDate.getMonth() + months);
+
+  return nextDate;
+}
+
+function getFrequencyMonths(frequency: ExistingTenantClaimPaymentFrequency) {
+  if (frequency === "monthly") {
+    return 1;
+  }
+
+  if (frequency === "quarterly") {
+    return 3;
+  }
+
+  if (frequency === "biannual") {
+    return 6;
+  }
+
+  return 12;
+}
+
+function calculateCurrentDueDateFromMoveIn(
+  moveInDate: string | null,
+  paymentFrequency: ExistingTenantClaimPaymentFrequency,
+) {
+  if (!moveInDate) {
+    return "";
+  }
+
+  const frequencyMonths = getFrequencyMonths(paymentFrequency);
+  const today = new Date();
+  let currentDueDate = addMonths(parseDateOnly(moveInDate), frequencyMonths);
+  let nextDueDate = addMonths(currentDueDate, frequencyMonths);
+
+  while (nextDueDate.getTime() <= today.getTime()) {
+    currentDueDate = nextDueDate;
+    nextDueDate = addMonths(currentDueDate, frequencyMonths);
+  }
+
+  return toDateOnly(currentDueDate);
+}
+
 function createPaymentRow(
   payment?: {
     amount: number;
@@ -150,6 +204,17 @@ function getBopaDueDate(claim: ExistingTenantClaimDetailRow) {
   return (
     claim.landlord_confirmed_current_due_date ??
     claim.bopa_calculated_current_due_date
+  );
+}
+
+function getDefaultArrearsStartDate(claim: ExistingTenantClaimDetailRow) {
+  return (
+    claim.landlord_arrears_start_date ??
+    claim.bopa_calculated_current_due_date ??
+    calculateCurrentDueDateFromMoveIn(
+      claim.tenant_move_in_date,
+      claim.tenant_payment_frequency,
+    )
   );
 }
 
@@ -219,7 +284,7 @@ function PaymentHistoryRows({
   disabled,
 }: {
   rows: PaymentHistoryDraft[];
-  setRows: React.Dispatch<React.SetStateAction<PaymentHistoryDraft[]>>;
+  setRows: Dispatch<SetStateAction<PaymentHistoryDraft[]>>;
   disabled: boolean;
 }) {
   function addRow() {
@@ -234,32 +299,6 @@ function PaymentHistoryRows({
 
       return currentRows.filter((row) => row.id !== rowId);
     });
-  }
-
-  function updateRow(
-    rowId: string,
-    key: keyof Omit<PaymentHistoryDraft, "id">,
-    value: string,
-  ) {
-    setRows((currentRows) =>
-      currentRows.map((row) => {
-        if (row.id !== rowId) {
-          return row;
-        }
-
-        if (key === "amount") {
-          return {
-            ...row,
-            amount: value.trim() ? Number(value) : null,
-          };
-        }
-
-        return {
-          ...row,
-          [key]: value,
-        };
-      }),
-    );
   }
 
   return (
@@ -311,26 +350,6 @@ function PaymentHistoryRows({
               disabled={disabled}
             />
           </div>
-
-          <input
-            type="hidden"
-            value={row.amount ?? ""}
-            onChange={(event) =>
-              updateRow(row.id, "amount", event.target.value)
-            }
-          />
-          <input
-            type="hidden"
-            value={row.paidAt}
-            onChange={(event) =>
-              updateRow(row.id, "paidAt", event.target.value)
-            }
-          />
-          <input
-            type="hidden"
-            value={row.note}
-            onChange={(event) => updateRow(row.id, "note", event.target.value)}
-          />
         </div>
       ))}
 
@@ -388,6 +407,8 @@ function ArrearsEstimateForm({
     claim.tenant_move_in_date !== null &&
     claim.tenant_claimed_rent_amount !== null;
 
+  const defaultArrearsStartDate = getDefaultArrearsStartDate(claim);
+
   return (
     <form action={formAction} className="space-y-4">
       <ActionResultToast
@@ -398,6 +419,19 @@ function ArrearsEstimateForm({
       />
 
       <input type="hidden" name="claimId" value={claim.id} />
+
+      <div className="rounded-card border border-primary/15 bg-primary-soft/30 p-4">
+        <Input
+          label="Start arrears calculation from"
+          name="arrearsStartDate"
+          type="date"
+          defaultValue={defaultArrearsStartDate}
+          helperText="BOPA assumes the initial move-in rent package and all earlier cycles were fully paid. Move this date backward only if the tenant owed from an earlier cycle."
+          error={state.fieldErrors?.arrearsStartDate?.[0]}
+          required
+          disabled={!canCalculate || isPending}
+        />
+      </div>
 
       <PaymentHistoryRows
         rows={paymentRows}
@@ -418,7 +452,7 @@ function ArrearsEstimateForm({
         disabled={!canCalculate}
         fullWidth
       >
-        Calculate Arrears from Payment History
+        Calculate Arrears from Start Cycle
       </Button>
     </form>
   );
@@ -431,16 +465,26 @@ function ArrearsSummary({ claim }: { claim: ExistingTenantClaimDetailRow }) {
   ) {
     return (
       <div className="rounded-button bg-background p-4 text-sm leading-6 text-text-muted">
-        Add the payment history to estimate what the tenant may be owing.
+        Choose the arrears start date and add payment history to estimate what
+        the tenant may be owing.
       </div>
     );
   }
 
   return (
-    <div className="grid gap-3 md:grid-cols-4">
+    <div className="grid gap-3 md:grid-cols-5">
       <div className="rounded-button bg-background p-4">
         <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-          BOPA Calculated Due Date
+          Arrears Start
+        </p>
+        <p className="mt-2 font-extrabold text-text-strong">
+          {formatDate(claim.landlord_arrears_start_date)}
+        </p>
+      </div>
+
+      <div className="rounded-button bg-background p-4">
+        <p className="text-xs font-black uppercase tracking-wide text-text-muted">
+          BOPA Due Date
         </p>
         <p className="mt-2 font-extrabold text-text-strong">
           {formatDate(claim.bopa_calculated_current_due_date)}
@@ -542,7 +586,7 @@ function ApproveExistingTenantClaimForm({
           label="Opening balance owed"
           name="openingBalance"
           defaultValue={openingBalance}
-          helperText="BOPA prefills this from the payment-history arrears estimate. Set to 0 only if the tenant is not owing."
+          helperText="BOPA prefills this from the selected arrears start cycle. Set to 0 only if the tenant is not owing."
           error={state.fieldErrors?.openingBalance?.[0]}
           required
         />
@@ -821,9 +865,8 @@ function ClaimReviewCard({ claim }: { claim: ExistingTenantClaimDetailRow }) {
               Payment history & arrears estimate
             </h3>
             <p className="mt-1 text-sm leading-6 text-text-muted">
-              Add all known payments for this tenancy. BOPA calculates rent
-              charges due from the move-in date and subtracts the recorded
-              payments.
+              Choose where arrears should start. BOPA assumes the move-in rent
+              package and all cycles before that start date were fully paid.
             </p>
           </div>
 
@@ -903,9 +946,9 @@ export function ExistingTenantClaimReviewList({
               Needs Review
             </p>
             <p className="mt-1 text-sm leading-6 text-text-muted">
-              These tenants have submitted rent and move-in details. Enter
-              payment history, calculate arrears, confirm the final values, then
-              approve to create a live tenancy.
+              These tenants have submitted rent and move-in details. Select the
+              arrears start date, enter payment history, calculate arrears,
+              confirm the final values, then approve to create a live tenancy.
             </p>
           </div>
 

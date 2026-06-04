@@ -49,6 +49,7 @@ export const submitExistingTenantClaimSchema = z.object({
 
 export const updateExistingTenantClaimArrearsSchema = z.object({
   claimId: uuidSchema,
+  arrearsStartDate: dateStringSchema,
   paymentHistory: z
     .array(existingTenantPaymentHistoryItemSchema)
     .min(1, "Enter at least one payment record.")

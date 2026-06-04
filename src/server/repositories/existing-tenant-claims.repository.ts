@@ -56,6 +56,7 @@ export type ExistingTenantClaimRow = {
   landlord_last_payment_amount: number | null;
   landlord_last_payment_date: string | null;
   landlord_payment_history: ExistingTenantPaymentHistoryItem[];
+  landlord_arrears_start_date: string | null;
 
   bopa_calculated_current_due_date: string | null;
   bopa_calculated_outstanding_balance: number | null;
@@ -124,6 +125,7 @@ const EXISTING_TENANT_CLAIM_SELECT = `
   landlord_last_payment_amount,
   landlord_last_payment_date,
   landlord_payment_history,
+  landlord_arrears_start_date,
   bopa_calculated_current_due_date,
   bopa_calculated_outstanding_balance,
   bopa_calculated_months_owed,
@@ -306,6 +308,7 @@ export async function updateExistingTenantClaimArrears(
   params: {
     claimId: string;
     landlordId: string;
+    arrearsStartDate: string;
     paymentHistory: ExistingTenantPaymentHistoryItem[];
     calculatedCurrentDueDate: string;
     calculatedOutstandingBalance: number;
@@ -326,6 +329,7 @@ export async function updateExistingTenantClaimArrears(
       landlord_last_payment_amount: latestPayment?.amount ?? null,
       landlord_last_payment_date: latestPayment?.paidAt ?? null,
       landlord_payment_history: params.paymentHistory,
+      landlord_arrears_start_date: params.arrearsStartDate,
       bopa_calculated_current_due_date: params.calculatedCurrentDueDate,
       bopa_calculated_outstanding_balance: params.calculatedOutstandingBalance,
       bopa_calculated_months_owed: params.calculatedMonthsOwed,

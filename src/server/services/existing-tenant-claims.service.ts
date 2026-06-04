@@ -191,29 +191,54 @@ function normalizePaymentHistory(
 
 function buildRentChargeSchedule(params: {
   moveInDate: string;
+  arrearsStartDate: string;
   rentAmount: number;
   paymentFrequency: ExistingTenantClaimPaymentFrequency;
   today: Date;
 }) {
   const frequencyMonths = getFrequencyMonths(params.paymentFrequency);
+  const arrearsStartDate = parseDateOnly(params.arrearsStartDate);
   const schedule: RentChargeScheduleItem[] = [];
-  let dueDate = parseDateOnly(params.moveInDate);
+
+  let dueDate = addMonths(parseDateOnly(params.moveInDate), frequencyMonths);
 
   while (dueDate.getTime() <= params.today.getTime()) {
     const periodStart = new Date(dueDate);
     const periodEnd = addMonths(periodStart, frequencyMonths);
 
-    schedule.push({
-      dueDate: toDateOnly(dueDate),
-      amount: params.rentAmount,
-      periodStart: toDateOnly(periodStart),
-      periodEnd: toDateOnly(periodEnd),
-    });
+    if (dueDate.getTime() >= arrearsStartDate.getTime()) {
+      schedule.push({
+        dueDate: toDateOnly(dueDate),
+        amount: params.rentAmount,
+        periodStart: toDateOnly(periodStart),
+        periodEnd: toDateOnly(periodEnd),
+      });
+    }
 
     dueDate = periodEnd;
   }
 
   return schedule;
+}
+
+function calculateCurrentDueDate(params: {
+  moveInDate: string;
+  paymentFrequency: ExistingTenantClaimPaymentFrequency;
+  today: Date;
+}) {
+  const frequencyMonths = getFrequencyMonths(params.paymentFrequency);
+  let currentDueDate = addMonths(
+    parseDateOnly(params.moveInDate),
+    frequencyMonths,
+  );
+  let nextDueDate = addMonths(currentDueDate, frequencyMonths);
+
+  while (nextDueDate.getTime() <= params.today.getTime()) {
+    currentDueDate = nextDueDate;
+    nextDueDate = addMonths(currentDueDate, frequencyMonths);
+  }
+
+  return toDateOnly(currentDueDate);
 }
 
 function calculatePaymentCoveredMonths(params: {
@@ -233,6 +258,7 @@ function calculatePaymentCoveredMonths(params: {
 
 function calculateExistingTenantArrears(params: {
   moveInDate: string;
+  arrearsStartDate: string;
   rentAmount: number;
   paymentFrequency: ExistingTenantClaimPaymentFrequency;
   paymentHistory: ExistingTenantPaymentHistoryItem[];
@@ -242,6 +268,7 @@ function calculateExistingTenantArrears(params: {
 
   const rentCharges = buildRentChargeSchedule({
     moveInDate: params.moveInDate,
+    arrearsStartDate: params.arrearsStartDate,
     rentAmount: params.rentAmount,
     paymentFrequency: params.paymentFrequency,
     today,
@@ -258,9 +285,11 @@ function calculateExistingTenantArrears(params: {
   );
 
   const outstandingBalance = Math.max(totalRentCharges - totalPayments, 0);
-
-  const calculatedCurrentDueDate =
-    rentCharges.at(-1)?.dueDate ?? params.moveInDate;
+  const calculatedCurrentDueDate = calculateCurrentDueDate({
+    moveInDate: params.moveInDate,
+    paymentFrequency: params.paymentFrequency,
+    today,
+  });
 
   const calculatedMonthsOwed = calculatePaymentCoveredMonths({
     outstandingBalance,
@@ -275,6 +304,7 @@ function calculateExistingTenantArrears(params: {
     normalizedPayments,
     metadata: {
       move_in_date: params.moveInDate,
+      arrears_start_date: params.arrearsStartDate,
       rent_amount: params.rentAmount,
       payment_frequency: params.paymentFrequency,
       frequency_months: getFrequencyMonths(params.paymentFrequency),
@@ -285,6 +315,8 @@ function calculateExistingTenantArrears(params: {
       calculated_current_due_date: calculatedCurrentDueDate,
       calculated_months_owed: calculatedMonthsOwed,
       calculated_outstanding_balance: outstandingBalance,
+      calculation_rule:
+        "Initial move-in cycle is assumed fully paid. Charges before landlord arrears start date are treated as fully paid.",
       calculated_at: new Date().toISOString(),
     },
   };
@@ -654,6 +686,7 @@ export async function updateExistingTenantClaimArrearsForCurrentLandlord(
 
   const calculation = calculateExistingTenantArrears({
     moveInDate: claim.tenant_move_in_date,
+    arrearsStartDate: input.arrearsStartDate,
     rentAmount: Number(claim.tenant_claimed_rent_amount),
     paymentFrequency: claim.tenant_payment_frequency,
     paymentHistory: input.paymentHistory,
@@ -662,6 +695,7 @@ export async function updateExistingTenantClaimArrearsForCurrentLandlord(
   const updatedClaim = await updateExistingTenantClaimArrears(supabase, {
     claimId: input.claimId,
     landlordId: landlord.id,
+    arrearsStartDate: input.arrearsStartDate,
     paymentHistory: calculation.normalizedPayments,
     calculatedCurrentDueDate: calculation.calculatedCurrentDueDate,
     calculatedOutstandingBalance: calculation.calculatedOutstandingBalance,
@@ -678,10 +712,11 @@ export async function updateExistingTenantClaimArrearsForCurrentLandlord(
     eventType: AUDIT_EVENT_TYPES.tenantUpdated,
     entityId: claim.id,
     description:
-      "Existing tenant arrears estimate was updated from payment history.",
+      "Existing tenant arrears estimate was updated from selected start cycle.",
     metadata: {
       existing_tenant_claim_id: claim.id,
       tenant_full_name: claim.tenant_full_name,
+      arrears_start_date: input.arrearsStartDate,
       payment_history_count: calculation.normalizedPayments.length,
       total_payments: calculation.metadata.total_payments,
       total_rent_charges: calculation.metadata.total_rent_charges,
@@ -780,6 +815,7 @@ export async function approveExistingTenantClaimForCurrentLandlord(
       tenant_id_number: claim.tenant_id_number,
       tenant_claimed_move_in_date: claim.tenant_move_in_date,
       tenant_claimed_rent_amount: claim.tenant_claimed_rent_amount,
+      landlord_arrears_start_date: claim.landlord_arrears_start_date,
       landlord_payment_history: claim.landlord_payment_history,
       landlord_confirmed_move_in_date: input.confirmedMoveInDate,
       landlord_confirmed_current_due_date: input.confirmedCurrentDueDate,
@@ -823,6 +859,7 @@ export async function approveExistingTenantClaimForCurrentLandlord(
       confirmed_move_in_date: input.confirmedMoveInDate,
       confirmed_current_due_date: input.confirmedCurrentDueDate,
       current_period_end: currentPeriodEnd,
+      landlord_arrears_start_date: claim.landlord_arrears_start_date,
       landlord_payment_history: claim.landlord_payment_history,
       bopa_calculated_outstanding_balance:
         claim.bopa_calculated_outstanding_balance,
