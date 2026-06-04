@@ -71,7 +71,7 @@ export function ExistingTenantClaimPublicForm({
     return (
       <TrustNotice
         title="Details submitted"
-        description="Your tenancy details have been sent to the landlord. The landlord will review the rent amount, move-in date, and due date before confirming the final record."
+        description="Your tenancy details have been sent to the landlord. BOPA will calculate the rent cycle from your move-in date, and your landlord will review everything before confirming the final record."
       />
     );
   }
@@ -89,7 +89,7 @@ export function ExistingTenantClaimPublicForm({
 
       <TrustNotice
         title="Confirm your tenancy details"
-        description="Enter your details as accurately as possible. Your landlord will review them before they become official BOPA records."
+        description="Enter your agreed move-in date and rent amount. You do not need to calculate your next due date; BOPA will calculate it for landlord review."
       />
 
       {state.message ? (
@@ -156,28 +156,11 @@ export function ExistingTenantClaimPublicForm({
 
       <div className="grid gap-4 md:grid-cols-2">
         <Input
-          label="Move-in date"
+          label="Agreed move-in date"
           name="moveInDate"
           type="date"
+          helperText="BOPA will use this to calculate the rent cycle."
           error={state.fieldErrors?.moveInDate?.[0]}
-          required
-        />
-
-        <Input
-          label="Next rent due date"
-          name="claimedNextRentDueDate"
-          type="date"
-          error={state.fieldErrors?.claimedNextRentDueDate?.[0]}
-          required
-        />
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <CurrencyInput
-          label="Current rent amount"
-          name="claimedRentAmount"
-          placeholder="0.00"
-          error={state.fieldErrors?.claimedRentAmount?.[0]}
           required
         />
 
@@ -190,6 +173,14 @@ export function ExistingTenantClaimPublicForm({
           required
         />
       </div>
+
+      <CurrencyInput
+        label="Current rent amount"
+        name="claimedRentAmount"
+        placeholder="0.00"
+        error={state.fieldErrors?.claimedRentAmount?.[0]}
+        required
+      />
 
       <Textarea
         label="Additional note"

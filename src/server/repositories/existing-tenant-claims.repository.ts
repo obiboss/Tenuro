@@ -259,7 +259,6 @@ export async function submitExistingTenantClaim(
     idNumber: string;
     moveInDate: string;
     claimedRentAmount: number;
-    claimedNextRentDueDate: string;
     paymentFrequency: ExistingTenantClaimPaymentFrequency;
     tenantNotes: string | null;
   },
@@ -277,7 +276,7 @@ export async function submitExistingTenantClaim(
       tenant_id_number: params.idNumber,
       tenant_move_in_date: params.moveInDate,
       tenant_claimed_rent_amount: params.claimedRentAmount,
-      tenant_claimed_next_rent_due_date: params.claimedNextRentDueDate,
+      tenant_claimed_next_rent_due_date: null,
       tenant_payment_frequency: params.paymentFrequency,
       tenant_notes: params.tenantNotes,
       status: "submitted",

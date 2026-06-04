@@ -33,7 +33,6 @@ export const submitExistingTenantClaimSchema = z.object({
   idNumber: z.string().trim().min(3, "Enter your ID number.").max(120),
   moveInDate: dateStringSchema,
   claimedRentAmount: positiveMoneySchema,
-  claimedNextRentDueDate: dateStringSchema,
   paymentFrequency: z
     .enum(["annual", "monthly", "quarterly", "biannual"], {
       message: "Select your rent payment frequency.",

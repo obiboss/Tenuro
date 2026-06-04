@@ -183,28 +183,39 @@ function calculateExistingTenantArrears(params: {
   }
 
   let dueCursor = new Date(moveInDate);
-  let periodsDueAfterLastPayment = 0;
+  let grossPeriodsDueAfterLastPayment = 0;
 
   while (dueCursor.getTime() <= today.getTime()) {
     if (dueCursor.getTime() > lastPaymentDate.getTime()) {
-      periodsDueAfterLastPayment += 1;
+      grossPeriodsDueAfterLastPayment += 1;
     }
 
     dueCursor = addMonths(dueCursor, frequencyMonths);
   }
 
   const totalExpectedSinceLastPayment =
-    periodsDueAfterLastPayment * params.rentAmount;
+    grossPeriodsDueAfterLastPayment * params.rentAmount;
 
   const outstandingBalance = Math.max(
     totalExpectedSinceLastPayment - params.lastPaymentAmount,
     0,
   );
 
+  const grossMonthsDue = grossPeriodsDueAfterLastPayment * frequencyMonths;
+  const paymentCoverageMonths =
+    params.rentAmount > 0
+      ? (params.lastPaymentAmount / params.rentAmount) * frequencyMonths
+      : 0;
+
+  const calculatedMonthsOwed = Math.max(
+    Math.ceil(grossMonthsDue - paymentCoverageMonths),
+    0,
+  );
+
   return {
     calculatedCurrentDueDate: toDateOnly(currentDueDate),
     calculatedOutstandingBalance: outstandingBalance,
-    calculatedMonthsOwed: periodsDueAfterLastPayment * frequencyMonths,
+    calculatedMonthsOwed,
     metadata: {
       move_in_date: params.moveInDate,
       rent_amount: params.rentAmount,
@@ -212,8 +223,12 @@ function calculateExistingTenantArrears(params: {
       frequency_months: frequencyMonths,
       last_payment_amount: params.lastPaymentAmount,
       last_payment_date: params.lastPaymentDate,
-      periods_due_after_last_payment: periodsDueAfterLastPayment,
+      gross_periods_due_after_last_payment: grossPeriodsDueAfterLastPayment,
+      gross_months_due: grossMonthsDue,
+      payment_coverage_months: paymentCoverageMonths,
+      calculated_months_owed: calculatedMonthsOwed,
       total_expected_since_last_payment: totalExpectedSinceLastPayment,
+      calculated_outstanding_balance: outstandingBalance,
       calculated_at: new Date().toISOString(),
     },
   };
@@ -251,10 +266,10 @@ function buildClaimWhatsappMessage(params: {
     "",
     `Your landlord has invited you to confirm your tenancy details for ${params.unitIdentifier} at ${params.propertyName} on BOPA (Boldverse Property).`,
     "",
-    "Please use this secure link to confirm your rent amount, move-in date, and next rent due date:",
+    "Please use this secure link to confirm your rent amount, move-in date, and identity details:",
     params.claimUrl,
     "",
-    "Your landlord will review and confirm the details before the tenancy record goes live.",
+    "Your landlord will review and confirm the rent cycle before the tenancy record goes live.",
   ].join("\n");
 }
 
@@ -498,7 +513,6 @@ export async function submitExistingTenantClaimByToken(
     idNumber: input.idNumber,
     moveInDate: input.moveInDate,
     claimedRentAmount: input.claimedRentAmount,
-    claimedNextRentDueDate: input.claimedNextRentDueDate,
     paymentFrequency: input.paymentFrequency,
     tenantNotes: input.tenantNotes?.trim() || null,
   });
@@ -520,8 +534,6 @@ export async function submitExistingTenantClaimByToken(
       tenant_occupation: submittedClaim.tenant_occupation,
       tenant_id_type: submittedClaim.tenant_id_type,
       tenant_claimed_rent_amount: submittedClaim.tenant_claimed_rent_amount,
-      tenant_claimed_next_rent_due_date:
-        submittedClaim.tenant_claimed_next_rent_due_date,
       tenant_move_in_date: submittedClaim.tenant_move_in_date,
       payment_frequency: submittedClaim.tenant_payment_frequency,
     },
@@ -712,8 +724,6 @@ export async function approveExistingTenantClaimForCurrentLandlord(
       tenant_id_number: claim.tenant_id_number,
       tenant_claimed_move_in_date: claim.tenant_move_in_date,
       tenant_claimed_rent_amount: claim.tenant_claimed_rent_amount,
-      tenant_claimed_next_rent_due_date:
-        claim.tenant_claimed_next_rent_due_date,
       landlord_confirmed_move_in_date: input.confirmedMoveInDate,
       landlord_confirmed_current_due_date: input.confirmedCurrentDueDate,
       landlord_confirmed_current_period_end: currentPeriodEnd,
