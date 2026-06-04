@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,21 +10,18 @@ import {
   calculateArrearsFromCycles,
   getCycleBalance,
   getCycleStatus,
-  getDefaultArrearsStartDate,
+  normalizeRentCycleAfterEdit,
+  startRecordingCycleArrears,
   type ExistingTenantRentCycle,
   type RentCycleStatus,
 } from "@/lib/existing-tenant-arrears";
-import type {
-  ExistingTenantClaimDetailRow,
-  ExistingTenantClaimPaymentFrequency,
-} from "@/server/repositories/existing-tenant-claims.repository";
+import type { ExistingTenantClaimDetailRow } from "@/server/repositories/existing-tenant-claims.repository";
 import { formatNaira } from "@/server/utils/money";
 
 type ExistingTenantRentHistoryTableProps = {
   claim: ExistingTenantClaimDetailRow;
   cycles: ExistingTenantRentCycle[];
-  arrearsStartDate: string;
-  onArrearsStartDateChange: (value: string) => void;
+  confirmedRentAmount: number;
   onCyclesChange: (cycles: ExistingTenantRentCycle[]) => void;
   disabled?: boolean;
 };
@@ -41,29 +38,11 @@ const statusCopy: Record<
   not_paid: { label: "Not paid", tone: "danger" },
 };
 
-function getYearOptions(moveInDate: string, paymentFrequency: ExistingTenantClaimPaymentFrequency) {
-  const cycles = buildRentCycles({
-    moveInDate,
-    paymentFrequency,
-    defaultRentAmount: 0,
-    arrearsStartDate: moveInDate,
-  });
-
-  const years = new Set<number>();
-
-  for (const cycle of cycles) {
-    years.add(new Date(`${cycle.periodStart}T00:00:00`).getFullYear());
-  }
-
-  return [...years].sort((first, second) => second - first);
-}
-
-function createPaymentRow() {
+function createEmptyPaymentRow() {
   return {
-    amount: "",
+    amount: 0,
     paidAt: "",
     note: "",
-    id: crypto.randomUUID(),
   };
 }
 
@@ -77,77 +56,37 @@ function PaymentRowsEditor({
   onChange: (payments: ExistingTenantRentCycle["payments"]) => void;
 }) {
   const rows =
-    cycle.payments.length > 0
-      ? cycle.payments.map((payment, index) => ({
-          id: `${cycle.id}-payment-${index}`,
-          amount: String(payment.amount ?? ""),
-          paidAt: payment.paidAt,
-          note: payment.note ?? "",
-        }))
-      : [createPaymentRow()];
+    cycle.payments.length > 0 ? cycle.payments : [createEmptyPaymentRow()];
 
-  function updatePayment(
-    rowId: string,
-    field: "amount" | "paidAt" | "note",
-    value: string,
+  function updatePayments(
+    nextRows: ExistingTenantRentCycle["payments"],
   ) {
-    const nextRows = rows.map((row) =>
-      row.id === rowId
-        ? {
-            ...row,
-            [field]: value,
-          }
-        : row,
-    );
-
     onChange(
-      nextRows
-        .filter((row) => Number(row.amount) > 0 && row.paidAt)
-        .map((row) => ({
-          amount: Number(row.amount),
-          paidAt: row.paidAt,
-          note: row.note,
-        })),
-    );
-  }
-
-  function addPaymentRow() {
-    onChange([
-      ...cycle.payments,
-      {
-        amount: 0,
-        paidAt: "",
-        note: "",
-      },
-    ]);
-  }
-
-  function removePaymentRow(rowId: string) {
-    const nextRows = rows.filter((row) => row.id !== rowId);
-
-    onChange(
-      nextRows
-        .filter((row) => Number(row.amount) > 0 && row.paidAt)
-        .map((row) => ({
-          amount: Number(row.amount),
-          paidAt: row.paidAt,
-          note: row.note,
-        })),
+      nextRows.filter(
+        (payment) => Number(payment.amount) > 0 && payment.paidAt.trim().length > 0,
+      ),
     );
   }
 
   return (
     <div className="space-y-3">
-      {rows.map((row, index) => (
+      {rows.map((payment, index) => (
         <div
-          key={row.id}
+          key={`${cycle.id}-payment-${index}`}
           className="grid gap-3 rounded-button border border-border-soft bg-background p-3 md:grid-cols-[1fr_1fr_1fr_auto]"
         >
           <CurrencyInput
             label={`Amount paid ${index + 1}`}
             name={`${cycle.id}-amount-${index}`}
-            value={row.amount}
-            onValueChange={(value) => updatePayment(row.id, "amount", value)}
+            value={payment.amount > 0 ? String(payment.amount) : ""}
+            onValueChange={(value) => {
+              const nextRows = rows.map((row, rowIndex) =>
+                rowIndex === index
+                  ? { ...row, amount: Number(value || 0) }
+                  : row,
+              );
+              updatePayments(nextRows);
+            }}
             disabled={disabled}
           />
 
@@ -157,11 +96,16 @@ function PaymentRowsEditor({
             </label>
             <input
               type="date"
-              value={row.paidAt}
+              value={payment.paidAt}
               disabled={disabled}
-              onChange={(event) =>
-                updatePayment(row.id, "paidAt", event.target.value)
-              }
+              onChange={(event) => {
+                const nextRows = rows.map((row, rowIndex) =>
+                  rowIndex === index
+                    ? { ...row, paidAt: event.target.value }
+                    : row,
+                );
+                updatePayments(nextRows);
+              }}
               className={inputClassName}
             />
           </div>
@@ -172,12 +116,17 @@ function PaymentRowsEditor({
             </label>
             <input
               type="text"
-              value={row.note}
+              value={payment.note ?? ""}
               placeholder="Optional"
               disabled={disabled}
-              onChange={(event) =>
-                updatePayment(row.id, "note", event.target.value)
-              }
+              onChange={(event) => {
+                const nextRows = rows.map((row, rowIndex) =>
+                  rowIndex === index
+                    ? { ...row, note: event.target.value }
+                    : row,
+                );
+                updatePayments(nextRows);
+              }}
               className={inputClassName}
             />
           </div>
@@ -186,7 +135,10 @@ function PaymentRowsEditor({
             type="button"
             aria-label="Remove payment"
             disabled={disabled || rows.length === 1}
-            onClick={() => removePaymentRow(row.id)}
+            onClick={() => {
+              const nextRows = rows.filter((_, rowIndex) => rowIndex !== index);
+              updatePayments(nextRows.length > 0 ? nextRows : []);
+            }}
             className="inline-flex h-11 min-h-11 items-center justify-center rounded-button px-3 text-danger transition hover:bg-danger-soft disabled:opacity-40"
           >
             <Trash2 size={16} strokeWidth={2.4} />
@@ -197,7 +149,7 @@ function PaymentRowsEditor({
       <Button
         type="button"
         variant="secondary"
-        onClick={addPaymentRow}
+        onClick={() => onChange([...cycle.payments, createEmptyPaymentRow()])}
         disabled={disabled}
       >
         <span className="inline-flex items-center gap-2">
@@ -211,7 +163,7 @@ function PaymentRowsEditor({
 
 function CycleStatusBadge({ status }: { status: RentCycleStatus }) {
   if (status === "assumed_paid") {
-    return <Badge tone="neutral">Assumed paid</Badge>;
+    return <Badge tone="success">Assumed paid</Badge>;
   }
 
   const copy = statusCopy[status];
@@ -219,282 +171,157 @@ function CycleStatusBadge({ status }: { status: RentCycleStatus }) {
   return <Badge tone={copy.tone}>{copy.label}</Badge>;
 }
 
+function CycleRow({
+  cycle,
+  confirmedRentAmount,
+  disabled,
+  onChange,
+}: {
+  cycle: ExistingTenantRentCycle;
+  confirmedRentAmount: number;
+  disabled?: boolean;
+  onChange: (cycle: ExistingTenantRentCycle) => void;
+}) {
+  const isRecording = !cycle.assumedPaid;
+  const status = getCycleStatus(cycle);
+  const balance = isRecording ? getCycleBalance(cycle) : 0;
+
+  function applyCycleUpdate(updater: (current: ExistingTenantRentCycle) => ExistingTenantRentCycle) {
+    onChange(normalizeRentCycleAfterEdit(updater(cycle)));
+  }
+
+  if (!isRecording) {
+    return (
+      <article className="flex flex-col gap-3 rounded-card border border-border-soft bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-base font-black text-text-strong">{cycle.label}</p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <CycleStatusBadge status="assumed_paid" />
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() =>
+              applyCycleUpdate((current) =>
+                startRecordingCycleArrears(current, confirmedRentAmount),
+              )
+            }
+            className="min-h-11 text-sm font-extrabold text-primary underline-offset-2 hover:underline disabled:opacity-50"
+          >
+            Record arrears
+          </button>
+        </div>
+      </article>
+    );
+  }
+
+  return (
+    <article className="space-y-4 rounded-card border border-primary/20 bg-white p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-base font-black text-text-strong">{cycle.label}</p>
+          <p className="mt-1 text-sm font-semibold text-text-muted">
+            Balance {formatNaira(balance)}
+          </p>
+        </div>
+        <CycleStatusBadge status={status} />
+      </div>
+
+      <CurrencyInput
+        label="Rent charged"
+        name={`rent-${cycle.id}`}
+        value={cycle.rentCharged > 0 ? String(cycle.rentCharged) : ""}
+        onValueChange={(value) =>
+          applyCycleUpdate((current) => ({
+            ...current,
+            rentCharged: Number(value || 0),
+          }))
+        }
+        disabled={disabled}
+      />
+
+      <PaymentRowsEditor
+        cycle={cycle}
+        disabled={disabled}
+        onChange={(payments) =>
+          applyCycleUpdate((current) => ({
+            ...current,
+            payments,
+          }))
+        }
+      />
+    </article>
+  );
+}
+
 export function ExistingTenantRentHistoryTable({
   claim,
   cycles,
-  arrearsStartDate,
-  onArrearsStartDateChange,
+  confirmedRentAmount,
   onCyclesChange,
   disabled = false,
 }: ExistingTenantRentHistoryTableProps) {
-  const [showAssumedPaid, setShowAssumedPaid] = useState(false);
-  const [expandedCycleId, setExpandedCycleId] = useState<string | null>(null);
-
   const moveInDate = claim.tenant_move_in_date ?? "";
-  const rentAmount = Number(claim.tenant_claimed_rent_amount ?? 0);
   const paymentFrequency = claim.tenant_payment_frequency;
-
-  const yearOptions = useMemo(
-    () => getYearOptions(moveInDate, paymentFrequency),
-    [moveInDate, paymentFrequency],
-  );
-
-  const selectedStartYear = new Date(`${arrearsStartDate}T00:00:00`).getFullYear();
 
   const summary = useMemo(
     () =>
       calculateArrearsFromCycles({
         moveInDate,
         paymentFrequency,
-        arrearsStartDate,
         cycles,
       }),
-    [arrearsStartDate, cycles, moveInDate, paymentFrequency],
+    [cycles, moveInDate, paymentFrequency],
   );
 
-  const assumedPaidCycles = cycles.filter((cycle) => cycle.assumedPaid);
-  const activeCycles = cycles.filter((cycle) => !cycle.assumedPaid);
-
-  function handleStartYearChange(year: number) {
-    const matchingCycle = cycles.find(
-      (cycle) =>
-        new Date(`${cycle.periodStart}T00:00:00`).getFullYear() === year,
-    );
-
-    if (!matchingCycle) {
-      return;
-    }
-
-    onArrearsStartDateChange(matchingCycle.periodStart);
-
-    const rebuilt = buildRentCycles({
-      moveInDate,
-      paymentFrequency,
-      defaultRentAmount: rentAmount,
-      arrearsStartDate: matchingCycle.periodStart,
-      savedCycles: cycles,
-    });
-
-    onCyclesChange(rebuilt);
-  }
+  const orderedCycles = useMemo(
+    () => [...cycles].reverse(),
+    [cycles],
+  );
 
   function updateCycle(
     cycleId: string,
     updater: (cycle: ExistingTenantRentCycle) => ExistingTenantRentCycle,
   ) {
-    onCyclesChange(cycles.map((cycle) => (cycle.id === cycleId ? updater(cycle) : cycle)));
+    onCyclesChange(
+      cycles.map((cycle) =>
+        cycle.id === cycleId ? normalizeRentCycleAfterEdit(updater(cycle)) : cycle,
+      ),
+    );
   }
+
+  const hasRecordedArrears = cycles.some((cycle) => !cycle.assumedPaid);
 
   return (
     <div className="space-y-4">
-      <div className="rounded-card border border-border-soft bg-white p-4">
-        <label className="block text-sm font-semibold text-text-strong">
-          Record arrears from
-        </label>
-        <select
-          value={selectedStartYear}
-          disabled={disabled || yearOptions.length === 0}
-          onChange={(event) => handleStartYearChange(Number(event.target.value))}
-          className={`${inputClassName} mt-2`}
-        >
-          {yearOptions.map((year) => (
-            <option key={year} value={year}>
-              {year}
-            </option>
-          ))}
-        </select>
-        <p className="mt-2 text-sm leading-6 text-text-muted">
-          Earlier years are assumed fully paid. Adjust rent charged per year if
-          the amount changed.
-        </p>
+      <p className="text-base leading-7 text-text-muted">
+        Every rent year is assumed fully paid unless you record arrears for that
+        year. You can approve with no changes if the tenant does not owe anything.
+      </p>
+
+      <div className="space-y-3">
+        {orderedCycles.map((cycle) => (
+          <CycleRow
+            key={cycle.id}
+            cycle={cycle}
+            confirmedRentAmount={confirmedRentAmount}
+            disabled={disabled}
+            onChange={(updatedCycle) => updateCycle(cycle.id, () => updatedCycle)}
+          />
+        ))}
       </div>
 
-      <div className="hidden overflow-hidden rounded-card border border-border-soft md:block">
-        <table className="w-full border-collapse bg-white text-sm">
-          <thead className="bg-background text-left text-xs font-black uppercase tracking-wide text-text-muted">
-            <tr>
-              <th className="px-4 py-3">Year</th>
-              <th className="px-4 py-3">Rent charged</th>
-              <th className="px-4 py-3">Payments</th>
-              <th className="px-4 py-3">Balance</th>
-              <th className="px-4 py-3">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border-soft">
-            {activeCycles.map((cycle) => {
-              const balance = getCycleBalance(cycle);
-              const status = getCycleStatus(cycle);
-              const paymentsTotal = cycle.payments.reduce(
-                (total, payment) => total + Number(payment.amount || 0),
-                0,
-              );
-
-              return (
-                <tr key={cycle.id} className="align-top">
-                  <td className="px-4 py-4 font-bold text-text-strong">
-                    {cycle.label}
-                  </td>
-                  <td className="px-4 py-4">
-                    <CurrencyInput
-                      label="Rent charged"
-                      name={`rent-${cycle.id}`}
-                      value={String(cycle.rentCharged)}
-                      onValueChange={(value) =>
-                        updateCycle(cycle.id, (current) => ({
-                          ...current,
-                          rentCharged: Number(value || 0),
-                        }))
-                      }
-                      disabled={disabled}
-                    />
-                  </td>
-                  <td className="px-4 py-4">
-                    <PaymentRowsEditor
-                      cycle={cycle}
-                      disabled={disabled}
-                      onChange={(payments) =>
-                        updateCycle(cycle.id, (current) => ({
-                          ...current,
-                          payments,
-                        }))
-                      }
-                    />
-                  </td>
-                  <td className="px-4 py-4 text-base font-black text-text-strong">
-                    {formatNaira(balance)}
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="space-y-2">
-                      <CycleStatusBadge status={status} />
-                      <p className="text-xs font-semibold text-text-muted">
-                        Paid {formatNaira(paymentsTotal)}
-                      </p>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="space-y-3 md:hidden">
-        {activeCycles.map((cycle) => {
-          const balance = getCycleBalance(cycle);
-          const status = getCycleStatus(cycle);
-          const isExpanded = expandedCycleId === cycle.id;
-          const paymentsTotal = cycle.payments.reduce(
-            (total, payment) => total + Number(payment.amount || 0),
-            0,
-          );
-
-          return (
-            <article
-              key={cycle.id}
-              className="rounded-card border border-border-soft bg-white"
-            >
-              <button
-                type="button"
-                className="flex w-full items-start justify-between gap-3 p-4 text-left"
-                onClick={() =>
-                  setExpandedCycleId(isExpanded ? null : cycle.id)
-                }
-              >
-                <div>
-                  <p className="font-black text-text-strong">{cycle.label}</p>
-                  <p className="mt-1 text-sm font-semibold text-text-muted">
-                    Balance {formatNaira(balance)} · Paid{" "}
-                    {formatNaira(paymentsTotal)}
-                  </p>
-                </div>
-                <CycleStatusBadge status={status} />
-              </button>
-
-              {isExpanded ? (
-                <div className="space-y-4 border-t border-border-soft p-4">
-                  <CurrencyInput
-                    label="Rent charged"
-                    name={`mobile-rent-${cycle.id}`}
-                    value={String(cycle.rentCharged)}
-                    onValueChange={(value) =>
-                      updateCycle(cycle.id, (current) => ({
-                        ...current,
-                        rentCharged: Number(value || 0),
-                      }))
-                    }
-                    disabled={disabled}
-                  />
-                  <PaymentRowsEditor
-                    cycle={cycle}
-                    disabled={disabled}
-                    onChange={(payments) =>
-                      updateCycle(cycle.id, (current) => ({
-                        ...current,
-                        payments,
-                      }))
-                    }
-                  />
-                </div>
-              ) : null}
-            </article>
-          );
-        })}
-      </div>
-
-      {assumedPaidCycles.length > 0 ? (
+      {hasRecordedArrears ? (
         <div className="rounded-card border border-border-soft bg-background p-4">
-          <button
-            type="button"
-            className="text-sm font-extrabold text-primary"
-            onClick={() => setShowAssumedPaid((current) => !current)}
-          >
-            {showAssumedPaid
-              ? "Hide previous years (assumed paid)"
-              : "Show previous years (assumed paid)"}
-          </button>
-
-          {showAssumedPaid ? (
-            <div className="mt-3 space-y-2">
-              {assumedPaidCycles.map((cycle) => (
-                <div
-                  key={cycle.id}
-                  className="flex items-center justify-between rounded-button bg-white/70 px-4 py-3 text-sm text-text-muted"
-                >
-                  <span className="font-bold">{cycle.label}</span>
-                  <CycleStatusBadge status="assumed_paid" />
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
-      <div className="grid gap-3 rounded-card border border-border-soft bg-background p-4 md:grid-cols-3">
-        <div>
-          <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-            Total charged
-          </p>
-          <p className="mt-2 text-base font-black text-text-strong">
-            {formatNaira(summary.totalRentDue)}
-          </p>
-        </div>
-        <div>
-          <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-            Total paid
-          </p>
-          <p className="mt-2 text-base font-black text-text-strong">
-            {formatNaira(summary.totalPaymentsCounted)}
-          </p>
-        </div>
-        <div>
           <p className="text-xs font-black uppercase tracking-wide text-danger">
-            Amount owed
+            Amount owed from recorded years
           </p>
           <p className="mt-2 text-base font-black text-danger">
             {formatNaira(summary.amountOwed)}
           </p>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }
@@ -502,61 +329,62 @@ export function ExistingTenantRentHistoryTable({
 export function buildInitialRentCyclesForClaim(
   claim: ExistingTenantClaimDetailRow,
 ): {
-  arrearsStartDate: string;
   cycles: ExistingTenantRentCycle[];
 } {
   const moveInDate = claim.tenant_move_in_date ?? "";
-  const rentAmount = Number(claim.tenant_claimed_rent_amount ?? 0);
   const paymentFrequency = claim.tenant_payment_frequency;
   const metadataCycles = claim.arrears_calculation_metadata?.cycles;
 
-  const arrearsStartDate =
-    claim.landlord_arrears_start_date ??
-    getDefaultArrearsStartDate({
+  if (Array.isArray(metadataCycles)) {
+    return {
+      cycles: buildRentCycles({
+        moveInDate,
+        paymentFrequency,
+        savedCycles: metadataCycles as ExistingTenantRentCycle[],
+      }),
+    };
+  }
+
+  if (claim.landlord_payment_history.length > 0 && moveInDate) {
+    const baseCycles = buildRentCycles({
       moveInDate,
       paymentFrequency,
     });
 
-  const savedCycles = Array.isArray(metadataCycles)
-    ? (metadataCycles as ExistingTenantRentCycle[])
-    : claim.landlord_payment_history.length > 0
-      ? undefined
-      : undefined;
-
-  const cycles = buildRentCycles({
-    moveInDate,
-    paymentFrequency,
-    defaultRentAmount: rentAmount,
-    arrearsStartDate,
-    savedCycles,
-  });
-
-  if (
-    !Array.isArray(metadataCycles) &&
-    claim.landlord_payment_history.length > 0
-  ) {
     return {
-      arrearsStartDate,
-      cycles: cycles.map((cycle) => ({
-        ...cycle,
-        payments: cycle.assumedPaid
-          ? []
-          : claim.landlord_payment_history
-              .filter((payment) => {
-                const paidAt = new Date(`${payment.paidAt}T00:00:00`).getTime();
-                const periodStart = new Date(`${cycle.periodStart}T00:00:00`).getTime();
-                const periodEnd = new Date(`${cycle.periodEnd}T00:00:00`).getTime();
+      cycles: baseCycles.map((cycle) => {
+        const payments = claim.landlord_payment_history
+          .filter((payment) => {
+            const paidAt = new Date(`${payment.paidAt}T00:00:00`).getTime();
+            const periodStart = new Date(`${cycle.periodStart}T00:00:00`).getTime();
+            const periodEnd = new Date(`${cycle.periodEnd}T00:00:00`).getTime();
 
-                return paidAt >= periodStart && paidAt < periodEnd;
-              })
-              .map((payment) => ({
-                amount: Number(payment.amount),
-                paidAt: payment.paidAt,
-                note: payment.note,
-              })),
-      })),
+            return paidAt >= periodStart && paidAt < periodEnd;
+          })
+          .map((payment) => ({
+            amount: Number(payment.amount),
+            paidAt: payment.paidAt,
+            note: payment.note,
+          }));
+
+        if (payments.length === 0) {
+          return cycle;
+        }
+
+        return {
+          ...cycle,
+          assumedPaid: false,
+          rentCharged: Number(claim.tenant_claimed_rent_amount ?? 0),
+          payments,
+        };
+      }),
     };
   }
 
-  return { arrearsStartDate, cycles };
+  return {
+    cycles: buildRentCycles({
+      moveInDate,
+      paymentFrequency,
+    }),
+  };
 }

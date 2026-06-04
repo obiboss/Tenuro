@@ -43,6 +43,8 @@ import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import {
   addMonths,
   calculateArrearsFromCycles,
+  deriveArrearsStartDate,
+  normalizeRentCycleAfterEdit,
   parseDateOnly,
   toDateOnly,
   type ExistingTenantRentCycle,
@@ -167,16 +169,21 @@ function mapCycleInputToRentCycle(
 
 function calculateExistingTenantArrears(params: {
   moveInDate: string;
-  arrearsStartDate: string;
   rentAmount: number;
   paymentFrequency: ExistingTenantClaimPaymentFrequency;
   cycles: ExistingTenantRentCycleInput[];
 }) {
-  const mappedCycles = params.cycles.map(mapCycleInputToRentCycle);
+  const mappedCycles = params.cycles
+    .map(mapCycleInputToRentCycle)
+    .map(normalizeRentCycleAfterEdit);
+  const arrearsStartDate = deriveArrearsStartDate({
+    moveInDate: params.moveInDate,
+    paymentFrequency: params.paymentFrequency,
+    cycles: mappedCycles,
+  });
   const summary = calculateArrearsFromCycles({
     moveInDate: params.moveInDate,
     paymentFrequency: params.paymentFrequency,
-    arrearsStartDate: params.arrearsStartDate,
     cycles: mappedCycles,
   });
 
@@ -188,7 +195,7 @@ function calculateExistingTenantArrears(params: {
     countedPayments: summary.paymentHistory,
     metadata: {
       move_in_date: params.moveInDate,
-      arrears_start_date: params.arrearsStartDate,
+      arrears_start_date: arrearsStartDate,
       rent_amount: params.rentAmount,
       payment_frequency: params.paymentFrequency,
       frequency_months: getFrequencyMonths(params.paymentFrequency),
@@ -598,7 +605,6 @@ export async function updateExistingTenantClaimArrearsForCurrentLandlord(
 
   const calculation = calculateExistingTenantArrears({
     moveInDate: claim.tenant_move_in_date,
-    arrearsStartDate: input.arrearsStartDate,
     rentAmount: Number(claim.tenant_claimed_rent_amount),
     paymentFrequency: claim.tenant_payment_frequency,
     cycles: input.cycles,
@@ -607,7 +613,7 @@ export async function updateExistingTenantClaimArrearsForCurrentLandlord(
   const updatedClaim = await updateExistingTenantClaimArrears(supabase, {
     claimId: input.claimId,
     landlordId: landlord.id,
-    arrearsStartDate: input.arrearsStartDate,
+    arrearsStartDate: calculation.metadata.arrears_start_date as string,
     paymentHistory: calculation.normalizedPayments,
     calculatedCurrentDueDate: calculation.calculatedCurrentDueDate,
     calculatedOutstandingBalance: calculation.calculatedOutstandingBalance,
@@ -628,7 +634,7 @@ export async function updateExistingTenantClaimArrearsForCurrentLandlord(
     metadata: {
       existing_tenant_claim_id: claim.id,
       tenant_full_name: claim.tenant_full_name,
-      arrears_start_date: input.arrearsStartDate,
+      arrears_start_date: calculation.metadata.arrears_start_date,
       payment_history_count: calculation.normalizedPayments.length,
       counted_payment_history_count: calculation.countedPayments.length,
       total_payments: calculation.metadata.total_payments,

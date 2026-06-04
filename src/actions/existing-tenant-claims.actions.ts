@@ -117,7 +117,6 @@ export async function updateExistingTenantClaimArrearsAction(
   try {
     const parsed = updateExistingTenantClaimArrearsSchema.parse({
       claimId: formData.get("claimId"),
-      arrearsStartDate: formData.get("arrearsStartDate"),
       cycles: parseRentCyclesJson(formData),
     });
 

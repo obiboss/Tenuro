@@ -61,7 +61,6 @@ export const submitExistingTenantClaimSchema = z.object({
 
 export const updateExistingTenantClaimArrearsSchema = z.object({
   claimId: uuidSchema,
-  arrearsStartDate: dateStringSchema,
   cycles: z
     .array(existingTenantRentCycleSchema)
     .min(1, "Rent history could not be built for this tenancy."),

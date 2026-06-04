@@ -133,15 +133,11 @@ function formatCycleLabel(periodStart: string, periodEnd: string) {
 export function buildRentCycles(params: {
   moveInDate: string;
   paymentFrequency: ExistingTenantPaymentFrequency;
-  defaultRentAmount: number;
-  arrearsStartDate: string;
-  today?: Date;
-  cycleRentCharges?: Record<string, number>;
   savedCycles?: ExistingTenantRentCycle[];
+  today?: Date;
 }) {
   const today = params.today ?? new Date();
   const frequencyMonths = getFrequencyMonths(params.paymentFrequency);
-  const arrearsStart = parseDateOnly(params.arrearsStartDate);
   const savedByPeriod = new Map(
     (params.savedCycles ?? []).map((cycle) => [cycle.periodStart, cycle]),
   );
@@ -152,27 +148,89 @@ export function buildRentCycles(params: {
   while (dueDate.getTime() <= today.getTime()) {
     const periodStart = toDateOnly(dueDate);
     const periodEnd = toDateOnly(addMonths(dueDate, frequencyMonths));
-    const assumedPaid = dueDate.getTime() < arrearsStart.getTime();
     const saved = savedByPeriod.get(periodStart);
-    const rentCharged =
-      saved?.rentCharged ??
-      params.cycleRentCharges?.[periodStart] ??
-      params.defaultRentAmount;
+    const assumedPaid = saved?.assumedPaid ?? true;
 
     cycles.push({
       id: periodStart,
       label: formatCycleLabel(periodStart, periodEnd),
       periodStart,
       periodEnd,
-      rentCharged,
+      rentCharged: assumedPaid ? 0 : Number(saved?.rentCharged ?? 0),
       assumedPaid,
-      payments: saved?.payments ?? [],
+      payments: assumedPaid ? [] : (saved?.payments ?? []),
     });
 
     dueDate = parseDateOnly(periodEnd);
   }
 
   return cycles;
+}
+
+export function deriveArrearsStartDate(params: {
+  moveInDate: string;
+  paymentFrequency: ExistingTenantPaymentFrequency;
+  cycles: ExistingTenantRentCycle[];
+}) {
+  const recordingCycles = params.cycles
+    .filter((cycle) => !cycle.assumedPaid)
+    .map((cycle) => cycle.periodStart)
+    .sort();
+
+  if (recordingCycles.length > 0) {
+    return recordingCycles[0];
+  }
+
+  return addMonths(
+    parseDateOnly(params.moveInDate),
+    getFrequencyMonths(params.paymentFrequency),
+  )
+    .toISOString()
+    .slice(0, 10);
+}
+
+export function hasMeaningfulCycleArrears(cycle: ExistingTenantRentCycle) {
+  const hasRentCharged = Number(cycle.rentCharged) > 0;
+  const hasPayments = cycle.payments.some(
+    (payment) => Number(payment.amount) > 0 && payment.paidAt.trim().length > 0,
+  );
+
+  return hasRentCharged || hasPayments;
+}
+
+export function normalizeRentCycleAfterEdit(
+  cycle: ExistingTenantRentCycle,
+): ExistingTenantRentCycle {
+  if (cycle.assumedPaid) {
+    return {
+      ...cycle,
+      rentCharged: 0,
+      payments: [],
+    };
+  }
+
+  if (!hasMeaningfulCycleArrears(cycle)) {
+    return {
+      ...cycle,
+      assumedPaid: true,
+      rentCharged: 0,
+      payments: [],
+    };
+  }
+
+  return cycle;
+}
+
+export function startRecordingCycleArrears(
+  cycle: ExistingTenantRentCycle,
+  defaultRentAmount: number,
+): ExistingTenantRentCycle {
+  return {
+    ...cycle,
+    assumedPaid: false,
+    rentCharged: defaultRentAmount > 0 ? defaultRentAmount : 0,
+    payments: [],
+  };
 }
 
 function normalizePayments(
@@ -213,7 +271,7 @@ export function getCycleBalance(cycle: ExistingTenantRentCycle) {
 export type RentCycleStatus = "fully_paid" | "part_paid" | "not_paid" | "assumed_paid";
 
 export function getCycleStatus(cycle: ExistingTenantRentCycle): RentCycleStatus {
-  if (cycle.assumedPaid) {
+  if (cycle.assumedPaid || !hasMeaningfulCycleArrears(cycle)) {
     return "assumed_paid";
   }
 
@@ -236,11 +294,15 @@ export function getCycleStatus(cycle: ExistingTenantRentCycle): RentCycleStatus 
 export function calculateArrearsFromCycles(params: {
   moveInDate: string;
   paymentFrequency: ExistingTenantPaymentFrequency;
-  arrearsStartDate: string;
   cycles: ExistingTenantRentCycle[];
   today?: Date;
 }): ExistingTenantArrearsSummary {
   const today = params.today ?? new Date();
+  const arrearsStartDate = deriveArrearsStartDate({
+    moveInDate: params.moveInDate,
+    paymentFrequency: params.paymentFrequency,
+    cycles: params.cycles,
+  });
   const activeCycles = params.cycles.filter((cycle) => !cycle.assumedPaid);
   const totalRentDue = activeCycles.reduce(
     (total, cycle) => total + Number(cycle.rentCharged || 0),
@@ -269,7 +331,7 @@ export function calculateArrearsFromCycles(params: {
       : Math.ceil((amountOwed / defaultRent) * frequencyMonths);
 
   return {
-    arrearsStartDate: params.arrearsStartDate,
+    arrearsStartDate,
     currentDueDate: calculateCurrentDueDate({
       moveInDate: params.moveInDate,
       paymentFrequency: params.paymentFrequency,
@@ -297,22 +359,27 @@ export function calculateFlatArrears(params: {
   const cycles = buildRentCycles({
     moveInDate: params.moveInDate,
     paymentFrequency: params.paymentFrequency,
-    defaultRentAmount: params.rentAmount,
-    arrearsStartDate: params.arrearsStartDate,
     today: params.today,
-  }).map((cycle) => ({
-    ...cycle,
-    payments: cycle.assumedPaid
-      ? []
-      : params.paymentHistory.filter((payment) =>
-          paymentBelongsToCycle(payment, cycle),
-        ),
-  }));
+  }).map((cycle) => {
+    const cyclePayments = params.paymentHistory.filter((payment) =>
+      paymentBelongsToCycle(payment, cycle),
+    );
+
+    if (cyclePayments.length === 0) {
+      return cycle;
+    }
+
+    return {
+      ...cycle,
+      assumedPaid: false,
+      rentCharged: params.rentAmount,
+      payments: cyclePayments,
+    };
+  });
 
   return calculateArrearsFromCycles({
     moveInDate: params.moveInDate,
     paymentFrequency: params.paymentFrequency,
-    arrearsStartDate: params.arrearsStartDate,
     cycles,
     today: params.today,
   });
