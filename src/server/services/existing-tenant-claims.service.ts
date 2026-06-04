@@ -44,6 +44,7 @@ import {
   addMonths,
   calculateArrearsFromCycles,
   deriveArrearsStartDate,
+  isCompleteExistingTenantPayment,
   normalizeRentCycleAfterEdit,
   parseDateOnly,
   toDateOnly,
@@ -159,11 +160,13 @@ function mapCycleInputToRentCycle(
     periodEnd: cycle.periodEnd,
     rentCharged: Number(cycle.rentCharged),
     assumedPaid: cycle.assumedPaid,
-    payments: cycle.payments.map((payment) => ({
-      amount: Number(payment.amount),
-      paidAt: payment.paidAt,
-      note: payment.note?.trim() ?? "",
-    })),
+    payments: cycle.payments
+      .filter(isCompleteExistingTenantPayment)
+      .map((payment) => ({
+        amount: Number(payment.amount),
+        paidAt: payment.paidAt,
+        note: payment.note?.trim() ?? "",
+      })),
   };
 }
 

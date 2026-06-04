@@ -10,6 +10,12 @@ export type ExistingTenantPaymentRecord = {
   note?: string;
 };
 
+export function isCompleteExistingTenantPayment(
+  payment: ExistingTenantPaymentRecord,
+) {
+  return Number(payment.amount) > 0 && payment.paidAt.trim().length > 0;
+}
+
 export type ExistingTenantRentCycle = {
   id: string;
   label: string;
@@ -191,9 +197,7 @@ export function deriveArrearsStartDate(params: {
 
 export function hasMeaningfulCycleArrears(cycle: ExistingTenantRentCycle) {
   const hasRentCharged = Number(cycle.rentCharged) > 0;
-  const hasPayments = cycle.payments.some(
-    (payment) => Number(payment.amount) > 0 && payment.paidAt.trim().length > 0,
-  );
+  const hasPayments = cycle.payments.some(isCompleteExistingTenantPayment);
 
   return hasRentCharged || hasPayments;
 }
@@ -242,7 +246,7 @@ function normalizePayments(
       paidAt: payment.paidAt,
       note: payment.note?.trim() ?? "",
     }))
-    .filter((payment) => payment.amount > 0 && payment.paidAt.trim().length > 0)
+    .filter(isCompleteExistingTenantPayment)
     .sort((firstPayment, secondPayment) =>
       firstPayment.paidAt.localeCompare(secondPayment.paidAt),
     );
@@ -260,10 +264,9 @@ function paymentBelongsToCycle(
 }
 
 export function getCycleBalance(cycle: ExistingTenantRentCycle) {
-  const paymentsTotal = cycle.payments.reduce(
-    (total, payment) => total + Number(payment.amount || 0),
-    0,
-  );
+  const paymentsTotal = cycle.payments
+    .filter(isCompleteExistingTenantPayment)
+    .reduce((total, payment) => total + Number(payment.amount || 0), 0);
 
   return Math.max(cycle.rentCharged - paymentsTotal, 0);
 }
@@ -276,9 +279,7 @@ export function getCycleStatus(cycle: ExistingTenantRentCycle): RentCycleStatus 
   }
 
   const balance = getCycleBalance(cycle);
-  const hasPayments = cycle.payments.some(
-    (payment) => Number(payment.amount) > 0 && payment.paidAt,
-  );
+  const hasPayments = cycle.payments.some(isCompleteExistingTenantPayment);
 
   if (balance <= 0) {
     return "fully_paid";

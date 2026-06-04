@@ -58,14 +58,8 @@ function PaymentRowsEditor({
   const rows =
     cycle.payments.length > 0 ? cycle.payments : [createEmptyPaymentRow()];
 
-  function updatePayments(
-    nextRows: ExistingTenantRentCycle["payments"],
-  ) {
-    onChange(
-      nextRows.filter(
-        (payment) => Number(payment.amount) > 0 && payment.paidAt.trim().length > 0,
-      ),
-    );
+  function updatePayments(nextRows: ExistingTenantRentCycle["payments"]) {
+    onChange(nextRows);
   }
 
   return (
