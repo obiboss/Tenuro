@@ -15,6 +15,12 @@ export const existingTenantClaimIdTypeSchema = z.enum([
   "voters_card",
 ]);
 
+export const existingTenantPaymentHistoryItemSchema = z.object({
+  amount: positiveMoneySchema,
+  paidAt: dateStringSchema,
+  note: z.string().trim().max(200).optional().or(z.literal("")),
+});
+
 export const createExistingTenantClaimSchema = z.object({
   unitId: uuidSchema,
   fullName: z.string().trim().min(2, "Enter the tenant name.").max(120),
@@ -43,8 +49,10 @@ export const submitExistingTenantClaimSchema = z.object({
 
 export const updateExistingTenantClaimArrearsSchema = z.object({
   claimId: uuidSchema,
-  lastPaymentAmount: moneySchema,
-  lastPaymentDate: dateStringSchema,
+  paymentHistory: z
+    .array(existingTenantPaymentHistoryItemSchema)
+    .min(1, "Enter at least one payment record.")
+    .max(12, "You can enter up to 12 payment records at once."),
 });
 
 export const approveExistingTenantClaimSchema = z.object({
@@ -60,6 +68,10 @@ export const rejectExistingTenantClaimSchema = z.object({
   claimId: uuidSchema,
   reason: z.string().trim().min(3, "Enter the reason.").max(500),
 });
+
+export type ExistingTenantPaymentHistoryItem = z.infer<
+  typeof existingTenantPaymentHistoryItemSchema
+>;
 
 export type CreateExistingTenantClaimInput = z.infer<
   typeof createExistingTenantClaimSchema

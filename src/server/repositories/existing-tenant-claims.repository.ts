@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { ExistingTenantPaymentHistoryItem } from "@/server/validators/existing-tenant-claim.schema";
 
 export type ExistingTenantClaimStatus =
   | "pending"
@@ -54,6 +55,7 @@ export type ExistingTenantClaimRow = {
   landlord_review_notes: string | null;
   landlord_last_payment_amount: number | null;
   landlord_last_payment_date: string | null;
+  landlord_payment_history: ExistingTenantPaymentHistoryItem[];
 
   bopa_calculated_current_due_date: string | null;
   bopa_calculated_outstanding_balance: number | null;
@@ -121,6 +123,7 @@ const EXISTING_TENANT_CLAIM_SELECT = `
   landlord_review_notes,
   landlord_last_payment_amount,
   landlord_last_payment_date,
+  landlord_payment_history,
   bopa_calculated_current_due_date,
   bopa_calculated_outstanding_balance,
   bopa_calculated_months_owed,
@@ -303,19 +306,26 @@ export async function updateExistingTenantClaimArrears(
   params: {
     claimId: string;
     landlordId: string;
-    lastPaymentAmount: number;
-    lastPaymentDate: string;
+    paymentHistory: ExistingTenantPaymentHistoryItem[];
     calculatedCurrentDueDate: string;
     calculatedOutstandingBalance: number;
     calculatedMonthsOwed: number;
     calculationMetadata: Record<string, unknown>;
   },
 ) {
+  const latestPayment = params.paymentHistory
+    .slice()
+    .sort((firstPayment, secondPayment) =>
+      firstPayment.paidAt.localeCompare(secondPayment.paidAt),
+    )
+    .at(-1);
+
   const { data, error } = await supabase
     .from("existing_tenant_claims")
     .update({
-      landlord_last_payment_amount: params.lastPaymentAmount,
-      landlord_last_payment_date: params.lastPaymentDate,
+      landlord_last_payment_amount: latestPayment?.amount ?? null,
+      landlord_last_payment_date: latestPayment?.paidAt ?? null,
+      landlord_payment_history: params.paymentHistory,
       bopa_calculated_current_due_date: params.calculatedCurrentDueDate,
       bopa_calculated_outstanding_balance: params.calculatedOutstandingBalance,
       bopa_calculated_months_owed: params.calculatedMonthsOwed,

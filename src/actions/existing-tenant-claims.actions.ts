@@ -18,6 +18,25 @@ import {
   updateExistingTenantClaimArrearsSchema,
 } from "@/server/validators/existing-tenant-claim.schema";
 
+function parsePaymentHistory(formData: FormData) {
+  const amounts = formData.getAll("paymentAmount");
+  const dates = formData.getAll("paymentDate");
+  const notes = formData.getAll("paymentNote");
+
+  return amounts
+    .map((amount, index) => ({
+      amount,
+      paidAt: dates[index],
+      note: notes[index],
+    }))
+    .filter((payment) => {
+      const amount = String(payment.amount ?? "").trim();
+      const paidAt = String(payment.paidAt ?? "").trim();
+
+      return amount.length > 0 || paidAt.length > 0;
+    });
+}
+
 export async function createExistingTenantClaimAction(
   _previousState: ExistingTenantClaimActionState,
   formData: FormData,
@@ -72,7 +91,6 @@ export async function submitExistingTenantClaimAction(
       idNumber: formData.get("idNumber"),
       moveInDate: formData.get("moveInDate"),
       claimedRentAmount: formData.get("claimedRentAmount"),
-      claimedNextRentDueDate: formData.get("claimedNextRentDueDate"),
       paymentFrequency: formData.get("paymentFrequency"),
       tenantNotes: formData.get("tenantNotes"),
     });
@@ -105,8 +123,7 @@ export async function updateExistingTenantClaimArrearsAction(
   try {
     const parsed = updateExistingTenantClaimArrearsSchema.parse({
       claimId: formData.get("claimId"),
-      lastPaymentAmount: formData.get("lastPaymentAmount"),
-      lastPaymentDate: formData.get("lastPaymentDate"),
+      paymentHistory: parsePaymentHistory(formData),
     });
 
     await updateExistingTenantClaimArrearsForCurrentLandlord(parsed);
@@ -115,7 +132,7 @@ export async function updateExistingTenantClaimArrearsAction(
 
     return {
       ok: true,
-      message: "Arrears estimate updated.",
+      message: "Arrears estimate updated from payment history.",
     };
   } catch (error) {
     const result = errorResult(error);
