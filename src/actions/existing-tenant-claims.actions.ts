@@ -7,11 +7,13 @@ import {
   createExistingTenantClaimForCurrentLandlord,
   rejectExistingTenantClaimForCurrentLandlord,
   submitExistingTenantClaimByToken,
+  updateExistingTenantClaimArrearsForCurrentLandlord,
 } from "@/server/services/existing-tenant-claims.service";
 import {
   createExistingTenantClaimSchema,
   rejectExistingTenantClaimSchema,
   submitExistingTenantClaimSchema,
+  updateExistingTenantClaimArrearsSchema,
 } from "@/server/validators/existing-tenant-claim.schema";
 
 export async function createExistingTenantClaimAction(
@@ -35,7 +37,7 @@ export async function createExistingTenantClaimAction(
 
     return {
       ok: true,
-      message: "Existing tenant claim link prepared.",
+      message: "Opening WhatsApp with the existing tenant link.",
       claimId: result.claim.id,
       claimUrl: result.claimUrl,
       whatsappMessage: result.whatsappMessage,
@@ -63,6 +65,9 @@ export async function submitExistingTenantClaimAction(
       fullName: formData.get("fullName"),
       phoneNumber: formData.get("phoneNumber"),
       email: formData.get("email"),
+      occupation: formData.get("occupation"),
+      idType: formData.get("idType"),
+      idNumber: formData.get("idNumber"),
       moveInDate: formData.get("moveInDate"),
       claimedRentAmount: formData.get("claimedRentAmount"),
       claimedNextRentDueDate: formData.get("claimedNextRentDueDate"),
@@ -79,6 +84,36 @@ export async function submitExistingTenantClaimAction(
     return {
       ok: true,
       message: "Your tenancy details have been submitted for landlord review.",
+    };
+  } catch (error) {
+    const result = errorResult(error);
+
+    return {
+      ok: false,
+      message: result.message,
+      fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
+    };
+  }
+}
+
+export async function updateExistingTenantClaimArrearsAction(
+  _previousState: ExistingTenantClaimActionState,
+  formData: FormData,
+): Promise<ExistingTenantClaimActionState> {
+  try {
+    const parsed = updateExistingTenantClaimArrearsSchema.parse({
+      claimId: formData.get("claimId"),
+      lastPaymentAmount: formData.get("lastPaymentAmount"),
+      lastPaymentDate: formData.get("lastPaymentDate"),
+    });
+
+    await updateExistingTenantClaimArrearsForCurrentLandlord(parsed);
+
+    revalidatePath("/existing-tenant-claims");
+
+    return {
+      ok: true,
+      message: "Arrears estimate updated.",
     };
   } catch (error) {
     const result = errorResult(error);

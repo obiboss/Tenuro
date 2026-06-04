@@ -16,6 +16,10 @@ export default async function TenantsPage() {
         description="Keep tenant records, rental units, profile status, and payment history organised."
         action={
           <div className="flex flex-col gap-2 sm:flex-row">
+            <Link href="/existing-tenant-claims">
+              <Button variant="secondary">Review Existing Claims</Button>
+            </Link>
+
             <Link href="/tenants/existing/new">
               <Button variant="secondary">Invite Existing Tenant</Button>
             </Link>
@@ -34,6 +38,10 @@ export default async function TenantsPage() {
           icon={<Users aria-hidden="true" size={24} strokeWidth={2.6} />}
           action={
             <div className="flex flex-col gap-2 sm:flex-row">
+              <Link href="/existing-tenant-claims">
+                <Button variant="secondary">Review Existing Claims</Button>
+              </Link>
+
               <Link href="/tenants/existing/new">
                 <Button variant="secondary">
                   <span className="inline-flex items-center gap-2">

@@ -1,11 +1,19 @@
 import { z } from "zod";
 import {
   dateStringSchema,
+  moneySchema,
   optionalEmailSchema,
   phoneSchema,
   positiveMoneySchema,
   uuidSchema,
 } from "./common.schema";
+
+export const existingTenantClaimIdTypeSchema = z.enum([
+  "nin",
+  "passport",
+  "drivers_license",
+  "voters_card",
+]);
 
 export const createExistingTenantClaimSchema = z.object({
   unitId: uuidSchema,
@@ -20,6 +28,9 @@ export const submitExistingTenantClaimSchema = z.object({
   fullName: z.string().trim().min(2, "Enter your full name.").max(120),
   phoneNumber: phoneSchema,
   email: optionalEmailSchema,
+  occupation: z.string().trim().min(2, "Enter your occupation.").max(120),
+  idType: existingTenantClaimIdTypeSchema,
+  idNumber: z.string().trim().min(3, "Enter your ID number.").max(120),
   moveInDate: dateStringSchema,
   claimedRentAmount: positiveMoneySchema,
   claimedNextRentDueDate: dateStringSchema,
@@ -29,6 +40,12 @@ export const submitExistingTenantClaimSchema = z.object({
     })
     .default("annual"),
   tenantNotes: z.string().trim().max(1000).optional().or(z.literal("")),
+});
+
+export const updateExistingTenantClaimArrearsSchema = z.object({
+  claimId: uuidSchema,
+  lastPaymentAmount: moneySchema,
+  lastPaymentDate: dateStringSchema,
 });
 
 export const rejectExistingTenantClaimSchema = z.object({
@@ -42,6 +59,10 @@ export type CreateExistingTenantClaimInput = z.infer<
 
 export type SubmitExistingTenantClaimInput = z.infer<
   typeof submitExistingTenantClaimSchema
+>;
+
+export type UpdateExistingTenantClaimArrearsInput = z.infer<
+  typeof updateExistingTenantClaimArrearsSchema
 >;
 
 export type RejectExistingTenantClaimInput = z.infer<

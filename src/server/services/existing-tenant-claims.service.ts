@@ -15,6 +15,8 @@ import {
   markExistingTenantClaimExpired,
   rejectExistingTenantClaim,
   submitExistingTenantClaim,
+  updateExistingTenantClaimArrears,
+  type ExistingTenantClaimPaymentFrequency,
 } from "@/server/repositories/existing-tenant-claims.repository";
 import {
   getUnitById,
@@ -30,6 +32,7 @@ import type {
   CreateExistingTenantClaimInput,
   RejectExistingTenantClaimInput,
   SubmitExistingTenantClaimInput,
+  UpdateExistingTenantClaimArrearsInput,
 } from "@/server/validators/existing-tenant-claim.schema";
 import { requireLandlordPlatformOperator } from "./auth.service";
 
@@ -104,6 +107,94 @@ function resolveUnitProperty(
   }
 
   return propertyRelation;
+}
+
+function parseDateOnly(value: string) {
+  return new Date(`${value}T00:00:00`);
+}
+
+function toDateOnly(value: Date) {
+  return value.toISOString().slice(0, 10);
+}
+
+function addMonths(value: Date, months: number) {
+  const nextDate = new Date(value);
+  nextDate.setMonth(nextDate.getMonth() + months);
+
+  return nextDate;
+}
+
+function getFrequencyMonths(frequency: ExistingTenantClaimPaymentFrequency) {
+  if (frequency === "monthly") {
+    return 1;
+  }
+
+  if (frequency === "quarterly") {
+    return 3;
+  }
+
+  if (frequency === "biannual") {
+    return 6;
+  }
+
+  return 12;
+}
+
+function calculateExistingTenantArrears(params: {
+  moveInDate: string;
+  rentAmount: number;
+  paymentFrequency: ExistingTenantClaimPaymentFrequency;
+  lastPaymentAmount: number;
+  lastPaymentDate: string;
+}) {
+  const today = new Date();
+  const moveInDate = parseDateOnly(params.moveInDate);
+  const lastPaymentDate = parseDateOnly(params.lastPaymentDate);
+  const frequencyMonths = getFrequencyMonths(params.paymentFrequency);
+
+  let currentDueDate = new Date(moveInDate);
+
+  while (
+    addMonths(currentDueDate, frequencyMonths).getTime() <= today.getTime()
+  ) {
+    currentDueDate = addMonths(currentDueDate, frequencyMonths);
+  }
+
+  let dueCursor = new Date(moveInDate);
+  let periodsDueAfterLastPayment = 0;
+
+  while (dueCursor.getTime() <= today.getTime()) {
+    if (dueCursor.getTime() > lastPaymentDate.getTime()) {
+      periodsDueAfterLastPayment += 1;
+    }
+
+    dueCursor = addMonths(dueCursor, frequencyMonths);
+  }
+
+  const totalExpectedSinceLastPayment =
+    periodsDueAfterLastPayment * params.rentAmount;
+
+  const outstandingBalance = Math.max(
+    totalExpectedSinceLastPayment - params.lastPaymentAmount,
+    0,
+  );
+
+  return {
+    calculatedCurrentDueDate: toDateOnly(currentDueDate),
+    calculatedOutstandingBalance: outstandingBalance,
+    calculatedMonthsOwed: periodsDueAfterLastPayment * frequencyMonths,
+    metadata: {
+      move_in_date: params.moveInDate,
+      rent_amount: params.rentAmount,
+      payment_frequency: params.paymentFrequency,
+      frequency_months: frequencyMonths,
+      last_payment_amount: params.lastPaymentAmount,
+      last_payment_date: params.lastPaymentDate,
+      periods_due_after_last_payment: periodsDueAfterLastPayment,
+      total_expected_since_last_payment: totalExpectedSinceLastPayment,
+      calculated_at: new Date().toISOString(),
+    },
+  };
 }
 
 function assertClaimPubliclySubmittable(params: {
@@ -380,6 +471,9 @@ export async function submitExistingTenantClaimByToken(
     fullName: input.fullName,
     phoneNumber: normalizedPhone.e164,
     email: input.email?.trim() ? input.email.trim().toLowerCase() : null,
+    occupation: input.occupation,
+    idType: input.idType,
+    idNumber: input.idNumber,
     moveInDate: input.moveInDate,
     claimedRentAmount: input.claimedRentAmount,
     claimedNextRentDueDate: input.claimedNextRentDueDate,
@@ -401,6 +495,8 @@ export async function submitExistingTenantClaimByToken(
       existing_tenant_claim_id: submittedClaim.id,
       tenant_full_name: submittedClaim.tenant_full_name,
       tenant_phone_number: submittedClaim.tenant_phone_number,
+      tenant_occupation: submittedClaim.tenant_occupation,
+      tenant_id_type: submittedClaim.tenant_id_type,
       tenant_claimed_rent_amount: submittedClaim.tenant_claimed_rent_amount,
       tenant_claimed_next_rent_due_date:
         submittedClaim.tenant_claimed_next_rent_due_date,
@@ -433,6 +529,79 @@ export async function getCurrentLandlordExistingTenantClaim(claimId: string) {
   }
 
   return claim;
+}
+
+export async function updateExistingTenantClaimArrearsForCurrentLandlord(
+  input: UpdateExistingTenantClaimArrearsInput,
+) {
+  const landlord = await requireLandlordPlatformOperator();
+  const supabase = await createSupabaseServerClient();
+  const claim = await getExistingTenantClaimById(supabase, input.claimId);
+
+  if (claim.landlord_id !== landlord.id) {
+    throw new AppError(
+      "FORBIDDEN",
+      "You do not have permission to update arrears for this existing tenant claim.",
+      403,
+    );
+  }
+
+  if (claim.status !== "submitted") {
+    throw new AppError(
+      "CLAIM_NOT_READY_FOR_ARREARS",
+      "Only submitted existing tenant claims can have arrears calculated.",
+      400,
+    );
+  }
+
+  if (!claim.tenant_move_in_date || !claim.tenant_claimed_rent_amount) {
+    throw new AppError(
+      "CLAIM_RENT_DETAILS_INCOMPLETE",
+      "The tenant must submit move-in date and rent amount before arrears can be calculated.",
+      400,
+    );
+  }
+
+  const calculation = calculateExistingTenantArrears({
+    moveInDate: claim.tenant_move_in_date,
+    rentAmount: Number(claim.tenant_claimed_rent_amount),
+    paymentFrequency: claim.tenant_payment_frequency,
+    lastPaymentAmount: input.lastPaymentAmount,
+    lastPaymentDate: input.lastPaymentDate,
+  });
+
+  const updatedClaim = await updateExistingTenantClaimArrears(supabase, {
+    claimId: input.claimId,
+    landlordId: landlord.id,
+    lastPaymentAmount: input.lastPaymentAmount,
+    lastPaymentDate: input.lastPaymentDate,
+    calculatedCurrentDueDate: calculation.calculatedCurrentDueDate,
+    calculatedOutstandingBalance: calculation.calculatedOutstandingBalance,
+    calculatedMonthsOwed: calculation.calculatedMonthsOwed,
+    calculationMetadata: calculation.metadata,
+  });
+
+  await writeExistingTenantClaimAudit({
+    landlordId: landlord.id,
+    unitId: claim.unit_id,
+    propertyId: claim.units?.properties?.id ?? null,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.tenantUpdated,
+    entityId: claim.id,
+    description: "Existing tenant arrears estimate was updated.",
+    metadata: {
+      existing_tenant_claim_id: claim.id,
+      tenant_full_name: claim.tenant_full_name,
+      last_payment_amount: input.lastPaymentAmount,
+      last_payment_date: input.lastPaymentDate,
+      calculated_current_due_date: calculation.calculatedCurrentDueDate,
+      calculated_outstanding_balance: calculation.calculatedOutstandingBalance,
+      calculated_months_owed: calculation.calculatedMonthsOwed,
+    },
+  });
+
+  return updatedClaim;
 }
 
 export async function rejectExistingTenantClaimForCurrentLandlord(

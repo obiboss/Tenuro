@@ -8,6 +8,18 @@ export type ExistingTenantClaimStatus =
   | "expired"
   | "cancelled";
 
+export type ExistingTenantClaimIdType =
+  | "nin"
+  | "passport"
+  | "drivers_license"
+  | "voters_card";
+
+export type ExistingTenantClaimPaymentFrequency =
+  | "annual"
+  | "monthly"
+  | "quarterly"
+  | "biannual";
+
 export type ExistingTenantClaimRow = {
   id: string;
   landlord_id: string;
@@ -16,23 +28,37 @@ export type ExistingTenantClaimRow = {
   token_expires_at: string;
   token_used_at: string | null;
   status: ExistingTenantClaimStatus;
+
   invited_tenant_full_name: string | null;
   invited_tenant_phone_number: string | null;
   invited_tenant_email: string | null;
+
   tenant_full_name: string | null;
   tenant_phone_number: string | null;
   tenant_email: string | null;
+  tenant_occupation: string | null;
+  tenant_id_type: ExistingTenantClaimIdType | null;
+  tenant_id_number: string | null;
   tenant_move_in_date: string | null;
   tenant_claimed_rent_amount: number | null;
   tenant_claimed_next_rent_due_date: string | null;
-  tenant_payment_frequency: "annual" | "monthly" | "quarterly" | "biannual";
+  tenant_payment_frequency: ExistingTenantClaimPaymentFrequency;
   tenant_notes: string | null;
   existing_agreement_path: string | null;
   last_payment_proof_path: string | null;
+
   landlord_confirmed_rent_amount: number | null;
   landlord_confirmed_move_in_date: string | null;
   landlord_confirmed_next_rent_due_date: string | null;
   landlord_review_notes: string | null;
+  landlord_last_payment_amount: number | null;
+  landlord_last_payment_date: string | null;
+
+  bopa_calculated_current_due_date: string | null;
+  bopa_calculated_outstanding_balance: number | null;
+  bopa_calculated_months_owed: number;
+  arrears_calculation_metadata: Record<string, unknown>;
+
   approved_tenant_id: string | null;
   approved_tenancy_id: string | null;
   rejected_reason: string | null;
@@ -77,6 +103,9 @@ const EXISTING_TENANT_CLAIM_SELECT = `
   tenant_full_name,
   tenant_phone_number,
   tenant_email,
+  tenant_occupation,
+  tenant_id_type,
+  tenant_id_number,
   tenant_move_in_date,
   tenant_claimed_rent_amount,
   tenant_claimed_next_rent_due_date,
@@ -88,6 +117,12 @@ const EXISTING_TENANT_CLAIM_SELECT = `
   landlord_confirmed_move_in_date,
   landlord_confirmed_next_rent_due_date,
   landlord_review_notes,
+  landlord_last_payment_amount,
+  landlord_last_payment_date,
+  bopa_calculated_current_due_date,
+  bopa_calculated_outstanding_balance,
+  bopa_calculated_months_owed,
+  arrears_calculation_metadata,
   approved_tenant_id,
   approved_tenancy_id,
   rejected_reason,
@@ -217,10 +252,13 @@ export async function submitExistingTenantClaim(
     fullName: string;
     phoneNumber: string;
     email: string | null;
+    occupation: string;
+    idType: ExistingTenantClaimIdType;
+    idNumber: string;
     moveInDate: string;
     claimedRentAmount: number;
     claimedNextRentDueDate: string;
-    paymentFrequency: "annual" | "monthly" | "quarterly" | "biannual";
+    paymentFrequency: ExistingTenantClaimPaymentFrequency;
     tenantNotes: string | null;
   },
 ) {
@@ -232,6 +270,9 @@ export async function submitExistingTenantClaim(
       tenant_full_name: params.fullName,
       tenant_phone_number: params.phoneNumber,
       tenant_email: params.email,
+      tenant_occupation: params.occupation,
+      tenant_id_type: params.idType,
+      tenant_id_number: params.idNumber,
       tenant_move_in_date: params.moveInDate,
       tenant_claimed_rent_amount: params.claimedRentAmount,
       tenant_claimed_next_rent_due_date: params.claimedNextRentDueDate,
@@ -245,6 +286,44 @@ export async function submitExistingTenantClaim(
     })
     .eq("id", params.claimId)
     .eq("status", "pending")
+    .is("deleted_at", null)
+    .select(EXISTING_TENANT_CLAIM_DETAIL_SELECT)
+    .single<ExistingTenantClaimDetailRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function updateExistingTenantClaimArrears(
+  supabase: SupabaseClient,
+  params: {
+    claimId: string;
+    landlordId: string;
+    lastPaymentAmount: number;
+    lastPaymentDate: string;
+    calculatedCurrentDueDate: string;
+    calculatedOutstandingBalance: number;
+    calculatedMonthsOwed: number;
+    calculationMetadata: Record<string, unknown>;
+  },
+) {
+  const { data, error } = await supabase
+    .from("existing_tenant_claims")
+    .update({
+      landlord_last_payment_amount: params.lastPaymentAmount,
+      landlord_last_payment_date: params.lastPaymentDate,
+      bopa_calculated_current_due_date: params.calculatedCurrentDueDate,
+      bopa_calculated_outstanding_balance: params.calculatedOutstandingBalance,
+      bopa_calculated_months_owed: params.calculatedMonthsOwed,
+      arrears_calculation_metadata: params.calculationMetadata,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", params.claimId)
+    .eq("landlord_id", params.landlordId)
+    .eq("status", "submitted")
     .is("deleted_at", null)
     .select(EXISTING_TENANT_CLAIM_DETAIL_SELECT)
     .single<ExistingTenantClaimDetailRow>();

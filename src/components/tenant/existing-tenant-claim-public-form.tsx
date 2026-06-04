@@ -37,6 +37,25 @@ const paymentFrequencyOptions = [
   },
 ];
 
+const idTypeOptions = [
+  {
+    label: "NIN",
+    value: "nin",
+  },
+  {
+    label: "International Passport",
+    value: "passport",
+  },
+  {
+    label: "Driver's License",
+    value: "drivers_license",
+  },
+  {
+    label: "Voter's Card",
+    value: "voters_card",
+  },
+];
+
 export function ExistingTenantClaimPublicForm({
   token,
   invitedName,
@@ -52,7 +71,7 @@ export function ExistingTenantClaimPublicForm({
     return (
       <TrustNotice
         title="Details submitted"
-        description="Your tenancy details have been sent to the landlord. The landlord will review the rent amount and due date before confirming the final record."
+        description="Your tenancy details have been sent to the landlord. The landlord will review the rent amount, move-in date, and due date before confirming the final record."
       />
     );
   }
@@ -70,7 +89,7 @@ export function ExistingTenantClaimPublicForm({
 
       <TrustNotice
         title="Confirm your tenancy details"
-        description="Your landlord will review these details before they become the official tenancy record."
+        description="Enter your details as accurately as possible. Your landlord will review them before they become official BOPA records."
       />
 
       {state.message ? (
@@ -108,6 +127,32 @@ export function ExistingTenantClaimPublicForm({
         placeholder="Optional"
         error={state.fieldErrors?.email?.[0]}
       />
+
+      <Input
+        label="Occupation"
+        name="occupation"
+        placeholder="Example: Trader, Accountant, Engineer"
+        error={state.fieldErrors?.occupation?.[0]}
+        required
+      />
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Select
+          label="Means of identification"
+          name="idType"
+          options={idTypeOptions}
+          error={state.fieldErrors?.idType?.[0]}
+          required
+        />
+
+        <Input
+          label="ID number"
+          name="idNumber"
+          placeholder="Enter the selected ID number"
+          error={state.fieldErrors?.idNumber?.[0]}
+          required
+        />
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Input
