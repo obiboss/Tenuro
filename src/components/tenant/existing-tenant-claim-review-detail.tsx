@@ -231,12 +231,6 @@ export function ExistingTenantClaimReviewDetail({
               {formatDate(claim.tenant_move_in_date)}
             </p>
           </div>
-          <div className="rounded-button border border-warning/30 bg-warning-soft/40 p-4 sm:col-span-2">
-            <p className="text-sm font-bold text-warning">Rent due date (tenant stated)</p>
-            <p className="mt-1 text-base font-black text-warning">
-              {formatDate(claim.tenant_claimed_next_rent_due_date)}
-            </p>
-          </div>
         </div>
 
         {claim.tenant_notes ? (
@@ -246,11 +240,74 @@ export function ExistingTenantClaimReviewDetail({
         ) : null}
       </section>
 
+      <section className="space-y-4 rounded-card border border-border-soft bg-surface p-5">
+        <div>
+          <h2 className="text-lg font-black text-text-strong">Rent history</h2>
+          <p className="mt-1 text-base leading-7 text-text-muted">
+            Optional. Only record arrears for years where the tenant still owes
+            rent. Review this before approving below.
+          </p>
+        </div>
+
+        <form action={arrearsAction} className="space-y-4">
+          <ActionResultToast
+            ok={arrearsState.ok}
+            message={arrearsState.message}
+            successTitle="Rent history saved"
+            errorTitle="Could not save rent history"
+          />
+
+          <input type="hidden" name="claimId" value={claim.id} />
+          <input
+            type="hidden"
+            name="rentCyclesJson"
+            value={JSON.stringify(
+              cycles.map((cycle) => ({
+                periodStart: cycle.periodStart,
+                periodEnd: cycle.periodEnd,
+                rentCharged: cycle.rentCharged,
+                assumedPaid: cycle.assumedPaid,
+                payments: cycle.payments,
+              })),
+            )}
+          />
+
+          <ExistingTenantRentHistoryTable
+            cycles={cycles}
+            confirmedRentAmount={confirmedRentAmountNumber}
+            onCyclesChange={setCycles}
+            disabled={arrearsPending}
+          />
+
+          <Button
+            type="submit"
+            variant="secondary"
+            isLoading={arrearsPending}
+            fullWidth
+          >
+            Save rent history
+          </Button>
+        </form>
+      </section>
+
+      <div className="rounded-card border-2 border-danger/25 bg-danger-soft/30 p-5">
+        <p className="text-xs font-black uppercase tracking-wide text-danger">
+          Amount owed from recorded years
+        </p>
+        <p className="mt-2 text-2xl font-black text-danger">
+          {formatNaira(openingBalance)}
+        </p>
+        <p className="mt-2 text-sm leading-6 text-text-muted">
+          Only includes rent years where you recorded arrears. All other years
+          are assumed fully paid.
+        </p>
+      </div>
+
       <section className="space-y-4 rounded-card border border-primary/15 bg-primary-soft/30 p-5">
         <div>
           <h2 className="text-lg font-black text-text-strong">Final approval</h2>
           <p className="mt-1 text-base leading-7 text-text-muted">
-            Confirm the rent, move-in date, and amount owed before creating the
+            Confirm the rent, move-in date, and due dates before creating the
             live tenancy.
           </p>
         </div>
@@ -282,32 +339,44 @@ export function ExistingTenantClaimReviewDetail({
               required
             />
             <div className="space-y-2">
-              <p className="text-sm font-semibold text-text-strong">Amount owed</p>
+              <p className="text-sm font-semibold text-text-strong">Opening balance</p>
               <p className="flex min-h-14 items-center rounded-button border border-border-soft bg-surface px-4 text-base font-black text-danger">
                 {formatNaira(openingBalance)}
               </p>
               <p className="text-sm text-text-muted">
-                Only includes years where you recorded arrears. Leave rent history
-                unchanged if the tenant owes nothing.
+                Matches the amount owed summary above.
               </p>
             </div>
           </div>
 
+          <Input
+            label="Confirmed move-in date"
+            name="confirmedMoveInDate"
+            type="date"
+            value={confirmedMoveInDate}
+            onChange={(event) => setConfirmedMoveInDate(event.target.value)}
+            required
+          />
+
           <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-warning">
+                Rent due date (tenant stated)
+              </p>
+              <p className="flex min-h-14 items-center rounded-button border border-warning/40 bg-warning-soft/50 px-4 text-base font-black text-warning">
+                {formatDate(claim.tenant_claimed_next_rent_due_date)}
+              </p>
+              <p className="text-sm text-text-muted">
+                What the tenant said on the claim form. Compare with the
+                calculated date.
+              </p>
+            </div>
             <Input
-              label="Confirmed move-in date"
-              name="confirmedMoveInDate"
-              type="date"
-              value={confirmedMoveInDate}
-              onChange={(event) => setConfirmedMoveInDate(event.target.value)}
-              required
-            />
-            <Input
-              label="Current due date"
+              label="Current due date (calculated)"
               type="date"
               value={confirmedCurrentDueDate}
               readOnly
-              helperText="Calculated from the confirmed move-in date."
+              helperText="From the confirmed move-in date and rent frequency."
             />
           </div>
 
@@ -335,57 +404,6 @@ export function ExistingTenantClaimReviewDetail({
         >
           Reject this claim
         </button>
-      </section>
-
-      <section className="space-y-4 rounded-card border border-border-soft bg-surface p-5">
-        <div>
-          <h2 className="text-lg font-black text-text-strong">Rent history</h2>
-          <p className="mt-1 text-base leading-7 text-text-muted">
-            Optional. Only record arrears for years where the tenant still owes
-            rent.
-          </p>
-        </div>
-
-        <form action={arrearsAction} className="space-y-4">
-          <ActionResultToast
-            ok={arrearsState.ok}
-            message={arrearsState.message}
-            successTitle="Rent history saved"
-            errorTitle="Could not save rent history"
-          />
-
-          <input type="hidden" name="claimId" value={claim.id} />
-          <input
-            type="hidden"
-            name="rentCyclesJson"
-            value={JSON.stringify(
-              cycles.map((cycle) => ({
-                periodStart: cycle.periodStart,
-                periodEnd: cycle.periodEnd,
-                rentCharged: cycle.rentCharged,
-                assumedPaid: cycle.assumedPaid,
-                payments: cycle.payments,
-              })),
-            )}
-          />
-
-          <ExistingTenantRentHistoryTable
-            claim={claim}
-            cycles={cycles}
-            confirmedRentAmount={confirmedRentAmountNumber}
-            onCyclesChange={setCycles}
-            disabled={arrearsPending}
-          />
-
-          <Button
-            type="submit"
-            variant="secondary"
-            isLoading={arrearsPending}
-            fullWidth
-          >
-            Save rent history
-          </Button>
-        </form>
       </section>
 
       <ConfirmDialog

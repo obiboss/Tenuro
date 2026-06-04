@@ -1,13 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import {
   buildRentCycles,
-  calculateArrearsFromCycles,
   getCycleBalance,
   getCycleStatus,
   normalizeRentCycleAfterEdit,
@@ -19,7 +17,6 @@ import type { ExistingTenantClaimDetailRow } from "@/server/repositories/existin
 import { formatNaira } from "@/server/utils/money";
 
 type ExistingTenantRentHistoryTableProps = {
-  claim: ExistingTenantClaimDetailRow;
   cycles: ExistingTenantRentCycle[];
   confirmedRentAmount: number;
   onCyclesChange: (cycles: ExistingTenantRentCycle[]) => void;
@@ -250,30 +247,11 @@ function CycleRow({
 }
 
 export function ExistingTenantRentHistoryTable({
-  claim,
   cycles,
   confirmedRentAmount,
   onCyclesChange,
   disabled = false,
 }: ExistingTenantRentHistoryTableProps) {
-  const moveInDate = claim.tenant_move_in_date ?? "";
-  const paymentFrequency = claim.tenant_payment_frequency;
-
-  const summary = useMemo(
-    () =>
-      calculateArrearsFromCycles({
-        moveInDate,
-        paymentFrequency,
-        cycles,
-      }),
-    [cycles, moveInDate, paymentFrequency],
-  );
-
-  const orderedCycles = useMemo(
-    () => [...cycles].reverse(),
-    [cycles],
-  );
-
   function updateCycle(
     cycleId: string,
     updater: (cycle: ExistingTenantRentCycle) => ExistingTenantRentCycle,
@@ -285,8 +263,6 @@ export function ExistingTenantRentHistoryTable({
     );
   }
 
-  const hasRecordedArrears = cycles.some((cycle) => !cycle.assumedPaid);
-
   return (
     <div className="space-y-4">
       <p className="text-base leading-7 text-text-muted">
@@ -295,7 +271,7 @@ export function ExistingTenantRentHistoryTable({
       </p>
 
       <div className="space-y-3">
-        {orderedCycles.map((cycle) => (
+        {cycles.map((cycle) => (
           <CycleRow
             key={cycle.id}
             cycle={cycle}
@@ -305,17 +281,6 @@ export function ExistingTenantRentHistoryTable({
           />
         ))}
       </div>
-
-      {hasRecordedArrears ? (
-        <div className="rounded-card border border-border-soft bg-background p-4">
-          <p className="text-xs font-black uppercase tracking-wide text-danger">
-            Amount owed from recorded years
-          </p>
-          <p className="mt-2 text-base font-black text-danger">
-            {formatNaira(summary.amountOwed)}
-          </p>
-        </div>
-      ) : null}
     </div>
   );
 }
