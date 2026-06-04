@@ -28,19 +28,15 @@ export function PayoutVerificationAutoRefresh({
     }
 
     const startedAt = Date.now();
-    let intervalId: number | undefined;
     let isActive = true;
 
-    async function pollStatus() {
+    async function pollStatus(intervalId: number) {
       if (!isActive) {
         return;
       }
 
       if (Date.now() - startedAt >= timeoutMs) {
-        if (intervalId !== undefined) {
-          window.clearInterval(intervalId);
-        }
-
+        window.clearInterval(intervalId);
         return;
       }
 
@@ -57,16 +53,12 @@ export function PayoutVerificationAutoRefresh({
 
         if (status.state === "verified" && !hasRefreshedRef.current) {
           hasRefreshedRef.current = true;
-
-          if (intervalId !== undefined) {
-            window.clearInterval(intervalId);
-          }
-
+          window.clearInterval(intervalId);
           router.refresh();
           return;
         }
 
-        if (status.state !== "unverified" && intervalId !== undefined) {
+        if (status.state !== "unverified") {
           window.clearInterval(intervalId);
         }
       } catch {
@@ -74,17 +66,15 @@ export function PayoutVerificationAutoRefresh({
       }
     }
 
-    void pollStatus();
-    intervalId = window.setInterval(() => {
-      void pollStatus();
+    const intervalId = window.setInterval(() => {
+      void pollStatus(intervalId);
     }, pollIntervalMs);
+
+    void pollStatus(intervalId);
 
     return () => {
       isActive = false;
-
-      if (intervalId !== undefined) {
-        window.clearInterval(intervalId);
-      }
+      window.clearInterval(intervalId);
     };
   }, [enabled, pollIntervalMs, timeoutMs, router]);
 

@@ -9,25 +9,32 @@ type ExistingTenantClaimReviewPageProps = {
   }>;
 };
 
+async function loadClaimForReview(claimId: string) {
+  try {
+    return await getCurrentLandlordExistingTenantClaim(claimId);
+  } catch {
+    return null;
+  }
+}
+
 export default async function ExistingTenantClaimReviewPage({
   params,
 }: ExistingTenantClaimReviewPageProps) {
   const { claimId } = await params;
+  const claim = await loadClaimForReview(claimId);
 
-  try {
-    const claim = await getCurrentLandlordExistingTenantClaim(claimId);
-
-    return (
-      <main>
-        <PageHeader
-          title="Review existing tenant"
-          description="Check tenant details, record rent history, and approve the tenancy."
-        />
-
-        <ExistingTenantClaimReviewDetail claim={claim} />
-      </main>
-    );
-  } catch {
+  if (!claim) {
     notFound();
   }
+
+  return (
+    <main>
+      <PageHeader
+        title="Review existing tenant"
+        description="Check tenant details, record rent history, and approve the tenancy."
+      />
+
+      <ExistingTenantClaimReviewDetail claim={claim} />
+    </main>
+  );
 }

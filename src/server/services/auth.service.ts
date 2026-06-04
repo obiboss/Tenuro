@@ -6,7 +6,6 @@ import {
   assertRole,
   type AppPermission,
 } from "@/server/constants/permissions";
-import { AppError } from "@/server/errors/app-error";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import type { ServerSessionUser, UserRole } from "@/server/types/auth.types";
 

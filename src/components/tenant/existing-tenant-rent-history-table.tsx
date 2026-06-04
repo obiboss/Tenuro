@@ -58,10 +58,6 @@ function getYearOptions(moveInDate: string, paymentFrequency: ExistingTenantClai
   return [...years].sort((first, second) => second - first);
 }
 
-function cycleMatchesStartYear(cycle: ExistingTenantRentCycle, startYear: number) {
-  return new Date(`${cycle.periodStart}T00:00:00`).getFullYear() >= startYear;
-}
-
 function createPaymentRow() {
   return {
     amount: "",

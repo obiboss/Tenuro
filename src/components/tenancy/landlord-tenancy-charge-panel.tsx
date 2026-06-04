@@ -147,12 +147,9 @@ function QuickAddChargeForm({
     initialLandlordTenancyChargeActionState,
   );
 
-  const [formKey, setFormKey] = useState(0);
-
   useEffect(() => {
     if (state.ok) {
       onAdded();
-      setFormKey((current) => current + 1);
     }
   }, [state.ok, onAdded]);
 
@@ -160,9 +157,11 @@ function QuickAddChargeForm({
     return null;
   }
 
+  const formKey = state.ok ? `${selectedPresetId}-success` : selectedPresetId;
+
   return (
     <div className="rounded-card border border-border-soft bg-surface p-4 shadow-card">
-      <form key={`${selectedPresetId}-${formKey}`} action={formAction} className="space-y-4">
+      <form key={formKey} action={formAction} className="space-y-4">
         <ActionResultToast
           ok={state.ok}
           message={state.message}
@@ -199,7 +198,6 @@ function QuickAddChargeForm({
         />
 
         <CurrencyInput
-          resetKey={formKey}
           label="Amount"
           name="amount"
           placeholder="0.00"
