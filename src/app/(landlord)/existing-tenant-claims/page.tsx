@@ -17,7 +17,7 @@ export default async function ExistingTenantClaimsPage() {
     <main>
       <PageHeader
         title="Existing Tenant Claims"
-        description="Review existing tenants who submitted rent amount, move-in date, and next rent due date for landlord confirmation."
+        description="Review existing tenants who submitted their move-in date, rent amount, and rent due date."
         action={
           <Link href="/tenants/existing/new">
             <Button>Invite Existing Tenant</Button>

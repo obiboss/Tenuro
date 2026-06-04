@@ -18,23 +18,14 @@ import {
   updateExistingTenantClaimArrearsSchema,
 } from "@/server/validators/existing-tenant-claim.schema";
 
-function parsePaymentHistory(formData: FormData) {
-  const amounts = formData.getAll("paymentAmount");
-  const dates = formData.getAll("paymentDate");
-  const notes = formData.getAll("paymentNote");
+function parseRentCyclesJson(formData: FormData) {
+  const raw = formData.get("rentCyclesJson");
 
-  return amounts
-    .map((amount, index) => ({
-      amount,
-      paidAt: dates[index],
-      note: notes[index],
-    }))
-    .filter((payment) => {
-      const amount = String(payment.amount ?? "").trim();
-      const paidAt = String(payment.paidAt ?? "").trim();
+  if (typeof raw !== "string" || raw.trim().length === 0) {
+    throw new Error("Rent history data is missing.");
+  }
 
-      return amount.length > 0 || paidAt.length > 0;
-    });
+  return JSON.parse(raw) as unknown;
 }
 
 export async function createExistingTenantClaimAction(
@@ -90,6 +81,7 @@ export async function submitExistingTenantClaimAction(
       idType: formData.get("idType"),
       idNumber: formData.get("idNumber"),
       moveInDate: formData.get("moveInDate"),
+      statedRentDueDate: formData.get("statedRentDueDate"),
       claimedRentAmount: formData.get("claimedRentAmount"),
       paymentFrequency: formData.get("paymentFrequency"),
       tenantNotes: formData.get("tenantNotes"),
@@ -97,13 +89,16 @@ export async function submitExistingTenantClaimAction(
 
     await submitExistingTenantClaimByToken(parsed);
 
+    revalidatePath(`/claim/${parsed.token}`);
     revalidatePath(`/existing-tenant-claims/${parsed.token}`);
     revalidatePath("/existing-tenant-claims");
     revalidatePath("/tenants");
+    revalidatePath("/notifications");
 
     return {
       ok: true,
-      message: "Your tenancy details have been submitted for landlord review.",
+      message:
+        "Your details have been submitted. Your landlord will review and confirm your tenancy shortly.",
     };
   } catch (error) {
     const result = errorResult(error);
@@ -124,16 +119,17 @@ export async function updateExistingTenantClaimArrearsAction(
     const parsed = updateExistingTenantClaimArrearsSchema.parse({
       claimId: formData.get("claimId"),
       arrearsStartDate: formData.get("arrearsStartDate"),
-      paymentHistory: parsePaymentHistory(formData),
+      cycles: parseRentCyclesJson(formData),
     });
 
     await updateExistingTenantClaimArrearsForCurrentLandlord(parsed);
 
     revalidatePath("/existing-tenant-claims");
+    revalidatePath(`/existing-tenant-claims/${parsed.claimId}`);
 
     return {
       ok: true,
-      message: "Arrears estimate updated from selected start cycle.",
+      message: "Rent history saved.",
     };
   } catch (error) {
     const result = errorResult(error);
@@ -160,9 +156,11 @@ export async function approveExistingTenantClaimAction(
       reviewNotes: formData.get("reviewNotes"),
     });
 
-    await approveExistingTenantClaimForCurrentLandlord(parsed);
+    const result = await approveExistingTenantClaimForCurrentLandlord(parsed);
 
     revalidatePath("/existing-tenant-claims");
+    revalidatePath(`/existing-tenant-claims/${parsed.claimId}`);
+    revalidatePath(`/tenants/${result.tenantId}`);
     revalidatePath("/tenants");
     revalidatePath("/tenancies");
     revalidatePath("/renewals");
@@ -171,7 +169,10 @@ export async function approveExistingTenantClaimAction(
 
     return {
       ok: true,
-      message: "Existing tenant approved and tenancy created.",
+      message: `${result.tenantName}'s tenancy has been created.`,
+      tenantId: result.tenantId,
+      tenancyId: result.tenancyId,
+      tenantName: result.tenantName,
     };
   } catch (error) {
     const result = errorResult(error);
@@ -197,6 +198,7 @@ export async function rejectExistingTenantClaimAction(
     await rejectExistingTenantClaimForCurrentLandlord(parsed);
 
     revalidatePath("/existing-tenant-claims");
+    revalidatePath(`/existing-tenant-claims/${parsed.claimId}`);
 
     return {
       ok: true,

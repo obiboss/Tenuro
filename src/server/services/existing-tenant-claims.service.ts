@@ -19,7 +19,11 @@ import {
   updateExistingTenantClaimArrears,
   type ExistingTenantClaimPaymentFrequency,
 } from "@/server/repositories/existing-tenant-claims.repository";
-import { postExistingTenantOpeningBalanceEntry } from "@/server/repositories/ledger.repository";
+import {
+  postExistingTenantHistoricalPayments,
+  postExistingTenantHistoricalRentCharges,
+  postExistingTenantOpeningBalanceEntry,
+} from "@/server/repositories/ledger.repository";
 import {
   createLiveExistingTenantTenancy,
   getActiveTenancyForUnit,
@@ -34,13 +38,25 @@ import {
   type UnitType,
 } from "@/server/repositories/units.repository";
 import { writeAuditLog } from "@/server/services/audit-log.service";
+import { queueLandlordInAppNotification } from "@/server/services/notification-queue.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
+import {
+  addMonths,
+  buildRentCycles,
+  calculateArrearsFromCycles,
+  calculateCurrentDueDate,
+  getDefaultArrearsStartDate,
+  parseDateOnly,
+  toDateOnly,
+  type ExistingTenantRentCycle,
+} from "@/lib/existing-tenant-arrears";
+import { getFrequencyMonths } from "@/lib/existing-tenant-arrears";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { normalisePhoneNumber } from "@/server/utils/phone";
 import type {
   ApproveExistingTenantClaimInput,
   CreateExistingTenantClaimInput,
-  ExistingTenantPaymentHistoryItem,
+  ExistingTenantRentCycleInput,
   RejectExistingTenantClaimInput,
   SubmitExistingTenantClaimInput,
   UpdateExistingTenantClaimArrearsInput,
@@ -55,17 +71,6 @@ type ExistingTenantClaimUnitProperty = {
   id: string;
   property_name: string;
   landlord_id: string;
-};
-
-type RentChargeScheduleItem = {
-  dueDate: string;
-  amount: number;
-  periodStart: string;
-  periodEnd: string;
-};
-
-type NormalizedPaymentHistoryItem = ExistingTenantPaymentHistoryItem & {
-  note: string;
 };
 
 export type ExistingTenantClaimUnitOption = {
@@ -105,9 +110,11 @@ function getAppBaseUrl() {
 }
 
 function buildExistingTenantClaimUrl(token: string) {
-  return `${getAppBaseUrl()}/existing-tenant-claims/${encodeURIComponent(
-    token,
-  )}`;
+  return `${getAppBaseUrl()}/claim/${encodeURIComponent(token)}`;
+}
+
+function buildExistingTenantClaimReviewPath(claimId: string) {
+  return `/existing-tenant-claims/${claimId}`;
 }
 
 function getTokenExpiry() {
@@ -131,37 +138,6 @@ function resolveUnitProperty(
   return propertyRelation;
 }
 
-function parseDateOnly(value: string) {
-  return new Date(`${value}T00:00:00`);
-}
-
-function toDateOnly(value: Date) {
-  return value.toISOString().slice(0, 10);
-}
-
-function addMonths(value: Date, months: number) {
-  const nextDate = new Date(value);
-  nextDate.setMonth(nextDate.getMonth() + months);
-
-  return nextDate;
-}
-
-function getFrequencyMonths(frequency: ExistingTenantClaimPaymentFrequency) {
-  if (frequency === "monthly") {
-    return 1;
-  }
-
-  if (frequency === "quarterly") {
-    return 3;
-  }
-
-  if (frequency === "biannual") {
-    return 6;
-  }
-
-  return 12;
-}
-
 function calculateCurrentPeriodEnd(params: {
   currentPeriodStart: string;
   paymentFrequency: ExistingTenantClaimPaymentFrequency;
@@ -174,98 +150,22 @@ function calculateCurrentPeriodEnd(params: {
   );
 }
 
-function normalizePaymentHistory(
-  paymentHistory: ExistingTenantPaymentHistoryItem[],
-): NormalizedPaymentHistoryItem[] {
-  return paymentHistory
-    .map((payment) => ({
+function mapCycleInputToRentCycle(
+  cycle: ExistingTenantRentCycleInput,
+): ExistingTenantRentCycle {
+  return {
+    id: cycle.periodStart,
+    label: "",
+    periodStart: cycle.periodStart,
+    periodEnd: cycle.periodEnd,
+    rentCharged: Number(cycle.rentCharged),
+    assumedPaid: cycle.assumedPaid,
+    payments: cycle.payments.map((payment) => ({
       amount: Number(payment.amount),
       paidAt: payment.paidAt,
       note: payment.note?.trim() ?? "",
-    }))
-    .filter((payment) => payment.amount > 0 && payment.paidAt.trim().length > 0)
-    .sort((firstPayment, secondPayment) =>
-      firstPayment.paidAt.localeCompare(secondPayment.paidAt),
-    );
-}
-
-function filterCountedPayments(params: {
-  paymentHistory: NormalizedPaymentHistoryItem[];
-  arrearsStartDate: string;
-}) {
-  const arrearsStartDate = parseDateOnly(params.arrearsStartDate);
-
-  return params.paymentHistory.filter(
-    (payment) =>
-      parseDateOnly(payment.paidAt).getTime() >= arrearsStartDate.getTime(),
-  );
-}
-
-function buildRentChargeSchedule(params: {
-  moveInDate: string;
-  arrearsStartDate: string;
-  rentAmount: number;
-  paymentFrequency: ExistingTenantClaimPaymentFrequency;
-  today: Date;
-}) {
-  const frequencyMonths = getFrequencyMonths(params.paymentFrequency);
-  const arrearsStartDate = parseDateOnly(params.arrearsStartDate);
-  const schedule: RentChargeScheduleItem[] = [];
-
-  let dueDate = addMonths(parseDateOnly(params.moveInDate), frequencyMonths);
-
-  while (dueDate.getTime() <= params.today.getTime()) {
-    const periodStart = new Date(dueDate);
-    const periodEnd = addMonths(periodStart, frequencyMonths);
-
-    if (dueDate.getTime() >= arrearsStartDate.getTime()) {
-      schedule.push({
-        dueDate: toDateOnly(dueDate),
-        amount: params.rentAmount,
-        periodStart: toDateOnly(periodStart),
-        periodEnd: toDateOnly(periodEnd),
-      });
-    }
-
-    dueDate = periodEnd;
-  }
-
-  return schedule;
-}
-
-function calculateCurrentDueDate(params: {
-  moveInDate: string;
-  paymentFrequency: ExistingTenantClaimPaymentFrequency;
-  today: Date;
-}) {
-  const frequencyMonths = getFrequencyMonths(params.paymentFrequency);
-  let currentDueDate = addMonths(
-    parseDateOnly(params.moveInDate),
-    frequencyMonths,
-  );
-  let nextDueDate = addMonths(currentDueDate, frequencyMonths);
-
-  while (nextDueDate.getTime() <= params.today.getTime()) {
-    currentDueDate = nextDueDate;
-    nextDueDate = addMonths(currentDueDate, frequencyMonths);
-  }
-
-  return toDateOnly(currentDueDate);
-}
-
-function calculatePaymentCoveredMonths(params: {
-  outstandingBalance: number;
-  rentAmount: number;
-  paymentFrequency: ExistingTenantClaimPaymentFrequency;
-}) {
-  if (params.outstandingBalance <= 0 || params.rentAmount <= 0) {
-    return 0;
-  }
-
-  const frequencyMonths = getFrequencyMonths(params.paymentFrequency);
-  const owedPeriods = params.outstandingBalance / params.rentAmount;
-
-  return Math.ceil(owedPeriods * frequencyMonths);
+    })),
+  };
 }
 
 function calculateExistingTenantArrears(params: {
@@ -273,82 +173,54 @@ function calculateExistingTenantArrears(params: {
   arrearsStartDate: string;
   rentAmount: number;
   paymentFrequency: ExistingTenantClaimPaymentFrequency;
-  paymentHistory: ExistingTenantPaymentHistoryItem[];
+  cycles: ExistingTenantRentCycleInput[];
 }) {
-  const today = new Date();
-  const normalizedPayments = normalizePaymentHistory(params.paymentHistory);
-  const countedPayments = filterCountedPayments({
-    paymentHistory: normalizedPayments,
-    arrearsStartDate: params.arrearsStartDate,
-  });
-
-  const rentCharges = buildRentChargeSchedule({
-    moveInDate: params.moveInDate,
-    arrearsStartDate: params.arrearsStartDate,
-    rentAmount: params.rentAmount,
-    paymentFrequency: params.paymentFrequency,
-    today,
-  });
-
-  const totalRentCharges = rentCharges.reduce(
-    (total, charge) => total + charge.amount,
-    0,
-  );
-
-  const totalPayments = countedPayments.reduce(
-    (total, payment) => total + payment.amount,
-    0,
-  );
-
-  const ignoredPayments = normalizedPayments.filter(
-    (payment) =>
-      !countedPayments.some(
-        (countedPayment) =>
-          countedPayment.paidAt === payment.paidAt &&
-          countedPayment.amount === payment.amount &&
-          countedPayment.note === payment.note,
-      ),
-  );
-
-  const outstandingBalance = Math.max(totalRentCharges - totalPayments, 0);
-  const calculatedCurrentDueDate = calculateCurrentDueDate({
+  const mappedCycles = params.cycles.map(mapCycleInputToRentCycle);
+  const summary = calculateArrearsFromCycles({
     moveInDate: params.moveInDate,
     paymentFrequency: params.paymentFrequency,
-    today,
-  });
-
-  const calculatedMonthsOwed = calculatePaymentCoveredMonths({
-    outstandingBalance,
-    rentAmount: params.rentAmount,
-    paymentFrequency: params.paymentFrequency,
+    arrearsStartDate: params.arrearsStartDate,
+    cycles: mappedCycles,
   });
 
   return {
-    calculatedCurrentDueDate,
-    calculatedOutstandingBalance: outstandingBalance,
-    calculatedMonthsOwed,
-    normalizedPayments,
-    countedPayments,
+    calculatedCurrentDueDate: summary.currentDueDate,
+    calculatedOutstandingBalance: summary.amountOwed,
+    calculatedMonthsOwed: summary.monthsOwed,
+    normalizedPayments: summary.paymentHistory,
+    countedPayments: summary.paymentHistory,
     metadata: {
       move_in_date: params.moveInDate,
       arrears_start_date: params.arrearsStartDate,
       rent_amount: params.rentAmount,
       payment_frequency: params.paymentFrequency,
       frequency_months: getFrequencyMonths(params.paymentFrequency),
-      rent_charges: rentCharges,
-      total_rent_charges: totalRentCharges,
-      payment_history: normalizedPayments,
-      counted_payment_history: countedPayments,
-      ignored_payment_history: ignoredPayments,
-      total_payments: totalPayments,
-      calculated_current_due_date: calculatedCurrentDueDate,
-      calculated_months_owed: calculatedMonthsOwed,
-      calculated_outstanding_balance: outstandingBalance,
-      calculation_rule:
-        "Initial move-in cycle is assumed fully paid. Charges before landlord arrears start date are treated as fully paid. Only payments dated on or after the arrears start date reduce the selected arrears period.",
+      cycles: summary.cycles,
+      total_rent_charges: summary.totalRentDue,
+      payment_history: summary.paymentHistory,
+      counted_payment_history: summary.paymentHistory,
+      total_payments: summary.totalPaymentsCounted,
+      calculated_current_due_date: summary.currentDueDate,
+      calculated_months_owed: summary.monthsOwed,
+      calculated_outstanding_balance: summary.amountOwed,
       calculated_at: new Date().toISOString(),
     },
   };
+}
+
+async function notifyLandlordExistingTenantClaimSubmitted(params: {
+  landlordId: string;
+  claimId: string;
+  tenantName: string;
+  propertyName: string;
+  unitIdentifier: string;
+}) {
+  const reviewPath = buildExistingTenantClaimReviewPath(params.claimId);
+
+  await queueLandlordInAppNotification({
+    landlordId: params.landlordId,
+    messageBody: `${params.tenantName} has submitted their details for ${params.propertyName} · ${params.unitIdentifier}. Review: ${reviewPath}`,
+  });
 }
 
 function assertClaimPubliclySubmittable(params: {
@@ -625,13 +497,27 @@ export async function submitExistingTenantClaimByToken(
     fullName: input.fullName,
     phoneNumber: normalizedPhone.e164,
     email: input.email?.trim() ? input.email.trim().toLowerCase() : null,
-    occupation: input.occupation,
+    occupation: input.occupation?.trim() || null,
     idType: input.idType,
     idNumber: input.idNumber,
     moveInDate: input.moveInDate,
+    statedRentDueDate: input.statedRentDueDate,
     claimedRentAmount: input.claimedRentAmount,
     paymentFrequency: input.paymentFrequency,
     tenantNotes: input.tenantNotes?.trim() || null,
+  });
+
+  const propertyName =
+    submittedClaim.units?.properties?.property_name ?? "your property";
+  const unitIdentifier =
+    submittedClaim.units?.unit_identifier ?? "the selected unit";
+
+  await notifyLandlordExistingTenantClaimSubmitted({
+    landlordId: submittedClaim.landlord_id,
+    claimId: submittedClaim.id,
+    tenantName: submittedClaim.tenant_full_name ?? "A tenant",
+    propertyName,
+    unitIdentifier,
   });
 
   await writeExistingTenantClaimAudit({
@@ -718,7 +604,7 @@ export async function updateExistingTenantClaimArrearsForCurrentLandlord(
     arrearsStartDate: input.arrearsStartDate,
     rentAmount: Number(claim.tenant_claimed_rent_amount),
     paymentFrequency: claim.tenant_payment_frequency,
-    paymentHistory: input.paymentHistory,
+    cycles: input.cycles,
   });
 
   const updatedClaim = await updateExistingTenantClaimArrears(supabase, {
@@ -873,28 +759,68 @@ export async function approveExistingTenantClaimForCurrentLandlord(
     agreementNotes: input.reviewNotes || null,
   });
 
-  await postExistingTenantOpeningBalanceEntry(adminSupabase, {
-    landlordId: landlord.id,
-    tenantId: tenant.id,
-    tenancyId: tenancy.id,
-    amount: input.openingBalance,
-    currencyCode: tenancy.currency_code,
-    description: "Opening balance from existing tenant onboarding.",
-    entryDate: input.confirmedCurrentDueDate,
-    metadata: {
-      source: "existing_tenant_claim",
-      existing_tenant_claim_id: claim.id,
-      claimed_rent_amount: claim.tenant_claimed_rent_amount,
-      confirmed_rent_amount: input.confirmedRentAmount,
-      confirmed_move_in_date: input.confirmedMoveInDate,
-      confirmed_current_due_date: input.confirmedCurrentDueDate,
-      current_period_end: currentPeriodEnd,
-      landlord_arrears_start_date: claim.landlord_arrears_start_date,
-      landlord_payment_history: claim.landlord_payment_history,
-      bopa_calculated_outstanding_balance:
-        claim.bopa_calculated_outstanding_balance,
-    },
-  });
+  const claimMetadata = claim.arrears_calculation_metadata ?? {};
+  const savedCycles = Array.isArray(claimMetadata.cycles)
+    ? (claimMetadata.cycles as Array<{
+        periodStart: string;
+        periodEnd: string;
+        rentCharged: number;
+        assumedPaid: boolean;
+        payments: Array<{ amount: number; paidAt: string; note?: string }>;
+      }>)
+    : [];
+
+  const activeCycles = savedCycles.filter((cycle) => !cycle.assumedPaid);
+  const ledgerMetadata = {
+    source: "existing_tenant_claim",
+    existing_tenant_claim_id: claim.id,
+  };
+
+  if (activeCycles.length > 0) {
+    await postExistingTenantHistoricalRentCharges(adminSupabase, {
+      landlordId: landlord.id,
+      tenantId: tenant.id,
+      tenancyId: tenancy.id,
+      currencyCode: tenancy.currency_code,
+      cycles: activeCycles.map((cycle) => ({
+        periodStart: cycle.periodStart,
+        periodEnd: cycle.periodEnd,
+        rentCharged: Number(cycle.rentCharged),
+      })),
+      metadata: ledgerMetadata,
+    });
+
+    await postExistingTenantHistoricalPayments(adminSupabase, {
+      landlordId: landlord.id,
+      tenantId: tenant.id,
+      tenancyId: tenancy.id,
+      currencyCode: tenancy.currency_code,
+      payments: activeCycles.flatMap((cycle) => cycle.payments ?? []),
+      metadata: ledgerMetadata,
+    });
+  } else {
+    await postExistingTenantOpeningBalanceEntry(adminSupabase, {
+      landlordId: landlord.id,
+      tenantId: tenant.id,
+      tenancyId: tenancy.id,
+      amount: input.openingBalance,
+      currencyCode: tenancy.currency_code,
+      description: "Amount owed from existing tenant onboarding.",
+      entryDate: input.confirmedCurrentDueDate,
+      metadata: {
+        ...ledgerMetadata,
+        claimed_rent_amount: claim.tenant_claimed_rent_amount,
+        confirmed_rent_amount: input.confirmedRentAmount,
+        confirmed_move_in_date: input.confirmedMoveInDate,
+        confirmed_current_due_date: input.confirmedCurrentDueDate,
+        current_period_end: currentPeriodEnd,
+        landlord_arrears_start_date: claim.landlord_arrears_start_date,
+        landlord_payment_history: claim.landlord_payment_history,
+        bopa_calculated_outstanding_balance:
+          claim.bopa_calculated_outstanding_balance,
+      },
+    });
+  }
 
   await markUnitOccupied(adminSupabase, claim.unit_id);
 
@@ -959,7 +885,12 @@ export async function approveExistingTenantClaimForCurrentLandlord(
     },
   });
 
-  return approvedClaim;
+  return {
+    approvedClaim,
+    tenantId: tenant.id,
+    tenancyId: tenancy.id,
+    tenantName: tenant.full_name,
+  };
 }
 
 export async function rejectExistingTenantClaimForCurrentLandlord(

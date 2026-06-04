@@ -21,6 +21,17 @@ export const existingTenantPaymentHistoryItemSchema = z.object({
   note: z.string().trim().max(200).optional().or(z.literal("")),
 });
 
+export const existingTenantRentCyclePaymentSchema =
+  existingTenantPaymentHistoryItemSchema;
+
+export const existingTenantRentCycleSchema = z.object({
+  periodStart: dateStringSchema,
+  periodEnd: dateStringSchema,
+  rentCharged: moneySchema,
+  assumedPaid: z.boolean(),
+  payments: z.array(existingTenantRentCyclePaymentSchema).max(24),
+});
+
 export const createExistingTenantClaimSchema = z.object({
   unitId: uuidSchema,
   fullName: z.string().trim().min(2, "Enter the tenant name.").max(120),
@@ -34,10 +45,11 @@ export const submitExistingTenantClaimSchema = z.object({
   fullName: z.string().trim().min(2, "Enter your full name.").max(120),
   phoneNumber: phoneSchema,
   email: optionalEmailSchema,
-  occupation: z.string().trim().min(2, "Enter your occupation.").max(120),
+  occupation: z.string().trim().max(120).optional().or(z.literal("")),
   idType: existingTenantClaimIdTypeSchema,
   idNumber: z.string().trim().min(3, "Enter your ID number.").max(120),
   moveInDate: dateStringSchema,
+  statedRentDueDate: dateStringSchema,
   claimedRentAmount: positiveMoneySchema,
   paymentFrequency: z
     .enum(["annual", "monthly", "quarterly", "biannual"], {
@@ -50,10 +62,9 @@ export const submitExistingTenantClaimSchema = z.object({
 export const updateExistingTenantClaimArrearsSchema = z.object({
   claimId: uuidSchema,
   arrearsStartDate: dateStringSchema,
-  paymentHistory: z
-    .array(existingTenantPaymentHistoryItemSchema)
-    .min(1, "Enter at least one payment record.")
-    .max(12, "You can enter up to 12 payment records at once."),
+  cycles: z
+    .array(existingTenantRentCycleSchema)
+    .min(1, "Rent history could not be built for this tenancy."),
 });
 
 export const approveExistingTenantClaimSchema = z.object({
@@ -72,6 +83,10 @@ export const rejectExistingTenantClaimSchema = z.object({
 
 export type ExistingTenantPaymentHistoryItem = z.infer<
   typeof existingTenantPaymentHistoryItemSchema
+>;
+
+export type ExistingTenantRentCycleInput = z.infer<
+  typeof existingTenantRentCycleSchema
 >;
 
 export type CreateExistingTenantClaimInput = z.infer<

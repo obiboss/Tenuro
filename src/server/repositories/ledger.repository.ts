@@ -103,6 +103,123 @@ export async function postExistingTenantOpeningBalanceEntry(
   return data;
 }
 
+export async function postExistingTenantHistoricalRentCharges(
+  supabase: SupabaseClient,
+  params: {
+    landlordId: string;
+    tenantId: string;
+    tenancyId: string;
+    currencyCode: string;
+    cycles: Array<{
+      periodStart: string;
+      periodEnd: string;
+      rentCharged: number;
+    }>;
+    metadata: Record<string, unknown>;
+  },
+) {
+  const chargeRows = params.cycles
+    .filter((cycle) => cycle.rentCharged > 0)
+    .map((cycle) => ({
+      landlord_id: params.landlordId,
+      tenant_id: params.tenantId,
+      tenancy_id: params.tenancyId,
+      payment_id: null,
+      entry_type: "rent_charge" as const,
+      direction: "debit" as const,
+      amount: cycle.rentCharged,
+      currency_code: params.currencyCode,
+      description: "Historical rent charge from existing tenant onboarding.",
+      entry_date: cycle.periodStart,
+      period_start: cycle.periodStart,
+      period_end: cycle.periodEnd,
+      metadata: {
+        ...params.metadata,
+        source: "existing_tenant_claim",
+        cycle_period_start: cycle.periodStart,
+        cycle_period_end: cycle.periodEnd,
+      },
+    }));
+
+  if (chargeRows.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from("ledger_entries")
+    .insert(chargeRows)
+    .select(
+      "id, landlord_id, tenant_id, tenancy_id, payment_id, entry_type, direction, amount, currency_code, description, entry_date, period_start, period_end, metadata, created_at",
+    )
+    .returns<LedgerEntryRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function postExistingTenantHistoricalPayments(
+  supabase: SupabaseClient,
+  params: {
+    landlordId: string;
+    tenantId: string;
+    tenancyId: string;
+    currencyCode: string;
+    payments: Array<{
+      amount: number;
+      paidAt: string;
+      note?: string;
+      periodStart?: string;
+      periodEnd?: string;
+    }>;
+    metadata: Record<string, unknown>;
+  },
+) {
+  const paymentRows = params.payments
+    .filter((payment) => payment.amount > 0)
+    .map((payment) => ({
+      landlord_id: params.landlordId,
+      tenant_id: params.tenantId,
+      tenancy_id: params.tenancyId,
+      payment_id: null,
+      entry_type: "payment" as const,
+      direction: "credit" as const,
+      amount: payment.amount,
+      currency_code: params.currencyCode,
+      description:
+        payment.note?.trim() ||
+        "Historical payment recorded during existing tenant onboarding.",
+      entry_date: payment.paidAt,
+      period_start: payment.periodStart ?? null,
+      period_end: payment.periodEnd ?? null,
+      metadata: {
+        ...params.metadata,
+        source: "existing_tenant_claim",
+        payment_note: payment.note?.trim() || null,
+      },
+    }));
+
+  if (paymentRows.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from("ledger_entries")
+    .insert(paymentRows)
+    .select(
+      "id, landlord_id, tenant_id, tenancy_id, payment_id, entry_type, direction, amount, currency_code, description, entry_date, period_start, period_end, metadata, created_at",
+    )
+    .returns<LedgerEntryRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 export async function postDueRentCharges(
   supabase: SupabaseClient,
   runDate?: string,

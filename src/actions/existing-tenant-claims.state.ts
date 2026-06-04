@@ -7,6 +7,9 @@ export type ExistingTenantClaimActionState = {
   whatsappMessage?: string;
   tenantWhatsappNumber?: string;
   expiresAt?: string;
+  tenantId?: string;
+  tenancyId?: string;
+  tenantName?: string;
 };
 
 export const initialExistingTenantClaimActionState: ExistingTenantClaimActionState =

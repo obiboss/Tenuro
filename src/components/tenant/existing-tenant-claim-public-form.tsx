@@ -71,7 +71,7 @@ export function ExistingTenantClaimPublicForm({
     return (
       <TrustNotice
         title="Details submitted"
-        description="Your tenancy details have been sent to the landlord. BOPA will calculate the rent cycle from your move-in date, and your landlord will review everything before confirming the final record."
+        description="Your details have been submitted. Your landlord will review and confirm your tenancy shortly."
       />
     );
   }
@@ -89,7 +89,7 @@ export function ExistingTenantClaimPublicForm({
 
       <TrustNotice
         title="Confirm your tenancy details"
-        description="Enter your agreed move-in date and rent amount. You do not need to calculate your next due date; BOPA will calculate it for landlord review."
+        description="Enter your agreed move-in date, rent amount, and the rent due date you know. Your landlord will review everything before confirming."
       />
 
       {state.message ? (
@@ -131,9 +131,8 @@ export function ExistingTenantClaimPublicForm({
       <Input
         label="Occupation"
         name="occupation"
-        placeholder="Example: Trader, Accountant, Engineer"
+        placeholder="Optional. Example: Trader, Accountant"
         error={state.fieldErrors?.occupation?.[0]}
-        required
       />
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -159,20 +158,29 @@ export function ExistingTenantClaimPublicForm({
           label="Agreed move-in date"
           name="moveInDate"
           type="date"
-          helperText="BOPA will use this to calculate the rent cycle."
+          helperText="The date you moved into this apartment."
           error={state.fieldErrors?.moveInDate?.[0]}
           required
         />
 
-        <Select
-          label="Payment frequency"
-          name="paymentFrequency"
-          options={paymentFrequencyOptions}
-          defaultValue="annual"
-          error={state.fieldErrors?.paymentFrequency?.[0]}
+        <Input
+          label="Rent due date (as you know it)"
+          name="statedRentDueDate"
+          type="date"
+          helperText="The date you believe your yearly rent is due."
+          error={state.fieldErrors?.statedRentDueDate?.[0]}
           required
         />
       </div>
+
+      <Select
+        label="Payment frequency"
+        name="paymentFrequency"
+        options={paymentFrequencyOptions}
+        defaultValue="annual"
+        error={state.fieldErrors?.paymentFrequency?.[0]}
+        required
+      />
 
       <CurrencyInput
         label="Current rent amount"

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useMemo, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import {
@@ -1074,7 +1075,22 @@ export function ExistingTenantClaimReviewList({
 
           <div className="space-y-4">
             {submittedClaims.map((claim) => (
-              <ClaimReviewCard key={claim.id} claim={claim} />
+              <article
+                key={claim.id}
+                className="flex flex-col gap-4 rounded-card border border-border-soft bg-white p-5 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div>
+                  <p className="text-lg font-black text-text-strong">
+                    {getTenantName(claim)}
+                  </p>
+                  <p className="mt-1 text-base text-text-muted">
+                    {getPropertyUnitLabel(claim)}
+                  </p>
+                </div>
+                <Link href={`/existing-tenant-claims/${claim.id}`}>
+                  <Button>Review claim</Button>
+                </Link>
+              </article>
             ))}
           </div>
         </div>
