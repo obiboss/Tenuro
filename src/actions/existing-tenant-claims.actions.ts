@@ -90,7 +90,6 @@ export async function submitExistingTenantClaimAction(
     await submitExistingTenantClaimByToken(parsed);
 
     revalidatePath(`/claim/${parsed.token}`);
-    revalidatePath(`/existing-tenant-claims/${parsed.token}`);
     revalidatePath("/existing-tenant-claims");
     revalidatePath("/tenants");
     revalidatePath("/notifications");
