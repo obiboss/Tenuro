@@ -3,6 +3,7 @@ export type UserRole =
   | "tenant"
   | "caretaker"
   | "agent"
+  | "developer"
   | "platform_admin";
 
 export type NormalizedPhoneNumber = {

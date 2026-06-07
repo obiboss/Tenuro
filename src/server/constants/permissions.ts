@@ -55,6 +55,9 @@ export const APP_PERMISSIONS = {
   AGENT_TENANT_ONBOARDING_SEND: "agent.tenant_onboarding.send",
   AGENT_DASHBOARD_VIEW: "agent.dashboard.view",
 
+  DEVELOPER_DASHBOARD_VIEW: "developer.dashboard.view",
+  DEVELOPER_ACCOUNT_MANAGE: "developer.account.manage",
+
   PLATFORM_ADMIN_DASHBOARD_VIEW: "platform_admin.dashboard.view",
 
   ADMIN_SUPPORT_VIEW: "admin.support.view",
@@ -149,6 +152,11 @@ const AGENT_PERMISSIONS: readonly AppPermission[] = [
   APP_PERMISSIONS.RECEIPT_READ,
 ];
 
+const DEVELOPER_PERMISSIONS: readonly AppPermission[] = [
+  APP_PERMISSIONS.DEVELOPER_DASHBOARD_VIEW,
+  APP_PERMISSIONS.DEVELOPER_ACCOUNT_MANAGE,
+];
+
 const PLATFORM_ADMIN_PERMISSIONS: readonly AppPermission[] = [
   APP_PERMISSIONS.PLATFORM_ADMIN_DASHBOARD_VIEW,
 ];
@@ -158,6 +166,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly AppPermission[]> = {
   tenant: TENANT_PERMISSIONS,
   caretaker: CARETAKER_PERMISSIONS,
   agent: AGENT_PERMISSIONS,
+  developer: DEVELOPER_PERMISSIONS,
   platform_admin: PLATFORM_ADMIN_PERMISSIONS,
 };
 

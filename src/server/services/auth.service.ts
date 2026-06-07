@@ -67,6 +67,22 @@ export async function requireUser(): Promise<ServerSessionUser> {
   return user;
 }
 
+export async function requireDeveloperUser(): Promise<ServerSessionUser> {
+  const user = await fetchSessionUserProfile();
+
+  if (!user) {
+    redirect("/developer/login");
+  }
+
+  assertRole({
+    role: user.role,
+    allowedRoles: ["developer"],
+    message: "You do not have permission to view this developer workspace.",
+  });
+
+  return user;
+}
+
 export async function requireRole(params: {
   allowedRoles: readonly UserRole[];
   message?: string;
@@ -101,9 +117,8 @@ export async function requireLandlord() {
 
 export async function requireLandlordPlatformOperator() {
   const landlord = await requireLandlord();
-  const { assertLandlordPlatformAccessForProfile } = await import(
-    "@/server/services/landlord-subscription-access.service"
-  );
+  const { assertLandlordPlatformAccessForProfile } =
+    await import("@/server/services/landlord-subscription-access.service");
 
   await assertLandlordPlatformAccessForProfile(landlord.id);
 
@@ -129,6 +144,10 @@ export async function requireAgent() {
     allowedRoles: ["agent"],
     message: "You do not have permission to view this agent page.",
   });
+}
+
+export async function requireDeveloper() {
+  return requireDeveloperUser();
 }
 
 export async function requireLandlordOrCaretaker() {
