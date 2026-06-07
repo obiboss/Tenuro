@@ -7,6 +7,10 @@ import {
   AUDIT_ENTITY_TYPES,
   AUDIT_EVENT_TYPES,
 } from "@/server/constants/audit-events";
+import {
+  calculateRentCollectionFee,
+  RENT_COLLECTION_FEE_MODEL,
+} from "@/server/constants/rent-collection-fees";
 import { AppError } from "@/server/errors/app-error";
 import { getActiveAgentPaystackAccount } from "@/server/repositories/agent-paystack.repository";
 import { getAgentPropertyListingById } from "@/server/repositories/agent-property-listings.repository";
@@ -61,7 +65,6 @@ const PAYMENT_LINK_EXPIRY_HOURS = 24;
 const PAYMENT_PURPOSE_NEW_TENANT_FIRST_RENT = "new_tenant_first_rent";
 const PAYMENT_PURPOSE_TENANT_DASHBOARD_RENT = "tenant_dashboard_rent";
 const PAYMENT_PURPOSE_LANDLORD_PREPARED_RENT = "landlord_prepared_rent_payment";
-const DEFAULT_BOPA_RENT_SERVICE_FEE_PERCENTAGE = 10;
 
 type GatewayPaymentInitializerActorRole =
   | typeof AUDIT_ACTOR_ROLES.landlord
@@ -140,33 +143,6 @@ function buildTenantPaymentMessage(params: {
     "",
     "Your tenant account activation will only be available after your full payment is confirmed.",
   ].join("\n");
-}
-
-function getBopaRentServiceFeePercentage() {
-  const configuredPercentage = Number(
-    process.env.BOPA_RENT_SERVICE_FEE_PERCENTAGE ??
-      DEFAULT_BOPA_RENT_SERVICE_FEE_PERCENTAGE,
-  );
-
-  if (
-    !Number.isFinite(configuredPercentage) ||
-    configuredPercentage < 0 ||
-    configuredPercentage >= 100
-  ) {
-    throw new AppError(
-      "BOPA_RENT_SERVICE_FEE_PERCENTAGE_INVALID",
-      "BOPA Service Fee percentage is not configured correctly.",
-      500,
-    );
-  }
-
-  return configuredPercentage;
-}
-
-function calculateBopaRentServiceFee(rentAmount: number) {
-  const percentage = getBopaRentServiceFeePercentage();
-
-  return Math.round(rentAmount * (percentage / 100));
 }
 
 function createPaymentReference() {
@@ -659,8 +635,12 @@ async function initializeGatewayPaymentForTenancy(params: {
 
   const rentAmount = params.amount;
   const landlordChargesAmount = sumActiveLandlordChargeAmount(landlordCharges);
-  const bopaServiceFeeAmount = calculateBopaRentServiceFee(rentAmount);
-  const bopaServiceFeePercentage = getBopaRentServiceFeePercentage();
+  const rentCollectionFee = calculateRentCollectionFee({
+    annualRentAmount: Number(tenancy.rent_amount),
+    paymentAmount: rentAmount,
+  });
+  const bopaServiceFeeAmount = rentCollectionFee.feeAmount;
+  const bopaServiceFeePercentage = rentCollectionFee.ratePercentage;
   const expiresAt = createPaymentLinkExpiry();
 
   const agentDealAllocation = await resolveAgentDealPaymentAllocation({
@@ -723,6 +703,12 @@ async function initializeGatewayPaymentForTenancy(params: {
     agent_commission_amount: agentCommissionAmount,
     bopa_service_fee_amount: bopaServiceFeeAmount,
     bopa_service_fee_percentage: bopaServiceFeePercentage,
+    fee_model: RENT_COLLECTION_FEE_MODEL,
+    annual_rent_amount: rentCollectionFee.annualRentAmount,
+    bopa_collection_fee_amount: rentCollectionFee.feeAmount,
+    bopa_collection_fee_rate: rentCollectionFee.rate,
+    bopa_collection_fee_percentage: rentCollectionFee.ratePercentage,
+    bopa_collection_fee_tier: rentCollectionFee.tierLabel,
     tenuro_fee_naira: bopaServiceFeeAmount,
     landlord_share_amount: landlordShareAmount,
     total_amount_naira: totalAmount,
@@ -764,7 +750,11 @@ async function initializeGatewayPaymentForTenancy(params: {
       platform: {
         amount: bopaServiceFeeAmount,
         fee_type: "bopa_service_fee",
+        fee_model: RENT_COLLECTION_FEE_MODEL,
+        fee_rate: rentCollectionFee.rate,
         fee_percentage: bopaServiceFeePercentage,
+        fee_tier: rentCollectionFee.tierLabel,
+        fee_basis: "rent_amount_only",
       },
     },
     paystack_split: agentDealSplit
@@ -890,8 +880,13 @@ async function initializeGatewayPaymentForTenancy(params: {
         source: "gateway_payment_intent_initialized",
         payment_purpose: params.paymentPurpose,
         fee_type: "bopa_service_fee",
+        fee_model: RENT_COLLECTION_FEE_MODEL,
+        fee_rate: rentCollectionFee.rate,
         fee_percentage: bopaServiceFeePercentage,
+        fee_tier: rentCollectionFee.tierLabel,
         fee_basis: "rent_amount_only",
+        annual_rent_amount: rentCollectionFee.annualRentAmount,
+        rent_payment_amount: rentAmount,
       },
     },
   ]);
@@ -916,6 +911,10 @@ async function initializeGatewayPaymentForTenancy(params: {
       agent_commission_amount: agentCommissionAmount,
       bopa_service_fee_amount: bopaServiceFeeAmount,
       bopa_service_fee_percentage: bopaServiceFeePercentage,
+      fee_model: RENT_COLLECTION_FEE_MODEL,
+      annual_rent_amount: rentCollectionFee.annualRentAmount,
+      bopa_collection_fee_rate: rentCollectionFee.rate,
+      bopa_collection_fee_tier: rentCollectionFee.tierLabel,
       landlord_share_amount: landlordShareAmount,
       total_amount: totalAmount,
       period_start: params.periodStart,
@@ -1194,10 +1193,9 @@ export async function getPublicTenantPaymentCheckout(params: {
     bopaServiceFeeAmount:
       readMetadataNumber(metadata, "bopa_service_fee_amount") ||
       Number(intent.tenuro_fee_amount),
-    bopaServiceFeePercentage: readMetadataNumber(
-      metadata,
-      "bopa_service_fee_percentage",
-    ),
+    bopaServiceFeePercentage:
+      readMetadataNumber(metadata, "bopa_service_fee_percentage") ||
+      readMetadataNumber(metadata, "bopa_collection_fee_percentage"),
     tenuroFeeAmount: Number(intent.tenuro_fee_amount),
     totalAmount: Number(intent.total_amount),
     currencyCode: intent.currency_code,

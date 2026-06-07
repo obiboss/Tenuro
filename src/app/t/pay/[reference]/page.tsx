@@ -57,6 +57,16 @@ function formatDate(value: string | null | undefined) {
   }).format(new Date(value));
 }
 
+function formatFeePercentage(value: number) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return "tiered";
+  }
+
+  return `${value.toLocaleString("en-NG", {
+    maximumFractionDigits: 2,
+  })}%`;
+}
+
 function getRecordString(
   record: Record<string, unknown>,
   key: string,
@@ -251,7 +261,7 @@ export default async function TenantPaymentPage({
         <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
           <SectionCard
             title="Payment Summary"
-            description="Review the amount before proceeding to Paystack."
+            description="Review the server-calculated amount before proceeding to Paystack."
           >
             <Card>
               <CardHeader>
@@ -289,10 +299,13 @@ export default async function TenantPaymentPage({
 
                   <div className="rounded-button bg-background p-4">
                     <p className="text-sm font-bold text-text-muted">
-                      Rent Amount
+                      Rent Payment
                     </p>
                     <p className="mt-2 text-xl font-extrabold text-text-strong">
                       {formatNaira(checkout.rentAmount)}
+                    </p>
+                    <p className="mt-1 text-xs font-semibold leading-5 text-text-muted">
+                      This is the rent amount credited to your tenancy ledger.
                     </p>
                   </div>
 
@@ -304,7 +317,9 @@ export default async function TenantPaymentPage({
                       {formatNaira(checkout.bopaServiceFeeAmount)}
                     </p>
                     <p className="mt-1 text-xs font-semibold leading-5 text-text-muted">
-                      10% service fee added to the rent payment.
+                      {formatFeePercentage(checkout.bopaServiceFeePercentage)}{" "}
+                      tiered service fee calculated from the confirmed annual
+                      rent.
                     </p>
                   </div>
 
@@ -379,6 +394,10 @@ export default async function TenantPaymentPage({
                     </p>
                     <p className="mt-2 text-2xl font-extrabold text-text-strong">
                       {formatNaira(checkout.totalAmount)}
+                    </p>
+                    <p className="mt-1 text-xs font-semibold leading-5 text-text-muted">
+                      This is the total amount Paystack will collect for this
+                      transaction.
                     </p>
                   </div>
 

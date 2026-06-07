@@ -11,6 +11,13 @@ import {
 import type { RentPaymentRow } from "@/server/repositories/payments.repository";
 import type { PublicGeneratedReceiptRow } from "@/server/repositories/public-tool-leads.repository";
 
+export type RentReceiptPaymentBreakdown = {
+  rentAmount: number;
+  bopaServiceFeeAmount: number;
+  totalPaidAmount: number;
+  feePercentage: number | null;
+};
+
 const styles = StyleSheet.create({
   page: {
     padding: 42,
@@ -78,6 +85,48 @@ const styles = StyleSheet.create({
     color: "#111827",
     fontWeight: 700,
   },
+  breakdownBox: {
+    marginTop: 12,
+    padding: 14,
+    backgroundColor: "#F9FAFB",
+    borderRadius: 10,
+  },
+  breakdownRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+    borderBottomStyle: "solid",
+    paddingVertical: 7,
+  },
+  breakdownLabel: {
+    color: "#6B7280",
+    fontWeight: 700,
+  },
+  breakdownValue: {
+    color: "#111827",
+    fontWeight: 700,
+  },
+  totalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingTop: 9,
+  },
+  totalLabel: {
+    color: "#111827",
+    fontWeight: 700,
+    fontSize: 11,
+  },
+  totalValue: {
+    color: "#111827",
+    fontWeight: 700,
+    fontSize: 11,
+  },
+  note: {
+    marginTop: 8,
+    fontSize: 8,
+    color: "#6B7280",
+  },
   footer: {
     position: "absolute",
     left: 42,
@@ -109,6 +158,16 @@ function formatDate(value: string | null) {
   return new Intl.DateTimeFormat("en-NG", {
     dateStyle: "medium",
   }).format(new Date(value));
+}
+
+function formatFeePercentage(value: number | null) {
+  if (value === null || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+
+  return `${value.toLocaleString("en-NG", {
+    maximumFractionDigits: 2,
+  })}%`;
 }
 
 function paymentMethodLabel(method: RentPaymentRow["payment_method"]) {
@@ -154,7 +213,72 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ReceiptPdfDocument({ payment }: { payment: RentPaymentRow }) {
+function BreakdownRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.breakdownRow}>
+      <Text style={styles.breakdownLabel}>{label}</Text>
+      <Text style={styles.breakdownValue}>{value}</Text>
+    </View>
+  );
+}
+
+function ReceiptPaymentBreakdown({
+  payment,
+  breakdown,
+}: {
+  payment: RentPaymentRow;
+  breakdown: RentReceiptPaymentBreakdown;
+}) {
+  const feePercentage = formatFeePercentage(breakdown.feePercentage);
+  const hasBopaServiceFee = breakdown.bopaServiceFeeAmount > 0;
+
+  return (
+    <View style={styles.breakdownBox}>
+      <BreakdownRow
+        label="Rent credited to ledger"
+        value={formatPdfMoney(breakdown.rentAmount)}
+      />
+
+      {hasBopaServiceFee ? (
+        <BreakdownRow
+          label={
+            feePercentage
+              ? `BOPA service fee (${feePercentage})`
+              : "BOPA service fee"
+          }
+          value={formatPdfMoney(breakdown.bopaServiceFeeAmount)}
+        />
+      ) : null}
+
+      <View style={styles.totalRow}>
+        <Text style={styles.totalLabel}>
+          {payment.payment_method === "paystack_gateway"
+            ? "Total paid via Paystack"
+            : "Total paid"}
+        </Text>
+        <Text style={styles.totalValue}>
+          {formatPdfMoney(breakdown.totalPaidAmount)}
+        </Text>
+      </View>
+
+      {hasBopaServiceFee ? (
+        <Text style={styles.note}>
+          The rent amount above is what was credited to the tenancy ledger. The
+          BOPA service fee is recorded separately and does not reduce or inflate
+          the rent balance.
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+function ReceiptPdfDocument({
+  payment,
+  breakdown,
+}: {
+  payment: RentPaymentRow;
+  breakdown: RentReceiptPaymentBreakdown;
+}) {
   const propertyName =
     payment.tenancies?.units?.properties?.property_name ?? "Property";
   const unitIdentifier = payment.tenancies?.units?.unit_identifier ?? "Unit";
@@ -210,16 +334,18 @@ function ReceiptPdfDocument({ payment }: { payment: RentPaymentRow }) {
         </View>
 
         <View style={styles.amountBox}>
-          <Text style={styles.amountLabel}>Amount Paid</Text>
+          <Text style={styles.amountLabel}>Rent Amount Recorded</Text>
           <Text style={styles.amountValue}>
             {formatPdfMoney(Number(payment.amount_paid))}
           </Text>
         </View>
 
+        <ReceiptPaymentBreakdown payment={payment} breakdown={breakdown} />
+
         <Text style={styles.footer}>
           This is an electronically generated receipt from Boldverse Property, a
-          product of Boldverse Services. This receipt confirms that the payment
-          above was recorded in the landlord rent ledger.
+          product of Boldverse Services. This receipt confirms that the rent
+          amount above was recorded in the landlord rent ledger.
         </Text>
       </Page>
     </Document>
@@ -290,8 +416,21 @@ function PublicReceiptPdfDocument({
   );
 }
 
-export async function renderRentReceiptPdf(payment: RentPaymentRow) {
-  return renderToBuffer(<ReceiptPdfDocument payment={payment} />);
+export async function renderRentReceiptPdf(
+  payment: RentPaymentRow,
+  breakdown?: RentReceiptPaymentBreakdown,
+) {
+  const paymentBreakdown: RentReceiptPaymentBreakdown =
+    breakdown ?? {
+      rentAmount: Number(payment.amount_paid),
+      bopaServiceFeeAmount: 0,
+      totalPaidAmount: Number(payment.amount_paid),
+      feePercentage: null,
+    };
+
+  return renderToBuffer(
+    <ReceiptPdfDocument payment={payment} breakdown={paymentBreakdown} />,
+  );
 }
 
 export async function renderPublicGeneratedReceiptPdf(
