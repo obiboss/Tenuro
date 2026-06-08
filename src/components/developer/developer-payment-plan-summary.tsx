@@ -43,8 +43,7 @@ export function DeveloperPaymentPlanSummary({
         }
       >
         <div className="rounded-button bg-warning-soft p-4 text-sm font-semibold leading-6 text-warning">
-          Create a payment plan before sending payment requests in the next
-          batch.
+          Create a payment plan before sending payment requests.
         </div>
       </SectionCard>
     );
@@ -54,6 +53,16 @@ export function DeveloperPaymentPlanSummary({
     <SectionCard
       title="Payment Plan"
       description="Expected payment schedule for this locked sale."
+      action={
+        plan.status === "active" ? (
+          <Link
+            href={`/developer/sales/${saleId}/payment-request`}
+            className="inline-flex min-h-11 items-center justify-center rounded-button bg-primary px-5 py-2.5 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary-hover"
+          >
+            Create Payment Request
+          </Link>
+        ) : null
+      }
     >
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-button bg-background p-4">
