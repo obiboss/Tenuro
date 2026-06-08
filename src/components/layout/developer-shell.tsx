@@ -10,6 +10,7 @@ import {
   Home,
   Map,
   Settings,
+  ShoppingBag,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -54,6 +55,11 @@ const desktopNavItems: readonly DeveloperNavItem[] = [
     icon: Users,
   },
   {
+    label: "Sales",
+    href: "/developer/sales",
+    icon: ShoppingBag,
+  },
+  {
     label: "Payments",
     href: "/developer/payments",
     icon: CreditCard,
@@ -94,6 +100,11 @@ const mobilePrimaryItems: readonly DeveloperNavItem[] = [
     label: "Buyers",
     href: "/developer/buyers",
     icon: Users,
+  },
+  {
+    label: "Sales",
+    href: "/developer/sales",
+    icon: ShoppingBag,
   },
 ];
 

@@ -100,6 +100,25 @@ export async function listDeveloperPlotAssignmentsForEstate(
   return data;
 }
 
+export async function listReservedDeveloperPlotAssignments(
+  supabase: SupabaseClient,
+  developerAccountId: string,
+) {
+  const { data, error } = await supabase
+    .from("developer_plot_assignments")
+    .select(DEVELOPER_PLOT_ASSIGNMENT_DETAILS_SELECT)
+    .eq("developer_account_id", developerAccountId)
+    .eq("status", "reserved")
+    .order("assigned_at", { ascending: false })
+    .returns<DeveloperPlotAssignmentWithDetails[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 export async function assignDeveloperBuyerToPlot(
   supabase: SupabaseClient,
   params: {
