@@ -7,6 +7,13 @@ export type DeveloperEstateStatus =
   | "sold_out"
   | "archived";
 
+export type DeveloperPlotInventoryStatus =
+  | "available"
+  | "reserved"
+  | "active"
+  | "sold"
+  | "blocked";
+
 export type DeveloperEstateRow = {
   id: string;
   developer_account_id: string;
@@ -14,6 +21,7 @@ export type DeveloperEstateRow = {
   location: string;
   city: string | null;
   state: string | null;
+  lga: string | null;
   country: string;
   description: string | null;
   status: DeveloperEstateStatus;
@@ -24,7 +32,7 @@ export type DeveloperEstateRow = {
 export type DeveloperEstateSummaryRow = DeveloperEstateRow & {
   developer_plots: {
     id: string;
-    status: "available" | "reserved" | "active" | "sold" | "blocked";
+    status: DeveloperPlotInventoryStatus;
   }[];
 };
 
@@ -35,6 +43,7 @@ const DEVELOPER_ESTATE_SELECT = `
   location,
   city,
   state,
+  lga,
   country,
   description,
   status,
@@ -49,6 +58,7 @@ const DEVELOPER_ESTATE_SUMMARY_SELECT = `
   location,
   city,
   state,
+  lga,
   country,
   description,
   status,
@@ -106,7 +116,8 @@ export async function createDeveloperEstate(
     estateName: string;
     location: string;
     city: string | null;
-    state: string | null;
+    state: string;
+    lga: string;
     description: string | null;
     status: DeveloperEstateStatus;
   },
@@ -119,6 +130,7 @@ export async function createDeveloperEstate(
       location: params.location,
       city: params.city,
       state: params.state,
+      lga: params.lga,
       description: params.description,
       status: params.status,
     })

@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 import { createDeveloperEstateAction } from "@/actions/developer-estates.actions";
 import { initialDeveloperEstateActionState } from "@/actions/developer-estates.state";
-import { NIGERIA_STATES_LGAS } from "@/constants/nigeria-states-lgas";
+import { NIGERIA_STATES_LGAS } from "@/server/constants/nigeria-states-lgas";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";

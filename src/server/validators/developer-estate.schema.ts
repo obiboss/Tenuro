@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { NIGERIA_STATES_LGAS } from "@/constants/nigeria-states-lgas";
+import { NIGERIA_STATES_LGAS } from "@/server/constants/nigeria-states-lgas";
 
 const validStates = new Set(NIGERIA_STATES_LGAS.map((item) => item.state));
 
