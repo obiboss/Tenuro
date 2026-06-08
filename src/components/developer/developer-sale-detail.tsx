@@ -1,11 +1,18 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { SectionCard } from "@/components/ui/section-card";
+import { DeveloperPaymentPlanSummary } from "@/components/developer/developer-payment-plan-summary";
+import type {
+  DeveloperPaymentPlanRow,
+  DeveloperPaymentScheduleItemRow,
+} from "@/server/repositories/developer-payment-plans.repository";
 import type { DeveloperSaleWithDetails } from "@/server/repositories/developer-sales.repository";
 import { formatNaira } from "@/server/utils/money";
 
 type DeveloperSaleDetailProps = {
   sale: DeveloperSaleWithDetails;
+  paymentPlan: DeveloperPaymentPlanRow | null;
+  scheduleItems: DeveloperPaymentScheduleItemRow[];
 };
 
 function formatStatus(value: string) {
@@ -22,7 +29,11 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
-export function DeveloperSaleDetail({ sale }: DeveloperSaleDetailProps) {
+export function DeveloperSaleDetail({
+  sale,
+  paymentPlan,
+  scheduleItems,
+}: DeveloperSaleDetailProps) {
   return (
     <div className="space-y-6">
       <SectionCard
@@ -100,13 +111,20 @@ export function DeveloperSaleDetail({ sale }: DeveloperSaleDetailProps) {
         </div>
       </SectionCard>
 
+      <DeveloperPaymentPlanSummary
+        saleId={sale.id}
+        plan={paymentPlan}
+        scheduleItems={scheduleItems}
+      />
+
       <SectionCard
         title="Next Step"
-        description="Payment plans are intentionally handled in the next batch."
+        description="Payment requests and payment ledger are intentionally handled in the next batch."
       >
         <div className="rounded-button bg-primary-soft p-4 text-sm font-semibold leading-6 text-primary">
-          Next batch: D5 — Payment Plan Engine. This will define the schedule
-          for outright, installment, milestone, and flexible sale payments.
+          Next batch: D6 — Payment Request + Paystack Ledger. This will allow a
+          developer to send buyer payment links and let the system create
+          payment records automatically after Paystack confirmation.
         </div>
       </SectionCard>
 
