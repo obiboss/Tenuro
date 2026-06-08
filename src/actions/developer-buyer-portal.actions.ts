@@ -1,11 +1,14 @@
 "use server";
 
+import { redirect } from "next/navigation";
+import { initialDeveloperBuyerPortalActionState } from "@/actions/developer-buyer-portal.state";
+import type { DeveloperBuyerPortalActionState } from "@/actions/developer-buyer-portal.state";
 import { errorResult } from "@/server/errors/result";
 import { getDeveloperAccountByOwnerProfileId } from "@/server/repositories/developer.repository";
 import { createBuyerSalePortalLink } from "@/server/services/developer-buyer-portal.service";
+import { createBuyerPortalSchedulePaymentRequest } from "@/server/services/developer-payment.service";
 import { requireDeveloper } from "@/server/services/auth.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
-import type { DeveloperBuyerPortalActionState } from "@/actions/developer-buyer-portal.state";
 
 function toActionError(error: unknown): DeveloperBuyerPortalActionState {
   const result = errorResult(error);
@@ -61,3 +64,22 @@ export async function createBuyerSalePortalLinkAction(
     return toActionError(error);
   }
 }
+
+export async function initiateBuyerPortalSchedulePaymentAction(
+  formData: FormData,
+): Promise<never> {
+  const token = String(formData.get("token") ?? "").trim();
+  const scheduleItemId = String(formData.get("scheduleItemId") ?? "").trim();
+
+  const supabase = createSupabaseAdminClient();
+
+  const result = await createBuyerPortalSchedulePaymentRequest({
+    supabase,
+    token,
+    scheduleItemId,
+  });
+
+  redirect(result.authorizationUrl);
+}
+
+export { initialDeveloperBuyerPortalActionState };

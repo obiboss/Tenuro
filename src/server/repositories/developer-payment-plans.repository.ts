@@ -92,6 +92,29 @@ export async function getActiveDeveloperPaymentPlanForSale(
   return data;
 }
 
+export async function getDeveloperPaymentScheduleItemById(
+  supabase: SupabaseClient,
+  params: {
+    developerAccountId: string;
+    saleId: string;
+    scheduleItemId: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("developer_payment_schedule_items")
+    .select(DEVELOPER_PAYMENT_SCHEDULE_ITEM_SELECT)
+    .eq("developer_account_id", params.developerAccountId)
+    .eq("sale_id", params.saleId)
+    .eq("id", params.scheduleItemId)
+    .maybeSingle<DeveloperPaymentScheduleItemRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 export async function listDeveloperPaymentScheduleItemsForSale(
   supabase: SupabaseClient,
   params: {

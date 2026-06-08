@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CreditCard, FileText } from "lucide-react";
+import { initiateBuyerPortalSchedulePaymentAction } from "@/actions/developer-buyer-portal.actions";
 import { Badge } from "@/components/ui/badge";
 import { SectionCard } from "@/components/ui/section-card";
 import type { getBuyerSalePortalByToken } from "@/server/services/developer-buyer-portal.service";
@@ -11,6 +12,7 @@ type BuyerPortalData = NonNullable<
 
 type DeveloperBuyerSalePortalViewProps = {
   data: BuyerPortalData;
+  token: string;
 };
 
 function formatStatus(value: string) {
@@ -33,6 +35,7 @@ function getScheduleBalance(item: BuyerPortalData["scheduleItems"][number]) {
 
 export function DeveloperBuyerSalePortalView({
   data,
+  token,
 }: DeveloperBuyerSalePortalViewProps) {
   const { sale, paymentPlan, scheduleItems, payments, summary } = data;
 
@@ -43,7 +46,7 @@ export function DeveloperBuyerSalePortalView({
         description="This is the plot and sale record linked to your payment schedule."
       >
         <div className="overflow-x-auto">
-          <table className="w-full min-w-160] text-left text-sm">
+          <table className="w-full min-w-160 text-left text-sm">
             <tbody className="divide-y divide-border-soft">
               <tr>
                 <th className="w-56 py-3 pr-4 font-black text-text-muted">
@@ -53,12 +56,14 @@ export function DeveloperBuyerSalePortalView({
                   {sale.developer_buyers?.full_name ?? "Buyer"}
                 </td>
               </tr>
+
               <tr>
                 <th className="py-3 pr-4 font-black text-text-muted">Estate</th>
                 <td className="py-3 font-semibold text-text-strong">
                   {sale.developer_estates?.estate_name ?? "Estate"}
                 </td>
               </tr>
+
               <tr>
                 <th className="py-3 pr-4 font-black text-text-muted">Plot</th>
                 <td className="py-3 font-semibold text-text-strong">
@@ -66,6 +71,7 @@ export function DeveloperBuyerSalePortalView({
                   {sale.developer_plots?.size_label ?? "—"}
                 </td>
               </tr>
+
               <tr>
                 <th className="py-3 pr-4 font-black text-text-muted">
                   Sale reference
@@ -74,6 +80,7 @@ export function DeveloperBuyerSalePortalView({
                   {sale.sale_reference}
                 </td>
               </tr>
+
               <tr>
                 <th className="py-3 pr-4 font-black text-text-muted">
                   Payment plan
@@ -84,6 +91,7 @@ export function DeveloperBuyerSalePortalView({
                   )}
                 </td>
               </tr>
+
               <tr>
                 <th className="py-3 pr-4 font-black text-text-muted">
                   Sale status
@@ -132,7 +140,7 @@ export function DeveloperBuyerSalePortalView({
 
       <SectionCard
         title="Payment Schedule"
-        description="Use this table to understand what is due, what has been paid, and what remains."
+        description="Pay an unpaid schedule item securely through Paystack. The platform fee is calculated automatically before checkout."
       >
         {scheduleItems.length === 0 ? (
           <p className="text-sm font-semibold text-text-muted">
@@ -156,7 +164,11 @@ export function DeveloperBuyerSalePortalView({
               <tbody>
                 {scheduleItems.map((item) => {
                   const balance = getScheduleBalance(item);
-                  const canPay = balance > 0;
+                  const canPay =
+                    balance > 0 &&
+                    (item.status === "pending" ||
+                      item.status === "part_paid" ||
+                      item.status === "overdue");
 
                   return (
                     <tr key={item.id} className="border-b border-border-soft">
@@ -182,14 +194,24 @@ export function DeveloperBuyerSalePortalView({
                       </td>
                       <td className="py-4 pr-4">
                         {canPay ? (
-                          <button
-                            type="button"
-                            disabled
-                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-button bg-primary-soft px-4 py-2 text-sm font-extrabold text-primary"
+                          <form
+                            action={initiateBuyerPortalSchedulePaymentAction}
                           >
-                            <CreditCard aria-hidden="true" size={16} />
-                            Pay soon
-                          </button>
+                            <input type="hidden" name="token" value={token} />
+                            <input
+                              type="hidden"
+                              name="scheduleItemId"
+                              value={item.id}
+                            />
+
+                            <button
+                              type="submit"
+                              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-button bg-primary px-4 py-2 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary-hover"
+                            >
+                              <CreditCard aria-hidden="true" size={16} />
+                              Pay Now
+                            </button>
+                          </form>
                         ) : (
                           <span className="text-sm font-semibold text-text-muted">
                             Paid

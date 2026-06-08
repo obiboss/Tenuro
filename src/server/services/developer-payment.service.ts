@@ -6,14 +6,20 @@ import {
   calculateDeveloperInstallmentFee,
   getDeveloperInstallmentFeePercentage,
 } from "@/server/constants/developer-installment-fees";
+import { getActiveBuyerSaleAccessTokenByHash } from "@/server/repositories/developer-buyer-sale-access-tokens.repository";
 import { createDeveloperPaymentAllocations } from "@/server/repositories/developer-payment-allocations.repository";
 import {
   createDeveloperPaymentIntent,
   getDeveloperPaymentIntentByIdempotencyKey,
   getDeveloperPaymentIntentByReference,
 } from "@/server/repositories/developer-payment-intents.repository";
-import { getActiveDeveloperPaymentPlanForSale } from "@/server/repositories/developer-payment-plans.repository";
+import {
+  getActiveDeveloperPaymentPlanForSale,
+  getDeveloperPaymentScheduleItemById,
+} from "@/server/repositories/developer-payment-plans.repository";
+import type { DeveloperPaymentScheduleItemRow } from "@/server/repositories/developer-payment-plans.repository";
 import { getDeveloperSaleById } from "@/server/repositories/developer-sales.repository";
+import type { DeveloperSaleWithDetails } from "@/server/repositories/developer-sales.repository";
 import {
   assertPaystackAmountMatchesExpected,
   initializeStandardPaystackTransaction,
@@ -21,6 +27,8 @@ import {
 } from "@/server/services/paystack.service";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { convertNairaToKobo } from "@/server/utils/money";
+
+const PAYABLE_SCHEDULE_STATUSES = new Set(["pending", "part_paid", "overdue"]);
 
 function getAppUrl() {
   const configuredUrl =
@@ -41,6 +49,10 @@ function getAppUrl() {
 
 function createDeveloperPaymentReference() {
   return `BPD-${crypto.randomUUID().replaceAll("-", "").slice(0, 18).toUpperCase()}`;
+}
+
+function hashBuyerPortalToken(token: string) {
+  return crypto.createHash("sha256").update(token).digest("hex");
 }
 
 function createIdempotencyKey(params: {
@@ -64,13 +76,60 @@ function toRecord(value: unknown): Record<string, unknown> {
   return {};
 }
 
-export async function createDeveloperPaymentRequest(params: {
+function assertPositiveAmount(amount: number) {
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new AppError(
+      "DEVELOPER_PAYMENT_AMOUNT_INVALID",
+      "Payment amount is not valid.",
+      400,
+    );
+  }
+}
+
+function getScheduleOutstandingAmount(item: DeveloperPaymentScheduleItemRow) {
+  return Number(
+    Math.max(
+      0,
+      Number(item.expected_amount) - Number(item.amount_paid),
+    ).toFixed(2),
+  );
+}
+
+function assertScheduleItemIsPayable(params: {
+  scheduleItem: DeveloperPaymentScheduleItemRow;
+  activePaymentPlanId: string;
+}) {
+  if (params.scheduleItem.payment_plan_id !== params.activePaymentPlanId) {
+    throw new AppError(
+      "DEVELOPER_SCHEDULE_ITEM_NOT_ACTIVE",
+      "This payment item is not part of the active payment plan.",
+      400,
+    );
+  }
+
+  if (!PAYABLE_SCHEDULE_STATUSES.has(params.scheduleItem.status)) {
+    throw new AppError(
+      "DEVELOPER_SCHEDULE_ITEM_NOT_PAYABLE",
+      "This payment item is not payable.",
+      400,
+    );
+  }
+
+  const outstandingAmount = getScheduleOutstandingAmount(params.scheduleItem);
+
+  if (outstandingAmount <= 0) {
+    throw new AppError(
+      "DEVELOPER_SCHEDULE_ITEM_ALREADY_PAID",
+      "This payment item has already been paid.",
+      400,
+    );
+  }
+}
+
+async function resolveActiveSaleAndPlan(params: {
   supabase: SupabaseClient;
   developerAccountId: string;
   saleId: string;
-  scheduleItemId: string | null;
-  amount: number;
-  buyerEmail: string | null;
 }) {
   const sale = await getDeveloperSaleById(params.supabase, {
     developerAccountId: params.developerAccountId,
@@ -81,6 +140,7 @@ export async function createDeveloperPaymentRequest(params: {
     throw new AppError(
       "DEVELOPER_SALE_NOT_FOUND",
       "Active sale was not found.",
+      404,
     );
   }
 
@@ -96,14 +156,103 @@ export async function createDeveloperPaymentRequest(params: {
     throw new AppError(
       "DEVELOPER_PAYMENT_PLAN_REQUIRED",
       "Create a payment plan before sending payment requests.",
+      400,
     );
   }
+
+  return {
+    sale,
+    activePlan,
+  };
+}
+
+async function resolvePayableScheduleItem(params: {
+  supabase: SupabaseClient;
+  developerAccountId: string;
+  saleId: string;
+  scheduleItemId: string;
+  activePaymentPlanId: string;
+}) {
+  const scheduleItem = await getDeveloperPaymentScheduleItemById(
+    params.supabase,
+    {
+      developerAccountId: params.developerAccountId,
+      saleId: params.saleId,
+      scheduleItemId: params.scheduleItemId,
+    },
+  );
+
+  if (!scheduleItem) {
+    throw new AppError(
+      "DEVELOPER_SCHEDULE_ITEM_NOT_FOUND",
+      "Payment item was not found.",
+      404,
+    );
+  }
+
+  assertScheduleItemIsPayable({
+    scheduleItem,
+    activePaymentPlanId: params.activePaymentPlanId,
+  });
+
+  return scheduleItem;
+}
+
+function resolveBuyerEmail(params: {
+  sale: DeveloperSaleWithDetails;
+  fallbackBuyerId: string;
+  providedBuyerEmail: string | null;
+}) {
+  return (
+    params.providedBuyerEmail ||
+    params.sale.developer_buyers?.email ||
+    `developer-buyer-${params.fallbackBuyerId}@boldverseproperty.com`
+  );
+}
+
+export async function createDeveloperPaymentRequest(params: {
+  supabase: SupabaseClient;
+  developerAccountId: string;
+  saleId: string;
+  scheduleItemId: string | null;
+  amount: number;
+  buyerEmail: string | null;
+}) {
+  assertPositiveAmount(params.amount);
+
+  const { sale, activePlan } = await resolveActiveSaleAndPlan({
+    supabase: params.supabase,
+    developerAccountId: params.developerAccountId,
+    saleId: params.saleId,
+  });
 
   if (params.amount > Number(sale.total_price_locked)) {
     throw new AppError(
       "DEVELOPER_PAYMENT_AMOUNT_TOO_HIGH",
       "Payment amount cannot exceed the locked sale price.",
+      400,
     );
+  }
+
+  if (params.scheduleItemId) {
+    const scheduleItem = await resolvePayableScheduleItem({
+      supabase: params.supabase,
+      developerAccountId: params.developerAccountId,
+      saleId: sale.id,
+      scheduleItemId: params.scheduleItemId,
+      activePaymentPlanId: activePlan.id,
+    });
+
+    const scheduleOutstandingAmount =
+      getScheduleOutstandingAmount(scheduleItem);
+
+    if (params.amount !== scheduleOutstandingAmount) {
+      throw new AppError(
+        "DEVELOPER_PAYMENT_AMOUNT_MISMATCH",
+        "Payment amount must match the selected payment item balance.",
+        400,
+      );
+    }
   }
 
   const idempotencyKey = createIdempotencyKey({
@@ -133,10 +282,11 @@ export async function createDeveloperPaymentRequest(params: {
   const appUrl = getAppUrl();
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
-  const buyerEmail =
-    params.buyerEmail ||
-    sale.developer_buyers?.email ||
-    `developer-buyer-${sale.buyer_id}@boldverseproperty.com`;
+  const buyerEmail = resolveBuyerEmail({
+    sale,
+    fallbackBuyerId: sale.buyer_id,
+    providedBuyerEmail: params.buyerEmail,
+  });
 
   const metadata = {
     product: "boldverse_developer_module",
@@ -195,6 +345,101 @@ export async function createDeveloperPaymentRequest(params: {
   return intent;
 }
 
+export async function createBuyerPortalSchedulePaymentRequest(params: {
+  supabase: SupabaseClient;
+  token: string;
+  scheduleItemId: string;
+}) {
+  const token = params.token.trim();
+  const scheduleItemId = params.scheduleItemId.trim();
+
+  if (!token) {
+    throw new AppError(
+      "BUYER_PORTAL_TOKEN_REQUIRED",
+      "Buyer portal token is required.",
+      400,
+    );
+  }
+
+  if (!scheduleItemId) {
+    throw new AppError(
+      "DEVELOPER_SCHEDULE_ITEM_REQUIRED",
+      "Payment item is required.",
+      400,
+    );
+  }
+
+  const accessToken = await getActiveBuyerSaleAccessTokenByHash(
+    params.supabase,
+    hashBuyerPortalToken(token),
+  );
+
+  if (!accessToken) {
+    throw new AppError(
+      "BUYER_PORTAL_TOKEN_INVALID",
+      "This buyer payment portal link is invalid or has been revoked.",
+      404,
+    );
+  }
+
+  if (
+    accessToken.expires_at &&
+    new Date(accessToken.expires_at).getTime() < Date.now()
+  ) {
+    throw new AppError(
+      "BUYER_PORTAL_TOKEN_EXPIRED",
+      "This buyer payment portal link has expired.",
+      410,
+    );
+  }
+
+  const { sale, activePlan } = await resolveActiveSaleAndPlan({
+    supabase: params.supabase,
+    developerAccountId: accessToken.developer_account_id,
+    saleId: accessToken.sale_id,
+  });
+
+  if (sale.buyer_id !== accessToken.buyer_id) {
+    throw new AppError(
+      "BUYER_PORTAL_SALE_MISMATCH",
+      "This buyer payment portal link does not match the sale record.",
+      403,
+    );
+  }
+
+  const scheduleItem = await resolvePayableScheduleItem({
+    supabase: params.supabase,
+    developerAccountId: accessToken.developer_account_id,
+    saleId: accessToken.sale_id,
+    scheduleItemId,
+    activePaymentPlanId: activePlan.id,
+  });
+
+  const amount = getScheduleOutstandingAmount(scheduleItem);
+
+  const intent = await createDeveloperPaymentRequest({
+    supabase: params.supabase,
+    developerAccountId: accessToken.developer_account_id,
+    saleId: accessToken.sale_id,
+    scheduleItemId: scheduleItem.id,
+    amount,
+    buyerEmail: sale.developer_buyers?.email ?? null,
+  });
+
+  if (!intent.authorization_url) {
+    throw new AppError(
+      "DEVELOPER_PAYMENT_AUTHORIZATION_URL_MISSING",
+      "Payment could not be initialized.",
+      500,
+    );
+  }
+
+  return {
+    intent,
+    authorizationUrl: intent.authorization_url,
+  };
+}
+
 export async function getPublicDeveloperPaymentCheckout(params: {
   supabase: SupabaseClient;
   reference: string;
@@ -241,6 +486,7 @@ export async function verifyAndPostDeveloperPaymentReference(params: {
     throw new AppError(
       "DEVELOPER_PAYMENT_INTENT_NOT_PAYABLE",
       "This payment request can no longer be verified.",
+      400,
     );
   }
 
@@ -250,6 +496,7 @@ export async function verifyAndPostDeveloperPaymentReference(params: {
     throw new AppError(
       "DEVELOPER_PAYSTACK_REFERENCE_MISMATCH",
       "Payment reference does not match.",
+      400,
     );
   }
 
@@ -257,6 +504,7 @@ export async function verifyAndPostDeveloperPaymentReference(params: {
     throw new AppError(
       "DEVELOPER_PAYSTACK_CURRENCY_MISMATCH",
       "Payment currency does not match.",
+      400,
     );
   }
 
@@ -264,6 +512,7 @@ export async function verifyAndPostDeveloperPaymentReference(params: {
     throw new AppError(
       "DEVELOPER_PAYSTACK_NOT_SUCCESSFUL",
       "Payment was not successful.",
+      400,
     );
   }
 

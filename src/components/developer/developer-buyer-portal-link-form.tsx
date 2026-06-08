@@ -15,7 +15,7 @@ function buildWhatsAppShareText(params: {
   buyerName: string;
   portalUrl: string;
 }) {
-  return `Hello ${params.buyerName}, use this secure Boldverse Property link to view your plot payment schedule, make installment payments, and download your payment receipts: ${params.portalUrl}`;
+  return `Hello ${params.buyerName}, use this secure Boldverse Property link to view your plot details, payment schedule, confirmed payments, and payment receipts: ${params.portalUrl}`;
 }
 
 export function DeveloperBuyerPortalLinkForm({
@@ -39,7 +39,7 @@ export function DeveloperBuyerPortalLinkForm({
   return (
     <SectionCard
       title="Buyer Payment Portal"
-      description="Create one secure link the buyer can reuse to view schedule, make payments, and access receipts."
+      description="Create one secure reusable link the buyer can use to view plot details, payment schedule, confirmed payments, and receipts."
     >
       <form action={formAction} className="space-y-4">
         <input type="hidden" name="saleId" value={saleId} />
@@ -62,6 +62,7 @@ export function DeveloperBuyerPortalLinkForm({
             <p className="text-sm font-bold text-text-muted">
               Buyer portal link
             </p>
+
             <p className="break-all text-sm font-semibold leading-6 text-text-strong">
               {state.portalUrl}
             </p>

@@ -73,7 +73,7 @@ export default async function BuyerSalePortalPage({
           description="View your plot details, payment schedule, confirmed payments, and receipts."
         />
 
-        <DeveloperBuyerSalePortalView data={portalData} />
+        <DeveloperBuyerSalePortalView data={portalData} token={token} />
       </section>
     </main>
   );
