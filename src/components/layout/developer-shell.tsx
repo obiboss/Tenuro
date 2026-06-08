@@ -52,7 +52,6 @@ const desktopNavItems: readonly DeveloperNavItem[] = [
     label: "Buyers",
     href: "/developer/buyers",
     icon: Users,
-    disabled: true,
   },
   {
     label: "Payments",
@@ -90,6 +89,11 @@ const mobilePrimaryItems: readonly DeveloperNavItem[] = [
     label: "Estates",
     href: "/developer/estates",
     icon: Building2,
+  },
+  {
+    label: "Buyers",
+    href: "/developer/buyers",
+    icon: Users,
   },
 ];
 

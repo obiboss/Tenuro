@@ -115,6 +115,29 @@ export async function listDeveloperPlotsForEstate(
   return data;
 }
 
+export async function listAvailableDeveloperPlotsForEstate(
+  supabase: SupabaseClient,
+  params: {
+    developerAccountId: string;
+    estateId: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("developer_plots")
+    .select(DEVELOPER_PLOT_SELECT)
+    .eq("developer_account_id", params.developerAccountId)
+    .eq("estate_id", params.estateId)
+    .eq("status", "available")
+    .order("plot_number", { ascending: true })
+    .returns<DeveloperPlotRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 export async function createDeveloperPlotType(
   supabase: SupabaseClient,
   params: {

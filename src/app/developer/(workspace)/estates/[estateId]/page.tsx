@@ -1,12 +1,16 @@
 import { notFound } from "next/navigation";
 import { DeveloperEstateDetail } from "@/components/developer/developer-estate-detail";
+import { DeveloperPlotAssignmentForm } from "@/components/developer/developer-plot-assignment-form";
 import { DeveloperPlotForm } from "@/components/developer/developer-plot-form";
 import { DeveloperPlotTypeForm } from "@/components/developer/developer-plot-type-form";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
+import { listAssignableDeveloperBuyers } from "@/server/repositories/developer-buyers.repository";
 import { getDeveloperAccountByOwnerProfileId } from "@/server/repositories/developer.repository";
 import { getDeveloperEstateById } from "@/server/repositories/developer-estates.repository";
+import { listDeveloperPlotAssignmentsForEstate } from "@/server/repositories/developer-plot-assignments.repository";
 import {
+  listAvailableDeveloperPlotsForEstate,
   listDeveloperPlotsForEstate,
   listDeveloperPlotTypesForEstate,
 } from "@/server/repositories/developer-plots.repository";
@@ -54,16 +58,26 @@ export default async function DeveloperEstatePage({
     notFound();
   }
 
-  const [plotTypes, plots] = await Promise.all([
-    listDeveloperPlotTypesForEstate(supabase, {
-      developerAccountId: account.id,
-      estateId,
-    }),
-    listDeveloperPlotsForEstate(supabase, {
-      developerAccountId: account.id,
-      estateId,
-    }),
-  ]);
+  const [plotTypes, plots, availablePlots, buyers, assignments] =
+    await Promise.all([
+      listDeveloperPlotTypesForEstate(supabase, {
+        developerAccountId: account.id,
+        estateId,
+      }),
+      listDeveloperPlotsForEstate(supabase, {
+        developerAccountId: account.id,
+        estateId,
+      }),
+      listAvailableDeveloperPlotsForEstate(supabase, {
+        developerAccountId: account.id,
+        estateId,
+      }),
+      listAssignableDeveloperBuyers(supabase, account.id),
+      listDeveloperPlotAssignmentsForEstate(supabase, {
+        developerAccountId: account.id,
+        estateId,
+      }),
+    ]);
 
   return (
     <div className="space-y-8">
@@ -82,9 +96,21 @@ export default async function DeveloperEstatePage({
           estate={estate}
           plotTypes={plotTypes}
           plots={plots}
+          assignments={assignments}
         />
 
         <div className="space-y-6 xl:sticky xl:top-28 xl:self-start">
+          <SectionCard
+            title="Assign Buyer"
+            description="Reserve an available plot for a prospective buyer."
+          >
+            <DeveloperPlotAssignmentForm
+              estateId={estate.id}
+              buyers={buyers}
+              plots={availablePlots}
+            />
+          </SectionCard>
+
           <SectionCard
             title="Add Plot Type"
             description="Create reusable size and pricing templates."

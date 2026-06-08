@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { SectionCard } from "@/components/ui/section-card";
 import type { DeveloperEstateRow } from "@/server/repositories/developer-estates.repository";
+import type { DeveloperPlotAssignmentWithDetails } from "@/server/repositories/developer-plot-assignments.repository";
 import type {
   DeveloperPlotRow,
   DeveloperPlotTypeRow,
@@ -12,6 +13,7 @@ type DeveloperEstateDetailProps = {
   estate: DeveloperEstateRow;
   plotTypes: DeveloperPlotTypeRow[];
   plots: DeveloperPlotRow[];
+  assignments: DeveloperPlotAssignmentWithDetails[];
 };
 
 function formatStatus(value: string) {
@@ -36,10 +38,20 @@ function getPlotCounts(plots: DeveloperPlotRow[]) {
   );
 }
 
+function getBuyerNameForPlot(
+  assignments: DeveloperPlotAssignmentWithDetails[],
+  plotId: string,
+) {
+  const assignment = assignments.find((item) => item.plot_id === plotId);
+
+  return assignment?.developer_buyers?.full_name ?? null;
+}
+
 export function DeveloperEstateDetail({
   estate,
   plotTypes,
   plots,
+  assignments,
 }: DeveloperEstateDetailProps) {
   const counts = getPlotCounts(plots);
 
@@ -65,9 +77,9 @@ export function DeveloperEstateDetail({
           </div>
 
           <div className="rounded-button bg-background p-4">
-            <p className="text-sm font-bold text-text-muted">Active/Sold</p>
+            <p className="text-sm font-bold text-text-muted">Reserved</p>
             <p className="mt-2 text-2xl font-black text-text-strong">
-              {counts.active + counts.sold}
+              {counts.reserved}
             </p>
           </div>
         </div>
@@ -118,37 +130,47 @@ export function DeveloperEstateDetail({
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-180 text-left text-sm">
+            <table className="w-full min-w-205 text-left text-sm">
               <thead>
                 <tr className="border-b border-border-soft text-xs uppercase tracking-wide text-text-muted">
                   <th className="py-3 pr-4 font-black">Plot</th>
                   <th className="py-3 pr-4 font-black">Type</th>
                   <th className="py-3 pr-4 font-black">Size</th>
                   <th className="py-3 pr-4 font-black">Price</th>
+                  <th className="py-3 pr-4 font-black">Assigned Buyer</th>
                   <th className="py-3 pr-4 font-black">Status</th>
                 </tr>
               </thead>
 
               <tbody>
-                {plots.map((plot) => (
-                  <tr key={plot.id} className="border-b border-border-soft">
-                    <td className="py-4 pr-4 font-black text-text-strong">
-                      {plot.plot_number}
-                    </td>
-                    <td className="py-4 pr-4 font-semibold text-text-muted">
-                      {plot.developer_plot_types?.type_name ?? "—"}
-                    </td>
-                    <td className="py-4 pr-4 font-semibold text-text-muted">
-                      {plot.size_label}
-                    </td>
-                    <td className="py-4 pr-4 font-black text-text-strong">
-                      {formatNaira(Number(plot.price))}
-                    </td>
-                    <td className="py-4 pr-4">
-                      <Badge tone="primary">{formatStatus(plot.status)}</Badge>
-                    </td>
-                  </tr>
-                ))}
+                {plots.map((plot) => {
+                  const buyerName = getBuyerNameForPlot(assignments, plot.id);
+
+                  return (
+                    <tr key={plot.id} className="border-b border-border-soft">
+                      <td className="py-4 pr-4 font-black text-text-strong">
+                        {plot.plot_number}
+                      </td>
+                      <td className="py-4 pr-4 font-semibold text-text-muted">
+                        {plot.developer_plot_types?.type_name ?? "—"}
+                      </td>
+                      <td className="py-4 pr-4 font-semibold text-text-muted">
+                        {plot.size_label}
+                      </td>
+                      <td className="py-4 pr-4 font-black text-text-strong">
+                        {formatNaira(Number(plot.price))}
+                      </td>
+                      <td className="py-4 pr-4 font-semibold text-text-muted">
+                        {buyerName ?? "—"}
+                      </td>
+                      <td className="py-4 pr-4">
+                        <Badge tone="primary">
+                          {formatStatus(plot.status)}
+                        </Badge>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
