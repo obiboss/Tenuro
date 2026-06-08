@@ -195,4 +195,4 @@ export async function createDeveloperSaleFromAssignment(
   return data;
 }
 
-export { DEVELOPER_SALE_SELECT };
+export { DEVELOPER_SALE_SELECT, DEVELOPER_SALE_DETAILS_SELECT };

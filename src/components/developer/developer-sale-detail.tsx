@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { SectionCard } from "@/components/ui/section-card";
+import { DeveloperBuyerPortalLinkForm } from "@/components/developer/developer-buyer-portal-link-form";
 import { DeveloperPaymentPlanSummary } from "@/components/developer/developer-payment-plan-summary";
 import type {
   DeveloperPaymentPlanRow,
@@ -117,14 +118,21 @@ export function DeveloperSaleDetail({
         scheduleItems={scheduleItems}
       />
 
+      {paymentPlan ? (
+        <DeveloperBuyerPortalLinkForm
+          saleId={sale.id}
+          buyerName={sale.developer_buyers?.full_name ?? "Buyer"}
+        />
+      ) : null}
+
       <SectionCard
         title="Next Step"
-        description="Payment requests and payment ledger are intentionally handled in the next batch."
+        description="Buyer payment initiation and receipt PDF generation come next."
       >
         <div className="rounded-button bg-primary-soft p-4 text-sm font-semibold leading-6 text-primary">
-          Next batch: D6 — Payment Request + Paystack Ledger. This will allow a
-          developer to send buyer payment links and let the system create
-          payment records automatically after Paystack confirmation.
+          Next: D6B — let buyers pay unpaid schedule items directly from the
+          portal, then post the payment to the ledger after Paystack
+          verification.
         </div>
       </SectionCard>
 
