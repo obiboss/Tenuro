@@ -1,13 +1,27 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { createDeveloperEstateAction } from "@/actions/developer-estates.actions";
 import { initialDeveloperEstateActionState } from "@/actions/developer-estates.state";
+import { NIGERIA_STATES_LGAS } from "@/constants/nigeria-states-lgas";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
+const estateStatusOptions = [
+  { value: "planning", label: "Planning" },
+  { value: "selling", label: "Selling" },
+  { value: "paused", label: "Paused" },
+  { value: "sold_out", label: "Sold out" },
+  { value: "archived", label: "Archived" },
+] as const;
+
 export function DeveloperEstateForm() {
+  const [selectedState, setSelectedState] = useState("");
+  const selectedStateData = NIGERIA_STATES_LGAS.find(
+    (item) => item.state === selectedState,
+  );
+
   const [state, formAction, isPending] = useActionState(
     createDeveloperEstateAction,
     initialDeveloperEstateActionState,
@@ -39,27 +53,84 @@ export function DeveloperEstateForm() {
           />
 
           <Input
-            label="Location"
+            label="Estate address / location"
             name="location"
-            placeholder="Ibeju-Lekki, Lagos"
+            placeholder="Estate road, nearest landmark, area"
             error={state.fieldErrors?.location?.[0]}
             required
           />
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <Input
-              label="City"
-              name="city"
-              placeholder="Lagos"
-              error={state.fieldErrors?.city?.[0]}
-            />
+          <Input
+            label="City / Town"
+            name="city"
+            placeholder="Lekki"
+            error={state.fieldErrors?.city?.[0]}
+          />
 
-            <Input
-              label="State"
-              name="state"
-              placeholder="Lagos"
-              error={state.fieldErrors?.state?.[0]}
-            />
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <label
+                htmlFor="state"
+                className="block text-sm font-semibold text-text-strong"
+              >
+                State / FCT <span className="ml-1 text-danger">*</span>
+              </label>
+
+              <select
+                id="state"
+                name="state"
+                required
+                value={selectedState}
+                onChange={(event) => setSelectedState(event.target.value)}
+                className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 py-3 text-base text-text-strong outline-none transition focus:border-primary focus:ring-2 focus:ring-primary-soft"
+              >
+                <option value="">Select state</option>
+                {NIGERIA_STATES_LGAS.map((item) => (
+                  <option key={item.state} value={item.state}>
+                    {item.state}
+                  </option>
+                ))}
+              </select>
+
+              {state.fieldErrors?.state?.[0] ? (
+                <p className="text-sm font-medium text-danger">
+                  {state.fieldErrors.state[0]}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="space-y-2">
+              <label
+                htmlFor="lga"
+                className="block text-sm font-semibold text-text-strong"
+              >
+                LGA <span className="ml-1 text-danger">*</span>
+              </label>
+
+              <select
+                id="lga"
+                name="lga"
+                required
+                disabled={!selectedStateData}
+                className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 py-3 text-base text-text-strong outline-none transition focus:border-primary focus:ring-2 focus:ring-primary-soft disabled:cursor-not-allowed disabled:bg-background disabled:text-text-muted"
+                defaultValue=""
+              >
+                <option value="">
+                  {selectedStateData ? "Select LGA" : "Select state first"}
+                </option>
+                {selectedStateData?.lgas.map((lga) => (
+                  <option key={lga} value={lga}>
+                    {lga}
+                  </option>
+                ))}
+              </select>
+
+              {state.fieldErrors?.lga?.[0] ? (
+                <p className="text-sm font-medium text-danger">
+                  {state.fieldErrors.lga[0]}
+                </p>
+              ) : null}
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -77,12 +148,18 @@ export function DeveloperEstateForm() {
               className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 py-3 text-base text-text-strong outline-none transition focus:border-primary focus:ring-2 focus:ring-primary-soft"
               defaultValue="planning"
             >
-              <option value="planning">Planning</option>
-              <option value="selling">Selling</option>
-              <option value="paused">Paused</option>
-              <option value="sold_out">Sold out</option>
-              <option value="archived">Archived</option>
+              {estateStatusOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
+
+            {state.fieldErrors?.status?.[0] ? (
+              <p className="text-sm font-medium text-danger">
+                {state.fieldErrors.status[0]}
+              </p>
+            ) : null}
           </div>
 
           <div className="space-y-2">

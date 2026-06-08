@@ -38,6 +38,7 @@ export async function createDeveloperEstateAction(
       location: formData.get("location"),
       city: formData.get("city"),
       state: formData.get("state"),
+      lga: formData.get("lga"),
       description: formData.get("description"),
       status: formData.get("status") || "planning",
     });
@@ -60,7 +61,8 @@ export async function createDeveloperEstateAction(
       estateName: parsed.estateName,
       location: parsed.location,
       city: nullableText(parsed.city),
-      state: nullableText(parsed.state),
+      state: parsed.state,
+      lga: parsed.lga,
       description: nullableText(parsed.description),
       status: parsed.status,
     });

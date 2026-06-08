@@ -43,9 +43,10 @@ const desktopNavItems: readonly DeveloperNavItem[] = [
     icon: Building2,
   },
   {
-    label: "Plots",
-    href: "/developer/estates",
+    label: "Plot Directory",
+    href: "/developer/plots",
     icon: Map,
+    disabled: true,
   },
   {
     label: "Buyers",
@@ -89,11 +90,6 @@ const mobilePrimaryItems: readonly DeveloperNavItem[] = [
     label: "Estates",
     href: "/developer/estates",
     icon: Building2,
-  },
-  {
-    label: "Plots",
-    href: "/developer/estates",
-    icon: Map,
   },
 ];
 
@@ -145,7 +141,8 @@ export function DeveloperShell({
           <nav className="mt-8 space-y-2">
             {desktopNavItems.map((item) => {
               const Icon = item.icon;
-              const active = isActivePath(pathname, item.href);
+              const active =
+                !item.disabled && isActivePath(pathname, item.href);
 
               if (item.disabled) {
                 return (

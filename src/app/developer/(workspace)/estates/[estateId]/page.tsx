@@ -19,6 +19,17 @@ type DeveloperEstatePageProps = {
   }>;
 };
 
+function formatEstateLocation(params: {
+  location: string;
+  city: string | null;
+  lga: string | null;
+  state: string | null;
+}) {
+  return [params.location, params.city, params.lga, params.state]
+    .filter(Boolean)
+    .join(", ");
+}
+
 export default async function DeveloperEstatePage({
   params,
 }: DeveloperEstatePageProps) {
@@ -58,7 +69,12 @@ export default async function DeveloperEstatePage({
     <div className="space-y-8">
       <PageHeader
         title={estate.estate_name}
-        description={`${estate.location}${estate.state ? `, ${estate.state}` : ""}`}
+        description={formatEstateLocation({
+          location: estate.location,
+          city: estate.city,
+          lga: estate.lga,
+          state: estate.state,
+        })}
       />
 
       <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
