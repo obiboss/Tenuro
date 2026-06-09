@@ -52,6 +52,23 @@ const DEVELOPER_SALE_PAYMENT_SELECT = `
   updated_at
 `;
 
+export async function getDeveloperSalePaymentById(
+  supabase: SupabaseClient,
+  paymentId: string,
+) {
+  const { data, error } = await supabase
+    .from("developer_sale_payments")
+    .select(DEVELOPER_SALE_PAYMENT_SELECT)
+    .eq("id", paymentId)
+    .maybeSingle<DeveloperSalePaymentRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 export async function listDeveloperSalePaymentsForSale(
   supabase: SupabaseClient,
   params: {
@@ -66,6 +83,34 @@ export async function listDeveloperSalePaymentsForSale(
     .eq("sale_id", params.saleId)
     .order("created_at", { ascending: false })
     .returns<DeveloperSalePaymentRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function markDeveloperSalePaymentReceiptGenerated(
+  supabase: SupabaseClient,
+  params: {
+    paymentId: string;
+    receiptNumber: string;
+    receiptPath: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("developer_sale_payments")
+    .update({
+      receipt_number: params.receiptNumber,
+      receipt_path: params.receiptPath,
+      receipt_generated: true,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", params.paymentId)
+    .eq("status", "posted")
+    .select(DEVELOPER_SALE_PAYMENT_SELECT)
+    .single<DeveloperSalePaymentRow>();
 
   if (error) {
     throw error;

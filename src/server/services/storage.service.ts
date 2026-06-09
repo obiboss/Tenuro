@@ -6,6 +6,7 @@ import { createSupabaseAdminClient } from "@/server/supabase/admin";
 const TENANT_KYC_BUCKET = "tenant-kyc-documents";
 const TENANCY_AGREEMENT_PDF_BUCKET = "tenancy-agreement-pdfs";
 const RENT_RECEIPTS_BUCKET = "rent-receipts";
+const DEVELOPER_PAYMENT_RECEIPTS_BUCKET = "developer-payment-receipts";
 const QUIT_NOTICE_PDF_BUCKET = "quit-notice-pdfs";
 const SIGNED_URL_EXPIRY_SECONDS = 60 * 10;
 
@@ -133,6 +134,26 @@ export async function uploadRentReceiptPdf(params: {
 export async function createSignedRentReceiptPdfUrl(path: string | null) {
   return createSignedStorageUrl({
     bucket: RENT_RECEIPTS_BUCKET,
+    path,
+  });
+}
+
+export async function uploadDeveloperPaymentReceiptPdf(params: {
+  path: string;
+  pdfBuffer: Buffer;
+}) {
+  return uploadPdfToBucket({
+    bucket: DEVELOPER_PAYMENT_RECEIPTS_BUCKET,
+    path: params.path,
+    pdfBuffer: params.pdfBuffer,
+  });
+}
+
+export async function createSignedDeveloperPaymentReceiptPdfUrl(
+  path: string | null,
+) {
+  return createSignedStorageUrl({
+    bucket: DEVELOPER_PAYMENT_RECEIPTS_BUCKET,
     path,
   });
 }

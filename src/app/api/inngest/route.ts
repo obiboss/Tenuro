@@ -1,32 +1,11 @@
-import { NextResponse } from "next/server";
+import { serve } from "inngest/next";
+import { inngest } from "@/server/jobs/inngest.client";
+import { receiptJobs } from "@/server/jobs/receipt.jobs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  return NextResponse.json(
-    {
-      ok: true,
-      status: "scaffolded",
-      message:
-        "Inngest route is available but background jobs are not active yet.",
-    },
-    {
-      status: 200,
-    },
-  );
-}
-
-export async function POST() {
-  return NextResponse.json(
-    {
-      ok: true,
-      status: "scaffolded",
-      message:
-        "Inngest route is available but background jobs are not active yet.",
-    },
-    {
-      status: 200,
-    },
-  );
-}
+export const { GET, POST, PUT } = serve({
+  client: inngest,
+  functions: [...receiptJobs],
+});

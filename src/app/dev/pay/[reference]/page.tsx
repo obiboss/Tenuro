@@ -1,12 +1,14 @@
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, CreditCard } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
+import { DeveloperPaymentCheckoutStatus } from "@/components/developer/developer-payment-checkout-status";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { TrustNotice } from "@/components/ui/trust-notice";
+import { errorResult } from "@/server/errors/result";
 import { getPublicDeveloperPaymentCheckout } from "@/server/services/developer-payment.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
-import { formatNaira } from "@/server/utils/money";
+import type { DeveloperPaymentIntentRow } from "@/server/repositories/developer-payment-intents.repository";
 
 type DeveloperPublicPaymentPageProps = {
   params: Promise<{
@@ -16,6 +18,18 @@ type DeveloperPublicPaymentPageProps = {
     verify?: string | string[];
   }>;
 };
+
+type PaymentPageState =
+  | {
+      status: "not_found";
+      errorMessage: string;
+      intent: null;
+    }
+  | {
+      status: "ready";
+      errorMessage?: string;
+      intent: DeveloperPaymentIntentRow;
+    };
 
 function getSearchParamValue(value?: string | string[]) {
   if (Array.isArray(value)) {
@@ -44,6 +58,86 @@ function DeveloperPaymentLogo() {
   );
 }
 
+function getPageTitle(params: {
+  intent: DeveloperPaymentIntentRow;
+  errorMessage?: string;
+}) {
+  if (params.errorMessage) {
+    return "Payment verification failed";
+  }
+
+  if (params.intent.status === "paid") {
+    return "Payment confirmed";
+  }
+
+  return "Review plot payment";
+}
+
+function getPageDescription(params: {
+  intent: DeveloperPaymentIntentRow;
+  errorMessage?: string;
+}) {
+  if (params.errorMessage) {
+    return "We could not verify this payment automatically. No duplicate payment has been posted.";
+  }
+
+  if (params.intent.status === "paid") {
+    return "Your payment has been verified and posted to the buyer ledger.";
+  }
+
+  return "Review the installment amount, Boldverse platform fee, and total before continuing to Paystack.";
+}
+
+async function resolvePaymentPageState(params: {
+  reference: string;
+  shouldVerify: boolean;
+}): Promise<PaymentPageState> {
+  const supabase = createSupabaseAdminClient();
+
+  try {
+    const intent = await getPublicDeveloperPaymentCheckout({
+      supabase,
+      reference: params.reference,
+      verify: params.shouldVerify,
+    });
+
+    if (!intent) {
+      return {
+        status: "not_found",
+        errorMessage: "This payment link is invalid or no longer available.",
+        intent: null,
+      };
+    }
+
+    return {
+      status: "ready",
+      intent,
+    };
+  } catch (error) {
+    const result = errorResult(error);
+
+    const fallbackIntent = await getPublicDeveloperPaymentCheckout({
+      supabase,
+      reference: params.reference,
+      verify: false,
+    });
+
+    if (!fallbackIntent) {
+      return {
+        status: "not_found",
+        errorMessage: result.message,
+        intent: null,
+      };
+    }
+
+    return {
+      status: "ready",
+      errorMessage: result.message,
+      intent: fallbackIntent,
+    };
+  }
+}
+
 export default async function DeveloperPublicPaymentPage({
   params,
   searchParams,
@@ -51,15 +145,12 @@ export default async function DeveloperPublicPaymentPage({
   const { reference } = await params;
   const resolvedSearchParams = await searchParams;
   const shouldVerify = getSearchParamValue(resolvedSearchParams.verify) === "1";
-  const supabase = createSupabaseAdminClient();
-
-  const intent = await getPublicDeveloperPaymentCheckout({
-    supabase,
+  const pageState = await resolvePaymentPageState({
     reference,
-    verify: shouldVerify,
+    shouldVerify,
   });
 
-  if (!intent) {
+  if (pageState.status === "not_found") {
     return (
       <main className="min-h-screen bg-background">
         <section className="mx-auto max-w-3xl px-4 py-12 md:px-6">
@@ -71,7 +162,7 @@ export default async function DeveloperPublicPaymentPage({
           >
             <TrustNotice
               title="Please request a new link"
-              description="This payment link is invalid or no longer available."
+              description={pageState.errorMessage}
               icon={<AlertTriangle aria-hidden="true" size={22} />}
             />
           </SectionCard>
@@ -80,73 +171,43 @@ export default async function DeveloperPublicPaymentPage({
     );
   }
 
-  const isPaid = intent.status === "paid";
-
   return (
     <main className="min-h-screen bg-background">
       <section className="mx-auto max-w-4xl px-4 py-12 md:px-6">
         <DeveloperPaymentLogo />
 
         <PageHeader
-          title={isPaid ? "Payment confirmed" : "Review plot payment"}
-          description={
-            isPaid
-              ? "Your payment has been verified and posted to the buyer ledger."
-              : "Review the installment amount, Boldverse platform fee, and total before continuing to Paystack."
-          }
+          title={getPageTitle({
+            intent: pageState.intent,
+            errorMessage: pageState.errorMessage,
+          })}
+          description={getPageDescription({
+            intent: pageState.intent,
+            errorMessage: pageState.errorMessage,
+          })}
           action={
-            <Badge tone={isPaid ? "success" : "primary"}>
-              {isPaid ? "Paid" : "Awaiting Payment"}
+            <Badge
+              tone={
+                pageState.errorMessage
+                  ? "danger"
+                  : pageState.intent.status === "paid"
+                    ? "success"
+                    : "primary"
+              }
+            >
+              {pageState.errorMessage
+                ? "Verification Failed"
+                : pageState.intent.status === "paid"
+                  ? "Paid"
+                  : "Awaiting Payment"}
             </Badge>
           }
         />
 
-        <SectionCard
-          title="Payment Summary"
-          description="All amounts are server-calculated from the payment request."
-        >
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-button bg-background p-4">
-              <p className="text-sm font-bold text-text-muted">Installment</p>
-              <p className="mt-2 text-xl font-black text-text-strong">
-                {formatNaira(Number(intent.installment_amount))}
-              </p>
-            </div>
-
-            <div className="rounded-button bg-background p-4">
-              <p className="text-sm font-bold text-text-muted">
-                Boldverse platform fee
-              </p>
-              <p className="mt-2 text-xl font-black text-text-strong">
-                {formatNaira(Number(intent.platform_fee_amount))}
-              </p>
-            </div>
-
-            <div className="rounded-button bg-background p-4">
-              <p className="text-sm font-bold text-text-muted">Total payable</p>
-              <p className="mt-2 text-xl font-black text-text-strong">
-                {formatNaira(Number(intent.total_amount))}
-              </p>
-            </div>
-          </div>
-
-          {isPaid ? (
-            <TrustNotice
-              title="Payment posted"
-              description="The developer and buyer records have been updated automatically."
-              icon={<CheckCircle2 aria-hidden="true" size={22} />}
-              className="mt-5"
-            />
-          ) : (
-            <a
-              href={intent.authorization_url ?? "#"}
-              className="mt-6 inline-flex min-h-11 w-full items-center justify-center rounded-button bg-primary px-5 py-2.5 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary-hover"
-            >
-              <CreditCard aria-hidden="true" size={18} />
-              Continue to Paystack
-            </a>
-          )}
-        </SectionCard>
+        <DeveloperPaymentCheckoutStatus
+          intent={pageState.intent}
+          errorMessage={pageState.errorMessage}
+        />
       </section>
     </main>
   );

@@ -24,6 +24,7 @@ import {
 } from "@/server/repositories/units.repository";
 import { writeSystemAuditLog } from "@/server/services/audit-log.service";
 import { verifyAgentTenantProcessingFeeReference } from "@/server/services/agent-processing-fee.service";
+import { verifyAndPostDeveloperPaymentReference } from "@/server/services/developer-payment.service";
 import { verifyTenantApplicationProcessingFeeReference } from "@/server/services/tenant-application-processing-fees.service";
 import {
   auditGatewayPaymentReplayIgnored,
@@ -105,6 +106,36 @@ function isFirstRentPaymentIntent(metadata: Record<string, unknown>) {
   return (
     metadata.payment_purpose === "new_tenant_first_rent" ||
     metadata.automatic_after_agreement === true
+  );
+}
+
+function isDeveloperPaymentReference(reference: string) {
+  return reference.trim().toUpperCase().startsWith("BPD-");
+}
+
+function getWebhookData(rawPayload: Record<string, unknown>) {
+  return toRecord(rawPayload.data);
+}
+
+function getWebhookMetadata(rawPayload: Record<string, unknown>) {
+  return toRecord(getWebhookData(rawPayload).metadata);
+}
+
+function isDeveloperInstallmentWebhook(params: {
+  reference: string;
+  rawPayload?: Record<string, unknown>;
+}) {
+  if (isDeveloperPaymentReference(params.reference)) {
+    return true;
+  }
+
+  const metadata = params.rawPayload
+    ? getWebhookMetadata(params.rawPayload)
+    : {};
+
+  return (
+    metadata.product === "boldverse_developer_module" ||
+    metadata.payment_type === "developer_installment"
   );
 }
 
@@ -451,6 +482,24 @@ function isProcessingFeeNotFoundError(error: unknown) {
   );
 }
 
+async function processVerifiedDeveloperPaymentReference(reference: string) {
+  const supabase = createSupabaseAdminClient();
+
+  const result = await verifyAndPostDeveloperPaymentReference({
+    supabase,
+    reference,
+  });
+
+  return {
+    status: result.status === "duplicate" ? "duplicate" : "processed",
+    message:
+      result.status === "duplicate"
+        ? "Developer payment already recorded."
+        : "Developer payment confirmed.",
+    paymentId: result.paymentId,
+  } satisfies GatewayPaymentWebhookResult;
+}
+
 async function processVerifiedPaystackReferenceWithFallback(
   reference: string,
   options?: {
@@ -459,6 +508,7 @@ async function processVerifiedPaystackReferenceWithFallback(
       | "verify_page"
       | "landlord_verify"
       | "reconciliation";
+    rawPayload?: Record<string, unknown>;
   },
 ) {
   try {
@@ -483,14 +533,31 @@ async function processVerifiedPaystackReferenceWithFallback(
       }
     }
 
-    const tenantApplicationProcessingFeeIntent =
-      await verifyTenantApplicationProcessingFeeReference(reference);
+    try {
+      const tenantApplicationProcessingFeeIntent =
+        await verifyTenantApplicationProcessingFeeReference(reference);
 
-    return {
-      status: "processed" as const,
-      message: "Tenant application processing fee confirmed.",
-      paymentId: tenantApplicationProcessingFeeIntent.id,
-    };
+      return {
+        status: "processed" as const,
+        message: "Tenant application processing fee confirmed.",
+        paymentId: tenantApplicationProcessingFeeIntent.id,
+      };
+    } catch (tenantApplicationError) {
+      if (!isProcessingFeeNotFoundError(tenantApplicationError)) {
+        throw tenantApplicationError;
+      }
+
+      if (
+        isDeveloperInstallmentWebhook({
+          reference,
+          rawPayload: options?.rawPayload,
+        })
+      ) {
+        return processVerifiedDeveloperPaymentReference(reference);
+      }
+
+      throw tenantApplicationError;
+    }
   }
 }
 
@@ -634,7 +701,10 @@ export async function processGatewayPaystackWebhook(params: {
 
     const result = await processVerifiedPaystackReferenceWithFallback(
       webhook.data.reference,
-      { replaySource: "webhook" },
+      {
+        replaySource: "webhook",
+        rawPayload,
+      },
     );
 
     const intent = await getGatewayPaymentIntentByReference(

@@ -14,6 +14,7 @@ import {
 } from "@/server/repositories/developer-payment-plans.repository";
 import { listDeveloperSalePaymentsForSale } from "@/server/repositories/developer-sale-payments.repository";
 import { getDeveloperSaleById } from "@/server/repositories/developer-sales.repository";
+import { createSignedDeveloperPaymentReceiptPdfUrl } from "@/server/services/storage.service";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type DeveloperBuyerPortalSaleDetails = {
@@ -126,6 +127,7 @@ export async function createBuyerSalePortalLink(params: {
     throw new AppError(
       "DEVELOPER_SALE_NOT_ACTIVE",
       "Only active sales can have buyer payment portal links.",
+      400,
     );
   }
 
@@ -206,6 +208,22 @@ export async function getBuyerSalePortalByToken(params: {
     }),
   ]);
 
+  const paymentsWithReceiptLinks = await Promise.all(
+    payments.map(async (payment) => {
+      const receiptDownloadUrl =
+        payment.receipt_generated && payment.receipt_path
+          ? await createSignedDeveloperPaymentReceiptPdfUrl(
+              payment.receipt_path,
+            )
+          : null;
+
+      return {
+        ...payment,
+        receiptDownloadUrl,
+      };
+    }),
+  );
+
   const totalPaid = payments
     .filter((payment) => payment.status === "posted")
     .reduce((total, payment) => total + Number(payment.amount_paid), 0);
@@ -227,7 +245,7 @@ export async function getBuyerSalePortalByToken(params: {
     sale,
     paymentPlan,
     scheduleItems,
-    payments,
+    payments: paymentsWithReceiptLinks,
     summary: {
       totalPrice: Number(sale.total_price_locked),
       totalPaid,

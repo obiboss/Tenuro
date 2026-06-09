@@ -6,6 +6,7 @@ import {
   calculateDeveloperInstallmentFee,
   getDeveloperInstallmentFeePercentage,
 } from "@/server/constants/developer-installment-fees";
+import { inngest } from "@/server/jobs/inngest.client";
 import { getActiveBuyerSaleAccessTokenByHash } from "@/server/repositories/developer-buyer-sale-access-tokens.repository";
 import { createDeveloperPaymentAllocations } from "@/server/repositories/developer-payment-allocations.repository";
 import {
@@ -208,6 +209,21 @@ function resolveBuyerEmail(params: {
     params.sale.developer_buyers?.email ||
     `developer-buyer-${params.fallbackBuyerId}@boldverseproperty.com`
   );
+}
+
+async function enqueueDeveloperPaymentReceiptGenerationSafely(
+  paymentId: string,
+) {
+  try {
+    await inngest.send({
+      name: "developer/payment.receipt.requested",
+      data: {
+        paymentId,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to enqueue developer payment receipt job:", error);
+  }
 }
 
 export async function createDeveloperPaymentRequest(params: {
@@ -533,6 +549,8 @@ export async function verifyAndPostDeveloperPaymentReference(params: {
   if (error) {
     throw error;
   }
+
+  await enqueueDeveloperPaymentReceiptGenerationSafely(data.id);
 
   return {
     status: "processed" as const,

@@ -272,9 +272,9 @@ export function DeveloperBuyerSalePortalView({
                       {formatNaira(Number(payment.balance_after))}
                     </td>
                     <td className="py-4 pr-4">
-                      {payment.receipt_path ? (
+                      {payment.receiptDownloadUrl ? (
                         <Link
-                          href={payment.receipt_path}
+                          href={payment.receiptDownloadUrl}
                           className="inline-flex min-h-10 items-center justify-center gap-2 rounded-button bg-primary px-4 py-2 text-sm font-extrabold text-white"
                         >
                           <FileText aria-hidden="true" size={16} />
