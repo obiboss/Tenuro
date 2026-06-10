@@ -39,34 +39,34 @@ export function DeveloperPlotTypeForm({
           ) : null}
 
           <Input
-            label="Plot type name"
+            label="What should this kind of plot be called?"
             name="typeName"
-            placeholder="Standard Plot"
+            placeholder="Example: 500 sqm Residential Plot"
             error={state.fieldErrors?.typeName?.[0]}
             required
           />
 
           <Input
-            label="Size"
+            label="What is the size?"
             name="sizeLabel"
-            placeholder="500 sqm"
+            placeholder="Example: 500 sqm"
             error={state.fieldErrors?.sizeLabel?.[0]}
             required
           />
 
           <Input
-            label="Default price"
+            label="Usual selling price"
             name="defaultPrice"
             type="number"
             min="1"
             step="0.01"
-            placeholder="5000000"
+            placeholder="Example: 5000000"
             error={state.fieldErrors?.defaultPrice?.[0]}
             required
           />
 
           <Input
-            label="Description"
+            label="Short note"
             name="description"
             placeholder="Optional"
             error={state.fieldErrors?.description?.[0]}
@@ -75,7 +75,7 @@ export function DeveloperPlotTypeForm({
 
         <CardFooter>
           <Button type="submit" isLoading={isPending}>
-            Add Plot Type
+            Save Plot Kind
           </Button>
         </CardFooter>
       </Card>

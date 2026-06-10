@@ -3,10 +3,10 @@
 import { useActionState } from "react";
 import { createDeveloperPlotAction } from "@/actions/developer-plots.actions";
 import { initialDeveloperPlotActionState } from "@/actions/developer-plots.state";
-import type { DeveloperPlotTypeRow } from "@/server/repositories/developer-plots.repository";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import type { DeveloperPlotTypeRow } from "@/server/repositories/developer-plots.repository";
 
 type DeveloperPlotFormProps = {
   estateId: string;
@@ -44,7 +44,7 @@ export function DeveloperPlotForm({
           <Input
             label="Plot number"
             name="plotNumber"
-            placeholder="A12"
+            placeholder="Example: A12"
             error={state.fieldErrors?.plotNumber?.[0]}
             required
           />
@@ -54,7 +54,7 @@ export function DeveloperPlotForm({
               htmlFor="plotTypeId"
               className="block text-sm font-semibold text-text-strong"
             >
-              Plot type
+              Kind of plot
             </label>
 
             <select
@@ -63,7 +63,7 @@ export function DeveloperPlotForm({
               className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 py-3 text-base text-text-strong outline-none transition focus:border-primary focus:ring-2 focus:ring-primary-soft"
               defaultValue=""
             >
-              <option value="">No plot type</option>
+              <option value="">Choose if applicable</option>
               {plotTypes.map((plotType) => (
                 <option key={plotType.id} value={plotType.id}>
                   {plotType.type_name} — {plotType.size_label}
@@ -73,20 +73,20 @@ export function DeveloperPlotForm({
           </div>
 
           <Input
-            label="Size"
+            label="Plot size"
             name="sizeLabel"
-            placeholder="500 sqm"
+            placeholder="Example: 500 sqm"
             error={state.fieldErrors?.sizeLabel?.[0]}
             required
           />
 
           <Input
-            label="Price"
+            label="Selling price"
             name="price"
             type="number"
             min="1"
             step="0.01"
-            placeholder="5000000"
+            placeholder="Example: 5000000"
             error={state.fieldErrors?.price?.[0]}
             required
           />
@@ -96,7 +96,8 @@ export function DeveloperPlotForm({
               htmlFor="status"
               className="block text-sm font-semibold text-text-strong"
             >
-              Status <span className="ml-1 text-danger">*</span>
+              Can this plot be sold now?{" "}
+              <span className="ml-1 text-danger">*</span>
             </label>
 
             <select
@@ -106,16 +107,16 @@ export function DeveloperPlotForm({
               className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 py-3 text-base text-text-strong outline-none transition focus:border-primary focus:ring-2 focus:ring-primary-soft"
               defaultValue="available"
             >
-              <option value="available">Available</option>
-              <option value="reserved">Reserved</option>
-              <option value="active">Active</option>
-              <option value="sold">Sold</option>
-              <option value="blocked">Blocked</option>
+              <option value="available">Yes, it is available</option>
+              <option value="reserved">No, it is already reserved</option>
+              <option value="active">No, a sale is already active</option>
+              <option value="sold">No, it has been sold</option>
+              <option value="blocked">No, block this plot for now</option>
             </select>
           </div>
 
           <Input
-            label="Notes"
+            label="Private note"
             name="notes"
             placeholder="Optional"
             error={state.fieldErrors?.notes?.[0]}

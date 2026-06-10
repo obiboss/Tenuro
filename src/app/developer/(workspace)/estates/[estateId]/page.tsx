@@ -17,6 +17,9 @@ import {
 import { requireDeveloper } from "@/server/services/auth.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type DeveloperEstatePageProps = {
   params: Promise<{
     estateId: string;
@@ -40,6 +43,7 @@ export default async function DeveloperEstatePage({
   const { estateId } = await params;
   const developer = await requireDeveloper();
   const supabase = createSupabaseAdminClient();
+
   const account = await getDeveloperAccountByOwnerProfileId(
     supabase,
     developer.id,
@@ -91,41 +95,40 @@ export default async function DeveloperEstatePage({
         })}
       />
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
-        <DeveloperEstateDetail
-          estate={estate}
-          plotTypes={plotTypes}
-          plots={plots}
-          assignments={assignments}
-        />
+      <DeveloperEstateDetail
+        plotTypes={plotTypes}
+        plots={plots}
+        availablePlots={availablePlots}
+        buyers={buyers}
+        assignments={assignments}
+      />
 
-        <div className="space-y-6 xl:sticky xl:top-28 xl:self-start">
-          <SectionCard
-            title="Assign Buyer"
-            description="Reserve an available plot for a prospective buyer."
-          >
-            <DeveloperPlotAssignmentForm
-              estateId={estate.id}
-              buyers={buyers}
-              plots={availablePlots}
-            />
-          </SectionCard>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <SectionCard
+          title="Step 1 — Describe the kind of plots you sell"
+          description="Add a simple plot category first. Example: 500 sqm Residential Plot at ₦5,000,000."
+        >
+          <DeveloperPlotTypeForm estateId={estate.id} />
+        </SectionCard>
 
-          <SectionCard
-            title="Add Plot Type"
-            description="Create reusable size and pricing templates."
-          >
-            <DeveloperPlotTypeForm estateId={estate.id} />
-          </SectionCard>
-
-          <SectionCard
-            title="Add Plot"
-            description="Create individual plots under this estate."
-          >
-            <DeveloperPlotForm estateId={estate.id} plotTypes={plotTypes} />
-          </SectionCard>
-        </div>
+        <SectionCard
+          title="Step 2 — Add the actual plot numbers"
+          description="Add each plot number under this estate. Example: A1, A2, B10, or Plot 15."
+        >
+          <DeveloperPlotForm estateId={estate.id} plotTypes={plotTypes} />
+        </SectionCard>
       </div>
+
+      <SectionCard
+        title="Step 3 — Give a plot to a buyer"
+        description="Choose a buyer and the plot you want to give them. After this, you can create their sale and payment plan."
+      >
+        <DeveloperPlotAssignmentForm
+          estateId={estate.id}
+          buyers={buyers}
+          plots={availablePlots}
+        />
+      </SectionCard>
     </div>
   );
 }
