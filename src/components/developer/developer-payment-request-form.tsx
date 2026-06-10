@@ -3,15 +3,14 @@
 import { useActionState, useMemo, useState } from "react";
 import { createDeveloperPaymentRequestAction } from "@/actions/developer-payments.actions";
 import { initialDeveloperPaymentActionState } from "@/actions/developer-payments.state";
-import type { DeveloperPaymentScheduleItemRow } from "@/server/repositories/developer-payment-plans.repository";
 import {
   calculateDeveloperInstallmentFee,
   getDeveloperInstallmentFeePercentage,
-} from "@/server/constants/developer-installment-fees";
-import { formatNaira } from "@/server/utils/money";
+} from "@/constants/developer-installment-fees";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import type { DeveloperPaymentScheduleItemRow } from "@/server/repositories/developer-payment-plans.repository";
 
 type DeveloperPaymentRequestFormProps = {
   saleId: string;
@@ -24,6 +23,14 @@ function getItemOutstanding(item: DeveloperPaymentScheduleItemRow) {
   return Math.max(0, Number(item.expected_amount) - Number(item.amount_paid));
 }
 
+function formatNaira(amount: number) {
+  return new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency: "NGN",
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
 export function DeveloperPaymentRequestForm({
   saleId,
   buyerEmail,
@@ -33,9 +40,11 @@ export function DeveloperPaymentRequestForm({
   const pendingItems = scheduleItems.filter(
     (item) => getItemOutstanding(item) > 0,
   );
+
   const [selectedScheduleItemId, setSelectedScheduleItemId] = useState(
     pendingItems[0]?.id ?? "",
   );
+
   const selectedItem = pendingItems.find(
     (item) => item.id === selectedScheduleItemId,
   );
@@ -57,6 +66,11 @@ export function DeveloperPaymentRequestForm({
     [safeAmount],
   );
 
+  const feePercentage = useMemo(
+    () => getDeveloperInstallmentFeePercentage(safeAmount),
+    [safeAmount],
+  );
+
   const totalPayable = Number((safeAmount + fee.feeAmount).toFixed(2));
 
   function handleScheduleChange(value: string) {
@@ -66,7 +80,10 @@ export function DeveloperPaymentRequestForm({
 
     if (nextItem) {
       setAmount(String(getItemOutstanding(nextItem)));
+      return;
     }
+
+    setAmount("");
   }
 
   return (
@@ -154,8 +171,7 @@ export function DeveloperPaymentRequestForm({
 
             <div className="rounded-button bg-background p-4">
               <p className="text-sm font-bold text-text-muted">
-                Platform fee ({getDeveloperInstallmentFeePercentage(safeAmount)}
-                %)
+                Platform fee ({feePercentage}%)
               </p>
               <p className="mt-2 text-lg font-black text-text-strong">
                 {formatNaira(fee.feeAmount)}

@@ -42,6 +42,7 @@ export type DeveloperSaleWithDetails = DeveloperSaleRow & {
     city: string | null;
     state: string | null;
     lga: string | null;
+    country: string | null;
   } | null;
   developer_plots: {
     id: string;
@@ -49,6 +50,7 @@ export type DeveloperSaleWithDetails = DeveloperSaleRow & {
     size_label: string;
     price: number;
     status: string;
+    notes: string | null;
   } | null;
   developer_buyers: {
     id: string;
@@ -56,6 +58,7 @@ export type DeveloperSaleWithDetails = DeveloperSaleRow & {
     phone_number: string;
     email: string | null;
     nin: string | null;
+    residential_address: string | null;
     status: string;
   } | null;
 };
@@ -104,14 +107,16 @@ const DEVELOPER_SALE_DETAILS_SELECT = `
     location,
     city,
     state,
-    lga
+    lga,
+    country
   ),
   developer_plots (
     id,
     plot_number,
     size_label,
     price,
-    status
+    status,
+    notes
   ),
   developer_buyers (
     id,
@@ -119,6 +124,7 @@ const DEVELOPER_SALE_DETAILS_SELECT = `
     phone_number,
     email,
     nin,
+    residential_address,
     status
   )
 `;
