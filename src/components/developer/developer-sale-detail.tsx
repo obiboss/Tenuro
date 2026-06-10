@@ -1,5 +1,8 @@
 import Link from "next/link";
-import { generateSalesAgreementAction } from "@/actions/developer-sale-documents.actions";
+import {
+  generateAllocationLetterAction,
+  generateSalesAgreementAction,
+} from "@/actions/developer-sale-documents.actions";
 import { DeveloperBuyerPortalLinkForm } from "@/components/developer/developer-buyer-portal-link-form";
 import { DeveloperPaymentPlanSummary } from "@/components/developer/developer-payment-plan-summary";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +21,7 @@ type DeveloperSaleDetailProps = {
   paymentPlan: DeveloperPaymentPlanRow | null;
   scheduleItems: DeveloperPaymentScheduleItemRow[];
   salesAgreementDocument: DeveloperSaleDocumentView | null;
+  allocationLetterDocument: DeveloperSaleDocumentView | null;
 };
 
 function formatStatus(value: string) {
@@ -34,11 +38,73 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
+function SaleDocumentRow({
+  title,
+  description,
+  document,
+  action,
+  buttonLabel,
+  regenerateLabel,
+  saleId,
+}: {
+  title: string;
+  description: string;
+  document: DeveloperSaleDocumentView | null;
+  action: (formData: FormData) => Promise<void>;
+  buttonLabel: string;
+  regenerateLabel: string;
+  saleId: string;
+}) {
+  return (
+    <div className="rounded-button border border-border-soft bg-background p-4">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-sm font-black text-text-strong">{title}</p>
+          <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+            {description}
+          </p>
+
+          {document ? (
+            <p className="mt-2 text-xs font-bold text-success">
+              Generated on {formatDate(document.generated_at)}
+            </p>
+          ) : (
+            <p className="mt-2 text-xs font-bold text-text-muted">
+              Not generated yet.
+            </p>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-3 sm:flex-row">
+          {document?.signedUrl ? (
+            <a
+              href={document.signedUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex min-h-11 items-center justify-center rounded-button bg-surface px-5 py-2.5 text-sm font-extrabold text-text-strong shadow-soft ring-1 ring-border-soft transition hover:bg-primary-soft"
+            >
+              Download Copy
+            </a>
+          ) : null}
+
+          <form action={action}>
+            <input type="hidden" name="saleId" value={saleId} />
+            <Button type="submit">
+              {document ? regenerateLabel : buttonLabel}
+            </Button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function DeveloperSaleDetail({
   sale,
   paymentPlan,
   scheduleItems,
   salesAgreementDocument,
+  allocationLetterDocument,
 }: DeveloperSaleDetailProps) {
   return (
     <div className="space-y-6">
@@ -134,49 +200,26 @@ export function DeveloperSaleDetail({
         title="Sale Documents"
         description="Generate and manage digital document copies. Physical originals remain developer-issued."
       >
-        <div className="rounded-button border border-border-soft bg-background p-4">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-sm font-black text-text-strong">
-                Sales Agreement
-              </p>
-              <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-                Digital copy for buyer review, printing, signing, and hard-copy
-                processing.
-              </p>
+        <div className="space-y-4">
+          <SaleDocumentRow
+            title="Sales Agreement"
+            description="Digital copy for buyer review, printing, signing, and hard-copy processing."
+            document={salesAgreementDocument}
+            action={generateSalesAgreementAction}
+            buttonLabel="Generate Sales Agreement"
+            regenerateLabel="Regenerate Sales Agreement"
+            saleId={sale.id}
+          />
 
-              {salesAgreementDocument ? (
-                <p className="mt-2 text-xs font-bold text-success">
-                  Generated on {formatDate(salesAgreementDocument.generated_at)}
-                </p>
-              ) : (
-                <p className="mt-2 text-xs font-bold text-text-muted">
-                  Not generated yet.
-                </p>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row">
-              {salesAgreementDocument?.signedUrl ? (
-                <a
-                  href={salesAgreementDocument.signedUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex min-h-11 items-center justify-center rounded-button bg-surface px-5 py-2.5 text-sm font-extrabold text-text-strong shadow-soft ring-1 ring-border-soft transition hover:bg-primary-soft"
-                >
-                  Download Copy
-                </a>
-              ) : null}
-
-              <form action={generateSalesAgreementAction}>
-                <input type="hidden" name="saleId" value={sale.id} />
-                <Button type="submit">
-                  {salesAgreementDocument ? "Regenerate" : "Generate"} Sales
-                  Agreement
-                </Button>
-              </form>
-            </div>
-          </div>
+          <SaleDocumentRow
+            title="Allocation Letter"
+            description="Digital copy confirming administrative plot allocation, subject to payment and handover rules."
+            document={allocationLetterDocument}
+            action={generateAllocationLetterAction}
+            buttonLabel="Generate Allocation Letter"
+            regenerateLabel="Regenerate Allocation Letter"
+            saleId={sale.id}
+          />
         </div>
 
         <div className="mt-4 rounded-button bg-warning-soft p-4 text-sm font-semibold leading-6 text-warning">
@@ -187,11 +230,11 @@ export function DeveloperSaleDetail({
 
       <SectionCard
         title="Next Step"
-        description="Allocation Letter generation comes next."
+        description="Buyer portal document checklist comes next."
       >
         <div className="rounded-button bg-primary-soft p-4 text-sm font-semibold leading-6 text-primary">
-          Next: D8D — generate Allocation Letter digital copies using the same
-          auto-fill document engine.
+          Next: D8E — show buyer-visible document checklist and download links
+          inside the buyer sale portal.
         </div>
       </SectionCard>
 

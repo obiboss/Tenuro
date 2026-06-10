@@ -60,6 +60,18 @@ function createSalesAgreementStoragePath(params: {
   ].join("/");
 }
 
+function createAllocationLetterStoragePath(params: {
+  developerAccountId: string;
+  saleId: string;
+}) {
+  return [
+    params.developerAccountId,
+    "sales",
+    params.saleId,
+    "allocation-letter.pdf",
+  ].join("/");
+}
+
 async function attachSignedUrl(
   document: DeveloperSaleDocumentRow | null,
 ): Promise<DeveloperSaleDocumentView | null> {
@@ -77,9 +89,7 @@ async function attachSignedUrl(
   };
 }
 
-export async function getSalesAgreementDocumentForCurrentDeveloper(params: {
-  saleId: string;
-}) {
+async function getVerifiedSaleForCurrentDeveloper(params: { saleId: string }) {
   const { supabase, account } = await getDeveloperAccountForCurrentUser();
 
   const sale = await getDeveloperSaleById(supabase, {
@@ -91,10 +101,40 @@ export async function getSalesAgreementDocumentForCurrentDeveloper(params: {
     throw new AppError("DEVELOPER_SALE_NOT_FOUND", "Sale was not found.", 404);
   }
 
+  return {
+    supabase,
+    account,
+    sale,
+  };
+}
+
+export async function getSalesAgreementDocumentForCurrentDeveloper(params: {
+  saleId: string;
+}) {
+  const { supabase, account, sale } = await getVerifiedSaleForCurrentDeveloper({
+    saleId: params.saleId,
+  });
+
   const document = await getDeveloperSaleDocumentByType(supabase, {
     developerAccountId: account.id,
-    saleId: params.saleId,
+    saleId: sale.id,
     documentType: "sales_agreement",
+  });
+
+  return attachSignedUrl(document);
+}
+
+export async function getAllocationLetterDocumentForCurrentDeveloper(params: {
+  saleId: string;
+}) {
+  const { supabase, account, sale } = await getVerifiedSaleForCurrentDeveloper({
+    saleId: params.saleId,
+  });
+
+  const document = await getDeveloperSaleDocumentByType(supabase, {
+    developerAccountId: account.id,
+    saleId: sale.id,
+    documentType: "allocation_letter",
   });
 
   return attachSignedUrl(document);
@@ -103,16 +143,9 @@ export async function getSalesAgreementDocumentForCurrentDeveloper(params: {
 export async function generateSalesAgreementForCurrentDeveloper(params: {
   saleId: string;
 }) {
-  const { supabase, account } = await getDeveloperAccountForCurrentUser();
-
-  const sale = await getDeveloperSaleById(supabase, {
-    developerAccountId: account.id,
+  const { supabase, account, sale } = await getVerifiedSaleForCurrentDeveloper({
     saleId: params.saleId,
   });
-
-  if (!sale) {
-    throw new AppError("DEVELOPER_SALE_NOT_FOUND", "Sale was not found.", 404);
-  }
 
   const preview = await getDeveloperDocumentAutofillPreviewForCurrentDeveloper({
     saleId: sale.id,
@@ -146,6 +179,57 @@ export async function generateSalesAgreementForCurrentDeveloper(params: {
     saleId: sale.id,
     documentType: "sales_agreement",
     title: "Sales Agreement",
+    storagePath,
+    metadata: {
+      generated_from_template: true,
+      unresolved_placeholders: preview.unresolvedPlaceholders,
+      missing_fields: preview.missingFields,
+      digital_copy_notice: DIGITAL_COPY_NOTICE,
+    },
+  });
+
+  return attachSignedUrl(document);
+}
+
+export async function generateAllocationLetterForCurrentDeveloper(params: {
+  saleId: string;
+}) {
+  const { supabase, account, sale } = await getVerifiedSaleForCurrentDeveloper({
+    saleId: params.saleId,
+  });
+
+  const preview = await getDeveloperDocumentAutofillPreviewForCurrentDeveloper({
+    saleId: sale.id,
+    templateType: "allocation_letter",
+  });
+
+  const bodyForPdf = preview.renderedBody.replace(
+    /\{\{[a-zA-Z0-9_]+\}\}/g,
+    "Not provided",
+  );
+
+  const pdfBuffer = await renderDeveloperSaleDocumentPdfBuffer({
+    title: "Allocation Letter",
+    subtitle: `Sale Reference: ${sale.sale_reference}`,
+    body: bodyForPdf,
+    notice: DIGITAL_COPY_NOTICE,
+  });
+
+  const storagePath = createAllocationLetterStoragePath({
+    developerAccountId: account.id,
+    saleId: sale.id,
+  });
+
+  await uploadDeveloperSaleDocumentPdf({
+    path: storagePath,
+    pdfBuffer,
+  });
+
+  const document = await upsertGeneratedDeveloperSaleDocument(supabase, {
+    developerAccountId: account.id,
+    saleId: sale.id,
+    documentType: "allocation_letter",
+    title: "Allocation Letter",
     storagePath,
     metadata: {
       generated_from_template: true,
