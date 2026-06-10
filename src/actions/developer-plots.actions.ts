@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { errorResult } from "@/server/errors/result";
 import { getDeveloperAccountByOwnerProfileId } from "@/server/repositories/developer.repository";
 import { getDeveloperEstateById } from "@/server/repositories/developer-estates.repository";
@@ -8,7 +9,10 @@ import {
   createDeveloperPlot,
   createDeveloperPlotsBulk,
   createDeveloperPlotType,
-  listDeveloperPlotsForEstate,
+  getDeveloperPlotsByIdsForEstate,
+  listDeveloperPlotNumbersForEstate,
+  listDeveloperPlotTypesForEstate,
+  updateDeveloperPlotsBulk,
 } from "@/server/repositories/developer-plots.repository";
 import { requireDeveloper } from "@/server/services/auth.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
@@ -17,6 +21,7 @@ import {
   createBulkDeveloperPlotsSchema,
   createDeveloperPlotSchema,
   createDeveloperPlotTypeSchema,
+  updateBulkDeveloperPlotsSchema,
   type BulkDeveloperPlotNumberingStyle,
 } from "@/server/validators/developer-plot.schema";
 
@@ -28,6 +33,14 @@ function toActionError(error: unknown): AuthActionState {
     message: result.message,
     fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
   };
+}
+
+function handleActionError(error: unknown): AuthActionState {
+  if (isRedirectError(error)) {
+    throw error;
+  }
+
+  return toActionError(error);
 }
 
 function nullableText(value: string) {
@@ -138,6 +151,42 @@ function normalisePlotNumber(value: string) {
   return value.trim().toLowerCase();
 }
 
+const NON_BULK_UPDATABLE_STATUSES = new Set(["reserved", "active", "sold"]);
+
+async function resolvePlotTypeIdForKindName(params: {
+  supabase: ReturnType<typeof createSupabaseAdminClient>;
+  developerAccountId: string;
+  estateId: string;
+  plotKindName: string;
+  sizeLabel?: string;
+  price?: number;
+}) {
+  const plotTypes = await listDeveloperPlotTypesForEstate(params.supabase, {
+    developerAccountId: params.developerAccountId,
+    estateId: params.estateId,
+  });
+
+  const normalisedKindName = params.plotKindName.trim().toLowerCase();
+  const existingPlotType = plotTypes.find(
+    (plotType) => plotType.type_name.trim().toLowerCase() === normalisedKindName,
+  );
+
+  if (existingPlotType) {
+    return existingPlotType.id;
+  }
+
+  const createdPlotType = await createDeveloperPlotType(params.supabase, {
+    developerAccountId: params.developerAccountId,
+    estateId: params.estateId,
+    typeName: params.plotKindName.trim(),
+    sizeLabel: params.sizeLabel?.trim() || "Not set",
+    defaultPrice: params.price ?? 1,
+    description: null,
+  });
+
+  return createdPlotType.id;
+}
+
 export async function createDeveloperPlotTypeAction(
   _previousState: AuthActionState,
   formData: FormData,
@@ -176,7 +225,7 @@ export async function createDeveloperPlotTypeAction(
       message: "Plot kind saved successfully.",
     };
   } catch (error) {
-    return toActionError(error);
+    return handleActionError(error);
   }
 }
 
@@ -222,7 +271,7 @@ export async function createDeveloperPlotAction(
       message: "Plot added successfully.",
     };
   } catch (error) {
-    return toActionError(error);
+    return handleActionError(error);
   }
 }
 
@@ -277,10 +326,13 @@ export async function createBulkDeveloperPlotsAction(
       };
     }
 
-    const existingPlots = await listDeveloperPlotsForEstate(context.supabase, {
-      developerAccountId: context.account.id,
-      estateId: parsed.estateId,
-    });
+    const existingPlots = await listDeveloperPlotNumbersForEstate(
+      context.supabase,
+      {
+        developerAccountId: context.account.id,
+        estateId: parsed.estateId,
+      },
+    );
 
     const existingPlotNumbers = new Set(
       existingPlots.map((plot) => normalisePlotNumber(plot.plot_number)),
@@ -302,7 +354,7 @@ export async function createBulkDeveloperPlotsAction(
       parsed.note,
     ].filter(Boolean);
 
-    await createDeveloperPlotsBulk(context.supabase, {
+    const insertedCount = await createDeveloperPlotsBulk(context.supabase, {
       developerAccountId: context.account.id,
       estateId: parsed.estateId,
       plots: generatedPlotNumbers.map((plotNumber) => ({
@@ -313,6 +365,14 @@ export async function createBulkDeveloperPlotsAction(
       })),
     });
 
+    if (insertedCount !== parsed.numberOfPlots) {
+      return {
+        ok: false,
+        message:
+          "BOPA could not create all plots. Please refresh the page and try again.",
+      };
+    }
+
     revalidatePath(`/developer/estates/${parsed.estateId}`);
 
     return {
@@ -320,6 +380,125 @@ export async function createBulkDeveloperPlotsAction(
       message: `${parsed.numberOfPlots} plots created successfully.`,
     };
   } catch (error) {
-    return toActionError(error);
+    return handleActionError(error);
+  }
+}
+
+export async function updateBulkDeveloperPlotsAction(
+  _previousState: AuthActionState,
+  formData: FormData,
+): Promise<AuthActionState> {
+  try {
+    const parsed = updateBulkDeveloperPlotsSchema.parse({
+      estateId: formData.get("estateId"),
+      plotIds: formData.get("plotIds"),
+      plotKindName: formData.get("plotKindName"),
+      sizeLabel: formData.get("sizeLabel"),
+      price: formData.get("price"),
+      status: formData.get("status"),
+      notes: formData.get("notes"),
+    });
+
+    const context = await requireDeveloperAccountForEstate(parsed.estateId);
+
+    if (!context.ok || !context.account) {
+      return {
+        ok: false,
+        message: context.message,
+      };
+    }
+
+    const selectedPlots = await getDeveloperPlotsByIdsForEstate(
+      context.supabase,
+      {
+        developerAccountId: context.account.id,
+        estateId: parsed.estateId,
+        plotIds: parsed.plotIds,
+      },
+    );
+
+    if (selectedPlots.length !== parsed.plotIds.length) {
+      return {
+        ok: false,
+        message:
+          "Some selected plots could not be found. Refresh the page and try again.",
+      };
+    }
+
+    const lockedPlots = selectedPlots.filter((plot) =>
+      NON_BULK_UPDATABLE_STATUSES.has(plot.status),
+    );
+
+    if (lockedPlots.length > 0) {
+      return {
+        ok: false,
+        message:
+          "Some selected plots are already linked to a buyer or sale and cannot be changed in bulk.",
+      };
+    }
+
+    const updates: {
+      plotTypeId?: string | null;
+      sizeLabel?: string;
+      price?: number;
+      status?: (typeof selectedPlots)[number]["status"];
+      notes?: string | null;
+    } = {};
+
+    if (parsed.sizeLabel.length > 0) {
+      updates.sizeLabel = parsed.sizeLabel;
+    }
+
+    if (parsed.price !== undefined) {
+      updates.price = parsed.price;
+    }
+
+    if (parsed.status !== undefined) {
+      updates.status = parsed.status;
+    }
+
+    if (parsed.notes.length > 0) {
+      updates.notes = parsed.notes;
+    }
+
+    if (parsed.plotKindName.length > 0) {
+      updates.plotTypeId = await resolvePlotTypeIdForKindName({
+        supabase: context.supabase,
+        developerAccountId: context.account.id,
+        estateId: parsed.estateId,
+        plotKindName: parsed.plotKindName,
+        sizeLabel: parsed.sizeLabel || undefined,
+        price: parsed.price,
+      });
+    }
+
+    const updatedCount = await updateDeveloperPlotsBulk(context.supabase, {
+      developerAccountId: context.account.id,
+      estateId: parsed.estateId,
+      plotIds: parsed.plotIds,
+      updates,
+    });
+
+    if (updatedCount !== parsed.plotIds.length) {
+      return {
+        ok: false,
+        message:
+          "Some selected plots are already linked to a buyer or sale and cannot be changed in bulk.",
+      };
+    }
+
+    revalidatePath(`/developer/estates/${parsed.estateId}`);
+
+    const successMessage =
+      parsed.plotIds.length === 1
+        ? "Plot updated successfully."
+        : `${parsed.plotIds.length} plots updated successfully.`;
+
+    return {
+      ok: true,
+      message: successMessage,
+    };
+  } catch (error) {
+    return handleActionError(error);
   }
 }

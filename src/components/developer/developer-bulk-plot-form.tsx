@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { createBulkDeveloperPlotsAction } from "@/actions/developer-plots.actions";
 import { initialDeveloperPlotActionState } from "@/actions/developer-plots.state";
+import { DeveloperMoneyInput } from "@/components/developer/developer-money-input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,24 +11,6 @@ import { Input } from "@/components/ui/input";
 type DeveloperBulkPlotFormProps = {
   estateId: string;
 };
-
-function formatNairaInput(value: string) {
-  const numericValue = value.replace(/[^\d]/g, "");
-
-  if (!numericValue) {
-    return "";
-  }
-
-  return new Intl.NumberFormat("en-NG", {
-    style: "currency",
-    currency: "NGN",
-    maximumFractionDigits: 0,
-  }).format(Number(numericValue));
-}
-
-function getNumericMoneyValue(value: string) {
-  return value.replace(/[^\d]/g, "");
-}
 
 export function DeveloperBulkPlotForm({
   estateId,
@@ -42,11 +25,6 @@ export function DeveloperBulkPlotForm({
   return (
     <form action={formAction}>
       <input type="hidden" name="estateId" value={estateId} />
-      <input
-        type="hidden"
-        name="pricePerPlot"
-        value={getNumericMoneyValue(priceDisplay)}
-      />
 
       <Card>
         <CardContent>
@@ -97,34 +75,14 @@ export function DeveloperBulkPlotForm({
               required
             />
 
-            <div className="space-y-2">
-              <label
-                htmlFor="priceDisplay"
-                className="block text-sm font-semibold text-text-strong"
-              >
-                Selling price per plot{" "}
-                <span className="ml-1 text-danger">*</span>
-              </label>
-
-              <input
-                id="priceDisplay"
-                type="text"
-                inputMode="numeric"
-                value={priceDisplay}
-                onChange={(event) =>
-                  setPriceDisplay(formatNairaInput(event.target.value))
-                }
-                placeholder="Example: ₦5,000,000"
-                required
-                className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 py-3 text-base text-text-strong outline-none transition placeholder:text-text-muted focus:border-primary focus:ring-2 focus:ring-primary-soft"
-              />
-
-              {state.fieldErrors?.pricePerPlot?.[0] ? (
-                <p className="text-sm font-medium text-danger">
-                  {state.fieldErrors.pricePerPlot[0]}
-                </p>
-              ) : null}
-            </div>
+            <DeveloperMoneyInput
+              label="Selling price per plot"
+              value={priceDisplay}
+              onChange={setPriceDisplay}
+              hiddenInputName="pricePerPlot"
+              required
+              error={state.fieldErrors?.pricePerPlot?.[0]}
+            />
 
             <div className="space-y-2">
               <label
@@ -137,7 +95,7 @@ export function DeveloperBulkPlotForm({
               <select
                 id="numberingStyle"
                 name="numberingStyle"
-                defaultValue="prefixed_numeric"
+                defaultValue="numeric"
                 className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 py-3 text-base text-text-strong outline-none transition focus:border-primary focus:ring-2 focus:ring-primary-soft"
               >
                 <option value="numeric">Plot 1, Plot 2, Plot 3</option>

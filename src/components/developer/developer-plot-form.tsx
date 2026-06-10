@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { createDeveloperPlotAction } from "@/actions/developer-plots.actions";
 import { initialDeveloperPlotActionState } from "@/actions/developer-plots.state";
+import { DeveloperMoneyInput } from "@/components/developer/developer-money-input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,24 +13,6 @@ type DeveloperPlotFormProps = {
   estateId: string;
   plotTypes: DeveloperPlotTypeRow[];
 };
-
-function formatNairaInput(value: string) {
-  const numericValue = value.replace(/[^\d]/g, "");
-
-  if (!numericValue) {
-    return "";
-  }
-
-  return new Intl.NumberFormat("en-NG", {
-    style: "currency",
-    currency: "NGN",
-    maximumFractionDigits: 0,
-  }).format(Number(numericValue));
-}
-
-function getNumericMoneyValue(value: string) {
-  return value.replace(/[^\d]/g, "");
-}
 
 export function DeveloperPlotForm({
   estateId,
@@ -45,11 +28,6 @@ export function DeveloperPlotForm({
   return (
     <form action={formAction}>
       <input type="hidden" name="estateId" value={estateId} />
-      <input
-        type="hidden"
-        name="price"
-        value={getNumericMoneyValue(priceDisplay)}
-      />
 
       <Card>
         <CardContent>
@@ -105,33 +83,14 @@ export function DeveloperPlotForm({
             required
           />
 
-          <div className="space-y-2">
-            <label
-              htmlFor="priceDisplay"
-              className="block text-sm font-semibold text-text-strong"
-            >
-              Selling price <span className="ml-1 text-danger">*</span>
-            </label>
-
-            <input
-              id="priceDisplay"
-              type="text"
-              inputMode="numeric"
-              value={priceDisplay}
-              onChange={(event) =>
-                setPriceDisplay(formatNairaInput(event.target.value))
-              }
-              placeholder="Example: ₦5,000,000"
-              required
-              className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 py-3 text-base text-text-strong outline-none transition placeholder:text-text-muted focus:border-primary focus:ring-2 focus:ring-primary-soft"
-            />
-
-            {state.fieldErrors?.price?.[0] ? (
-              <p className="text-sm font-medium text-danger">
-                {state.fieldErrors.price[0]}
-              </p>
-            ) : null}
-          </div>
+          <DeveloperMoneyInput
+            label="Selling price"
+            value={priceDisplay}
+            onChange={setPriceDisplay}
+            hiddenInputName="price"
+            required
+            error={state.fieldErrors?.price?.[0]}
+          />
 
           <div className="space-y-2">
             <label

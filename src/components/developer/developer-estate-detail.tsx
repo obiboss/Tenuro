@@ -1,20 +1,17 @@
 import Link from "next/link";
-import { DeveloperPlotGrid } from "@/components/developer/developer-plot-grid";
 import { SectionCard } from "@/components/ui/section-card";
+import { formatNaira } from "@/lib/money/naira";
 import type { DeveloperBuyerRow } from "@/server/repositories/developer-buyers.repository";
-import type { DeveloperPlotAssignmentWithDetails } from "@/server/repositories/developer-plot-assignments.repository";
 import type {
   DeveloperPlotRow,
   DeveloperPlotTypeRow,
 } from "@/server/repositories/developer-plots.repository";
-import { formatNaira } from "@/server/utils/money";
 
 type DeveloperEstateDetailProps = {
   plotTypes: DeveloperPlotTypeRow[];
   plots: DeveloperPlotRow[];
   availablePlots: DeveloperPlotRow[];
   buyers: DeveloperBuyerRow[];
-  assignments: DeveloperPlotAssignmentWithDetails[];
 };
 
 function getPlotCounts(plots: DeveloperPlotRow[]) {
@@ -81,7 +78,6 @@ export function DeveloperEstateDetail({
   plots,
   availablePlots,
   buyers,
-  assignments,
 }: DeveloperEstateDetailProps) {
   const counts = getPlotCounts(plots);
   const guidance = getNextGuidance({
@@ -126,13 +122,6 @@ export function DeveloperEstateDetail({
             {guidance.body}
           </p>
         </div>
-      </SectionCard>
-
-      <SectionCard
-        title="Estate plot layout"
-        description="Each box represents one plot. You can quickly see what is available, sold, reserved, or blocked."
-      >
-        <DeveloperPlotGrid plots={plots} assignments={assignments} />
       </SectionCard>
 
       <SectionCard

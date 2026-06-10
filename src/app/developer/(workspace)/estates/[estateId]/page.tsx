@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { DeveloperBulkPlotForm } from "@/components/developer/developer-bulk-plot-form";
 import { DeveloperEstateDetail } from "@/components/developer/developer-estate-detail";
+import { DeveloperPlotLayoutSection } from "@/components/developer/developer-plot-layout-section";
 import { DeveloperPlotAssignmentForm } from "@/components/developer/developer-plot-assignment-form";
 import { DeveloperPlotForm } from "@/components/developer/developer-plot-form";
 import { DeveloperPlotTypeForm } from "@/components/developer/developer-plot-type-form";
@@ -101,6 +102,11 @@ export default async function DeveloperEstatePage({
         plots={plots}
         availablePlots={availablePlots}
         buyers={buyers}
+      />
+
+      <DeveloperPlotLayoutSection
+        estateId={estate.id}
+        plots={plots}
         assignments={assignments}
       />
 
