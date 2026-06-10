@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { DeveloperBulkPlotForm } from "@/components/developer/developer-bulk-plot-form";
 import { DeveloperEstateDetail } from "@/components/developer/developer-estate-detail";
 import { DeveloperPlotAssignmentForm } from "@/components/developer/developer-plot-assignment-form";
 import { DeveloperPlotForm } from "@/components/developer/developer-plot-form";
@@ -103,24 +104,15 @@ export default async function DeveloperEstatePage({
         assignments={assignments}
       />
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <SectionCard
-          title="Step 1 — Describe the kind of plots you sell"
-          description="Add a simple plot category first. Example: 500 sqm Residential Plot at ₦5,000,000."
-        >
-          <DeveloperPlotTypeForm estateId={estate.id} />
-        </SectionCard>
-
-        <SectionCard
-          title="Step 2 — Add the actual plot numbers"
-          description="Add each plot number under this estate. Example: A1, A2, B10, or Plot 15."
-        >
-          <DeveloperPlotForm estateId={estate.id} plotTypes={plotTypes} />
-        </SectionCard>
-      </div>
+      <SectionCard
+        title="Generate plots for this estate"
+        description="Enter the land and plot details once. BOPA will create the plot numbers automatically."
+      >
+        <DeveloperBulkPlotForm estateId={estate.id} />
+      </SectionCard>
 
       <SectionCard
-        title="Step 3 — Give a plot to a buyer"
+        title="Give a plot to a buyer"
         description="Choose a buyer and the plot you want to give them. After this, you can create their sale and payment plan."
       >
         <DeveloperPlotAssignmentForm
@@ -129,6 +121,22 @@ export default async function DeveloperEstatePage({
           plots={availablePlots}
         />
       </SectionCard>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <SectionCard
+          title="Optional — save a common plot kind"
+          description="Use this only when the estate has different plot categories, such as standard plots or corner pieces."
+        >
+          <DeveloperPlotTypeForm estateId={estate.id} />
+        </SectionCard>
+
+        <SectionCard
+          title="Optional — add one plot manually"
+          description="Use this only when you need to add a special plot outside the generated list."
+        >
+          <DeveloperPlotForm estateId={estate.id} plotTypes={plotTypes} />
+        </SectionCard>
+      </div>
     </div>
   );
 }

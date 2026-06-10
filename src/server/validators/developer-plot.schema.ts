@@ -8,13 +8,19 @@ export const developerPlotStatusSchema = z.enum([
   "blocked",
 ]);
 
+export const bulkDeveloperPlotNumberingStyleSchema = z.enum([
+  "numeric",
+  "prefixed_numeric",
+  "block_numeric",
+]);
+
 export const createDeveloperPlotTypeSchema = z.object({
   estateId: z.string().uuid("Estate is invalid."),
   typeName: z
     .string()
     .trim()
-    .min(2, "Enter the plot type name.")
-    .max(120, "Plot type name is too long."),
+    .min(2, "Enter the plot kind name.")
+    .max(120, "Plot kind name is too long."),
   sizeLabel: z
     .string()
     .trim()
@@ -22,8 +28,8 @@ export const createDeveloperPlotTypeSchema = z.object({
     .max(80, "Plot size is too long."),
   defaultPrice: z.coerce
     .number()
-    .positive("Default price must be greater than zero.")
-    .max(999_999_999_999, "Default price is too high."),
+    .positive("Selling price must be greater than zero.")
+    .max(999_999_999_999, "Selling price is too high."),
   description: z
     .string()
     .trim()
@@ -62,10 +68,64 @@ export const createDeveloperPlotSchema = z.object({
     .transform((value) => value || ""),
 });
 
+export const createBulkDeveloperPlotsSchema = z.object({
+  estateId: z.string().uuid("Estate is invalid."),
+  landSize: z
+    .string()
+    .trim()
+    .min(1, "Enter the total land size.")
+    .max(80, "Land size is too long."),
+  numberOfPlots: z.coerce
+    .number()
+    .int("Number of plots must be a whole number.")
+    .min(1, "Enter at least one plot.")
+    .max(500, "You can generate up to 500 plots at once."),
+  plotSizeLabel: z
+    .string()
+    .trim()
+    .min(1, "Enter the size of each plot.")
+    .max(80, "Plot size is too long."),
+  numberingStyle: bulkDeveloperPlotNumberingStyleSchema.default("numeric"),
+  startingNumber: z.coerce
+    .number()
+    .int("Starting number must be a whole number.")
+    .min(1, "Starting number must be at least 1.")
+    .max(999_999, "Starting number is too high."),
+  labelPrefix: z
+    .string()
+    .trim()
+    .max(12, "Prefix is too long.")
+    .optional()
+    .transform((value) => value || ""),
+  plotsPerBlock: z.coerce
+    .number()
+    .int("Plots per block must be a whole number.")
+    .min(1, "Plots per block must be at least 1.")
+    .max(100, "Plots per block cannot exceed 100."),
+  pricePerPlot: z.coerce
+    .number()
+    .positive("Price per plot must be greater than zero.")
+    .max(999_999_999_999, "Price per plot is too high."),
+  note: z
+    .string()
+    .trim()
+    .max(600, "Note is too long.")
+    .optional()
+    .transform((value) => value || ""),
+});
+
 export type CreateDeveloperPlotTypeInput = z.infer<
   typeof createDeveloperPlotTypeSchema
 >;
 
 export type CreateDeveloperPlotInput = z.infer<
   typeof createDeveloperPlotSchema
+>;
+
+export type CreateBulkDeveloperPlotsInput = z.infer<
+  typeof createBulkDeveloperPlotsSchema
+>;
+
+export type BulkDeveloperPlotNumberingStyle = z.infer<
+  typeof bulkDeveloperPlotNumberingStyleSchema
 >;

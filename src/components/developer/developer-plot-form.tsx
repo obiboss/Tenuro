@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { createDeveloperPlotAction } from "@/actions/developer-plots.actions";
 import { initialDeveloperPlotActionState } from "@/actions/developer-plots.state";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,24 @@ type DeveloperPlotFormProps = {
   plotTypes: DeveloperPlotTypeRow[];
 };
 
+function formatNairaInput(value: string) {
+  const numericValue = value.replace(/[^\d]/g, "");
+
+  if (!numericValue) {
+    return "";
+  }
+
+  return new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency: "NGN",
+    maximumFractionDigits: 0,
+  }).format(Number(numericValue));
+}
+
+function getNumericMoneyValue(value: string) {
+  return value.replace(/[^\d]/g, "");
+}
+
 export function DeveloperPlotForm({
   estateId,
   plotTypes,
@@ -22,9 +40,16 @@ export function DeveloperPlotForm({
     initialDeveloperPlotActionState,
   );
 
+  const [priceDisplay, setPriceDisplay] = useState("");
+
   return (
     <form action={formAction}>
       <input type="hidden" name="estateId" value={estateId} />
+      <input
+        type="hidden"
+        name="price"
+        value={getNumericMoneyValue(priceDisplay)}
+      />
 
       <Card>
         <CardContent>
@@ -80,16 +105,33 @@ export function DeveloperPlotForm({
             required
           />
 
-          <Input
-            label="Selling price"
-            name="price"
-            type="number"
-            min="1"
-            step="0.01"
-            placeholder="Example: 5000000"
-            error={state.fieldErrors?.price?.[0]}
-            required
-          />
+          <div className="space-y-2">
+            <label
+              htmlFor="priceDisplay"
+              className="block text-sm font-semibold text-text-strong"
+            >
+              Selling price <span className="ml-1 text-danger">*</span>
+            </label>
+
+            <input
+              id="priceDisplay"
+              type="text"
+              inputMode="numeric"
+              value={priceDisplay}
+              onChange={(event) =>
+                setPriceDisplay(formatNairaInput(event.target.value))
+              }
+              placeholder="Example: ₦5,000,000"
+              required
+              className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 py-3 text-base text-text-strong outline-none transition placeholder:text-text-muted focus:border-primary focus:ring-2 focus:ring-primary-soft"
+            />
+
+            {state.fieldErrors?.price?.[0] ? (
+              <p className="text-sm font-medium text-danger">
+                {state.fieldErrors.price[0]}
+              </p>
+            ) : null}
+          </div>
 
           <div className="space-y-2">
             <label

@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
+import { DeveloperPlotGrid } from "@/components/developer/developer-plot-grid";
 import { SectionCard } from "@/components/ui/section-card";
 import type { DeveloperBuyerRow } from "@/server/repositories/developer-buyers.repository";
-
 import type { DeveloperPlotAssignmentWithDetails } from "@/server/repositories/developer-plot-assignments.repository";
 import type {
   DeveloperPlotRow,
@@ -17,10 +16,6 @@ type DeveloperEstateDetailProps = {
   buyers: DeveloperBuyerRow[];
   assignments: DeveloperPlotAssignmentWithDetails[];
 };
-
-function formatStatus(value: string) {
-  return value.replaceAll("_", " ");
-}
 
 function getPlotCounts(plots: DeveloperPlotRow[]) {
   return plots.reduce(
@@ -41,32 +36,16 @@ function getPlotCounts(plots: DeveloperPlotRow[]) {
   );
 }
 
-function getBuyerNameForPlot(
-  assignments: DeveloperPlotAssignmentWithDetails[],
-  plotId: string,
-) {
-  const assignment = assignments.find((item) => item.plot_id === plotId);
-
-  return assignment?.developer_buyers?.full_name ?? null;
-}
-
 function getNextGuidance(params: {
   plotTypeCount: number;
   plotCount: number;
   availablePlotCount: number;
   buyerCount: number;
 }) {
-  if (params.plotTypeCount === 0) {
-    return {
-      title: "Start by describing the kind of plots you sell.",
-      body: "Add a simple plot category such as 500 sqm Residential Plot. This helps you reuse the same size and price when adding plot numbers.",
-    };
-  }
-
   if (params.plotCount === 0) {
     return {
-      title: "Now add the actual plot numbers.",
-      body: "Add plots like A1, A2, B3, or Plot 12. Buyers cannot be given a plot until at least one available plot exists.",
+      title: "Start by generating the plots for this estate.",
+      body: "Enter the land size, number of plots, plot size, numbering style, and price. BOPA will create the plot numbers for you.",
     };
   }
 
@@ -84,9 +63,16 @@ function getNextGuidance(params: {
     };
   }
 
+  if (params.plotTypeCount === 0) {
+    return {
+      title: "Optional: save a common plot kind.",
+      body: "You already have plots. You can still save common plot sizes and prices if this estate has different categories.",
+    };
+  }
+
   return {
     title: "You can now give a plot to a buyer.",
-    body: "Use the form below to choose the buyer and the plot. After that, create the buyer’s sale and payment plan.",
+    body: "Choose the buyer and the plot below. After that, create the buyer’s sale and payment plan.",
   };
 }
 
@@ -109,18 +95,18 @@ export function DeveloperEstateDetail({
     <div className="space-y-6">
       <SectionCard
         title="Estate setup"
-        description="Follow these steps to prepare this estate for buyer sales."
+        description="Prepare this estate for sales without adding plots one by one."
       >
         <div className="grid gap-4 md:grid-cols-3">
           <div className="rounded-button bg-background p-4">
-            <p className="text-sm font-bold text-text-muted">Plots added</p>
+            <p className="text-sm font-bold text-text-muted">Plots created</p>
             <p className="mt-2 text-2xl font-black text-text-strong">
               {counts.total}
             </p>
           </div>
 
           <div className="rounded-button bg-background p-4">
-            <p className="text-sm font-bold text-text-muted">Ready to sell</p>
+            <p className="text-sm font-bold text-text-muted">Available</p>
             <p className="mt-2 text-2xl font-black text-text-strong">
               {counts.available}
             </p>
@@ -143,17 +129,25 @@ export function DeveloperEstateDetail({
       </SectionCard>
 
       <SectionCard
-        title="Types of plots in this estate"
-        description="These are the common plot sizes and prices you sell in this estate."
+        title="Estate plot layout"
+        description="Each box represents one plot. You can quickly see what is available, sold, reserved, or blocked."
+      >
+        <DeveloperPlotGrid plots={plots} assignments={assignments} />
+      </SectionCard>
+
+      <SectionCard
+        title="Common plot sizes and prices"
+        description="Optional saved plot categories for this estate."
       >
         {plotTypes.length === 0 ? (
           <div className="rounded-button border border-dashed border-border-soft bg-background p-5">
             <p className="font-black text-text-strong">
-              No plot type has been added yet.
+              No saved plot kind yet.
             </p>
             <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
-              Start with a simple description like “500 sqm Residential Plot”.
-              This makes it easier to add the actual plot numbers next.
+              This is optional. Use it when the estate has different plot
+              categories, such as standard plots, corner pieces, or commercial
+              plots.
             </p>
           </div>
         ) : (
@@ -174,69 +168,6 @@ export function DeveloperEstateDetail({
                 </p>
               </div>
             ))}
-          </div>
-        )}
-      </SectionCard>
-
-      <SectionCard
-        title="Plots in this estate"
-        description="These are the actual plot numbers and who they are currently linked to."
-      >
-        {plots.length === 0 ? (
-          <div className="rounded-button border border-dashed border-border-soft bg-background p-5">
-            <p className="font-black text-text-strong">
-              No plot has been added yet.
-            </p>
-            <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
-              Add the actual plot numbers below. Once plots are added, you can
-              give one to a buyer and create the buyer’s payment plan.
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-205 text-left text-sm">
-              <thead>
-                <tr className="border-b border-border-soft text-xs uppercase tracking-wide text-text-muted">
-                  <th className="py-3 pr-4 font-black">Plot</th>
-                  <th className="py-3 pr-4 font-black">Kind of plot</th>
-                  <th className="py-3 pr-4 font-black">Size</th>
-                  <th className="py-3 pr-4 font-black">Price</th>
-                  <th className="py-3 pr-4 font-black">Buyer</th>
-                  <th className="py-3 pr-4 font-black">Status</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {plots.map((plot) => {
-                  const buyerName = getBuyerNameForPlot(assignments, plot.id);
-
-                  return (
-                    <tr key={plot.id} className="border-b border-border-soft">
-                      <td className="py-4 pr-4 font-black text-text-strong">
-                        {plot.plot_number}
-                      </td>
-                      <td className="py-4 pr-4 font-semibold text-text-muted">
-                        {plot.developer_plot_types?.type_name ?? "—"}
-                      </td>
-                      <td className="py-4 pr-4 font-semibold text-text-muted">
-                        {plot.size_label}
-                      </td>
-                      <td className="py-4 pr-4 font-black text-text-strong">
-                        {formatNaira(Number(plot.price))}
-                      </td>
-                      <td className="py-4 pr-4 font-semibold text-text-muted">
-                        {buyerName ?? "Not given yet"}
-                      </td>
-                      <td className="py-4 pr-4">
-                        <Badge tone="primary">
-                          {formatStatus(plot.status)}
-                        </Badge>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
           </div>
         )}
       </SectionCard>

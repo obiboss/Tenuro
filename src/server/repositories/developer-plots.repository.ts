@@ -203,3 +203,46 @@ export async function createDeveloperPlot(
 
   return data;
 }
+
+export async function createDeveloperPlotsBulk(
+  supabase: SupabaseClient,
+  params: {
+    developerAccountId: string;
+    estateId: string;
+    plots: {
+      plotNumber: string;
+      sizeLabel: string;
+      price: number;
+      notes: string | null;
+    }[];
+  },
+) {
+  if (params.plots.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from("developer_plots")
+    .insert(
+      params.plots.map((plot) => ({
+        developer_account_id: params.developerAccountId,
+        estate_id: params.estateId,
+        plot_type_id: null,
+        plot_number: plot.plotNumber,
+        size_label: plot.sizeLabel,
+        price: plot.price,
+        status: "available",
+        notes: plot.notes,
+      })),
+    )
+    .select(DEVELOPER_PLOT_SELECT)
+    .returns<DeveloperPlotRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export { DEVELOPER_PLOT_SELECT, DEVELOPER_PLOT_TYPE_SELECT };
