@@ -1,6 +1,8 @@
 import "server-only";
 
 import crypto from "node:crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { DeveloperDocumentType } from "@/constants/developer-document-templates";
 import { AppError } from "@/server/errors/app-error";
 import {
   createBuyerSaleAccessToken,
@@ -12,10 +14,28 @@ import {
   getActiveDeveloperPaymentPlanForSale,
   listDeveloperPaymentScheduleItemsForSale,
 } from "@/server/repositories/developer-payment-plans.repository";
+import { listDeveloperSaleDocumentsForSale } from "@/server/repositories/developer-sale-documents.repository";
 import { listDeveloperSalePaymentsForSale } from "@/server/repositories/developer-sale-payments.repository";
 import { getDeveloperSaleById } from "@/server/repositories/developer-sales.repository";
-import { createSignedDeveloperPaymentReceiptPdfUrl } from "@/server/services/storage.service";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  createSignedDeveloperPaymentReceiptPdfUrl,
+  createSignedDeveloperSaleDocumentPdfUrl,
+} from "@/server/services/storage.service";
+
+export type DeveloperBuyerPortalDocumentAvailability =
+  | "available"
+  | "pending"
+  | "locked";
+
+export type DeveloperBuyerPortalDocumentChecklistItem = {
+  type: DeveloperDocumentType;
+  label: string;
+  description: string;
+  availability: DeveloperBuyerPortalDocumentAvailability;
+  statusLabel: string;
+  downloadUrl: string | null;
+  note: string;
+};
 
 export type DeveloperBuyerPortalSaleDetails = {
   id: string;
@@ -106,6 +126,132 @@ function createRawBuyerPortalToken() {
 
 export function hashBuyerPortalToken(token: string) {
   return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+function getChecklistBaseItems(): Omit<
+  DeveloperBuyerPortalDocumentChecklistItem,
+  "availability" | "statusLabel" | "downloadUrl" | "note"
+>[] {
+  return [
+    {
+      type: "sales_agreement",
+      label: "Sales Agreement",
+      description:
+        "Digital copy for review, printing, signing, and hard-copy processing.",
+    },
+    {
+      type: "payment_receipts",
+      label: "Payment Receipt(s)",
+      description:
+        "Receipts generated after confirmed payments through Boldverse Property.",
+    },
+    {
+      type: "allocation_letter",
+      label: "Allocation Letter",
+      description:
+        "Digital copy confirming administrative plot allocation, subject to payment and handover rules.",
+    },
+    {
+      type: "cofo_copy_reference",
+      label: "CofO copy/reference",
+      description:
+        "Certificate of Occupancy copy or reference record. Physical original remains developer-issued.",
+    },
+    {
+      type: "deed_of_assignment_copy_reference",
+      label: "Deed of Assignment copy/reference",
+      description:
+        "Deed copy or reference record. Physical original remains developer-issued.",
+    },
+    {
+      type: "survey_plan_copy_reference",
+      label: "Survey Plan copy/reference",
+      description:
+        "Survey plan copy or reference record. Physical original remains developer-issued.",
+    },
+  ];
+}
+
+async function buildBuyerPortalDocumentChecklist(params: {
+  supabase: SupabaseClient;
+  developerAccountId: string;
+  saleId: string;
+  hasGeneratedPaymentReceipts: boolean;
+}): Promise<DeveloperBuyerPortalDocumentChecklistItem[]> {
+  const saleDocuments = await listDeveloperSaleDocumentsForSale(
+    params.supabase,
+    {
+      developerAccountId: params.developerAccountId,
+      saleId: params.saleId,
+    },
+  );
+
+  const signedDocuments = await Promise.all(
+    saleDocuments.map(async (document) => {
+      const signedUrl = await createSignedDeveloperSaleDocumentPdfUrl(
+        document.storage_path,
+      );
+
+      return {
+        ...document,
+        signedUrl,
+      };
+    }),
+  );
+
+  return getChecklistBaseItems().map((item) => {
+    if (item.type === "payment_receipts") {
+      return {
+        ...item,
+        availability: params.hasGeneratedPaymentReceipts
+          ? "available"
+          : "pending",
+        statusLabel: params.hasGeneratedPaymentReceipts
+          ? "Available"
+          : "Pending",
+        downloadUrl: null,
+        note: params.hasGeneratedPaymentReceipts
+          ? "Download individual receipts from the payment history section below."
+          : "Receipts will appear after confirmed payments are posted and receipt PDFs are generated.",
+      };
+    }
+
+    const document = signedDocuments.find(
+      (record) => record.document_type === item.type,
+    );
+
+    if (document?.signedUrl) {
+      return {
+        ...item,
+        availability: "available",
+        statusLabel: "Copy available",
+        downloadUrl: document.signedUrl,
+        note: "Digital copy only. Physical originals remain developer-issued.",
+      };
+    }
+
+    if (
+      item.type === "cofo_copy_reference" ||
+      item.type === "deed_of_assignment_copy_reference" ||
+      item.type === "survey_plan_copy_reference"
+    ) {
+      return {
+        ...item,
+        availability: "locked",
+        statusLabel: "Locked / developer-issued",
+        downloadUrl: null,
+        note: "This document is released by the developer according to full payment, verification, and handover requirements.",
+      };
+    }
+
+    return {
+      ...item,
+      availability: "pending",
+      statusLabel: "Pending",
+      downloadUrl: null,
+      note: "This digital copy has not been generated by the developer yet.",
+    };
+  });
 }
 
 export async function createBuyerSalePortalLink(params: {
@@ -224,6 +370,17 @@ export async function getBuyerSalePortalByToken(params: {
     }),
   );
 
+  const hasGeneratedPaymentReceipts = paymentsWithReceiptLinks.some((payment) =>
+    Boolean(payment.receiptDownloadUrl),
+  );
+
+  const documents = await buildBuyerPortalDocumentChecklist({
+    supabase: params.supabase,
+    developerAccountId: accessToken.developer_account_id,
+    saleId: sale.id,
+    hasGeneratedPaymentReceipts,
+  });
+
   const totalPaid = payments
     .filter((payment) => payment.status === "posted")
     .reduce((total, payment) => total + Number(payment.amount_paid), 0);
@@ -246,6 +403,7 @@ export async function getBuyerSalePortalByToken(params: {
     paymentPlan,
     scheduleItems,
     payments: paymentsWithReceiptLinks,
+    documents,
     summary: {
       totalPrice: Number(sale.total_price_locked),
       totalPaid,

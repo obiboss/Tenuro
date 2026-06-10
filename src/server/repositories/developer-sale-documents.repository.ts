@@ -1,6 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DeveloperDocumentType } from "@/constants/developer-document-templates";
 
+export type DeveloperSaleDocumentType = Exclude<
+  DeveloperDocumentType,
+  "payment_receipts"
+>;
+
 export type DeveloperSaleDocumentStatus =
   | "generated"
   | "signed_copy_uploaded"
@@ -12,7 +17,7 @@ export type DeveloperSaleDocumentRow = {
   id: string;
   developer_account_id: string;
   sale_id: string;
-  document_type: Exclude<DeveloperDocumentType, "payment_receipts">;
+  document_type: DeveloperSaleDocumentType;
   title: string;
   storage_path: string;
   status: DeveloperSaleDocumentStatus;
@@ -43,7 +48,7 @@ export async function getDeveloperSaleDocumentByType(
   params: {
     developerAccountId: string;
     saleId: string;
-    documentType: DeveloperSaleDocumentRow["document_type"];
+    documentType: DeveloperSaleDocumentType;
   },
 ) {
   const { data, error } = await supabase
@@ -61,12 +66,35 @@ export async function getDeveloperSaleDocumentByType(
   return data;
 }
 
+export async function listDeveloperSaleDocumentsForSale(
+  supabase: SupabaseClient,
+  params: {
+    developerAccountId: string;
+    saleId: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("developer_sale_documents")
+    .select(DEVELOPER_SALE_DOCUMENT_SELECT)
+    .eq("developer_account_id", params.developerAccountId)
+    .eq("sale_id", params.saleId)
+    .neq("status", "voided")
+    .order("created_at", { ascending: true })
+    .returns<DeveloperSaleDocumentRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 export async function upsertGeneratedDeveloperSaleDocument(
   supabase: SupabaseClient,
   params: {
     developerAccountId: string;
     saleId: string;
-    documentType: DeveloperSaleDocumentRow["document_type"];
+    documentType: DeveloperSaleDocumentType;
     title: string;
     storagePath: string;
     metadata: Record<string, unknown>;

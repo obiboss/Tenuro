@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { CreditCard, FileText } from "lucide-react";
+import { CreditCard, FileCheck2, FileLock2, FileText } from "lucide-react";
 import { initiateBuyerPortalSchedulePaymentAction } from "@/actions/developer-buyer-portal.actions";
 import { Badge } from "@/components/ui/badge";
 import { SectionCard } from "@/components/ui/section-card";
@@ -33,11 +32,42 @@ function getScheduleBalance(item: BuyerPortalData["scheduleItems"][number]) {
   return Math.max(0, Number(item.expected_amount) - Number(item.amount_paid));
 }
 
+function getDocumentTone(
+  availability: BuyerPortalData["documents"][number]["availability"],
+) {
+  if (availability === "available") {
+    return "success";
+  }
+
+  if (availability === "locked") {
+    return "warning";
+  }
+
+  return "primary";
+}
+
+function DocumentIcon({
+  availability,
+}: {
+  availability: BuyerPortalData["documents"][number]["availability"];
+}) {
+  if (availability === "available") {
+    return <FileCheck2 aria-hidden="true" size={20} />;
+  }
+
+  if (availability === "locked") {
+    return <FileLock2 aria-hidden="true" size={20} />;
+  }
+
+  return <FileText aria-hidden="true" size={20} />;
+}
+
 export function DeveloperBuyerSalePortalView({
   data,
   token,
 }: DeveloperBuyerSalePortalViewProps) {
-  const { sale, paymentPlan, scheduleItems, payments, summary } = data;
+  const { sale, paymentPlan, scheduleItems, payments, documents, summary } =
+    data;
 
   return (
     <div className="space-y-6">
@@ -139,6 +169,63 @@ export function DeveloperBuyerSalePortalView({
       </div>
 
       <SectionCard
+        title="Sale Documents"
+        description="Digital copies shown here are for reference, record, printing, and signing. Original physical documents remain developer-issued."
+      >
+        <div className="grid gap-4 md:grid-cols-2">
+          {documents.map((document) => (
+            <div
+              key={document.type}
+              className="rounded-button border border-border-soft bg-background p-4"
+            >
+              <div className="flex items-start gap-3">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+                  <DocumentIcon availability={document.availability} />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="font-black text-text-strong">
+                      {document.label}
+                    </p>
+                    <Badge tone={getDocumentTone(document.availability)}>
+                      {document.statusLabel}
+                    </Badge>
+                  </div>
+
+                  <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
+                    {document.description}
+                  </p>
+
+                  <p className="mt-2 text-xs font-bold leading-5 text-text-muted">
+                    {document.note}
+                  </p>
+
+                  {document.downloadUrl ? (
+                    <a
+                      href={document.downloadUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-4 inline-flex min-h-10 items-center justify-center gap-2 rounded-button bg-primary px-4 py-2 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary-hover"
+                    >
+                      <FileText aria-hidden="true" size={16} />
+                      Download Copy
+                    </a>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 rounded-button bg-warning-soft p-4 text-sm font-semibold leading-6 text-warning">
+          This portal does not replace the developer’s physical original
+          document handover process. Final original documents remain subject to
+          full payment, verification, signing, and developer release.
+        </div>
+      </SectionCard>
+
+      <SectionCard
         title="Payment Schedule"
         description="Pay an unpaid schedule item securely through Paystack. The platform fee is calculated automatically before checkout."
       >
@@ -237,7 +324,7 @@ export function DeveloperBuyerSalePortalView({
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-230 text-left text-sm">
+            <table className="w-full min-w-210 text-left text-sm">
               <thead>
                 <tr className="border-b border-border-soft text-xs uppercase tracking-wide text-text-muted">
                   <th className="py-3 pr-4 font-black">Date</th>
@@ -273,13 +360,15 @@ export function DeveloperBuyerSalePortalView({
                     </td>
                     <td className="py-4 pr-4">
                       {payment.receiptDownloadUrl ? (
-                        <Link
+                        <a
                           href={payment.receiptDownloadUrl}
+                          target="_blank"
+                          rel="noreferrer"
                           className="inline-flex min-h-10 items-center justify-center gap-2 rounded-button bg-primary px-4 py-2 text-sm font-extrabold text-white"
                         >
                           <FileText aria-hidden="true" size={16} />
                           Download
-                        </Link>
+                        </a>
                       ) : (
                         <span className="text-sm font-semibold text-text-muted">
                           Pending
