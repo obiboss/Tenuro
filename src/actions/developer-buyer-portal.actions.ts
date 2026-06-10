@@ -1,7 +1,6 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { initialDeveloperBuyerPortalActionState } from "@/actions/developer-buyer-portal.state";
 import type { DeveloperBuyerPortalActionState } from "@/actions/developer-buyer-portal.state";
 import { errorResult } from "@/server/errors/result";
 import { getDeveloperAccountByOwnerProfileId } from "@/server/repositories/developer.repository";
@@ -81,5 +80,3 @@ export async function initiateBuyerPortalSchedulePaymentAction(
 
   redirect(result.authorizationUrl);
 }
-
-export { initialDeveloperBuyerPortalActionState };
