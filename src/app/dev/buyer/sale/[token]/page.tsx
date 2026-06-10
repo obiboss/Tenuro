@@ -7,6 +7,9 @@ import { TrustNotice } from "@/components/ui/trust-notice";
 import { getBuyerSalePortalByToken } from "@/server/services/developer-buyer-portal.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type BuyerSalePortalPageProps = {
   params: Promise<{
     token: string;
