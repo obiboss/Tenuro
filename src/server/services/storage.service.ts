@@ -7,6 +7,7 @@ const TENANT_KYC_BUCKET = "tenant-kyc-documents";
 const TENANCY_AGREEMENT_PDF_BUCKET = "tenancy-agreement-pdfs";
 const RENT_RECEIPTS_BUCKET = "rent-receipts";
 const DEVELOPER_PAYMENT_RECEIPTS_BUCKET = "developer-payment-receipts";
+const DEVELOPER_SALE_DOCUMENTS_BUCKET = "developer-sale-documents";
 const QUIT_NOTICE_PDF_BUCKET = "quit-notice-pdfs";
 const SIGNED_URL_EXPIRY_SECONDS = 60 * 10;
 
@@ -154,6 +155,26 @@ export async function createSignedDeveloperPaymentReceiptPdfUrl(
 ) {
   return createSignedStorageUrl({
     bucket: DEVELOPER_PAYMENT_RECEIPTS_BUCKET,
+    path,
+  });
+}
+
+export async function uploadDeveloperSaleDocumentPdf(params: {
+  path: string;
+  pdfBuffer: Buffer;
+}) {
+  return uploadPdfToBucket({
+    bucket: DEVELOPER_SALE_DOCUMENTS_BUCKET,
+    path: params.path,
+    pdfBuffer: params.pdfBuffer,
+  });
+}
+
+export async function createSignedDeveloperSaleDocumentPdfUrl(
+  path: string | null,
+) {
+  return createSignedStorageUrl({
+    bucket: DEVELOPER_SALE_DOCUMENTS_BUCKET,
     path,
   });
 }

@@ -1,19 +1,23 @@
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
-import { SectionCard } from "@/components/ui/section-card";
+import { generateSalesAgreementAction } from "@/actions/developer-sale-documents.actions";
 import { DeveloperBuyerPortalLinkForm } from "@/components/developer/developer-buyer-portal-link-form";
 import { DeveloperPaymentPlanSummary } from "@/components/developer/developer-payment-plan-summary";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { SectionCard } from "@/components/ui/section-card";
 import type {
   DeveloperPaymentPlanRow,
   DeveloperPaymentScheduleItemRow,
 } from "@/server/repositories/developer-payment-plans.repository";
 import type { DeveloperSaleWithDetails } from "@/server/repositories/developer-sales.repository";
+import type { DeveloperSaleDocumentView } from "@/server/services/developer-sale-documents.service";
 import { formatNaira } from "@/server/utils/money";
 
 type DeveloperSaleDetailProps = {
   sale: DeveloperSaleWithDetails;
   paymentPlan: DeveloperPaymentPlanRow | null;
   scheduleItems: DeveloperPaymentScheduleItemRow[];
+  salesAgreementDocument: DeveloperSaleDocumentView | null;
 };
 
 function formatStatus(value: string) {
@@ -34,6 +38,7 @@ export function DeveloperSaleDetail({
   sale,
   paymentPlan,
   scheduleItems,
+  salesAgreementDocument,
 }: DeveloperSaleDetailProps) {
   return (
     <div className="space-y-6">
@@ -126,13 +131,67 @@ export function DeveloperSaleDetail({
       ) : null}
 
       <SectionCard
+        title="Sale Documents"
+        description="Generate and manage digital document copies. Physical originals remain developer-issued."
+      >
+        <div className="rounded-button border border-border-soft bg-background p-4">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-black text-text-strong">
+                Sales Agreement
+              </p>
+              <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                Digital copy for buyer review, printing, signing, and hard-copy
+                processing.
+              </p>
+
+              {salesAgreementDocument ? (
+                <p className="mt-2 text-xs font-bold text-success">
+                  Generated on {formatDate(salesAgreementDocument.generated_at)}
+                </p>
+              ) : (
+                <p className="mt-2 text-xs font-bold text-text-muted">
+                  Not generated yet.
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row">
+              {salesAgreementDocument?.signedUrl ? (
+                <a
+                  href={salesAgreementDocument.signedUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex min-h-11 items-center justify-center rounded-button bg-surface px-5 py-2.5 text-sm font-extrabold text-text-strong shadow-soft ring-1 ring-border-soft transition hover:bg-primary-soft"
+                >
+                  Download Copy
+                </a>
+              ) : null}
+
+              <form action={generateSalesAgreementAction}>
+                <input type="hidden" name="saleId" value={sale.id} />
+                <Button type="submit">
+                  {salesAgreementDocument ? "Regenerate" : "Generate"} Sales
+                  Agreement
+                </Button>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-button bg-warning-soft p-4 text-sm font-semibold leading-6 text-warning">
+          Digital copies are for reference, record, printing, and signing. They
+          do not replace original physical documents issued by the developer.
+        </div>
+      </SectionCard>
+
+      <SectionCard
         title="Next Step"
-        description="Buyer payment initiation and receipt PDF generation come next."
+        description="Allocation Letter generation comes next."
       >
         <div className="rounded-button bg-primary-soft p-4 text-sm font-semibold leading-6 text-primary">
-          Next: D6B — let buyers pay unpaid schedule items directly from the
-          portal, then post the payment to the ledger after Paystack
-          verification.
+          Next: D8D — generate Allocation Letter digital copies using the same
+          auto-fill document engine.
         </div>
       </SectionCard>
 

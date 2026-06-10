@@ -8,7 +8,11 @@ import {
 } from "@/server/repositories/developer-payment-plans.repository";
 import { getDeveloperSaleById } from "@/server/repositories/developer-sales.repository";
 import { requireDeveloper } from "@/server/services/auth.service";
+import { getSalesAgreementDocumentForCurrentDeveloper } from "@/server/services/developer-sale-documents.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 type DeveloperSalePageProps = {
   params: Promise<{
@@ -40,16 +44,20 @@ export default async function DeveloperSalePage({
     notFound();
   }
 
-  const [paymentPlan, scheduleItems] = await Promise.all([
-    getActiveDeveloperPaymentPlanForSale(supabase, {
-      developerAccountId: account.id,
-      saleId: sale.id,
-    }),
-    listDeveloperPaymentScheduleItemsForSale(supabase, {
-      developerAccountId: account.id,
-      saleId: sale.id,
-    }),
-  ]);
+  const [paymentPlan, scheduleItems, salesAgreementDocument] =
+    await Promise.all([
+      getActiveDeveloperPaymentPlanForSale(supabase, {
+        developerAccountId: account.id,
+        saleId: sale.id,
+      }),
+      listDeveloperPaymentScheduleItemsForSale(supabase, {
+        developerAccountId: account.id,
+        saleId: sale.id,
+      }),
+      getSalesAgreementDocumentForCurrentDeveloper({
+        saleId: sale.id,
+      }),
+    ]);
 
   return (
     <div className="space-y-8">
@@ -62,6 +70,7 @@ export default async function DeveloperSalePage({
         sale={sale}
         paymentPlan={paymentPlan}
         scheduleItems={scheduleItems}
+        salesAgreementDocument={salesAgreementDocument}
       />
     </div>
   );
