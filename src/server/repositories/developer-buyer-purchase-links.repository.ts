@@ -83,48 +83,6 @@ const DEVELOPER_BUYER_PURCHASE_LINK_SELECT = `
   updated_at
 `;
 
-const DEVELOPER_BUYER_PURCHASE_LINK_DETAILS_SELECT = `
-  id,
-  developer_account_id,
-  estate_id,
-  plot_id,
-  buyer_id,
-  sale_id,
-  token_hash,
-  buyer_name,
-  buyer_phone,
-  buyer_email,
-  buyer_full_name,
-  buyer_nin,
-  buyer_address,
-  buyer_next_of_kin_name,
-  buyer_next_of_kin_phone,
-  payment_plan_mode,
-  first_payment_amount,
-  total_price,
-  note,
-  status,
-  expires_at,
-  used_at,
-  created_by_profile_id,
-  created_at,
-  updated_at,
-  developer_estates (
-    id,
-    estate_name,
-    location,
-    city,
-    state
-  ),
-  developer_plots (
-    id,
-    plot_number,
-    size_label,
-    price,
-    status
-  )
-`;
-
 export async function createDeveloperBuyerPurchaseLink(
   supabase: SupabaseClient,
   params: {
@@ -168,21 +126,76 @@ export async function createDeveloperBuyerPurchaseLink(
   return data;
 }
 
+type PublicDeveloperBuyerPurchaseLinkRpcRow = DeveloperBuyerPurchaseLinkRow & {
+  estate_name: string;
+  estate_location: string;
+  estate_city: string | null;
+  estate_state: string | null;
+  plot_number: string;
+  plot_size_label: string;
+  plot_price: number;
+  plot_status: string;
+};
+
 export async function getDeveloperBuyerPurchaseLinkByHash(
   supabase: SupabaseClient,
   tokenHash: string,
 ) {
   const { data, error } = await supabase
-    .from("developer_buyer_purchase_links")
-    .select(DEVELOPER_BUYER_PURCHASE_LINK_DETAILS_SELECT)
-    .eq("token_hash", tokenHash)
-    .maybeSingle<DeveloperBuyerPurchaseLinkWithDetails>();
+    .rpc("get_public_developer_buyer_purchase_link_by_hash", {
+      p_token_hash: tokenHash,
+    })
+    .maybeSingle<PublicDeveloperBuyerPurchaseLinkRpcRow>();
 
   if (error) {
     throw error;
   }
 
-  return data;
+  if (!data) {
+    return null;
+  }
+
+  return {
+    id: data.id,
+    developer_account_id: data.developer_account_id,
+    estate_id: data.estate_id,
+    plot_id: data.plot_id,
+    buyer_id: data.buyer_id,
+    sale_id: data.sale_id,
+    token_hash: data.token_hash,
+    buyer_name: data.buyer_name,
+    buyer_phone: data.buyer_phone,
+    buyer_email: data.buyer_email,
+    buyer_full_name: data.buyer_full_name,
+    buyer_nin: data.buyer_nin,
+    buyer_address: data.buyer_address,
+    buyer_next_of_kin_name: data.buyer_next_of_kin_name,
+    buyer_next_of_kin_phone: data.buyer_next_of_kin_phone,
+    payment_plan_mode: data.payment_plan_mode,
+    first_payment_amount: data.first_payment_amount,
+    total_price: data.total_price,
+    note: data.note,
+    status: data.status,
+    expires_at: data.expires_at,
+    used_at: data.used_at,
+    created_by_profile_id: data.created_by_profile_id,
+    created_at: data.created_at,
+    updated_at: data.updated_at,
+    developer_estates: {
+      id: data.estate_id,
+      estate_name: data.estate_name,
+      location: data.estate_location,
+      city: data.estate_city,
+      state: data.estate_state,
+    },
+    developer_plots: {
+      id: data.plot_id,
+      plot_number: data.plot_number,
+      size_label: data.plot_size_label,
+      price: data.plot_price,
+      status: data.plot_status,
+    },
+  } satisfies DeveloperBuyerPurchaseLinkWithDetails;
 }
 
 export async function updateDeveloperBuyerPurchaseLinkBuyerDetails(
