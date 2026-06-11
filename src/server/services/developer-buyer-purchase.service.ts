@@ -4,21 +4,13 @@ import crypto from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { AppError } from "@/server/errors/app-error";
 import {
-  createDeveloperBuyer,
-  findDeveloperBuyerByPhone,
-  updateDeveloperBuyer,
-} from "@/server/repositories/developer-buyers.repository";
-import {
   createDeveloperBuyerPurchaseLink,
   getDeveloperBuyerPurchaseLinkByHash,
   markDeveloperBuyerPurchaseLinkPaid,
-  markDeveloperBuyerPurchaseLinkPaymentStarted,
+  prepareBuyerPurchaseSaleFromLink,
   updateDeveloperBuyerPurchaseLinkBuyerDetails,
   type DeveloperBuyerPurchaseLinkRow,
 } from "@/server/repositories/developer-buyer-purchase-links.repository";
-import { createDeveloperPaymentPlan } from "@/server/repositories/developer-payment-plans.repository";
-import { assignDeveloperBuyerToPlot } from "@/server/repositories/developer-plot-assignments.repository";
-import { createDeveloperSaleFromAssignment } from "@/server/repositories/developer-sales.repository";
 import { getDeveloperEstateById } from "@/server/repositories/developer-estates.repository";
 import { createBuyerSalePortalLink } from "@/server/services/developer-buyer-portal.service";
 import { createDeveloperPaymentRequest } from "@/server/services/developer-payment.service";
@@ -96,43 +88,6 @@ function assertPurchaseLinkIsUsable(link: {
       410,
     );
   }
-}
-
-function buildPaymentScheduleItems(params: {
-  paymentPlanMode: DeveloperPaymentPlanMode;
-  firstPaymentAmount: number;
-  totalPrice: number;
-  scheduleStartDate: string;
-}) {
-  const firstPayment = Number(params.firstPaymentAmount.toFixed(2));
-  const totalPrice = Number(params.totalPrice.toFixed(2));
-  const balance = Number((totalPrice - firstPayment).toFixed(2));
-
-  const items = [
-    {
-      label: "First payment",
-      due_date: params.scheduleStartDate,
-      expected_amount: firstPayment,
-      sort_order: 0,
-    },
-  ];
-
-  if (balance > 0) {
-    const balanceDueDate = new Date(params.scheduleStartDate);
-    balanceDueDate.setDate(balanceDueDate.getDate() + 30);
-
-    items.push({
-      label:
-        params.paymentPlanMode === "flexible"
-          ? "Remaining balance"
-          : "Next installment",
-      due_date: balanceDueDate.toISOString().slice(0, 10),
-      expected_amount: balance,
-      sort_order: 1,
-    });
-  }
-
-  return items;
 }
 
 export async function startDeveloperBuyerPurchase(params: {
@@ -291,9 +246,9 @@ export async function getBuyerPurchaseByToken(params: {
   };
 }
 
-async function upsertBuyerFromPurchaseDetails(params: {
+async function ensureSaleReadyForPayment(params: {
   supabase: SupabaseClient;
-  developerAccountId: string;
+  link: DeveloperBuyerPurchaseLinkRow;
   details: SubmitBuyerPurchaseDetailsInput;
 }) {
   const phone = normalisePhoneNumber(params.details.phoneNumber);
@@ -301,153 +256,16 @@ async function upsertBuyerFromPurchaseDetails(params: {
   const email =
     params.details.email.trim().length > 0 ? params.details.email.trim() : null;
 
-  const existingBuyer = await findDeveloperBuyerByPhone(params.supabase, {
-    developerAccountId: params.developerAccountId,
-    phoneNumber: phone.e164,
+  return prepareBuyerPurchaseSaleFromLink(params.supabase, {
+    purchaseLinkId: params.link.id,
+    buyerFullName: params.details.fullName,
+    buyerPhone: phone.e164,
+    buyerEmail: email,
+    buyerNin: params.details.nin,
+    buyerAddress: params.details.residentialAddress,
+    buyerNextOfKinName: params.details.nextOfKinName,
+    buyerNextOfKinPhone: nextOfKinPhone.e164,
   });
-
-  if (existingBuyer) {
-    const updatedBuyer = await updateDeveloperBuyer(params.supabase, {
-      developerAccountId: params.developerAccountId,
-      buyerId: existingBuyer.id,
-      fullName: params.details.fullName,
-      phoneNumber: phone.e164,
-      email,
-      nin: params.details.nin,
-      nextOfKinName: params.details.nextOfKinName,
-      nextOfKinPhone: nextOfKinPhone.e164,
-      residentialAddress: params.details.residentialAddress,
-      status: "assigned",
-    });
-
-    if (!updatedBuyer) {
-      throw new AppError(
-        "DEVELOPER_BUYER_UPDATE_FAILED",
-        "Buyer details could not be saved.",
-        500,
-      );
-    }
-
-    return updatedBuyer;
-  }
-
-  return createDeveloperBuyer(params.supabase, {
-    developerAccountId: params.developerAccountId,
-    fullName: params.details.fullName,
-    phoneNumber: phone.e164,
-    email,
-    nin: params.details.nin,
-    nextOfKinName: params.details.nextOfKinName,
-    nextOfKinPhone: nextOfKinPhone.e164,
-    residentialAddress: params.details.residentialAddress,
-  });
-}
-
-async function ensureSaleReadyForPayment(params: {
-  supabase: SupabaseClient;
-  link: DeveloperBuyerPurchaseLinkRow;
-  buyerId: string;
-}) {
-  if (params.link.sale_id && params.link.buyer_id) {
-    const { data: sale, error } = await params.supabase
-      .from("developer_sales")
-      .select("id, status")
-      .eq("id", params.link.sale_id)
-      .eq("developer_account_id", params.link.developer_account_id)
-      .maybeSingle<{ id: string; status: string }>();
-
-    if (error) {
-      throw error;
-    }
-
-    if (sale?.status === "active") {
-      const { data: scheduleItem, error: scheduleError } = await params.supabase
-        .from("developer_payment_schedule_items")
-        .select("id")
-        .eq("developer_account_id", params.link.developer_account_id)
-        .eq("sale_id", sale.id)
-        .eq("sort_order", 0)
-        .maybeSingle<{ id: string }>();
-
-      if (scheduleError) {
-        throw scheduleError;
-      }
-
-      if (scheduleItem) {
-        return {
-          saleId: sale.id,
-          scheduleItemId: scheduleItem.id,
-        };
-      }
-    }
-  }
-
-  const assignment = await assignDeveloperBuyerToPlot(params.supabase, {
-    developerAccountId: params.link.developer_account_id,
-    estateId: params.link.estate_id,
-    plotId: params.link.plot_id,
-    buyerId: params.buyerId,
-    assignmentNote: params.link.note,
-  });
-
-  const saleDate = new Date().toISOString().slice(0, 10);
-  const sale = await createDeveloperSaleFromAssignment(params.supabase, {
-    developerAccountId: params.link.developer_account_id,
-    plotAssignmentId: assignment.id,
-    paymentPlanMode: params.link.payment_plan_mode,
-    totalPriceLocked: Number(params.link.total_price),
-    initialDepositAmount: Number(params.link.first_payment_amount),
-    saleDate,
-    expectedCompletionDate: null,
-    notes: params.link.note,
-  });
-
-  const scheduleItems = buildPaymentScheduleItems({
-    paymentPlanMode: params.link.payment_plan_mode,
-    firstPaymentAmount: Number(params.link.first_payment_amount),
-    totalPrice: Number(params.link.total_price),
-    scheduleStartDate: saleDate,
-  });
-
-  await createDeveloperPaymentPlan(params.supabase, {
-    developerAccountId: params.link.developer_account_id,
-    saleId: sale.id,
-    paymentPlanMode: params.link.payment_plan_mode,
-    scheduleStartDate: saleDate,
-    notes: params.link.note,
-    items: scheduleItems,
-  });
-
-  const { data: firstScheduleItem, error: scheduleError } = await params.supabase
-    .from("developer_payment_schedule_items")
-    .select("id")
-    .eq("developer_account_id", params.link.developer_account_id)
-    .eq("sale_id", sale.id)
-    .eq("sort_order", 0)
-    .maybeSingle<{ id: string }>();
-
-  if (scheduleError) {
-    throw scheduleError;
-  }
-
-  if (!firstScheduleItem) {
-    throw new AppError(
-      "DEVELOPER_PAYMENT_SCHEDULE_MISSING",
-      "Payment schedule could not be prepared.",
-      500,
-    );
-  }
-
-  await markDeveloperBuyerPurchaseLinkPaymentStarted(params.supabase, {
-    linkId: params.link.id,
-    buyerId: params.buyerId,
-    saleId: sale.id,
-  });
-
-  return {
-    saleId: sale.id,
-    scheduleItemId: firstScheduleItem.id,
-  };
 }
 
 export async function initiateBuyerPurchasePayment(params: {
@@ -470,42 +288,43 @@ export async function initiateBuyerPurchasePayment(params: {
 
   assertPurchaseLinkIsUsable(link);
 
-  const updatedLink = await updateDeveloperBuyerPurchaseLinkBuyerDetails(
-    params.supabase,
-    {
-      linkId: link.id,
-      buyerFullName: params.details.fullName,
-      buyerPhone: normalisePhoneNumber(params.details.phoneNumber).e164,
-      buyerEmail:
-        params.details.email.trim().length > 0
-          ? params.details.email.trim()
-          : null,
-      buyerNin: params.details.nin,
-      buyerAddress: params.details.residentialAddress,
-      buyerNextOfKinName: params.details.nextOfKinName,
-      buyerNextOfKinPhone: normalisePhoneNumber(params.details.nextOfKinPhone)
-        .e164,
-    },
-  );
+  let updatedLink: DeveloperBuyerPurchaseLinkRow = link;
 
-  if (!updatedLink) {
-    throw new AppError(
-      "BUYER_PURCHASE_DETAILS_NOT_SAVED",
-      "Your details could not be saved.",
-      400,
+  if (link.status !== "payment_started") {
+    const savedLink = await updateDeveloperBuyerPurchaseLinkBuyerDetails(
+      params.supabase,
+      {
+        linkId: link.id,
+        buyerFullName: params.details.fullName,
+        buyerPhone: normalisePhoneNumber(params.details.phoneNumber).e164,
+        buyerEmail:
+          params.details.email.trim().length > 0
+            ? params.details.email.trim()
+            : null,
+        buyerNin: params.details.nin,
+        buyerAddress: params.details.residentialAddress,
+        buyerNextOfKinName: params.details.nextOfKinName,
+        buyerNextOfKinPhone: normalisePhoneNumber(
+          params.details.nextOfKinPhone,
+        ).e164,
+      },
     );
-  }
 
-  const buyer = await upsertBuyerFromPurchaseDetails({
-    supabase: params.supabase,
-    developerAccountId: link.developer_account_id,
-    details: params.details,
-  });
+    if (!savedLink) {
+      throw new AppError(
+        "BUYER_PURCHASE_DETAILS_NOT_SAVED",
+        "Your details could not be saved.",
+        400,
+      );
+    }
+
+    updatedLink = savedLink;
+  }
 
   const { saleId, scheduleItemId } = await ensureSaleReadyForPayment({
     supabase: params.supabase,
     link: updatedLink,
-    buyerId: buyer.id,
+    details: params.details,
   });
 
   const trustedAmount = Number(link.first_payment_amount.toFixed(2));

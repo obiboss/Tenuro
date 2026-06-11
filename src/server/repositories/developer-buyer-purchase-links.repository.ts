@@ -264,6 +264,55 @@ export async function markDeveloperBuyerPurchaseLinkPaymentStarted(
   return data;
 }
 
+export type PrepareBuyerPurchaseSaleFromLinkResult = {
+  saleId: string;
+  scheduleItemId: string;
+  buyerId: string;
+};
+
+type PrepareBuyerPurchaseSaleFromLinkRpcRow = {
+  sale_id: string;
+  schedule_item_id: string;
+  buyer_id: string;
+};
+
+export async function prepareBuyerPurchaseSaleFromLink(
+  supabase: SupabaseClient,
+  params: {
+    purchaseLinkId: string;
+    buyerFullName: string;
+    buyerPhone: string;
+    buyerEmail: string | null;
+    buyerNin: string;
+    buyerAddress: string;
+    buyerNextOfKinName: string;
+    buyerNextOfKinPhone: string;
+  },
+): Promise<PrepareBuyerPurchaseSaleFromLinkResult> {
+  const { data, error } = await supabase
+    .rpc("create_public_buyer_purchase_sale_from_link", {
+      p_purchase_link_id: params.purchaseLinkId,
+      p_buyer_full_name: params.buyerFullName,
+      p_buyer_phone: params.buyerPhone,
+      p_buyer_email: params.buyerEmail,
+      p_buyer_nin: params.buyerNin,
+      p_buyer_address: params.buyerAddress,
+      p_buyer_next_of_kin_name: params.buyerNextOfKinName,
+      p_buyer_next_of_kin_phone: params.buyerNextOfKinPhone,
+    })
+    .single<PrepareBuyerPurchaseSaleFromLinkRpcRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return {
+    saleId: data.sale_id,
+    scheduleItemId: data.schedule_item_id,
+    buyerId: data.buyer_id,
+  };
+}
+
 export async function markDeveloperBuyerPurchaseLinkPaid(
   supabase: SupabaseClient,
   linkId: string,
