@@ -33,6 +33,7 @@ type DeveloperPlotOverviewProps = {
     plot: DeveloperPlotRow,
     status: "available" | "blocked",
   ) => void;
+  onPlotStartPurchase: (plot: DeveloperPlotRow) => void;
 };
 
 type PlotTileMenuState = {
@@ -61,6 +62,7 @@ export function DeveloperPlotOverview({
   onPlotOpen,
   onPlotUpdate,
   onPlotQuickStatus,
+  onPlotStartPurchase,
 }: DeveloperPlotOverviewProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<PlotStatusFilter>("all");
@@ -236,7 +238,7 @@ export function DeveloperPlotOverview({
           >
             <option value="all">All</option>
             <option value="available">Available</option>
-            <option value="given_out">Given out</option>
+            <option value="reserved">Reserved</option>
             <option value="sold">Sold</option>
             <option value="blocked">Blocked</option>
           </select>
@@ -438,6 +440,19 @@ export function DeveloperPlotOverview({
               </p>
             ) : (
               <>
+                {activeMenuPlot.status === "available" ? (
+                  <button
+                    type="button"
+                    className="block w-full rounded-button px-3 py-2 text-left text-sm font-semibold text-text-strong hover:bg-background"
+                    onClick={() => {
+                      onPlotStartPurchase(activeMenuPlot);
+                      setMenuState(null);
+                    }}
+                  >
+                    Start buyer purchase
+                  </button>
+                ) : null}
+
                 <button
                   type="button"
                   className="block w-full rounded-button px-3 py-2 text-left text-sm font-semibold text-text-strong hover:bg-background"

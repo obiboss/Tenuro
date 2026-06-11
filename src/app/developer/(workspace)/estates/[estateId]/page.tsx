@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
 import { DeveloperEstateWorkspace } from "@/components/developer/developer-estate-workspace";
-import { listAssignableDeveloperBuyers } from "@/server/repositories/developer-buyers.repository";
 import { getDeveloperAccountByOwnerProfileId } from "@/server/repositories/developer.repository";
 import { getDeveloperEstateById } from "@/server/repositories/developer-estates.repository";
 import { listDeveloperPlotAssignmentsForEstate } from "@/server/repositories/developer-plot-assignments.repository";
@@ -57,8 +56,7 @@ export default async function DeveloperEstatePage({
     notFound();
   }
 
-  const [plotTypes, plots, availablePlots, buyers, assignments] =
-    await Promise.all([
+  const [plotTypes, plots, availablePlots, assignments] = await Promise.all([
       listDeveloperPlotTypesForEstate(supabase, {
         developerAccountId: account.id,
         estateId,
@@ -71,7 +69,6 @@ export default async function DeveloperEstatePage({
         developerAccountId: account.id,
         estateId,
       }),
-      listAssignableDeveloperBuyers(supabase, account.id),
       listDeveloperPlotAssignmentsForEstate(supabase, {
         developerAccountId: account.id,
         estateId,
@@ -93,7 +90,6 @@ export default async function DeveloperEstatePage({
       plotTypes={plotTypes}
       plots={plots}
       availablePlots={availablePlots}
-      buyers={buyers}
       assignments={assignments}
     />
   );

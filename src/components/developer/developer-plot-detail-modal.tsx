@@ -20,7 +20,7 @@ type DeveloperPlotDetailModalProps = {
   estateId: string;
   onClose: () => void;
   onUpdatePlot: (plot: DeveloperPlotRow) => void;
-  onGivePlotToBuyer: (plot: DeveloperPlotRow) => void;
+  onStartBuyerPurchase: (plot: DeveloperPlotRow) => void;
   onSuccessfulChange: () => void;
 };
 
@@ -31,7 +31,7 @@ export function DeveloperPlotDetailModal({
   estateId,
   onClose,
   onUpdatePlot,
-  onGivePlotToBuyer,
+  onStartBuyerPurchase,
   onSuccessfulChange,
 }: DeveloperPlotDetailModalProps) {
   if (!plot) {
@@ -116,9 +116,9 @@ export function DeveloperPlotDetailModal({
             <Button
               type="button"
               variant="secondary"
-              onClick={() => onGivePlotToBuyer(plot)}
+              onClick={() => onStartBuyerPurchase(plot)}
             >
-              Give plot to buyer
+              Start buyer purchase
             </Button>
           ) : null}
 

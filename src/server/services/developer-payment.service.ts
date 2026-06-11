@@ -21,6 +21,7 @@ import {
 import type { DeveloperPaymentScheduleItemRow } from "@/server/repositories/developer-payment-plans.repository";
 import { getDeveloperSaleById } from "@/server/repositories/developer-sales.repository";
 import type { DeveloperSaleWithDetails } from "@/server/repositories/developer-sales.repository";
+import { tryCompletePurchaseFromPaymentIntent } from "@/server/services/developer-buyer-purchase.service";
 import {
   assertPaystackAmountMatchesExpected,
   initializeStandardPaystackTransaction,
@@ -233,6 +234,7 @@ export async function createDeveloperPaymentRequest(params: {
   scheduleItemId: string | null;
   amount: number;
   buyerEmail: string | null;
+  purchaseLinkId?: string | null;
 }) {
   assertPositiveAmount(params.amount);
 
@@ -318,6 +320,9 @@ export async function createDeveloperPaymentRequest(params: {
     platform_fee_percentage: fee.percentage,
     total_amount: totalAmount,
     currency_code: "NGN",
+    ...(params.purchaseLinkId
+      ? { purchase_link_id: params.purchaseLinkId }
+      : {}),
   };
 
   const initialized = await initializeStandardPaystackTransaction({
@@ -461,17 +466,30 @@ export async function getPublicDeveloperPaymentCheckout(params: {
   reference: string;
   verify?: boolean;
 }) {
+  let buyerPortalUrl: string | null = null;
+
   if (params.verify) {
-    await verifyAndPostDeveloperPaymentReference({
+    const verification = await verifyAndPostDeveloperPaymentReference({
       supabase: params.supabase,
       reference: params.reference,
     });
+
+    buyerPortalUrl = verification.buyerPortalUrl ?? null;
   }
 
-  return getDeveloperPaymentIntentByReference(
+  const intent = await getDeveloperPaymentIntentByReference(
     params.supabase,
     params.reference,
   );
+
+  if (!intent) {
+    return null;
+  }
+
+  return {
+    intent,
+    buyerPortalUrl,
+  };
 }
 
 export async function verifyAndPostDeveloperPaymentReference(params: {
@@ -492,9 +510,15 @@ export async function verifyAndPostDeveloperPaymentReference(params: {
   }
 
   if (intent.status === "paid" && intent.processed_payment_id) {
+    const buyerPortal = await tryCompletePurchaseFromPaymentIntent({
+      supabase: params.supabase,
+      intent,
+    });
+
     return {
       status: "duplicate" as const,
       paymentId: intent.processed_payment_id,
+      buyerPortalUrl: buyerPortal?.portalUrl ?? null,
     };
   }
 
@@ -552,10 +576,24 @@ export async function verifyAndPostDeveloperPaymentReference(params: {
 
   await enqueueDeveloperPaymentReceiptGenerationSafely(data.id);
 
+  const refreshedIntent = await getDeveloperPaymentIntentByReference(
+    params.supabase,
+    params.reference,
+  );
+
+  const buyerPortal =
+    refreshedIntent?.status === "paid"
+      ? await tryCompletePurchaseFromPaymentIntent({
+          supabase: params.supabase,
+          intent: refreshedIntent,
+        })
+      : null;
+
   return {
     status: "processed" as const,
     paymentId: data.id,
     verifiedPayload: toRecord(verified),
+    buyerPortalUrl: buyerPortal?.portalUrl ?? null,
   };
 }
 

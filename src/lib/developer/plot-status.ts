@@ -3,7 +3,7 @@ import type { DeveloperPlotStatus } from "@/server/repositories/developer-plots.
 export type PlotStatusFilter =
   | "all"
   | "available"
-  | "given_out"
+  | "reserved"
   | "sold"
   | "blocked";
 
@@ -13,7 +13,7 @@ export function getPlotStatusLabel(status: DeveloperPlotStatus) {
   }
 
   if (status === "reserved") {
-    return "Given out";
+    return "Reserved";
   }
 
   if (status === "active") {
@@ -55,7 +55,7 @@ export function matchesPlotStatusFilter(
     return status === "available";
   }
 
-  if (filter === "given_out") {
+  if (filter === "reserved") {
     return status === "reserved";
   }
 

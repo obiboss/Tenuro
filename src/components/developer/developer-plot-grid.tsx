@@ -31,7 +31,7 @@ function getStatusLabel(status: DeveloperPlotRow["status"]) {
   }
 
   if (status === "reserved") {
-    return "Given out";
+    return "Reserved";
   }
 
   if (status === "active") {

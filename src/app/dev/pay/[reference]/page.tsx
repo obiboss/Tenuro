@@ -24,11 +24,13 @@ type PaymentPageState =
       status: "not_found";
       errorMessage: string;
       intent: null;
+      buyerPortalUrl: null;
     }
   | {
       status: "ready";
       errorMessage?: string;
       intent: DeveloperPaymentIntentRow;
+      buyerPortalUrl: string | null;
     };
 
 function getSearchParamValue(value?: string | string[]) {
@@ -95,45 +97,49 @@ async function resolvePaymentPageState(params: {
   const supabase = createSupabaseAdminClient();
 
   try {
-    const intent = await getPublicDeveloperPaymentCheckout({
+    const checkout = await getPublicDeveloperPaymentCheckout({
       supabase,
       reference: params.reference,
       verify: params.shouldVerify,
     });
 
-    if (!intent) {
+    if (!checkout) {
       return {
         status: "not_found",
         errorMessage: "This payment link is invalid or no longer available.",
         intent: null,
+        buyerPortalUrl: null,
       };
     }
 
     return {
       status: "ready",
-      intent,
+      intent: checkout.intent,
+      buyerPortalUrl: checkout.buyerPortalUrl,
     };
   } catch (error) {
     const result = errorResult(error);
 
-    const fallbackIntent = await getPublicDeveloperPaymentCheckout({
+    const fallbackCheckout = await getPublicDeveloperPaymentCheckout({
       supabase,
       reference: params.reference,
       verify: false,
     });
 
-    if (!fallbackIntent) {
+    if (!fallbackCheckout) {
       return {
         status: "not_found",
         errorMessage: result.message,
         intent: null,
+        buyerPortalUrl: null,
       };
     }
 
     return {
       status: "ready",
       errorMessage: result.message,
-      intent: fallbackIntent,
+      intent: fallbackCheckout.intent,
+      buyerPortalUrl: fallbackCheckout.buyerPortalUrl,
     };
   }
 }
@@ -207,6 +213,7 @@ export default async function DeveloperPublicPaymentPage({
         <DeveloperPaymentCheckoutStatus
           intent={pageState.intent}
           errorMessage={pageState.errorMessage}
+          buyerPortalUrl={pageState.buyerPortalUrl}
         />
       </section>
     </main>

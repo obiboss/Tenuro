@@ -73,6 +73,67 @@ export async function listAssignableDeveloperBuyers(
   return data;
 }
 
+export async function findDeveloperBuyerByPhone(
+  supabase: SupabaseClient,
+  params: {
+    developerAccountId: string;
+    phoneNumber: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("developer_buyers")
+    .select(DEVELOPER_BUYER_SELECT)
+    .eq("developer_account_id", params.developerAccountId)
+    .eq("phone_number", params.phoneNumber)
+    .maybeSingle<DeveloperBuyerRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function updateDeveloperBuyer(
+  supabase: SupabaseClient,
+  params: {
+    developerAccountId: string;
+    buyerId: string;
+    fullName: string;
+    phoneNumber: string;
+    email: string | null;
+    nin: string;
+    nextOfKinName: string;
+    nextOfKinPhone: string;
+    residentialAddress: string;
+    status?: DeveloperBuyerStatus;
+  },
+) {
+  const { data, error } = await supabase
+    .from("developer_buyers")
+    .update({
+      full_name: params.fullName,
+      phone_number: params.phoneNumber,
+      email: params.email,
+      nin: params.nin,
+      next_of_kin_name: params.nextOfKinName,
+      next_of_kin_phone: params.nextOfKinPhone,
+      residential_address: params.residentialAddress,
+      ...(params.status ? { status: params.status } : {}),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("developer_account_id", params.developerAccountId)
+    .eq("id", params.buyerId)
+    .select(DEVELOPER_BUYER_SELECT)
+    .maybeSingle<DeveloperBuyerRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 export async function createDeveloperBuyer(
   supabase: SupabaseClient,
   params: {

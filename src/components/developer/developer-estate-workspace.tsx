@@ -10,7 +10,7 @@ import {
   DeveloperPlotDetailModal,
   getBuyerNameForPlot,
 } from "@/components/developer/developer-plot-detail-modal";
-import { DeveloperPlotAssignmentForm } from "@/components/developer/developer-plot-assignment-form";
+import { DeveloperStartBuyerPurchaseForm } from "@/components/developer/developer-start-buyer-purchase-form";
 import { DeveloperPlotBulkUpdateForm } from "@/components/developer/developer-plot-bulk-update-form";
 import { DeveloperPlotForm } from "@/components/developer/developer-plot-form";
 import { DeveloperPlotOverview } from "@/components/developer/developer-plot-overview";
@@ -20,7 +20,6 @@ import { DeveloperPlotTypeForm } from "@/components/developer/developer-plot-typ
 import { Button } from "@/components/ui/button";
 import { SectionCard } from "@/components/ui/section-card";
 import { isPlotLockedForBulkUpdate } from "@/lib/developer/plot-status";
-import type { DeveloperBuyerRow } from "@/server/repositories/developer-buyers.repository";
 import type { DeveloperPlotAssignmentWithDetails } from "@/server/repositories/developer-plot-assignments.repository";
 import type {
   DeveloperPlotRow,
@@ -36,13 +35,12 @@ type DeveloperEstateWorkspaceProps = {
   plotTypes: DeveloperPlotTypeRow[];
   plots: DeveloperPlotRow[];
   availablePlots: DeveloperPlotRow[];
-  buyers: DeveloperBuyerRow[];
   assignments: DeveloperPlotAssignmentWithDetails[];
 };
 
 type ActiveModal =
   | "generate"
-  | "assign"
+  | "start-purchase"
   | "update"
   | "special-plot"
   | "plot-kind"
@@ -69,7 +67,6 @@ function getPlotCounts(plots: DeveloperPlotRow[]) {
 
 function getGuidance(params: {
   plotCount: number;
-  buyerCount: number;
   availablePlotCount: number;
 }) {
   if (params.plotCount === 0) {
@@ -79,22 +76,15 @@ function getGuidance(params: {
     };
   }
 
-  if (params.buyerCount === 0) {
-    return {
-      title: "Your plots are ready. Add a buyer, then give them a plot.",
-      body: "Create a buyer from the Buyers page, then come back here to give that buyer one of your available plots.",
-    };
-  }
-
   if (params.availablePlotCount === 0) {
     return {
       title: "There are no available plots right now.",
-      body: "You can update plot details, generate more plots, or review plots that are already given out or sold.",
+      body: "You can update plot details, generate more plots, or review plots that are already reserved or sold.",
     };
   }
 
   return {
-    title: "You can now give a plot to a buyer or update selected plots.",
+    title: "You can now start a buyer purchase or update selected plots.",
     body: "Search for a plot, open its details, or select several plots and update them together.",
   };
 }
@@ -104,14 +94,12 @@ export function DeveloperEstateWorkspace({
   plotTypes,
   plots,
   availablePlots,
-  buyers,
   assignments,
 }: DeveloperEstateWorkspaceProps) {
   const router = useRouter();
   const counts = getPlotCounts(plots);
   const guidance = getGuidance({
     plotCount: plots.length,
-    buyerCount: buyers.length,
     availablePlotCount: availablePlots.length,
   });
 
@@ -121,7 +109,7 @@ export function DeveloperEstateWorkspace({
   const [detailPlot, setDetailPlot] = useState<DeveloperPlotRow | null>(null);
   const [updatePlotIds, setUpdatePlotIds] = useState<string[]>([]);
   const [updatePlotLabel, setUpdatePlotLabel] = useState<string | undefined>();
-  const [assignPlotId, setAssignPlotId] = useState("");
+  const [purchasePlotId, setPurchasePlotId] = useState("");
   const [quickStatusRequest, setQuickStatusRequest] = useState<{
     plotIds: string[];
     status: "available" | "blocked";
@@ -149,7 +137,7 @@ export function DeveloperEstateWorkspace({
     setSelectionMode(false);
     setSelectedPlotIds([]);
     setUpdatePlotIds([]);
-    setAssignPlotId("");
+    setPurchasePlotId("");
     refreshWorkspace();
   }, [refreshWorkspace]);
 
@@ -159,9 +147,9 @@ export function DeveloperEstateWorkspace({
     setActiveModal("update");
   }
 
-  function openAssignModal(plot?: DeveloperPlotRow) {
-    setAssignPlotId(plot?.id ?? "");
-    setActiveModal("assign");
+  function openStartPurchaseModal(plot?: DeveloperPlotRow) {
+    setPurchasePlotId(plot?.id ?? "");
+    setActiveModal("start-purchase");
   }
 
   function triggerQuickStatus(
@@ -218,7 +206,7 @@ export function DeveloperEstateWorkspace({
           { label: "Plots created", value: counts.total },
           { label: "Available", value: counts.available },
           {
-            label: "Given to buyers",
+            label: "Reserved",
             value: counts.reserved,
           },
           {
@@ -265,18 +253,11 @@ export function DeveloperEstateWorkspace({
         <Button
           type="button"
           variant="secondary"
-          onClick={() => openAssignModal()}
-          disabled={buyers.length === 0 || availablePlots.length === 0}
+          onClick={() => openStartPurchaseModal()}
+          disabled={availablePlots.length === 0}
         >
-          Give plot to buyer
+          Start buyer purchase
         </Button>
-
-        <Link
-          href="/developer/buyers"
-          className="inline-flex min-h-11 items-center justify-center rounded-button bg-transparent px-5 py-2.5 text-sm font-semibold text-text-normal transition hover:bg-primary-soft"
-        >
-          Add buyer
-        </Link>
 
         {selectedPlotIds.length > 0 ? (
           <Button
@@ -345,6 +326,7 @@ export function DeveloperEstateWorkspace({
             onPlotQuickStatus={(plot, status) =>
               triggerQuickStatus([plot.id], status)
             }
+            onPlotStartPurchase={(plot) => openStartPurchaseModal(plot)}
           />
         </SectionCard>
       ) : null}
@@ -432,9 +414,9 @@ export function DeveloperEstateWorkspace({
           setDetailPlot(null);
           openBulkUpdate([plot.id], `Plot ${plot.plot_number}`);
         }}
-        onGivePlotToBuyer={(plot) => {
+        onStartBuyerPurchase={(plot) => {
           setDetailPlot(null);
-          openAssignModal(plot);
+          openStartPurchaseModal(plot);
         }}
         onSuccessfulChange={handleModalSuccess}
       />
@@ -454,19 +436,17 @@ export function DeveloperEstateWorkspace({
       </DeveloperEstateActionModal>
 
       <DeveloperEstateActionModal
-        open={activeModal === "assign"}
-        title="Give a plot to a buyer"
-        description="Choose the buyer and the plot you want to give them."
+        open={activeModal === "start-purchase"}
+        title="Start buyer purchase"
+        description="Choose the plot the buyer is interested in. BOPA will create a private link so the buyer can fill their details and make the first payment."
         onClose={() => setActiveModal(null)}
         size="lg"
       >
-        <DeveloperPlotAssignmentForm
+        <DeveloperStartBuyerPurchaseForm
+          key={`start-purchase-${purchasePlotId}`}
           estateId={estate.id}
-          buyers={buyers}
           plots={availablePlots}
-          preselectedPlotId={assignPlotId}
-          embedded
-          onSuccess={handleModalSuccess}
+          preselectedPlotId={purchasePlotId}
         />
       </DeveloperEstateActionModal>
 

@@ -9,6 +9,7 @@ import { formatNaira } from "@/server/utils/money";
 type DeveloperPaymentCheckoutStatusProps = {
   intent: DeveloperPaymentIntentRow;
   errorMessage?: string;
+  buyerPortalUrl?: string | null;
 };
 
 function formatStatus(value: string) {
@@ -18,6 +19,7 @@ function formatStatus(value: string) {
 export function DeveloperPaymentCheckoutStatus({
   intent,
   errorMessage,
+  buyerPortalUrl = null,
 }: DeveloperPaymentCheckoutStatusProps) {
   const isPaid = intent.status === "paid";
   const isPayable = intent.status === "initialized" && !errorMessage;
@@ -76,11 +78,20 @@ export function DeveloperPaymentCheckoutStatus({
 
       {isPaid ? (
         <TrustNotice
-          title="Payment posted"
-          description="Your payment has been verified and posted automatically to the buyer ledger."
+          title="Payment confirmed"
+          description="Your payment has been verified. Your purchase record and receipts are now available in your buyer portal."
           icon={<CheckCircle2 aria-hidden="true" size={22} />}
           className="mt-5"
         />
+      ) : null}
+
+      {isPaid && buyerPortalUrl ? (
+        <a
+          href={buyerPortalUrl}
+          className="mt-5 inline-flex min-h-11 w-full items-center justify-center rounded-button bg-primary px-5 py-2.5 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary-hover"
+        >
+          Open buyer portal
+        </a>
       ) : null}
 
       {isPayable ? (
@@ -93,10 +104,12 @@ export function DeveloperPaymentCheckoutStatus({
         </a>
       ) : null}
 
-      <div className="mt-5 rounded-button bg-primary-soft p-4 text-sm font-semibold leading-6 text-primary">
-        To return to your buyer portal, use the secure portal link previously
-        sent to you by the developer.
-      </div>
+      {!buyerPortalUrl ? (
+        <div className="mt-5 rounded-button bg-primary-soft p-4 text-sm font-semibold leading-6 text-primary">
+          To return to your buyer portal, use the secure link sent to you by the
+          developer.
+        </div>
+      ) : null}
 
       <Link
         href="/"
