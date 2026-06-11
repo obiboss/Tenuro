@@ -1,12 +1,5 @@
 import { notFound } from "next/navigation";
-import { DeveloperBulkPlotForm } from "@/components/developer/developer-bulk-plot-form";
-import { DeveloperEstateDetail } from "@/components/developer/developer-estate-detail";
-import { DeveloperPlotLayoutSection } from "@/components/developer/developer-plot-layout-section";
-import { DeveloperPlotAssignmentForm } from "@/components/developer/developer-plot-assignment-form";
-import { DeveloperPlotForm } from "@/components/developer/developer-plot-form";
-import { DeveloperPlotTypeForm } from "@/components/developer/developer-plot-type-form";
-import { PageHeader } from "@/components/ui/page-header";
-import { SectionCard } from "@/components/ui/section-card";
+import { DeveloperEstateWorkspace } from "@/components/developer/developer-estate-workspace";
 import { listAssignableDeveloperBuyers } from "@/server/repositories/developer-buyers.repository";
 import { getDeveloperAccountByOwnerProfileId } from "@/server/repositories/developer.repository";
 import { getDeveloperEstateById } from "@/server/repositories/developer-estates.repository";
@@ -86,63 +79,22 @@ export default async function DeveloperEstatePage({
     ]);
 
   return (
-    <div className="space-y-8">
-      <PageHeader
-        title={estate.estate_name}
-        description={formatEstateLocation({
+    <DeveloperEstateWorkspace
+      estate={{
+        id: estate.id,
+        name: estate.estate_name,
+        location: formatEstateLocation({
           location: estate.location,
           city: estate.city,
           lga: estate.lga,
           state: estate.state,
-        })}
-      />
-
-      <DeveloperEstateDetail
-        plotTypes={plotTypes}
-        plots={plots}
-        availablePlots={availablePlots}
-        buyers={buyers}
-      />
-
-      <DeveloperPlotLayoutSection
-        estateId={estate.id}
-        plots={plots}
-        assignments={assignments}
-      />
-
-      <SectionCard
-        title="Generate plots for this estate"
-        description="Enter the land and plot details once. BOPA will create the plot numbers automatically."
-      >
-        <DeveloperBulkPlotForm estateId={estate.id} />
-      </SectionCard>
-
-      <SectionCard
-        title="Give a plot to a buyer"
-        description="Choose a buyer and the plot you want to give them. After this, you can create their sale and payment plan."
-      >
-        <DeveloperPlotAssignmentForm
-          estateId={estate.id}
-          buyers={buyers}
-          plots={availablePlots}
-        />
-      </SectionCard>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <SectionCard
-          title="Optional — save a common plot kind"
-          description="Use this only when the estate has different plot categories, such as standard plots or corner pieces."
-        >
-          <DeveloperPlotTypeForm estateId={estate.id} />
-        </SectionCard>
-
-        <SectionCard
-          title="Optional — add one plot manually"
-          description="Use this only when you need to add a special plot outside the generated list."
-        >
-          <DeveloperPlotForm estateId={estate.id} plotTypes={plotTypes} />
-        </SectionCard>
-      </div>
-    </div>
+        }),
+      }}
+      plotTypes={plotTypes}
+      plots={plots}
+      availablePlots={availablePlots}
+      buyers={buyers}
+      assignments={assignments}
+    />
   );
 }

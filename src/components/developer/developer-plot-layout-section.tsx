@@ -27,6 +27,7 @@ export function DeveloperPlotLayoutSection({
         description="Each box represents one plot. Select plots to update their size, price, status, or kind."
       >
         <DeveloperPlotGrid
+          key={plots.length}
           plots={plots}
           assignments={assignments}
           selectedPlotIds={selectedPlotIds}
@@ -41,6 +42,7 @@ export function DeveloperPlotLayoutSection({
         <DeveloperBulkPlotUpdateForm
           estateId={estateId}
           selectedPlotIds={selectedPlotIds}
+          onSuccessfulUpdate={() => setSelectedPlotIds([])}
         />
       </SectionCard>
     </div>

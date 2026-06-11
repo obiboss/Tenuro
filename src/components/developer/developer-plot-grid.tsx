@@ -2,9 +2,12 @@
 
 import { useMemo, useState, type MouseEvent } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { formatNairaCompact } from "@/lib/money/naira";
 import type { DeveloperPlotAssignmentWithDetails } from "@/server/repositories/developer-plot-assignments.repository";
 import type { DeveloperPlotRow } from "@/server/repositories/developer-plots.repository";
+
+const PLOTS_VISIBLE_BATCH_SIZE = 20;
 
 type DeveloperPlotGridProps = {
   plots: DeveloperPlotRow[];
@@ -67,10 +70,20 @@ export function DeveloperPlotGrid({
   const [lastSelectedPlotId, setLastSelectedPlotId] = useState<string | null>(
     null,
   );
+  const [visibleCount, setVisibleCount] = useState(PLOTS_VISIBLE_BATCH_SIZE);
 
   const selectedPlotIdSet = useMemo(
     () => new Set(selectedPlotIds),
     [selectedPlotIds],
+  );
+
+  const clampedVisibleCount = Math.min(visibleCount, plots.length);
+  const visiblePlots = plots.slice(0, clampedVisibleCount);
+  const hasMorePlots = clampedVisibleCount < plots.length;
+  const remainingPlotCount = plots.length - clampedVisibleCount;
+  const nextBatchSize = Math.min(
+    PLOTS_VISIBLE_BATCH_SIZE,
+    remainingPlotCount,
   );
 
   function togglePlotSelection(plotId: string) {
@@ -129,14 +142,20 @@ export function DeveloperPlotGrid({
 
   return (
     <div className="space-y-4">
-      <p className="text-sm font-semibold text-text-muted">
-        {selectedPlotIds.length} plot
-        {selectedPlotIds.length === 1 ? "" : "s"} selected. Click a plot to
-        select it. Hold Shift and click to select a range.
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-text-muted">
+          {selectedPlotIds.length} plot
+          {selectedPlotIds.length === 1 ? "" : "s"} selected. Click a plot to
+          select it. Hold Shift and click to select a range.
+        </p>
+
+        <p className="text-sm font-semibold text-text-muted">
+          Showing {clampedVisibleCount} of {plots.length} plots
+        </p>
+      </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {plots.map((plot) => {
+        {visiblePlots.map((plot) => {
           const buyerName = getBuyerNameForPlot(assignments, plot.id);
           const isSelected = selectedPlotIdSet.has(plot.id);
 
@@ -201,6 +220,22 @@ export function DeveloperPlotGrid({
           );
         })}
       </div>
+
+      {hasMorePlots ? (
+        <div className="flex justify-center">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() =>
+              setVisibleCount(
+                (currentCount) => currentCount + PLOTS_VISIBLE_BATCH_SIZE,
+              )
+            }
+          >
+            Show more ({nextBatchSize} more)
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }
