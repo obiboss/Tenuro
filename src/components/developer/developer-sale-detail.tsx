@@ -190,10 +190,23 @@ export function DeveloperSaleDetail({
       />
 
       {paymentPlan ? (
-        <DeveloperBuyerPortalLinkForm
-          saleId={sale.id}
-          buyerName={sale.developer_buyers?.full_name ?? "Buyer"}
-        />
+        <div className="space-y-3">
+          <SectionCard
+            title="Buyer Portal Link"
+            description="Create or resend the buyer portal link if the buyer did not save it after payment."
+          >
+            <div className="rounded-button bg-primary-soft p-4 text-sm font-semibold leading-6 text-primary">
+              Send this secure portal link to the buyer. The buyer can use it to
+              view payment history, download receipts and documents, check
+              balance, and make the next payment.
+            </div>
+          </SectionCard>
+
+          <DeveloperBuyerPortalLinkForm
+            saleId={sale.id}
+            buyerName={sale.developer_buyers?.full_name ?? "Buyer"}
+          />
+        </div>
       ) : null}
 
       <SectionCard
@@ -225,16 +238,6 @@ export function DeveloperSaleDetail({
         <div className="mt-4 rounded-button bg-warning-soft p-4 text-sm font-semibold leading-6 text-warning">
           Digital copies are for reference, record, printing, and signing. They
           do not replace original physical documents issued by the developer.
-        </div>
-      </SectionCard>
-
-      <SectionCard
-        title="Next Step"
-        description="Buyer portal document checklist comes next."
-      >
-        <div className="rounded-button bg-primary-soft p-4 text-sm font-semibold leading-6 text-primary">
-          Next: D8E — show buyer-visible document checklist and download links
-          inside the buyer sale portal.
         </div>
       </SectionCard>
 

@@ -126,5 +126,5 @@ export async function initiateBuyerPurchasePaymentAction(
     details: parsed,
   });
 
-  redirect(result.authorizationUrl);
+  redirect(`/dev/pay/${encodeURIComponent(result.reference)}`);
 }

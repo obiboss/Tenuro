@@ -13,7 +13,6 @@ import {
 } from "@/server/repositories/developer-buyer-purchase-links.repository";
 import { getDeveloperEstateById } from "@/server/repositories/developer-estates.repository";
 import { createBuyerSalePortalLink } from "@/server/services/developer-buyer-portal.service";
-import { createDeveloperPaymentRequest } from "@/server/services/developer-payment.service";
 import type { DeveloperPaymentPlanMode } from "@/server/validators/developer-payment-plan.schema";
 import type { SubmitBuyerPurchaseDetailsInput } from "@/server/validators/developer-buyer-purchase.schema";
 import { normalisePhoneNumber } from "@/server/utils/phone";
@@ -73,7 +72,10 @@ function assertPurchaseLinkIsUsable(link: {
   status: string;
   expires_at: string | null;
 }) {
-  if (!ACTIVE_PURCHASE_LINK_STATUSES.has(link.status) && link.status !== "paid") {
+  if (
+    !ACTIVE_PURCHASE_LINK_STATUSES.has(link.status) &&
+    link.status !== "paid"
+  ) {
     throw new AppError(
       "BUYER_PURCHASE_LINK_INACTIVE",
       "This purchase link is no longer active.",
@@ -88,6 +90,12 @@ function assertPurchaseLinkIsUsable(link: {
       410,
     );
   }
+}
+
+function buildBuyerPurchasePaymentCallbackUrl(reference: string) {
+  return `${getAppUrl()}/dev/buyer/payment/callback?reference=${encodeURIComponent(
+    reference,
+  )}`;
 }
 
 export async function startDeveloperBuyerPurchase(params: {
@@ -109,7 +117,11 @@ export async function startDeveloperBuyerPurchase(params: {
   });
 
   if (!estate) {
-    throw new AppError("DEVELOPER_ESTATE_NOT_FOUND", "Estate was not found.", 404);
+    throw new AppError(
+      "DEVELOPER_ESTATE_NOT_FOUND",
+      "Estate was not found.",
+      404,
+    );
   }
 
   const { data: plot, error: plotError } = await params.supabase
@@ -304,9 +316,8 @@ export async function initiateBuyerPurchasePayment(params: {
         buyerNin: params.details.nin,
         buyerAddress: params.details.residentialAddress,
         buyerNextOfKinName: params.details.nextOfKinName,
-        buyerNextOfKinPhone: normalisePhoneNumber(
-          params.details.nextOfKinPhone,
-        ).e164,
+        buyerNextOfKinPhone: normalisePhoneNumber(params.details.nextOfKinPhone)
+          .e164,
       },
     );
 
@@ -327,6 +338,9 @@ export async function initiateBuyerPurchasePayment(params: {
     details: params.details,
   });
 
+  const { createDeveloperPaymentRequest } =
+    await import("@/server/services/developer-payment.service");
+
   const trustedAmount = Number(link.first_payment_amount.toFixed(2));
 
   const intent = await createDeveloperPaymentRequest({
@@ -340,6 +354,8 @@ export async function initiateBuyerPurchasePayment(params: {
         ? params.details.email.trim()
         : link.buyer_email,
     purchaseLinkId: link.id,
+    callbackUrlBuilder: buildBuyerPurchasePaymentCallbackUrl,
+    idempotencyScope: `buyer-purchase:${link.id}`,
   });
 
   if (!intent.authorization_url) {
@@ -377,27 +393,18 @@ export async function completeBuyerPurchaseAfterPayment(params: {
     throw purchaseLinkError;
   }
 
-  if (!purchaseLink || purchaseLink.status === "paid") {
-    const { data: existingToken } = await params.supabase
-      .from("developer_buyer_sale_access_tokens")
-      .select("id")
-      .eq("developer_account_id", params.developerAccountId)
-      .eq("sale_id", params.saleId)
-      .is("revoked_at", null)
-      .limit(1)
-      .maybeSingle<{ id: string }>();
+  if (!purchaseLink) {
+    return null;
+  }
 
-    if (existingToken) {
-      return null;
-    }
-  } else {
+  if (purchaseLink.status !== "paid") {
     await markDeveloperBuyerPurchaseLinkPaid(
       params.supabase,
       params.purchaseLinkId,
     );
   }
 
-  if (!purchaseLink?.created_by_profile_id) {
+  if (!purchaseLink.created_by_profile_id) {
     return null;
   }
 

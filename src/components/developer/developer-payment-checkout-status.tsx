@@ -27,7 +27,7 @@ export function DeveloperPaymentCheckoutStatus({
   return (
     <SectionCard
       title="Payment Summary"
-      description="All amounts are server-calculated from the payment request."
+      description="Review the payment amount and BOPA processing fee before continuing to Paystack."
     >
       <div className="mb-5 flex flex-wrap items-center gap-3">
         <Badge tone={isPaid ? "success" : errorMessage ? "danger" : "primary"}>
@@ -44,7 +44,7 @@ export function DeveloperPaymentCheckoutStatus({
 
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-button bg-background p-4">
-          <p className="text-sm font-bold text-text-muted">Installment</p>
+          <p className="text-sm font-bold text-text-muted">Payment amount</p>
           <p className="mt-2 text-xl font-black text-text-strong">
             {formatNaira(Number(intent.installment_amount))}
           </p>
@@ -52,7 +52,7 @@ export function DeveloperPaymentCheckoutStatus({
 
         <div className="rounded-button bg-background p-4">
           <p className="text-sm font-bold text-text-muted">
-            Boldverse platform fee
+            BOPA processing fee
           </p>
           <p className="mt-2 text-xl font-black text-text-strong">
             {formatNaira(Number(intent.platform_fee_amount))}
@@ -79,7 +79,7 @@ export function DeveloperPaymentCheckoutStatus({
       {isPaid ? (
         <TrustNotice
           title="Payment confirmed"
-          description="Your payment has been verified. Your purchase record and receipts are now available in your buyer portal."
+          description="Your payment has been verified. Continue to your buyer portal to view your payment history, receipts, documents, balance, and next payment."
           icon={<CheckCircle2 aria-hidden="true" size={22} />}
           className="mt-5"
         />
@@ -104,19 +104,21 @@ export function DeveloperPaymentCheckoutStatus({
         </a>
       ) : null}
 
-      {!buyerPortalUrl ? (
+      {!isPayable && !buyerPortalUrl ? (
         <div className="mt-5 rounded-button bg-primary-soft p-4 text-sm font-semibold leading-6 text-primary">
-          To return to your buyer portal, use the secure link sent to you by the
-          developer.
+          Use the buyer portal link sent by the developer to view payment
+          history, receipts, documents, balance, and next payment.
         </div>
       ) : null}
 
-      <Link
-        href="/"
-        className="mt-4 inline-flex min-h-11 items-center justify-center rounded-button bg-surface px-5 py-2.5 text-sm font-extrabold text-text-strong shadow-soft ring-1 ring-border-soft transition hover:bg-primary-soft"
-      >
-        Back to Boldverse Property
-      </Link>
+      {isPayable ? (
+        <Link
+          href="/"
+          className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-button bg-surface px-5 py-2.5 text-sm font-extrabold text-text-strong shadow-soft ring-1 ring-border-soft transition hover:bg-primary-soft"
+        >
+          Cancel and return later
+        </Link>
+      ) : null}
     </SectionCard>
   );
 }

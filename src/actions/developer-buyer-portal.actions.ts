@@ -56,7 +56,8 @@ export async function createBuyerSalePortalLinkAction(
 
     return {
       ok: true,
-      message: "Buyer payment portal link created.",
+      message:
+        "Buyer portal link ready. Send this link to the buyer so they can view payments, receipts, documents, balance, and next payment.",
       portalUrl: result.portalUrl,
     };
   } catch (error) {
@@ -78,5 +79,5 @@ export async function initiateBuyerPortalSchedulePaymentAction(
     scheduleItemId,
   });
 
-  redirect(result.authorizationUrl);
+  redirect(`/dev/pay/${encodeURIComponent(result.intent.paystack_reference)}`);
 }

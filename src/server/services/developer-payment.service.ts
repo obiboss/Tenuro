@@ -1,12 +1,12 @@
 import "server-only";
 
 import crypto from "node:crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { AppError } from "@/server/errors/app-error";
 import {
   calculateDeveloperInstallmentFee,
   getDeveloperInstallmentFeePercentage,
 } from "@/server/constants/developer-installment-fees";
-import { inngest } from "@/server/jobs/inngest.client";
 import { getActiveBuyerSaleAccessTokenByHash } from "@/server/repositories/developer-buyer-sale-access-tokens.repository";
 import { createDeveloperPaymentAllocations } from "@/server/repositories/developer-payment-allocations.repository";
 import {
@@ -21,16 +21,24 @@ import {
 import type { DeveloperPaymentScheduleItemRow } from "@/server/repositories/developer-payment-plans.repository";
 import { getDeveloperSaleById } from "@/server/repositories/developer-sales.repository";
 import type { DeveloperSaleWithDetails } from "@/server/repositories/developer-sales.repository";
-import { tryCompletePurchaseFromPaymentIntent } from "@/server/services/developer-buyer-purchase.service";
+import { generateDeveloperPaymentReceiptSystem } from "@/server/services/developer-payment-receipts.service";
 import {
   assertPaystackAmountMatchesExpected,
   initializeStandardPaystackTransaction,
   verifyPaystackTransaction,
 } from "@/server/services/paystack.service";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { convertNairaToKobo } from "@/server/utils/money";
 
 const PAYABLE_SCHEDULE_STATUSES = new Set(["pending", "part_paid", "overdue"]);
+
+type OutstandingScheduleGateRow = {
+  id: string;
+  label: string;
+  due_date: string | null;
+  expected_amount: number | string;
+  amount_paid: number | string;
+  status: string;
+};
 
 function getAppUrl() {
   const configuredUrl =
@@ -61,9 +69,11 @@ function createIdempotencyKey(params: {
   saleId: string;
   scheduleItemId: string | null;
   amount: number;
+  scope?: string | null;
 }) {
   return [
     "developer-payment-request",
+    params.scope?.trim() || "standard",
     params.saleId,
     params.scheduleItemId ?? "custom",
     params.amount.toFixed(2),
@@ -97,7 +107,115 @@ function getScheduleOutstandingAmount(item: DeveloperPaymentScheduleItemRow) {
   );
 }
 
-function assertScheduleItemIsPayable(params: {
+function getGateRowOutstandingAmount(item: OutstandingScheduleGateRow) {
+  return Number(
+    Math.max(
+      0,
+      Number(item.expected_amount) - Number(item.amount_paid),
+    ).toFixed(2),
+  );
+}
+
+function getDateKey(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const directDateMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+  if (directDateMatch) {
+    return `${directDateMatch[1]}-${directDateMatch[2]}-${directDateMatch[3]}`;
+  }
+
+  const parsedDate = new Date(value);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null;
+  }
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Lagos",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(parsedDate);
+
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  return year && month && day ? `${year}-${month}-${day}` : null;
+}
+
+function getTodayDateKey() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Lagos",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  return year && month && day ? `${year}-${month}-${day}` : "";
+}
+
+function isScheduleDueNow(dueDate: string | null) {
+  const dueDateKey = getDateKey(dueDate);
+
+  if (!dueDateKey) {
+    return true;
+  }
+
+  const todayDateKey = getTodayDateKey();
+
+  return Boolean(todayDateKey) && dueDateKey <= todayDateKey;
+}
+
+function compareOutstandingScheduleItems(
+  left: OutstandingScheduleGateRow,
+  right: OutstandingScheduleGateRow,
+) {
+  const leftDate = getDateKey(left.due_date) ?? "9999-12-31";
+  const rightDate = getDateKey(right.due_date) ?? "9999-12-31";
+
+  if (leftDate !== rightDate) {
+    return leftDate.localeCompare(rightDate);
+  }
+
+  return left.label.localeCompare(right.label);
+}
+
+async function getFirstOutstandingScheduleItem(params: {
+  supabase: SupabaseClient;
+  developerAccountId: string;
+  saleId: string;
+  activePaymentPlanId: string;
+}) {
+  const { data, error } = await params.supabase
+    .from("developer_payment_schedule_items")
+    .select("id, label, due_date, expected_amount, amount_paid, status")
+    .eq("developer_account_id", params.developerAccountId)
+    .eq("sale_id", params.saleId)
+    .eq("payment_plan_id", params.activePaymentPlanId)
+    .in("status", Array.from(PAYABLE_SCHEDULE_STATUSES))
+    .returns<OutstandingScheduleGateRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? [])
+    .filter((item) => getGateRowOutstandingAmount(item) > 0)
+    .sort(compareOutstandingScheduleItems)[0];
+}
+
+async function assertScheduleItemIsPayable(params: {
+  supabase: SupabaseClient;
+  developerAccountId: string;
+  saleId: string;
   scheduleItem: DeveloperPaymentScheduleItemRow;
   activePaymentPlanId: string;
 }) {
@@ -123,6 +241,32 @@ function assertScheduleItemIsPayable(params: {
     throw new AppError(
       "DEVELOPER_SCHEDULE_ITEM_ALREADY_PAID",
       "This payment item has already been paid.",
+      400,
+    );
+  }
+
+  const firstOutstandingItem = await getFirstOutstandingScheduleItem({
+    supabase: params.supabase,
+    developerAccountId: params.developerAccountId,
+    saleId: params.saleId,
+    activePaymentPlanId: params.activePaymentPlanId,
+  });
+
+  if (
+    !firstOutstandingItem ||
+    firstOutstandingItem.id !== params.scheduleItem.id
+  ) {
+    throw new AppError(
+      "DEVELOPER_SCHEDULE_ITEM_SEQUENCE_INVALID",
+      "Please pay the next outstanding installment first.",
+      400,
+    );
+  }
+
+  if (!isScheduleDueNow(params.scheduleItem.due_date)) {
+    throw new AppError(
+      "DEVELOPER_SCHEDULE_ITEM_NOT_DUE",
+      "This installment is not due yet.",
       400,
     );
   }
@@ -192,7 +336,10 @@ async function resolvePayableScheduleItem(params: {
     );
   }
 
-  assertScheduleItemIsPayable({
+  await assertScheduleItemIsPayable({
+    supabase: params.supabase,
+    developerAccountId: params.developerAccountId,
+    saleId: params.saleId,
     scheduleItem,
     activePaymentPlanId: params.activePaymentPlanId,
   });
@@ -212,19 +359,27 @@ function resolveBuyerEmail(params: {
   );
 }
 
-async function enqueueDeveloperPaymentReceiptGenerationSafely(
-  paymentId: string,
-) {
+async function generateDeveloperPaymentReceiptSafely(paymentId: string) {
   try {
-    await inngest.send({
-      name: "developer/payment.receipt.requested",
-      data: {
-        paymentId,
-      },
-    });
+    await generateDeveloperPaymentReceiptSystem(paymentId);
   } catch (error) {
-    console.error("Failed to enqueue developer payment receipt job:", error);
+    console.error("Failed to generate developer payment receipt:", error);
   }
+}
+
+async function tryCompleteBuyerPurchaseFromPaidIntent(params: {
+  supabase: SupabaseClient;
+  intent: {
+    status: string;
+    sale_id: string;
+    developer_account_id: string;
+    metadata: Record<string, unknown>;
+  };
+}) {
+  const { tryCompletePurchaseFromPaymentIntent } =
+    await import("@/server/services/developer-buyer-purchase.service");
+
+  return tryCompletePurchaseFromPaymentIntent(params);
 }
 
 export async function createDeveloperPaymentRequest(params: {
@@ -235,6 +390,9 @@ export async function createDeveloperPaymentRequest(params: {
   amount: number;
   buyerEmail: string | null;
   purchaseLinkId?: string | null;
+  callbackUrl?: string | null;
+  callbackUrlBuilder?: (reference: string) => string;
+  idempotencyScope?: string | null;
 }) {
   assertPositiveAmount(params.amount);
 
@@ -273,10 +431,15 @@ export async function createDeveloperPaymentRequest(params: {
     }
   }
 
+  const idempotencyScope =
+    params.idempotencyScope ??
+    (params.purchaseLinkId ? `buyer-purchase:${params.purchaseLinkId}` : null);
+
   const idempotencyKey = createIdempotencyKey({
     saleId: sale.id,
     scheduleItemId: params.scheduleItemId,
     amount: params.amount,
+    scope: idempotencyScope,
   });
 
   const existingIntent = await getDeveloperPaymentIntentByIdempotencyKey(
@@ -325,11 +488,18 @@ export async function createDeveloperPaymentRequest(params: {
       : {}),
   };
 
+  const callbackUrlFromBuilder = params.callbackUrlBuilder?.(reference).trim();
+
+  const callbackUrl =
+    callbackUrlFromBuilder ||
+    params.callbackUrl?.trim() ||
+    `${appUrl}/dev/pay/${reference}?verify=1`;
+
   const initialized = await initializeStandardPaystackTransaction({
     email: buyerEmail,
     amountKobo: convertNairaToKobo(totalAmount),
     reference,
-    callbackUrl: `${appUrl}/dev/pay/${reference}?verify=1`,
+    callbackUrl,
     currencyCode: "NGN",
     metadata,
   });
@@ -437,6 +607,7 @@ export async function createBuyerPortalSchedulePaymentRequest(params: {
   });
 
   const amount = getScheduleOutstandingAmount(scheduleItem);
+  const appUrl = getAppUrl();
 
   const intent = await createDeveloperPaymentRequest({
     supabase: params.supabase,
@@ -445,6 +616,11 @@ export async function createBuyerPortalSchedulePaymentRequest(params: {
     scheduleItemId: scheduleItem.id,
     amount,
     buyerEmail: sale.developer_buyers?.email ?? null,
+    idempotencyScope: `buyer-portal:${accessToken.id}`,
+    callbackUrlBuilder: (reference) =>
+      `${appUrl}/dev/buyer/payment/callback?reference=${encodeURIComponent(
+        reference,
+      )}&portalToken=${encodeURIComponent(token)}`,
   });
 
   if (!intent.authorization_url) {
@@ -510,7 +686,9 @@ export async function verifyAndPostDeveloperPaymentReference(params: {
   }
 
   if (intent.status === "paid" && intent.processed_payment_id) {
-    const buyerPortal = await tryCompletePurchaseFromPaymentIntent({
+    await generateDeveloperPaymentReceiptSafely(intent.processed_payment_id);
+
+    const buyerPortal = await tryCompleteBuyerPurchaseFromPaidIntent({
       supabase: params.supabase,
       intent,
     });
@@ -574,20 +752,15 @@ export async function verifyAndPostDeveloperPaymentReference(params: {
     throw error;
   }
 
-  await enqueueDeveloperPaymentReceiptGenerationSafely(data.id);
+  const buyerPortal = await tryCompleteBuyerPurchaseFromPaidIntent({
+    supabase: params.supabase,
+    intent: {
+      ...intent,
+      status: "paid",
+    },
+  });
 
-  const refreshedIntent = await getDeveloperPaymentIntentByReference(
-    params.supabase,
-    params.reference,
-  );
-
-  const buyerPortal =
-    refreshedIntent?.status === "paid"
-      ? await tryCompletePurchaseFromPaymentIntent({
-          supabase: params.supabase,
-          intent: refreshedIntent,
-        })
-      : null;
+  await generateDeveloperPaymentReceiptSafely(data.id);
 
   return {
     status: "processed" as const,

@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { AppError } from "@/server/errors/app-error";
 import {
   getDeveloperSalePaymentById,
@@ -51,30 +52,70 @@ function getEstateLocation(sale: DeveloperSaleWithDetails) {
     .join(", ");
 }
 
+function normalisePlotLabel(value: string | null | undefined) {
+  const trimmedValue = value?.trim();
+
+  if (!trimmedValue) {
+    return "Plot —";
+  }
+
+  return /^plot\s+/i.test(trimmedValue) ? trimmedValue : `Plot ${trimmedValue}`;
+}
+
+function getPlotLabel(sale: DeveloperSaleWithDetails) {
+  const plotLabel = normalisePlotLabel(sale.developer_plots?.plot_number);
+  const sizeLabel = sale.developer_plots?.size_label?.trim();
+
+  return sizeLabel ? `${plotLabel} · ${sizeLabel}` : plotLabel;
+}
+
+async function getDeveloperCompanyName(params: {
+  supabase: SupabaseClient;
+  developerAccountId: string;
+}) {
+  const { data, error } = await params.supabase
+    .from("developer_accounts")
+    .select("company_name")
+    .eq("id", params.developerAccountId)
+    .maybeSingle<{
+      company_name: string | null;
+    }>();
+
+  if (error) {
+    throw error;
+  }
+
+  const companyName = data?.company_name?.trim();
+
+  if (companyName) {
+    return companyName;
+  }
+
+  return "Developer";
+}
+
 function buildReceiptPdfData(params: {
   payment: DeveloperSalePaymentRow;
   sale: DeveloperSaleWithDetails;
   receiptNumber: string;
+  developerName: string;
 }) {
-  const { payment, sale, receiptNumber } = params;
+  const { payment, sale, receiptNumber, developerName } = params;
 
   return {
     receiptNumber,
-    developerLabel: `Developer account ${payment.developer_account_id}`,
+    developerName,
     buyerName: sale.developer_buyers?.full_name ?? "Buyer",
     estateName: sale.developer_estates?.estate_name ?? "Estate",
     estateLocation: getEstateLocation(sale) || "Not provided",
-    plotLabel: `Plot ${sale.developer_plots?.plot_number ?? "—"} · ${
-      sale.developer_plots?.size_label ?? "—"
-    }`,
+    plotLabel: getPlotLabel(sale),
     saleReference: sale.sale_reference,
     paymentReference: payment.payment_reference,
     amountPaid: formatNaira(Number(payment.amount_paid)),
-    platformFee: formatNaira(Number(payment.platform_fee_amount)),
+    bopaProcessingFee: formatNaira(Number(payment.platform_fee_amount)),
     totalPaid: formatNaira(Number(payment.total_paid_amount)),
     paymentDate: formatReceiptDate(payment.payment_date),
-    balanceBefore: formatNaira(Number(payment.balance_before)),
-    balanceAfter: formatNaira(Number(payment.balance_after)),
+    outstandingBalanceAfterPayment: formatNaira(Number(payment.balance_after)),
   };
 }
 
@@ -132,8 +173,14 @@ export async function generateDeveloperPaymentReceiptSystem(paymentId: string) {
     );
   }
 
+  const developerName = await getDeveloperCompanyName({
+    supabase,
+    developerAccountId: payment.developer_account_id,
+  });
+
   const receiptNumber =
     payment.receipt_number ?? createDeveloperPaymentReceiptNumber(payment);
+
   const receiptPath =
     payment.receipt_path ??
     createDeveloperPaymentReceiptPath({
@@ -146,6 +193,7 @@ export async function generateDeveloperPaymentReceiptSystem(paymentId: string) {
       payment,
       sale,
       receiptNumber,
+      developerName,
     }),
   );
 
