@@ -193,6 +193,25 @@ export async function createAgentSubaccount(params: {
   });
 }
 
+export async function createDeveloperSubaccount(params: {
+  businessName: string;
+  bankCode: string;
+  accountNumber: string;
+  developerName: string;
+  developerPhoneNumber: string | null;
+  developerEmail: string | null;
+}) {
+  return createPaystackSubaccount({
+    businessName: params.businessName,
+    bankCode: params.bankCode,
+    accountNumber: params.accountNumber,
+    description: "BOPA developer sale payout subaccount",
+    primaryContactName: params.developerName,
+    primaryContactPhone: params.developerPhoneNumber,
+    primaryContactEmail: params.developerEmail,
+  });
+}
+
 export async function createTransactionSplit(params: {
   name: string;
   landlordSubaccountCode: string;

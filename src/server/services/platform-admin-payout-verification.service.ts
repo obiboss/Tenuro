@@ -7,6 +7,12 @@ import {
   type AgentPaystackAccountWithOwner,
 } from "@/server/repositories/agent-paystack.repository";
 import {
+  getDeveloperPaystackAccountById,
+  getDeveloperPaystackAccountsWithOwnersByVerificationStatus,
+  updateActiveDeveloperPaystackAccountVerificationStatus,
+  type DeveloperPaystackAccountWithOwner,
+} from "@/server/repositories/developer-paystack-repository";
+import {
   getLandlordPaystackAccountById,
   getLandlordPaystackAccountsWithOwnersByVerificationStatus,
   updateActiveLandlordPaystackAccountVerificationStatus,
@@ -17,11 +23,17 @@ import { requirePlatformAdmin } from "@/server/services/platform-admin.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import type {
   AgentPaystackAccount,
+  DeveloperPaystackAccount,
   LandlordPaystackAccount,
   PaystackVerificationStatus,
 } from "@/server/types/paystack.types";
 
-export type PayoutVerificationAccountType = "landlord" | "agent";
+export type PayoutVerificationAccountType = "landlord" | "agent" | "developer";
+
+type VerifiablePayoutAccount =
+  | LandlordPaystackAccount
+  | AgentPaystackAccount
+  | DeveloperPaystackAccount;
 
 export type PlatformAdminPayoutVerificationAccount = {
   id: string;
@@ -113,6 +125,38 @@ function mapAgentAccount(
   };
 }
 
+function mapDeveloperAccount(
+  account: DeveloperPaystackAccountWithOwner,
+): PlatformAdminPayoutVerificationAccount {
+  const ownerProfile = account.developer_account?.owner_profile ?? null;
+
+  return {
+    id: account.id,
+    ownerId: account.developer_account_id,
+    ownerName:
+      account.developer_account?.company_name?.trim() ||
+      ownerProfile?.full_name?.trim() ||
+      "Developer",
+    ownerEmail:
+      account.developer_account?.company_email ?? ownerProfile?.email ?? null,
+    ownerPhoneNumber:
+      account.developer_account?.company_phone ??
+      ownerProfile?.phone_number ??
+      null,
+    ownerRole: "developer",
+    bankName: account.bank_name,
+    accountName: account.account_name,
+    accountNumber: account.account_number,
+    maskedAccountNumber: maskAccountNumber(account.account_number),
+    paystackSubaccountCode: account.paystack_subaccount_code,
+    isActive: account.is_active,
+    verificationStatus: account.verification_status,
+    verifiedAt: account.verified_at,
+    createdAt: account.created_at,
+    updatedAt: account.updated_at,
+  };
+}
+
 function sortQueueAccounts(accounts: PlatformAdminPayoutVerificationAccount[]) {
   return [...accounts].sort((left, right) => {
     const leftTime = new Date(left.createdAt).getTime();
@@ -122,9 +166,7 @@ function sortQueueAccounts(accounts: PlatformAdminPayoutVerificationAccount[]) {
   });
 }
 
-function assertActiveAccount(
-  account: LandlordPaystackAccount | AgentPaystackAccount | null,
-) {
+function assertActiveAccount(account: VerifiablePayoutAccount | null) {
   if (!account) {
     throw new AppError(
       "PAYOUT_ACCOUNT_NOT_FOUND",
@@ -145,7 +187,7 @@ function assertActiveAccount(
 }
 
 function assertFreshAccount(params: {
-  account: LandlordPaystackAccount | AgentPaystackAccount;
+  account: VerifiablePayoutAccount;
   expectedUpdatedAt: string;
   targetStatus: PaystackVerificationStatus;
 }) {
@@ -164,9 +206,7 @@ function assertFreshAccount(params: {
   );
 }
 
-function isAlreadyVerified(
-  account: LandlordPaystackAccount | AgentPaystackAccount,
-) {
+function isAlreadyVerified(account: VerifiablePayoutAccount) {
   return (
     account.verification_status === "verified" && Boolean(account.verified_at)
   );
@@ -182,7 +222,11 @@ async function getCurrentAccount(params: {
     return getLandlordPaystackAccountById(supabase, params.accountId);
   }
 
-  return getAgentPaystackAccountById(supabase, params.accountId);
+  if (params.accountType === "agent") {
+    return getAgentPaystackAccountById(supabase, params.accountId);
+  }
+
+  return getDeveloperPaystackAccountById(supabase, params.accountId);
 }
 
 export async function getPlatformAdminPayoutVerificationQueue(): Promise<PlatformAdminPayoutVerificationQueue> {
@@ -193,10 +237,13 @@ export async function getPlatformAdminPayoutVerificationQueue(): Promise<Platfor
   const [
     pendingLandlords,
     pendingAgents,
+    pendingDevelopers,
     verifiedLandlords,
     verifiedAgents,
+    verifiedDevelopers,
     failedLandlords,
     failedAgents,
+    failedDevelopers,
   ] = await Promise.all([
     getLandlordPaystackAccountsWithOwnersByVerificationStatus(
       supabase,
@@ -208,6 +255,11 @@ export async function getPlatformAdminPayoutVerificationQueue(): Promise<Platfor
       "unverified",
       { activeOnly: true },
     ),
+    getDeveloperPaystackAccountsWithOwnersByVerificationStatus(
+      supabase,
+      "unverified",
+      { activeOnly: true },
+    ),
     getLandlordPaystackAccountsWithOwnersByVerificationStatus(
       supabase,
       "verified",
@@ -216,24 +268,35 @@ export async function getPlatformAdminPayoutVerificationQueue(): Promise<Platfor
       supabase,
       "verified",
     ),
+    getDeveloperPaystackAccountsWithOwnersByVerificationStatus(
+      supabase,
+      "verified",
+    ),
     getLandlordPaystackAccountsWithOwnersByVerificationStatus(
       supabase,
       "failed",
     ),
     getAgentPaystackAccountsWithOwnersByVerificationStatus(supabase, "failed"),
+    getDeveloperPaystackAccountsWithOwnersByVerificationStatus(
+      supabase,
+      "failed",
+    ),
   ]);
 
   const pending = sortQueueAccounts([
     ...pendingLandlords.map(mapLandlordAccount),
     ...pendingAgents.map(mapAgentAccount),
+    ...pendingDevelopers.map(mapDeveloperAccount),
   ]);
   const verified = sortQueueAccounts([
     ...verifiedLandlords.map(mapLandlordAccount),
     ...verifiedAgents.map(mapAgentAccount),
+    ...verifiedDevelopers.map(mapDeveloperAccount),
   ]);
   const failed = sortQueueAccounts([
     ...failedLandlords.map(mapLandlordAccount),
     ...failedAgents.map(mapAgentAccount),
+    ...failedDevelopers.map(mapDeveloperAccount),
   ]);
 
   return {
@@ -256,6 +319,7 @@ export async function verifyPlatformAdminPayoutAccount(params: {
   await requirePlatformAdmin();
 
   const currentAccount = assertActiveAccount(await getCurrentAccount(params));
+
   assertFreshAccount({
     account: currentAccount,
     expectedUpdatedAt: params.expectedUpdatedAt,
@@ -272,20 +336,40 @@ export async function verifyPlatformAdminPayoutAccount(params: {
 
   const supabase = createSupabaseAdminClient();
   const verifiedAt = new Date().toISOString();
-  const updatedAccount =
-    params.accountType === "landlord"
-      ? await updateActiveLandlordPaystackAccountVerificationStatus(supabase, {
-          accountId: params.accountId,
-          expectedUpdatedAt: params.expectedUpdatedAt,
-          verificationStatus: "verified",
-          verifiedAt,
-        })
-      : await updateActiveAgentPaystackAccountVerificationStatus(supabase, {
-          accountId: params.accountId,
-          expectedUpdatedAt: params.expectedUpdatedAt,
-          verificationStatus: "verified",
-          verifiedAt,
-        });
+
+  let updatedAccount: VerifiablePayoutAccount | null = null;
+
+  if (params.accountType === "landlord") {
+    updatedAccount =
+      await updateActiveLandlordPaystackAccountVerificationStatus(supabase, {
+        accountId: params.accountId,
+        expectedUpdatedAt: params.expectedUpdatedAt,
+        verificationStatus: "verified",
+        verifiedAt,
+      });
+  }
+
+  if (params.accountType === "agent") {
+    updatedAccount = await updateActiveAgentPaystackAccountVerificationStatus(
+      supabase,
+      {
+        accountId: params.accountId,
+        expectedUpdatedAt: params.expectedUpdatedAt,
+        verificationStatus: "verified",
+        verifiedAt,
+      },
+    );
+  }
+
+  if (params.accountType === "developer") {
+    updatedAccount =
+      await updateActiveDeveloperPaystackAccountVerificationStatus(supabase, {
+        accountId: params.accountId,
+        expectedUpdatedAt: params.expectedUpdatedAt,
+        verificationStatus: "verified",
+        verifiedAt,
+      });
+  }
 
   if (!updatedAccount) {
     const latestAccount = assertActiveAccount(await getCurrentAccount(params));
@@ -316,6 +400,7 @@ export async function failPlatformAdminPayoutAccount(params: {
   await requirePlatformAdmin();
 
   const currentAccount = assertActiveAccount(await getCurrentAccount(params));
+
   assertFreshAccount({
     account: currentAccount,
     expectedUpdatedAt: params.expectedUpdatedAt,
@@ -335,20 +420,40 @@ export async function failPlatformAdminPayoutAccount(params: {
   }
 
   const supabase = createSupabaseAdminClient();
-  const updatedAccount =
-    params.accountType === "landlord"
-      ? await updateActiveLandlordPaystackAccountVerificationStatus(supabase, {
-          accountId: params.accountId,
-          expectedUpdatedAt: params.expectedUpdatedAt,
-          verificationStatus: "failed",
-          verifiedAt: null,
-        })
-      : await updateActiveAgentPaystackAccountVerificationStatus(supabase, {
-          accountId: params.accountId,
-          expectedUpdatedAt: params.expectedUpdatedAt,
-          verificationStatus: "failed",
-          verifiedAt: null,
-        });
+
+  let updatedAccount: VerifiablePayoutAccount | null = null;
+
+  if (params.accountType === "landlord") {
+    updatedAccount =
+      await updateActiveLandlordPaystackAccountVerificationStatus(supabase, {
+        accountId: params.accountId,
+        expectedUpdatedAt: params.expectedUpdatedAt,
+        verificationStatus: "failed",
+        verifiedAt: null,
+      });
+  }
+
+  if (params.accountType === "agent") {
+    updatedAccount = await updateActiveAgentPaystackAccountVerificationStatus(
+      supabase,
+      {
+        accountId: params.accountId,
+        expectedUpdatedAt: params.expectedUpdatedAt,
+        verificationStatus: "failed",
+        verifiedAt: null,
+      },
+    );
+  }
+
+  if (params.accountType === "developer") {
+    updatedAccount =
+      await updateActiveDeveloperPaystackAccountVerificationStatus(supabase, {
+        accountId: params.accountId,
+        expectedUpdatedAt: params.expectedUpdatedAt,
+        verificationStatus: "failed",
+        verifiedAt: null,
+      });
+  }
 
   if (!updatedAccount) {
     const latestAccount = assertActiveAccount(await getCurrentAccount(params));

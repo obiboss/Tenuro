@@ -21,10 +21,11 @@ import {
 import type { DeveloperPaymentScheduleItemRow } from "@/server/repositories/developer-payment-plans.repository";
 import { getDeveloperSaleById } from "@/server/repositories/developer-sales.repository";
 import type { DeveloperSaleWithDetails } from "@/server/repositories/developer-sales.repository";
+import { assertDeveloperPayoutAccountVerified } from "@/server/services/developer-payout.service";
 import { generateDeveloperPaymentReceiptSystem } from "@/server/services/developer-payment-receipts.service";
 import {
   assertPaystackAmountMatchesExpected,
-  initializeStandardPaystackTransaction,
+  initializePaystackTransaction,
   verifyPaystackTransaction,
 } from "@/server/services/paystack.service";
 import { convertNairaToKobo } from "@/server/utils/money";
@@ -69,11 +70,14 @@ function createIdempotencyKey(params: {
   saleId: string;
   scheduleItemId: string | null;
   amount: number;
+  paystackSubaccountCode: string;
   scope?: string | null;
 }) {
   return [
     "developer-payment-request",
+    "subaccount-transaction-charge-v1",
     params.scope?.trim() || "standard",
+    params.paystackSubaccountCode.trim(),
     params.saleId,
     params.scheduleItemId ?? "custom",
     params.amount.toFixed(2),
@@ -396,6 +400,11 @@ export async function createDeveloperPaymentRequest(params: {
 }) {
   assertPositiveAmount(params.amount);
 
+  const verifiedPayoutAccount = await assertDeveloperPayoutAccountVerified({
+    supabase: params.supabase,
+    developerAccountId: params.developerAccountId,
+  });
+
   const { sale, activePlan } = await resolveActiveSaleAndPlan({
     supabase: params.supabase,
     developerAccountId: params.developerAccountId,
@@ -431,6 +440,9 @@ export async function createDeveloperPaymentRequest(params: {
     }
   }
 
+  const fee = calculateDeveloperInstallmentFee(params.amount);
+  const totalAmount = Number((params.amount + fee.feeAmount).toFixed(2));
+
   const idempotencyScope =
     params.idempotencyScope ??
     (params.purchaseLinkId ? `buyer-purchase:${params.purchaseLinkId}` : null);
@@ -439,6 +451,7 @@ export async function createDeveloperPaymentRequest(params: {
     saleId: sale.id,
     scheduleItemId: params.scheduleItemId,
     amount: params.amount,
+    paystackSubaccountCode: verifiedPayoutAccount.paystack_subaccount_code,
     scope: idempotencyScope,
   });
 
@@ -457,8 +470,6 @@ export async function createDeveloperPaymentRequest(params: {
     return existingIntent;
   }
 
-  const fee = calculateDeveloperInstallmentFee(params.amount);
-  const totalAmount = Number((params.amount + fee.feeAmount).toFixed(2));
   const reference = createDeveloperPaymentReference();
   const appUrl = getAppUrl();
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
@@ -472,6 +483,9 @@ export async function createDeveloperPaymentRequest(params: {
   const metadata = {
     product: "boldverse_developer_module",
     payment_type: "developer_installment",
+    paystack_mode: "subaccount_transaction_charge",
+    payout_account_id: verifiedPayoutAccount.id,
+    subaccount_code: verifiedPayoutAccount.paystack_subaccount_code,
     developer_account_id: params.developerAccountId,
     sale_id: sale.id,
     buyer_id: sale.buyer_id,
@@ -495,11 +509,13 @@ export async function createDeveloperPaymentRequest(params: {
     params.callbackUrl?.trim() ||
     `${appUrl}/dev/pay/${reference}?verify=1`;
 
-  const initialized = await initializeStandardPaystackTransaction({
+  const initialized = await initializePaystackTransaction({
     email: buyerEmail,
     amountKobo: convertNairaToKobo(totalAmount),
     reference,
     callbackUrl,
+    subaccountCode: verifiedPayoutAccount.paystack_subaccount_code,
+    transactionChargeKobo: convertNairaToKobo(fee.feeAmount),
     currencyCode: "NGN",
     metadata,
   });

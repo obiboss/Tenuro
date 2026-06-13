@@ -10,6 +10,7 @@ import {
   initiateBuyerPurchasePayment,
   startDeveloperBuyerPurchase,
 } from "@/server/services/developer-buyer-purchase.service";
+import { assertDeveloperPayoutAccountVerified } from "@/server/services/developer-payout.service";
 import { requireDeveloper } from "@/server/services/auth.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import {
@@ -62,6 +63,11 @@ export async function startDeveloperBuyerPurchaseAction(
         message: "Developer account is not active.",
       };
     }
+
+    await assertDeveloperPayoutAccountVerified({
+      supabase,
+      developerAccountId: account.id,
+    });
 
     const estate = await getDeveloperEstateById(supabase, {
       developerAccountId: account.id,
@@ -126,5 +132,5 @@ export async function initiateBuyerPurchasePaymentAction(
     details: parsed,
   });
 
-  redirect(`/dev/pay/${encodeURIComponent(result.reference)}`);
+  redirect(result.authorizationUrl);
 }

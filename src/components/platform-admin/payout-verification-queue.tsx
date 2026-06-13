@@ -58,7 +58,15 @@ function formatDateTime(value: string | null) {
 function formatOwnerRole(
   role: PlatformAdminPayoutVerificationAccount["ownerRole"],
 ) {
-  return role === "landlord" ? "Landlord" : "Agent";
+  if (role === "landlord") {
+    return "Landlord";
+  }
+
+  if (role === "agent") {
+    return "Agent";
+  }
+
+  return "Developer";
 }
 
 function StatusBadge({ status }: { status: PaystackVerificationStatus }) {
@@ -264,10 +272,10 @@ export function PayoutVerificationQueue({
 
       <QueueSection
         title="Pending payout accounts"
-        description="Review active landlord and agent payout accounts before split settlements are enabled."
+        description="Review active landlord, agent, and developer payout accounts before split settlements are enabled."
         accounts={queue.pending}
         emptyTitle="No pending payout accounts"
-        emptyDescription="New landlord and agent payout accounts will appear here for platform review."
+        emptyDescription="New landlord, agent, and developer payout accounts will appear here for platform review."
         highlightPending
       />
 

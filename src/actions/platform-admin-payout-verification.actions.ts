@@ -21,7 +21,11 @@ function parsePayoutVerificationFormData(formData: FormData) {
     formData.get("expectedUpdatedAt") ?? "",
   ).trim();
 
-  if (accountType !== "landlord" && accountType !== "agent") {
+  if (
+    accountType !== "landlord" &&
+    accountType !== "agent" &&
+    accountType !== "developer"
+  ) {
     throw new AppError(
       "INVALID_PAYOUT_ACCOUNT_TYPE",
       "The payout account type is invalid.",
@@ -49,6 +53,8 @@ function revalidatePayoutVerificationSurfaces() {
   revalidatePath("/admin/payout-verifications");
   revalidatePath("/settings");
   revalidatePath("/agent/overview");
+  revalidatePath("/developer/settings");
+  revalidatePath("/developer");
 }
 
 function toActionError(
