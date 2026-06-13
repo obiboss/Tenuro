@@ -30,7 +30,7 @@ export function DeveloperEstateForm() {
   return (
     <form action={formAction}>
       <Card>
-        <CardContent>
+        <CardContent className="space-y-5">
           {state.message ? (
             <div
               role="alert"
@@ -43,6 +43,14 @@ export function DeveloperEstateForm() {
               {state.message}
             </div>
           ) : null}
+
+          <div className="rounded-card bg-primary-soft p-5">
+            <p className="font-black text-text-strong">Estate details</p>
+            <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
+              Create the estate record first. BOPA will use the estate payment
+              rule for every buyer purchase link under this estate.
+            </p>
+          </div>
 
           <Input
             label="Estate name"
@@ -183,6 +191,49 @@ export function DeveloperEstateForm() {
                 {state.fieldErrors.description[0]}
               </p>
             ) : null}
+          </div>
+
+          <div className="rounded-card border border-border-soft bg-background p-5">
+            <p className="font-black text-text-strong">
+              Default buyer payment plan
+            </p>
+            <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
+              Set this once for the estate. When you start a buyer purchase,
+              BOPA will calculate the first payment automatically from the plot
+              price.
+            </p>
+
+            <div className="mt-5 grid gap-5 md:grid-cols-2">
+              <Input
+                label="How much should buyers pay first?"
+                name="initialPaymentPercentage"
+                type="number"
+                min="1"
+                max="100"
+                step="0.01"
+                defaultValue="25"
+                error={state.fieldErrors?.initialPaymentPercentage?.[0]}
+                required
+              />
+
+              <Input
+                label="Spread the balance over how many months?"
+                name="balanceSpreadMonths"
+                type="number"
+                min="0"
+                max="120"
+                step="1"
+                defaultValue="12"
+                error={state.fieldErrors?.balanceSpreadMonths?.[0]}
+                required
+              />
+            </div>
+
+            <div className="mt-4 rounded-button bg-white px-4 py-3 text-sm font-bold leading-6 text-text-muted">
+              Example: if a plot costs ₦5,000,000 and first payment is 25%, BOPA
+              will require ₦1,250,000 first, then spread the remaining
+              ₦3,750,000 across the months you entered.
+            </div>
           </div>
         </CardContent>
 

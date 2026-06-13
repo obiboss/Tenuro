@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { DeveloperBulkPlotForm } from "@/components/developer/developer-bulk-plot-form";
 import { DeveloperEstateActionModal } from "@/components/developer/developer-estate-action-modal";
 import {
   DeveloperPlotDetailModal,
@@ -39,7 +38,6 @@ type DeveloperEstateWorkspaceProps = {
 };
 
 type ActiveModal =
-  | "generate"
   | "start-purchase"
   | "update"
   | "special-plot"
@@ -71,21 +69,21 @@ function getGuidance(params: {
 }) {
   if (params.plotCount === 0) {
     return {
-      title: "Start by generating the plots for this estate.",
-      body: "Enter the land size, number of plots, plot size, numbering style, and price. BOPA will create the plot numbers for you.",
+      title: "No plots have been added to this estate yet.",
+      body: "Plot generation belongs to the estate setup flow. Use this page to view and manage plots after they have been created.",
     };
   }
 
   if (params.availablePlotCount === 0) {
     return {
       title: "There are no available plots right now.",
-      body: "You can update plot details, generate more plots, or review plots that are already reserved or sold.",
+      body: "You can review plots that are already reserved, active, sold, or blocked.",
     };
   }
 
   return {
-    title: "You can now start a buyer purchase or update selected plots.",
-    body: "Search for a plot, open its details, or select several plots and update them together.",
+    title: "Open a plot or start a buyer purchase.",
+    body: "Search for a plot, open its details, select plots for updates, or start a buyer purchase from an available plot.",
   };
 }
 
@@ -198,21 +196,17 @@ export function DeveloperEstateWorkspace({
         <h1 className="text-2xl font-black tracking-tight text-text-strong sm:text-3xl">
           {estate.name}
         </h1>
-        <p className="text-sm font-semibold text-text-muted">{estate.location}</p>
+        <p className="text-sm font-semibold text-text-muted">
+          {estate.location}
+        </p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         {[
           { label: "Plots created", value: counts.total },
           { label: "Available", value: counts.available },
-          {
-            label: "Reserved",
-            value: counts.reserved,
-          },
-          {
-            label: "Sold/active",
-            value: counts.active + counts.sold,
-          },
+          { label: "Reserved", value: counts.reserved },
+          { label: "Sold/active", value: counts.active + counts.sold },
           { label: "Blocked", value: counts.blocked },
         ].map((item) => (
           <div
@@ -246,10 +240,6 @@ export function DeveloperEstateWorkspace({
       ) : null}
 
       <div className="flex flex-wrap gap-3">
-        <Button type="button" onClick={() => setActiveModal("generate")}>
-          Generate plots
-        </Button>
-
         <Button
           type="button"
           variant="secondary"
@@ -420,20 +410,6 @@ export function DeveloperEstateWorkspace({
         }}
         onSuccessfulChange={handleModalSuccess}
       />
-
-      <DeveloperEstateActionModal
-        open={activeModal === "generate"}
-        title="Generate plots for this estate"
-        description="Enter the land and plot details once. BOPA will create the plot numbers for you."
-        onClose={() => setActiveModal(null)}
-        size="lg"
-      >
-        <DeveloperBulkPlotForm
-          estateId={estate.id}
-          embedded
-          onSuccess={handleModalSuccess}
-        />
-      </DeveloperEstateActionModal>
 
       <DeveloperEstateActionModal
         open={activeModal === "start-purchase"}

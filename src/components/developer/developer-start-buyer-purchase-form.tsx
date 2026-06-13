@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useMemo, useState } from "react";
 import { startDeveloperBuyerPurchaseAction } from "@/actions/developer-buyer-purchase.actions";
 import { initialDeveloperBuyerPurchaseActionState } from "@/actions/developer-buyer-purchase.state";
@@ -14,11 +15,14 @@ type DeveloperStartBuyerPurchaseFormProps = {
   preselectedPlotId?: string;
 };
 
-const paymentPlanOptions = [
-  { value: "outright", label: "Full payment" },
-  { value: "fixed_installment", label: "Fixed installment" },
-  { value: "flexible", label: "Flexible payment" },
-] as const;
+function isPayoutSetupError(message: string) {
+  const normalizedMessage = message.toLowerCase();
+
+  return (
+    normalizedMessage.includes("payout bank account") ||
+    normalizedMessage.includes("payout account")
+  );
+}
 
 export function DeveloperStartBuyerPurchaseForm({
   estateId,
@@ -30,9 +34,6 @@ export function DeveloperStartBuyerPurchaseForm({
     initialDeveloperBuyerPurchaseActionState,
   );
   const [selectedPlotId, setSelectedPlotId] = useState(preselectedPlotId);
-  const [paymentPlanMode, setPaymentPlanMode] =
-    useState<(typeof paymentPlanOptions)[number]["value"]>("fixed_installment");
-  const [customFirstPaymentAmount, setCustomFirstPaymentAmount] = useState("");
 
   const effectiveSelectedPlotId = selectedPlotId || preselectedPlotId;
 
@@ -41,51 +42,8 @@ export function DeveloperStartBuyerPurchaseForm({
     [plots, effectiveSelectedPlotId],
   );
 
-  const firstPaymentAmount = useMemo(() => {
-    if (!selectedPlot) {
-      return customFirstPaymentAmount;
-    }
-
-    if (paymentPlanMode === "outright") {
-      return String(Number(selectedPlot.price));
-    }
-
-    return customFirstPaymentAmount;
-  }, [customFirstPaymentAmount, paymentPlanMode, selectedPlot]);
-
-  function handlePlotChange(plotId: string) {
-    setSelectedPlotId(plotId);
-
-    const plot = plots.find((item) => item.id === plotId);
-
-    if (!plot) {
-      return;
-    }
-
-    if (paymentPlanMode === "outright") {
-      return;
-    }
-
-    setCustomFirstPaymentAmount(String(Number(plot.price) * 0.3));
-  }
-
-  function handlePaymentPlanChange(
-    mode: (typeof paymentPlanOptions)[number]["value"],
-  ) {
-    setPaymentPlanMode(mode);
-
-    if (!selectedPlot) {
-      return;
-    }
-
-    if (mode === "outright") {
-      return;
-    }
-
-    if (!customFirstPaymentAmount) {
-      setCustomFirstPaymentAmount(String(Number(selectedPlot.price) * 0.3));
-    }
-  }
+  const showPayoutSettingsCta =
+    Boolean(state.message) && !state.ok && isPayoutSetupError(state.message);
 
   const canStart = plots.length > 0;
 
@@ -98,17 +56,30 @@ export function DeveloperStartBuyerPurchaseForm({
           role="alert"
           className={
             state.ok
-              ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
-              : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
+              ? "space-y-3 rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
+              : "space-y-3 rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
           }
         >
-          {state.message}
+          <p>{state.message}</p>
+
+          {showPayoutSettingsCta ? (
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/developer?section=settings#payout-account"
+                className="inline-flex min-h-11 items-center justify-center rounded-button bg-primary px-5 py-2.5 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary-hover"
+              >
+                Go to payout settings
+              </Link>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
       {state.purchaseUrl ? (
         <div className="space-y-3 rounded-button bg-background p-4">
-          <p className="text-sm font-bold text-text-muted">Buyer purchase link</p>
+          <p className="text-sm font-bold text-text-muted">
+            Buyer purchase link
+          </p>
           <p className="break-all text-sm font-semibold leading-6 text-text-strong">
             {state.purchaseUrl}
           </p>
@@ -152,7 +123,7 @@ export function DeveloperStartBuyerPurchaseForm({
           required
           disabled={plots.length === 0}
           value={effectiveSelectedPlotId}
-          onChange={(event) => handlePlotChange(event.target.value)}
+          onChange={(event) => setSelectedPlotId(event.target.value)}
           className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 py-3 text-base text-text-strong outline-none transition focus:border-primary focus:ring-2 focus:ring-primary-soft disabled:cursor-not-allowed disabled:bg-background disabled:text-text-muted"
         >
           <option value="">
@@ -200,56 +171,16 @@ export function DeveloperStartBuyerPurchaseForm({
         error={state.fieldErrors?.buyerEmail?.[0]}
       />
 
-      <div className="space-y-2">
-        <label
-          htmlFor="paymentPlanMode"
-          className="block text-sm font-semibold text-text-strong"
-        >
-          Payment option <span className="ml-1 text-danger">*</span>
-        </label>
-
-        <select
-          id="paymentPlanMode"
-          name="paymentPlanMode"
-          required
-          value={paymentPlanMode}
-          onChange={(event) =>
-            handlePaymentPlanChange(
-              event.target.value as (typeof paymentPlanOptions)[number]["value"],
-            )
-          }
-          className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 py-3 text-base text-text-strong outline-none transition focus:border-primary focus:ring-2 focus:ring-primary-soft"
-        >
-          {paymentPlanOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-
-        {state.fieldErrors?.paymentPlanMode?.[0] ? (
-          <p className="text-sm font-medium text-danger">
-            {state.fieldErrors.paymentPlanMode[0]}
-          </p>
-        ) : null}
-      </div>
-
-      <Input
-        label="First payment amount"
-        name="firstPaymentAmount"
-        type="number"
-        min="1"
-        step="0.01"
-        value={firstPaymentAmount}
-        onChange={(event) => setCustomFirstPaymentAmount(event.target.value)}
-        required
-        disabled={paymentPlanMode === "outright"}
-        error={state.fieldErrors?.firstPaymentAmount?.[0]}
-      />
-
       {selectedPlot ? (
-        <div className="rounded-button bg-background p-4 text-sm font-semibold leading-6 text-text-muted">
-          Total plot price: {formatNairaCompact(Number(selectedPlot.price))}
+        <div className="rounded-card bg-primary-soft p-4">
+          <p className="font-black text-text-strong">
+            Plot price: {formatNairaCompact(Number(selectedPlot.price))}
+          </p>
+          <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
+            BOPA will calculate the buyer’s first payment from the payment plan
+            saved on this estate. The buyer cannot change the payment amount
+            from the purchase link.
+          </p>
         </div>
       ) : null}
 

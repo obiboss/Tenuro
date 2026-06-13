@@ -6,6 +6,7 @@ import {
   getActiveDeveloperPaymentPlanForSale,
   listDeveloperPaymentScheduleItemsForSale,
 } from "@/server/repositories/developer-payment-plans.repository";
+import { listDeveloperSalePaymentsForSale } from "@/server/repositories/developer-sale-payments.repository";
 import { getDeveloperSaleById } from "@/server/repositories/developer-sales.repository";
 import { requireDeveloper } from "@/server/services/auth.service";
 import {
@@ -29,6 +30,7 @@ export default async function DeveloperSalePage({
   const { saleId } = await params;
   const developer = await requireDeveloper();
   const supabase = createSupabaseAdminClient();
+
   const account = await getDeveloperAccountByOwnerProfileId(
     supabase,
     developer.id,
@@ -50,6 +52,7 @@ export default async function DeveloperSalePage({
   const [
     paymentPlan,
     scheduleItems,
+    payments,
     salesAgreementDocument,
     allocationLetterDocument,
   ] = await Promise.all([
@@ -58,6 +61,10 @@ export default async function DeveloperSalePage({
       saleId: sale.id,
     }),
     listDeveloperPaymentScheduleItemsForSale(supabase, {
+      developerAccountId: account.id,
+      saleId: sale.id,
+    }),
+    listDeveloperSalePaymentsForSale(supabase, {
       developerAccountId: account.id,
       saleId: sale.id,
     }),
@@ -72,14 +79,15 @@ export default async function DeveloperSalePage({
   return (
     <div className="space-y-8">
       <PageHeader
-        title={sale.sale_reference}
-        description="Locked developer plot sale record."
+        title={sale.developer_buyers?.full_name ?? sale.sale_reference}
+        description={`Sale ${sale.sale_reference} · buyer, plot, payment schedule, transactions, and receipts.`}
       />
 
       <DeveloperSaleDetail
         sale={sale}
         paymentPlan={paymentPlan}
         scheduleItems={scheduleItems}
+        payments={payments}
         salesAgreementDocument={salesAgreementDocument}
         allocationLetterDocument={allocationLetterDocument}
       />

@@ -14,6 +14,10 @@ export type DeveloperPlotInventoryStatus =
   | "sold"
   | "blocked";
 
+export type DeveloperEstatePaymentPlanMode = "outright" | "fixed_installment";
+
+export type DeveloperEstateInstallmentInterval = "monthly";
+
 export type DeveloperEstateRow = {
   id: string;
   developer_account_id: string;
@@ -25,6 +29,10 @@ export type DeveloperEstateRow = {
   country: string;
   description: string | null;
   status: DeveloperEstateStatus;
+  initial_payment_percentage: number;
+  balance_spread_months: number;
+  installment_interval: DeveloperEstateInstallmentInterval;
+  default_payment_plan_mode: DeveloperEstatePaymentPlanMode;
   created_at: string;
   updated_at: string;
 };
@@ -47,6 +55,10 @@ const DEVELOPER_ESTATE_SELECT = `
   country,
   description,
   status,
+  initial_payment_percentage,
+  balance_spread_months,
+  installment_interval,
+  default_payment_plan_mode,
   created_at,
   updated_at
 `;
@@ -62,6 +74,10 @@ const DEVELOPER_ESTATE_SUMMARY_SELECT = `
   country,
   description,
   status,
+  initial_payment_percentage,
+  balance_spread_months,
+  installment_interval,
+  default_payment_plan_mode,
   created_at,
   updated_at,
   developer_plots (
@@ -120,6 +136,10 @@ export async function createDeveloperEstate(
     lga: string;
     description: string | null;
     status: DeveloperEstateStatus;
+    initialPaymentPercentage: number;
+    balanceSpreadMonths: number;
+    installmentInterval: DeveloperEstateInstallmentInterval;
+    defaultPaymentPlanMode: DeveloperEstatePaymentPlanMode;
   },
 ) {
   const { data, error } = await supabase
@@ -133,6 +153,10 @@ export async function createDeveloperEstate(
       lga: params.lga,
       description: params.description,
       status: params.status,
+      initial_payment_percentage: params.initialPaymentPercentage,
+      balance_spread_months: params.balanceSpreadMonths,
+      installment_interval: params.installmentInterval,
+      default_payment_plan_mode: params.defaultPaymentPlanMode,
     })
     .select(DEVELOPER_ESTATE_SELECT)
     .single<DeveloperEstateRow>();

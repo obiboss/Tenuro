@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { phoneNumberSchema } from "@/server/validators/auth.schema";
+
 const optionalEmailSchema = z
   .string()
   .trim()
@@ -23,11 +24,6 @@ export const startDeveloperBuyerPurchaseSchema = z.object({
   buyerPhone: phoneNumberSchema,
   buyerName: optionalNameSchema,
   buyerEmail: optionalEmailSchema,
-  paymentPlanMode: z.enum(["outright", "fixed_installment", "flexible"]),
-  firstPaymentAmount: z.coerce
-    .number()
-    .positive("First payment must be greater than zero.")
-    .max(999_999_999_999, "First payment is too high."),
   note: z
     .string()
     .trim()

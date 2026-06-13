@@ -45,8 +45,6 @@ export async function startDeveloperBuyerPurchaseAction(
       buyerPhone: formData.get("buyerPhone"),
       buyerName: formData.get("buyerName"),
       buyerEmail: formData.get("buyerEmail"),
-      paymentPlanMode: formData.get("paymentPlanMode"),
-      firstPaymentAmount: formData.get("firstPaymentAmount"),
       note: formData.get("note"),
     });
 
@@ -92,8 +90,6 @@ export async function startDeveloperBuyerPurchaseAction(
       buyerPhone: buyerPhone.e164,
       buyerName: nullableText(parsed.buyerName),
       buyerEmail: nullableText(parsed.buyerEmail),
-      paymentPlanMode: parsed.paymentPlanMode,
-      firstPaymentAmount: parsed.firstPaymentAmount,
       note: nullableText(parsed.note),
     });
 

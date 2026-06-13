@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { SectionCard } from "@/components/ui/section-card";
 import type { DeveloperSaleWithDetails } from "@/server/repositories/developer-sales.repository";
@@ -16,7 +17,7 @@ export function DeveloperSalesList({ sales }: DeveloperSalesListProps) {
   return (
     <SectionCard
       title="Sales"
-      description="Active and historical developer plot sales."
+      description="Open a sale to view the buyer, plot, payment schedule, transactions, receipts, and outstanding balance."
       action={
         <Link
           href="/developer/sales/new"
@@ -36,7 +37,7 @@ export function DeveloperSalesList({ sales }: DeveloperSalesListProps) {
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-205 text-left text-sm">
+          <table className="w-full min-w-230 text-left text-sm">
             <thead>
               <tr className="border-b border-border-soft text-xs uppercase tracking-wide text-text-muted">
                 <th className="py-3 pr-4 font-black">Reference</th>
@@ -45,6 +46,7 @@ export function DeveloperSalesList({ sales }: DeveloperSalesListProps) {
                 <th className="py-3 pr-4 font-black">Locked Price</th>
                 <th className="py-3 pr-4 font-black">Mode</th>
                 <th className="py-3 pr-4 font-black">Status</th>
+                <th className="py-3 pl-4 text-right font-black">Action</th>
               </tr>
             </thead>
 
@@ -52,13 +54,11 @@ export function DeveloperSalesList({ sales }: DeveloperSalesListProps) {
               {sales.map((sale) => (
                 <tr key={sale.id} className="border-b border-border-soft">
                   <td className="py-4 pr-4">
-                    <Link
-                      href={`/developer/sales/${sale.id}`}
-                      className="font-black text-primary"
-                    >
+                    <p className="font-black text-primary">
                       {sale.sale_reference}
-                    </Link>
+                    </p>
                   </td>
+
                   <td className="py-4 pr-4">
                     <p className="font-black text-text-strong">
                       {sale.developer_buyers?.full_name ?? "Buyer"}
@@ -67,6 +67,7 @@ export function DeveloperSalesList({ sales }: DeveloperSalesListProps) {
                       {sale.developer_buyers?.phone_number ?? "—"}
                     </p>
                   </td>
+
                   <td className="py-4 pr-4">
                     <p className="font-semibold text-text-strong">
                       {sale.developer_estates?.estate_name ?? "Estate"}
@@ -75,14 +76,31 @@ export function DeveloperSalesList({ sales }: DeveloperSalesListProps) {
                       Plot {sale.developer_plots?.plot_number ?? "—"}
                     </p>
                   </td>
+
                   <td className="py-4 pr-4 font-black text-text-strong">
                     {formatNaira(Number(sale.total_price_locked))}
                   </td>
+
                   <td className="py-4 pr-4 font-semibold text-text-muted">
                     {formatStatus(sale.payment_plan_mode)}
                   </td>
+
                   <td className="py-4 pr-4">
                     <Badge tone="primary">{formatStatus(sale.status)}</Badge>
+                  </td>
+
+                  <td className="py-4 pl-4 text-right">
+                    <Link
+                      href={`/developer/sales/${sale.id}`}
+                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-button bg-primary px-4 py-2 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary-hover"
+                    >
+                      View details
+                      <ArrowRight
+                        aria-hidden="true"
+                        size={16}
+                        strokeWidth={2.8}
+                      />
+                    </Link>
                   </td>
                 </tr>
               ))}

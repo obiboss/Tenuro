@@ -13,6 +13,7 @@ import {
 } from "@/server/repositories/developer-buyer-purchase-links.repository";
 import { getDeveloperEstateById } from "@/server/repositories/developer-estates.repository";
 import { createBuyerSalePortalLink } from "@/server/services/developer-buyer-portal.service";
+import { createDeveloperPaymentRequest } from "@/server/services/developer-payment.service";
 import type { DeveloperPaymentPlanMode } from "@/server/validators/developer-payment-plan.schema";
 import type { SubmitBuyerPurchaseDetailsInput } from "@/server/validators/developer-buyer-purchase.schema";
 import { normalisePhoneNumber } from "@/server/utils/phone";
@@ -98,6 +99,19 @@ function buildBuyerPurchasePaymentCallbackUrl(reference: string) {
   )}`;
 }
 
+function calculateEstateFirstPayment(params: {
+  totalPrice: number;
+  initialPaymentPercentage: number;
+}) {
+  if (params.initialPaymentPercentage >= 100) {
+    return Number(params.totalPrice.toFixed(2));
+  }
+
+  return Number(
+    ((params.totalPrice * params.initialPaymentPercentage) / 100).toFixed(2),
+  );
+}
+
 export async function startDeveloperBuyerPurchase(params: {
   supabase: SupabaseClient;
   developerAccountId: string;
@@ -107,8 +121,6 @@ export async function startDeveloperBuyerPurchase(params: {
   buyerPhone: string;
   buyerName: string | null;
   buyerEmail: string | null;
-  paymentPlanMode: DeveloperPaymentPlanMode;
-  firstPaymentAmount: number;
   note: string | null;
 }) {
   const estate = await getDeveloperEstateById(params.supabase, {
@@ -149,26 +161,21 @@ export async function startDeveloperBuyerPurchase(params: {
   }
 
   const totalPrice = Number(plot.price);
-  const firstPaymentAmount = Number(params.firstPaymentAmount.toFixed(2));
+  const firstPaymentAmount = calculateEstateFirstPayment({
+    totalPrice,
+    initialPaymentPercentage: Number(estate.initial_payment_percentage),
+  });
 
-  if (firstPaymentAmount > totalPrice) {
+  if (firstPaymentAmount <= 0 || firstPaymentAmount > totalPrice) {
     throw new AppError(
-      "DEVELOPER_FIRST_PAYMENT_TOO_HIGH",
-      "First payment cannot exceed the plot price.",
+      "DEVELOPER_ESTATE_PAYMENT_RULE_INVALID",
+      "Estate payment rule is not valid for this plot price.",
       400,
     );
   }
 
-  if (
-    params.paymentPlanMode === "outright" &&
-    firstPaymentAmount !== Number(totalPrice.toFixed(2))
-  ) {
-    throw new AppError(
-      "DEVELOPER_OUTRIGHT_PAYMENT_MISMATCH",
-      "Full payment requires the first payment to equal the total price.",
-      400,
-    );
-  }
+  const paymentPlanMode: DeveloperPaymentPlanMode =
+    firstPaymentAmount >= totalPrice ? "outright" : "fixed_installment";
 
   const buyerPhone = normalisePhoneNumber(params.buyerPhone);
   const rawToken = createRawPurchaseToken();
@@ -182,7 +189,7 @@ export async function startDeveloperBuyerPurchase(params: {
     buyerPhone: buyerPhone.e164,
     buyerName: params.buyerName,
     buyerEmail: params.buyerEmail,
-    paymentPlanMode: params.paymentPlanMode,
+    paymentPlanMode,
     firstPaymentAmount,
     totalPrice,
     note: params.note,
@@ -337,9 +344,6 @@ export async function initiateBuyerPurchasePayment(params: {
     link: updatedLink,
     details: params.details,
   });
-
-  const { createDeveloperPaymentRequest } =
-    await import("@/server/services/developer-payment.service");
 
   const trustedAmount = Number(link.first_payment_amount.toFixed(2));
 

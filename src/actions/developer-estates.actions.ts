@@ -41,6 +41,8 @@ export async function createDeveloperEstateAction(
       lga: formData.get("lga"),
       description: formData.get("description"),
       status: formData.get("status") || "planning",
+      initialPaymentPercentage: formData.get("initialPaymentPercentage"),
+      balanceSpreadMonths: formData.get("balanceSpreadMonths"),
     });
 
     const supabase = createSupabaseAdminClient();
@@ -56,6 +58,9 @@ export async function createDeveloperEstateAction(
       };
     }
 
+    const defaultPaymentPlanMode =
+      parsed.initialPaymentPercentage >= 100 ? "outright" : "fixed_installment";
+
     const estate = await createDeveloperEstate(supabase, {
       developerAccountId: account.id,
       estateName: parsed.estateName,
@@ -65,6 +70,13 @@ export async function createDeveloperEstateAction(
       lga: parsed.lga,
       description: nullableText(parsed.description),
       status: parsed.status,
+      initialPaymentPercentage: Number(
+        parsed.initialPaymentPercentage.toFixed(2),
+      ),
+      balanceSpreadMonths:
+        parsed.initialPaymentPercentage >= 100 ? 0 : parsed.balanceSpreadMonths,
+      installmentInterval: "monthly",
+      defaultPaymentPlanMode,
     });
 
     estateId = estate.id;

@@ -1,27 +1,33 @@
 import Link from "next/link";
-import {
-  generateAllocationLetterAction,
-  generateSalesAgreementAction,
-} from "@/actions/developer-sale-documents.actions";
+import { ReceiptText } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { SectionCard } from "@/components/ui/section-card";
 import { DeveloperBuyerPortalLinkForm } from "@/components/developer/developer-buyer-portal-link-form";
 import { DeveloperPaymentPlanSummary } from "@/components/developer/developer-payment-plan-summary";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { SectionCard } from "@/components/ui/section-card";
 import type {
   DeveloperPaymentPlanRow,
   DeveloperPaymentScheduleItemRow,
 } from "@/server/repositories/developer-payment-plans.repository";
+import type { DeveloperSalePaymentRow } from "@/server/repositories/developer-sale-payments.repository";
 import type { DeveloperSaleWithDetails } from "@/server/repositories/developer-sales.repository";
-import type { DeveloperSaleDocumentView } from "@/server/services/developer-sale-documents.service";
 import { formatNaira } from "@/server/utils/money";
+
+type DeveloperSaleDocumentView = {
+  id: string;
+  document_type: string;
+  storage_path: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+} | null;
 
 type DeveloperSaleDetailProps = {
   sale: DeveloperSaleWithDetails;
   paymentPlan: DeveloperPaymentPlanRow | null;
   scheduleItems: DeveloperPaymentScheduleItemRow[];
-  salesAgreementDocument: DeveloperSaleDocumentView | null;
-  allocationLetterDocument: DeveloperSaleDocumentView | null;
+  payments: DeveloperSalePaymentRow[];
+  salesAgreementDocument: DeveloperSaleDocumentView;
+  allocationLetterDocument: DeveloperSaleDocumentView;
 };
 
 function formatStatus(value: string) {
@@ -38,97 +44,106 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
-function SaleDocumentRow({
-  title,
-  description,
-  document,
-  action,
-  buttonLabel,
-  regenerateLabel,
-  saleId,
-}: {
-  title: string;
-  description: string;
-  document: DeveloperSaleDocumentView | null;
-  action: (formData: FormData) => Promise<void>;
-  buttonLabel: string;
-  regenerateLabel: string;
-  saleId: string;
-}) {
-  return (
-    <div className="rounded-button border border-border-soft bg-background p-4">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-sm font-black text-text-strong">{title}</p>
-          <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-            {description}
-          </p>
+function formatDateTime(value: string | null) {
+  if (!value) {
+    return "Not set";
+  }
 
-          {document ? (
-            <p className="mt-2 text-xs font-bold text-success">
-              Generated on {formatDate(document.generated_at)}
-            </p>
-          ) : (
-            <p className="mt-2 text-xs font-bold text-text-muted">
-              Not generated yet.
-            </p>
-          )}
-        </div>
+  return new Intl.DateTimeFormat("en-NG", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
 
-        <div className="flex flex-col gap-3 sm:flex-row">
-          {document?.signedUrl ? (
-            <a
-              href={document.signedUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex min-h-11 items-center justify-center rounded-button bg-surface px-5 py-2.5 text-sm font-extrabold text-text-strong shadow-soft ring-1 ring-border-soft transition hover:bg-primary-soft"
-            >
-              Download Copy
-            </a>
-          ) : null}
+function getPostedPayments(payments: DeveloperSalePaymentRow[]) {
+  return payments.filter((payment) => payment.status === "posted");
+}
 
-          <form action={action}>
-            <input type="hidden" name="saleId" value={saleId} />
-            <Button type="submit">
-              {document ? regenerateLabel : buttonLabel}
-            </Button>
-          </form>
-        </div>
-      </div>
-    </div>
+function getTotalPaid(payments: DeveloperSalePaymentRow[]) {
+  return getPostedPayments(payments).reduce(
+    (total, payment) => total + Number(payment.amount_paid),
+    0,
   );
+}
+
+function getOutstandingBalance(params: {
+  sale: DeveloperSaleWithDetails;
+  payments: DeveloperSalePaymentRow[];
+}) {
+  return Math.max(
+    0,
+    Number(params.sale.total_price_locked) - getTotalPaid(params.payments),
+  );
+}
+
+function getDocumentStatus(document: DeveloperSaleDocumentView) {
+  if (!document) {
+    return "Not generated";
+  }
+
+  return formatStatus(document.status);
 }
 
 export function DeveloperSaleDetail({
   sale,
   paymentPlan,
   scheduleItems,
+  payments,
   salesAgreementDocument,
   allocationLetterDocument,
 }: DeveloperSaleDetailProps) {
+  const totalPaid = getTotalPaid(payments);
+  const outstandingBalance = getOutstandingBalance({ sale, payments });
+  const latestPostedPayment = getPostedPayments(payments)[0] ?? null;
+
   return (
     <div className="space-y-6">
       <SectionCard
-        title="Sale Summary"
-        description="This sale price is locked and must not be silently edited."
+        title="Buyer details and payment summary"
+        description="This page shows the buyer, plot, payment schedule, transactions, receipts, and outstanding balance."
       >
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-button bg-background p-4">
+            <p className="text-sm font-bold text-text-muted">Buyer</p>
+            <p className="mt-2 text-lg font-black text-text-strong">
+              {sale.developer_buyers?.full_name ?? "Buyer"}
+            </p>
+            <p className="mt-1 text-sm font-semibold text-text-muted">
+              {sale.developer_buyers?.phone_number ?? "—"}
+            </p>
+            <p className="mt-1 text-sm font-semibold text-text-muted">
+              {sale.developer_buyers?.email ?? "No email saved"}
+            </p>
+          </div>
+
           <div className="rounded-button bg-background p-4">
             <p className="text-sm font-bold text-text-muted">Locked price</p>
-            <p className="mt-2 text-2xl font-black text-text-strong">
+            <p className="mt-2 text-lg font-black text-text-strong">
               {formatNaira(Number(sale.total_price_locked))}
             </p>
-          </div>
-
-          <div className="rounded-button bg-background p-4">
-            <p className="text-sm font-bold text-text-muted">Initial deposit</p>
-            <p className="mt-2 text-2xl font-black text-text-strong">
-              {formatNaira(Number(sale.initial_deposit_amount))}
+            <p className="mt-1 text-sm font-semibold text-text-muted">
+              {formatStatus(sale.payment_plan_mode)}
             </p>
           </div>
 
           <div className="rounded-button bg-background p-4">
-            <p className="text-sm font-bold text-text-muted">Status</p>
+            <p className="text-sm font-bold text-text-muted">Paid so far</p>
+            <p className="mt-2 text-lg font-black text-text-strong">
+              {formatNaira(totalPaid)}
+            </p>
+            <p className="mt-1 text-sm font-semibold text-text-muted">
+              Last payment:{" "}
+              {latestPostedPayment
+                ? formatDate(latestPostedPayment.payment_date)
+                : "None yet"}
+            </p>
+          </div>
+
+          <div className="rounded-button bg-background p-4">
+            <p className="text-sm font-bold text-text-muted">Outstanding</p>
+            <p className="mt-2 text-lg font-black text-text-strong">
+              {formatNaira(outstandingBalance)}
+            </p>
             <div className="mt-2">
               <Badge tone="primary">{formatStatus(sale.status)}</Badge>
             </div>
@@ -137,17 +152,17 @@ export function DeveloperSaleDetail({
       </SectionCard>
 
       <SectionCard
-        title="Buyer + Plot"
-        description="Buyer and plot linked to this sale."
+        title="Plot and sale record"
+        description="Buyer, estate, plot, and locked sale information."
       >
         <div className="grid gap-4 md:grid-cols-2">
           <div className="rounded-button bg-background p-4">
-            <p className="text-sm font-bold text-text-muted">Buyer</p>
+            <p className="text-sm font-bold text-text-muted">Estate</p>
             <p className="mt-2 font-black text-text-strong">
-              {sale.developer_buyers?.full_name ?? "Buyer"}
+              {sale.developer_estates?.estate_name ?? "Estate"}
             </p>
             <p className="mt-1 text-sm font-semibold text-text-muted">
-              {sale.developer_buyers?.phone_number ?? "—"}
+              {sale.developer_estates?.location ?? "—"}
             </p>
           </div>
 
@@ -162,22 +177,23 @@ export function DeveloperSaleDetail({
           </div>
 
           <div className="rounded-button bg-background p-4">
-            <p className="text-sm font-bold text-text-muted">Estate</p>
+            <p className="text-sm font-bold text-text-muted">Sale reference</p>
             <p className="mt-2 font-black text-text-strong">
-              {sale.developer_estates?.estate_name ?? "Estate"}
+              {sale.sale_reference}
             </p>
             <p className="mt-1 text-sm font-semibold text-text-muted">
-              {sale.developer_estates?.location ?? "—"}
+              Sale date: {formatDate(sale.sale_date)}
             </p>
           </div>
 
           <div className="rounded-button bg-background p-4">
-            <p className="text-sm font-bold text-text-muted">Payment mode</p>
+            <p className="text-sm font-bold text-text-muted">Expected finish</p>
             <p className="mt-2 font-black text-text-strong">
-              {formatStatus(sale.payment_plan_mode)}
+              {formatDate(sale.expected_completion_date)}
             </p>
             <p className="mt-1 text-sm font-semibold text-text-muted">
-              Sale date: {formatDate(sale.sale_date)}
+              Initial deposit:{" "}
+              {formatNaira(Number(sale.initial_deposit_amount))}
             </p>
           </div>
         </div>
@@ -189,57 +205,127 @@ export function DeveloperSaleDetail({
         scheduleItems={scheduleItems}
       />
 
-      {paymentPlan ? (
-        <div className="space-y-3">
-          <SectionCard
-            title="Buyer Portal Link"
-            description="Create or resend the buyer portal link if the buyer did not save it after payment."
-          >
-            <div className="rounded-button bg-primary-soft p-4 text-sm font-semibold leading-6 text-primary">
-              Send this secure portal link to the buyer. The buyer can use it to
-              view payment history, download receipts and documents, check
-              balance, and make the next payment.
-            </div>
-          </SectionCard>
+      <SectionCard
+        title="Buyer transactions"
+        description="Verified payments posted to this buyer’s sale record."
+      >
+        {payments.length === 0 ? (
+          <div className="rounded-button bg-background p-5 text-sm font-semibold leading-6 text-text-muted">
+            No payment has been posted for this buyer yet. When the buyer pays
+            through BOPA, verified transactions and receipt status will appear
+            here.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-230 text-left text-sm">
+              <thead>
+                <tr className="border-b border-border-soft text-xs uppercase tracking-wide text-text-muted">
+                  <th className="py-3 pr-4 font-black">Payment date</th>
+                  <th className="py-3 pr-4 font-black">Reference</th>
+                  <th className="py-3 pr-4 font-black">Amount paid</th>
+                  <th className="py-3 pr-4 font-black">BOPA fee</th>
+                  <th className="py-3 pr-4 font-black">Total paid</th>
+                  <th className="py-3 pr-4 font-black">Balance after</th>
+                  <th className="py-3 pr-4 font-black">Receipt</th>
+                  <th className="py-3 pr-4 font-black">Status</th>
+                </tr>
+              </thead>
 
-          <DeveloperBuyerPortalLinkForm
-            saleId={sale.id}
-            buyerName={sale.developer_buyers?.full_name ?? "Buyer"}
-          />
-        </div>
-      ) : null}
+              <tbody>
+                {payments.map((payment) => (
+                  <tr key={payment.id} className="border-b border-border-soft">
+                    <td className="py-4 pr-4 font-semibold text-text-strong">
+                      {formatDateTime(payment.payment_date)}
+                    </td>
+
+                    <td className="py-4 pr-4">
+                      <p className="font-black text-primary">
+                        {payment.payment_reference}
+                      </p>
+                      <p className="mt-1 text-xs font-semibold text-text-muted">
+                        {payment.payment_method}
+                      </p>
+                    </td>
+
+                    <td className="py-4 pr-4 font-black text-text-strong">
+                      {formatNaira(Number(payment.amount_paid))}
+                    </td>
+
+                    <td className="py-4 pr-4 font-semibold text-text-muted">
+                      {formatNaira(Number(payment.platform_fee_amount))}
+                    </td>
+
+                    <td className="py-4 pr-4 font-black text-text-strong">
+                      {formatNaira(Number(payment.total_paid_amount))}
+                    </td>
+
+                    <td className="py-4 pr-4 font-black text-text-strong">
+                      {formatNaira(Number(payment.balance_after))}
+                    </td>
+
+                    <td className="py-4 pr-4">
+                      {payment.receipt_generated ? (
+                        <div className="flex items-center gap-2 text-sm font-bold text-success">
+                          <ReceiptText
+                            aria-hidden="true"
+                            size={17}
+                            strokeWidth={2.6}
+                          />
+                          {payment.receipt_number ?? "Generated"}
+                        </div>
+                      ) : (
+                        <span className="text-sm font-semibold text-text-muted">
+                          Pending
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="py-4 pr-4">
+                      <Badge
+                        tone={
+                          payment.status === "posted" ? "success" : "warning"
+                        }
+                      >
+                        {formatStatus(payment.status)}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SectionCard>
 
       <SectionCard
-        title="Sale Documents"
-        description="Generate and manage digital document copies. Physical originals remain developer-issued."
+        title="Sale documents"
+        description="Document records connected to this buyer’s sale."
       >
-        <div className="space-y-4">
-          <SaleDocumentRow
-            title="Sales Agreement"
-            description="Digital copy for buyer review, printing, signing, and hard-copy processing."
-            document={salesAgreementDocument}
-            action={generateSalesAgreementAction}
-            buttonLabel="Generate Sales Agreement"
-            regenerateLabel="Regenerate Sales Agreement"
-            saleId={sale.id}
-          />
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="rounded-button bg-background p-4">
+            <p className="text-sm font-bold text-text-muted">Sales agreement</p>
+            <p className="mt-2 font-black text-text-strong">
+              {getDocumentStatus(salesAgreementDocument)}
+            </p>
+          </div>
 
-          <SaleDocumentRow
-            title="Allocation Letter"
-            description="Digital copy confirming administrative plot allocation, subject to payment and handover rules."
-            document={allocationLetterDocument}
-            action={generateAllocationLetterAction}
-            buttonLabel="Generate Allocation Letter"
-            regenerateLabel="Regenerate Allocation Letter"
-            saleId={sale.id}
-          />
-        </div>
-
-        <div className="mt-4 rounded-button bg-warning-soft p-4 text-sm font-semibold leading-6 text-warning">
-          Digital copies are for reference, record, printing, and signing. They
-          do not replace original physical documents issued by the developer.
+          <div className="rounded-button bg-background p-4">
+            <p className="text-sm font-bold text-text-muted">
+              Allocation letter
+            </p>
+            <p className="mt-2 font-black text-text-strong">
+              {getDocumentStatus(allocationLetterDocument)}
+            </p>
+          </div>
         </div>
       </SectionCard>
+
+      {paymentPlan ? (
+        <DeveloperBuyerPortalLinkForm
+          saleId={sale.id}
+          buyerName={sale.developer_buyers?.full_name ?? "Buyer"}
+        />
+      ) : null}
 
       <Link
         href="/developer/sales"

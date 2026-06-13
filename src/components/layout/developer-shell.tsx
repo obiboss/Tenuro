@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   BarChart3,
   Building2,
@@ -31,6 +31,8 @@ type DeveloperNavItem = {
   icon: LucideIcon;
   disabled?: boolean;
 };
+
+const SETTINGS_DASHBOARD_HREF = "/developer?section=settings#payout-account";
 
 const desktopNavItems: readonly DeveloperNavItem[] = [
   {
@@ -79,9 +81,8 @@ const desktopNavItems: readonly DeveloperNavItem[] = [
   },
   {
     label: "Settings",
-    href: "/developer/settings",
+    href: SETTINGS_DASHBOARD_HREF,
     icon: Settings,
-    disabled: true,
   },
 ];
 
@@ -106,18 +107,43 @@ const mobilePrimaryItems: readonly DeveloperNavItem[] = [
     href: "/developer/sales",
     icon: ShoppingBag,
   },
+  {
+    label: "Settings",
+    href: SETTINGS_DASHBOARD_HREF,
+    icon: Settings,
+  },
 ];
 
 function getFirstName(fullName: string) {
   return fullName.trim().split(/\s+/)[0] || "Developer";
 }
 
-function isActivePath(pathname: string, href: string) {
-  if (href === "/developer") {
-    return pathname === href;
+function getPathFromHref(href: string) {
+  return href.split(/[?#]/)[0] || href;
+}
+
+function isActiveNavItem(params: {
+  pathname: string;
+  activeSection: string | null;
+  item: DeveloperNavItem;
+}) {
+  if (params.item.label === "Settings") {
+    return (
+      params.pathname === "/developer" && params.activeSection === "settings"
+    );
   }
 
-  return pathname === href || pathname.startsWith(`${href}/`);
+  if (params.item.href === "/developer") {
+    return (
+      params.pathname === "/developer" && params.activeSection !== "settings"
+    );
+  }
+
+  const hrefPath = getPathFromHref(params.item.href);
+
+  return (
+    params.pathname === hrefPath || params.pathname.startsWith(`${hrefPath}/`)
+  );
 }
 
 function BoldverseBrand({ subtitle }: { subtitle: string }) {
@@ -145,6 +171,8 @@ export function DeveloperShell({
   companyName,
 }: DeveloperShellProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const activeSection = searchParams.get("section");
   const firstName = getFirstName(developerName);
 
   return (
@@ -157,7 +185,12 @@ export function DeveloperShell({
             {desktopNavItems.map((item) => {
               const Icon = item.icon;
               const active =
-                !item.disabled && isActivePath(pathname, item.href);
+                !item.disabled &&
+                isActiveNavItem({
+                  pathname,
+                  activeSection,
+                  item,
+                });
 
               if (item.disabled) {
                 return (
@@ -180,7 +213,7 @@ export function DeveloperShell({
 
               return (
                 <Link
-                  key={item.href}
+                  key={`${item.label}-${item.href}`}
                   href={item.href}
                   className={cn(
                     "flex min-h-12 items-center gap-3 rounded-button px-4 text-sm font-extrabold transition",
@@ -249,7 +282,11 @@ export function DeveloperShell({
           <div className="flex items-center gap-1">
             {mobilePrimaryItems.map((item) => {
               const Icon = item.icon;
-              const active = isActivePath(pathname, item.href);
+              const active = isActiveNavItem({
+                pathname,
+                activeSection,
+                item,
+              });
 
               return (
                 <Link
