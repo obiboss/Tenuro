@@ -17,6 +17,16 @@ export const developerEstateStatusSchema = z.enum([
   "archived",
 ]);
 
+export const estatePlotNumberingStyleSchema = z.enum([
+  "numeric",
+  "prefixed_numeric",
+  "block_numeric",
+]);
+
+export type EstatePlotNumberingStyle = z.infer<
+  typeof estatePlotNumberingStyleSchema
+>;
+
 export const createDeveloperEstateSchema = z
   .object({
     estateName: z
@@ -56,6 +66,48 @@ export const createDeveloperEstateSchema = z
       .int("Balance spread must be a whole number.")
       .min(0, "Balance spread cannot be negative.")
       .max(120, "Balance spread is too long."),
+    landSize: z
+      .string()
+      .trim()
+      .min(2, "Enter the total land size.")
+      .max(120, "Land size is too long."),
+    numberOfPlots: z.coerce
+      .number()
+      .int("Number of plots must be a whole number.")
+      .min(1, "Enter at least one plot.")
+      .max(500, "You can generate a maximum of 500 plots at once."),
+    plotSizeLabel: z
+      .string()
+      .trim()
+      .min(1, "Enter the size of each plot.")
+      .max(80, "Plot size is too long."),
+    pricePerPlot: z.coerce
+      .number()
+      .positive("Enter the selling price per plot.")
+      .max(999_999_999_999, "Selling price is too high."),
+    numberingStyle: estatePlotNumberingStyleSchema.default("numeric"),
+    startingNumber: z.coerce
+      .number()
+      .int("Starting number must be a whole number.")
+      .min(1, "Starting number must be at least 1.")
+      .max(999_999, "Starting number is too high."),
+    labelPrefix: z
+      .string()
+      .trim()
+      .max(20, "Prefix is too long.")
+      .optional()
+      .transform((value) => value || ""),
+    plotsPerBlock: z.coerce
+      .number()
+      .int("Plots per block must be a whole number.")
+      .min(1, "Plots per block must be at least 1.")
+      .max(100, "Plots per block is too high."),
+    plotNote: z
+      .string()
+      .trim()
+      .max(600, "Plot note is too long.")
+      .optional()
+      .transform((value) => value || ""),
   })
   .refine((value) => isValidStateLgaPair(value.state, value.lga), {
     path: ["lga"],

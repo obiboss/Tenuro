@@ -7,7 +7,7 @@ export default function NewDeveloperEstatePage() {
     <div className="space-y-6">
       <PageHeader
         title="Create Estate"
-        description="Add a developer estate project before creating plot types and individual plots."
+        description="Create the estate, set the buyer payment rule, and generate the plot inventory in one step."
       />
 
       <DeveloperEstateForm />

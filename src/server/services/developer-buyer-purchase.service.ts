@@ -12,6 +12,7 @@ import {
   type DeveloperBuyerPurchaseLinkRow,
 } from "@/server/repositories/developer-buyer-purchase-links.repository";
 import { getDeveloperEstateById } from "@/server/repositories/developer-estates.repository";
+import { getDeveloperPaymentScheduleItemById } from "@/server/repositories/developer-payment-plans.repository";
 import { createBuyerSalePortalLink } from "@/server/services/developer-buyer-portal.service";
 import { createDeveloperPaymentRequest } from "@/server/services/developer-payment.service";
 import type { DeveloperPaymentPlanMode } from "@/server/validators/developer-payment-plan.schema";
@@ -109,6 +110,18 @@ function calculateEstateFirstPayment(params: {
 
   return Number(
     ((params.totalPrice * params.initialPaymentPercentage) / 100).toFixed(2),
+  );
+}
+
+function getTrustedScheduleOutstandingAmount(params: {
+  expectedAmount: number | string;
+  amountPaid: number | string;
+}) {
+  return Number(
+    Math.max(
+      0,
+      Number(params.expectedAmount) - Number(params.amountPaid),
+    ).toFixed(2),
   );
 }
 
@@ -345,21 +358,49 @@ export async function initiateBuyerPurchasePayment(params: {
     details: params.details,
   });
 
-  const trustedAmount = Number(link.first_payment_amount.toFixed(2));
+  const scheduleItem = await getDeveloperPaymentScheduleItemById(
+    params.supabase,
+    {
+      developerAccountId: updatedLink.developer_account_id,
+      saleId,
+      scheduleItemId,
+    },
+  );
+
+  if (!scheduleItem) {
+    throw new AppError(
+      "BUYER_PURCHASE_SCHEDULE_ITEM_NOT_FOUND",
+      "Payment schedule could not be prepared.",
+      400,
+    );
+  }
+
+  const trustedAmount = getTrustedScheduleOutstandingAmount({
+    expectedAmount: scheduleItem.expected_amount,
+    amountPaid: scheduleItem.amount_paid,
+  });
+
+  if (trustedAmount <= 0) {
+    throw new AppError(
+      "BUYER_PURCHASE_SCHEDULE_ITEM_ALREADY_PAID",
+      "This payment has already been completed.",
+      400,
+    );
+  }
 
   const intent = await createDeveloperPaymentRequest({
     supabase: params.supabase,
-    developerAccountId: link.developer_account_id,
+    developerAccountId: updatedLink.developer_account_id,
     saleId,
     scheduleItemId,
     amount: trustedAmount,
     buyerEmail:
       params.details.email.trim().length > 0
         ? params.details.email.trim()
-        : link.buyer_email,
-    purchaseLinkId: link.id,
+        : updatedLink.buyer_email,
+    purchaseLinkId: updatedLink.id,
     callbackUrlBuilder: buildBuyerPurchasePaymentCallbackUrl,
-    idempotencyScope: `buyer-purchase:${link.id}`,
+    idempotencyScope: `buyer-purchase:${updatedLink.id}`,
   });
 
   if (!intent.authorization_url) {
@@ -373,7 +414,7 @@ export async function initiateBuyerPurchasePayment(params: {
   return {
     authorizationUrl: intent.authorization_url,
     reference: intent.paystack_reference,
-    purchaseLinkId: link.id,
+    purchaseLinkId: updatedLink.id,
   };
 }
 
