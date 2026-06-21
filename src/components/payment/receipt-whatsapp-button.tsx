@@ -9,10 +9,12 @@ import { Button } from "@/components/ui/button";
 
 type ReceiptWhatsAppButtonProps = {
   paymentId: string;
+  label?: string;
 };
 
 export function ReceiptWhatsAppButton({
   paymentId,
+  label = "Send Receipt on WhatsApp",
 }: ReceiptWhatsAppButtonProps) {
   const openedUrlRef = useRef<string | null>(null);
 
@@ -50,7 +52,7 @@ export function ReceiptWhatsAppButton({
         >
           <span className="inline-flex items-center justify-center gap-2">
             <Send aria-hidden="true" size={16} strokeWidth={2.6} />
-            Send Receipt on WhatsApp
+            {label}
           </span>
         </Button>
       </form>

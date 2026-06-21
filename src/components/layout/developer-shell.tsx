@@ -11,6 +11,7 @@ import {
   Map,
   Settings,
   ShoppingBag,
+  UserRoundPlus,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -62,6 +63,11 @@ const desktopNavItems: readonly DeveloperNavItem[] = [
     icon: ShoppingBag,
   },
   {
+    label: "Staff",
+    href: "/developer/staff",
+    icon: UserRoundPlus,
+  },
+  {
     label: "Payments",
     href: "/developer/payments",
     icon: CreditCard,
@@ -108,9 +114,9 @@ const mobilePrimaryItems: readonly DeveloperNavItem[] = [
     icon: ShoppingBag,
   },
   {
-    label: "Settings",
-    href: SETTINGS_DASHBOARD_HREF,
-    icon: Settings,
+    label: "Staff",
+    href: "/developer/staff",
+    icon: UserRoundPlus,
   },
 ];
 

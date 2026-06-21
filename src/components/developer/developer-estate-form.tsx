@@ -7,6 +7,12 @@ import { DeveloperMoneyInput } from "@/components/developer/developer-money-inpu
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  LAND_UNIT_OPTIONS,
+  calculateLandCapacity,
+  formatSquareMetres,
+  type LandSizeUnit,
+} from "@/lib/developer/land-capacity";
 import { formatNaira } from "@/lib/money/naira";
 import { NIGERIA_STATES_LGAS } from "@/server/constants/nigeria-states-lgas";
 
@@ -35,6 +41,7 @@ const numberingStyleOptions = [
 
 const initialPaymentOptions = ["10", "20", "25", "30", "50", "100"] as const;
 const balanceMonthOptions = ["6", "12", "18", "24", "36", "48"] as const;
+const reservedLandOptions = ["0", "10", "15", "20", "25", "30"] as const;
 
 function cleanDecimalInput(value: string) {
   const cleaned = value.replace(/[^\d.]/g, "");
@@ -49,14 +56,14 @@ function cleanIntegerInput(value: string) {
   return value.replace(/\D/g, "");
 }
 
-function getSafePercentage(value: string) {
+function getNumber(value: string) {
   const parsed = Number(value);
 
-  if (!Number.isFinite(parsed)) {
-    return 0;
-  }
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 
-  return Math.min(Math.max(parsed, 0), 100);
+function getSafePercentage(value: string) {
+  return Math.min(Math.max(getNumber(value), 0), 100);
 }
 
 export function DeveloperEstateForm() {
@@ -65,6 +72,11 @@ export function DeveloperEstateForm() {
   const [initialPaymentPercentage, setInitialPaymentPercentage] =
     useState("25");
   const [balanceSpreadMonths, setBalanceSpreadMonths] = useState("12");
+  const [landSizeValue, setLandSizeValue] = useState("");
+  const [landSizeUnit, setLandSizeUnit] = useState<LandSizeUnit>("hectare");
+  const [reservedLandPercentage, setReservedLandPercentage] = useState("20");
+  const [plotSizeSqm, setPlotSizeSqm] = useState("500");
+  const [numberOfPlots, setNumberOfPlots] = useState("");
 
   const selectedStateData = NIGERIA_STATES_LGAS.find(
     (item) => item.state === selectedState,
@@ -81,6 +93,23 @@ export function DeveloperEstateForm() {
 
   const effectiveBalanceSpreadMonths =
     safeInitialPaymentPercentage >= 100 ? "0" : balanceSpreadMonths;
+
+  const capacity = useMemo(
+    () =>
+      calculateLandCapacity({
+        landSizeValue: getNumber(landSizeValue),
+        landSizeUnit,
+        reservedLandPercentage: getNumber(reservedLandPercentage),
+        plotSizeSqm: getNumber(plotSizeSqm),
+      }),
+    [landSizeUnit, landSizeValue, plotSizeSqm, reservedLandPercentage],
+  );
+
+  const requestedPlots = getNumber(numberOfPlots);
+  const exceedsCapacity =
+    requestedPlots > 0 &&
+    capacity.maximumPlots > 0 &&
+    requestedPlots > capacity.maximumPlots;
 
   const example = useMemo(() => {
     const plotPrice = 5_000_000;
@@ -126,8 +155,8 @@ export function DeveloperEstateForm() {
           <div className="rounded-card bg-primary-soft p-5">
             <p className="font-black text-text-strong">Estate details</p>
             <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
-              Create the estate, define how buyers will pay, then generate the
-              plots that belong to this estate.
+              Create the estate, define how buyers will pay, then generate only
+              the number of plots the land can carry.
             </p>
           </div>
 
@@ -442,20 +471,225 @@ export function DeveloperEstateForm() {
           </div>
 
           <div className="rounded-card border border-border-soft bg-background p-5">
-            <p className="font-black text-text-strong">Plot generation</p>
+            <p className="font-black text-text-strong">
+              Land capacity and plot generation
+            </p>
             <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
-              Enter the plot setup once. BOPA will create the plot list and
-              labels immediately after the estate is created.
+              BOPA will convert hectares, acres, or square metres into usable
+              land size and stop you from creating more plots than the land can
+              carry.
             </p>
 
             <div className="mt-5 grid gap-5 md:grid-cols-2">
-              <Input
-                label="Total land size"
-                name="landSize"
-                placeholder="Example: 100 acres or 40 hectares"
-                error={state.fieldErrors?.landSize?.[0]}
-                required
-              />
+              <div className="space-y-2">
+                <label
+                  htmlFor="landSizeValue"
+                  className="block text-sm font-semibold text-text-strong"
+                >
+                  Total land size <span className="ml-1 text-danger">*</span>
+                </label>
+
+                <div className="grid gap-3 sm:grid-cols-[1fr_180px]">
+                  <input
+                    id="landSizeValue"
+                    name="landSizeValue"
+                    type="text"
+                    inputMode="decimal"
+                    value={landSizeValue}
+                    onChange={(event) =>
+                      setLandSizeValue(cleanDecimalInput(event.target.value))
+                    }
+                    placeholder="Example: 1"
+                    required
+                    className="min-h-12 rounded-button border border-border-soft bg-white px-4 py-3 text-base text-text-strong outline-none transition placeholder:text-text-muted focus:border-primary focus:ring-2 focus:ring-primary-soft"
+                  />
+
+                  <select
+                    name="landSizeUnit"
+                    value={landSizeUnit}
+                    onChange={(event) =>
+                      setLandSizeUnit(event.target.value as LandSizeUnit)
+                    }
+                    className="min-h-12 rounded-button border border-border-soft bg-white px-4 py-3 text-base font-bold text-text-strong outline-none transition focus:border-primary focus:ring-2 focus:ring-primary-soft"
+                  >
+                    {LAND_UNIT_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {state.fieldErrors?.landSizeValue?.[0] ? (
+                  <p className="text-sm font-medium text-danger">
+                    {state.fieldErrors.landSizeValue[0]}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="space-y-2">
+                <label
+                  htmlFor="plotSizeSqm"
+                  className="block text-sm font-semibold text-text-strong"
+                >
+                  Size of each plot <span className="ml-1 text-danger">*</span>
+                </label>
+
+                <div className="flex min-h-12 items-center rounded-button border border-border-soft bg-white px-4 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary-soft">
+                  <input
+                    id="plotSizeSqm"
+                    name="plotSizeSqm"
+                    type="text"
+                    inputMode="decimal"
+                    value={plotSizeSqm}
+                    onChange={(event) =>
+                      setPlotSizeSqm(cleanDecimalInput(event.target.value))
+                    }
+                    placeholder="Example: 500"
+                    required
+                    className="w-full bg-transparent text-base text-text-strong outline-none placeholder:text-text-muted"
+                  />
+                  <span className="text-sm font-black text-text-muted">
+                    sqm
+                  </span>
+                </div>
+
+                {state.fieldErrors?.plotSizeSqm?.[0] ? (
+                  <p className="text-sm font-medium text-danger">
+                    {state.fieldErrors.plotSizeSqm[0]}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="rounded-card border border-border-soft bg-white p-4 md:col-span-2">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <p className="text-sm font-black text-text-strong">
+                      Reserved/common area
+                    </p>
+                    <p className="mt-1 text-xs font-bold leading-5 text-text-muted">
+                      Roads, drainage, setbacks, green areas, and shared spaces.
+                    </p>
+                  </div>
+
+                  <div className="rounded-full bg-primary-soft px-4 py-2 text-lg font-black text-primary">
+                    {reservedLandPercentage || "0"}%
+                  </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-3 gap-2 md:grid-cols-6">
+                  {reservedLandOptions.map((option) => {
+                    const active = reservedLandPercentage === option;
+
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => setReservedLandPercentage(option)}
+                        className={
+                          active
+                            ? "min-h-10 rounded-button bg-primary px-3 text-sm font-black text-white shadow-soft"
+                            : "min-h-10 rounded-button bg-background px-3 text-sm font-black text-text-muted transition hover:bg-primary-soft hover:text-primary"
+                        }
+                      >
+                        {option}%
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-4">
+                  <label
+                    htmlFor="reservedLandPercentage"
+                    className="text-xs font-black uppercase tracking-wide text-text-muted"
+                  >
+                    Custom reserved percentage
+                  </label>
+
+                  <div className="mt-2 flex min-h-12 items-center rounded-button border border-border-soft bg-background px-4 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary-soft">
+                    <input
+                      id="reservedLandPercentage"
+                      name="reservedLandPercentage"
+                      type="text"
+                      inputMode="decimal"
+                      value={reservedLandPercentage}
+                      onChange={(event) =>
+                        setReservedLandPercentage(
+                          cleanDecimalInput(event.target.value),
+                        )
+                      }
+                      className="w-full bg-transparent text-base font-black text-text-strong outline-none"
+                    />
+                    <span className="text-sm font-black text-text-muted">
+                      %
+                    </span>
+                  </div>
+
+                  {state.fieldErrors?.reservedLandPercentage?.[0] ? (
+                    <p className="mt-2 text-sm font-medium text-danger">
+                      {state.fieldErrors.reservedLandPercentage[0]}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="rounded-card border border-border-soft bg-white p-4 md:col-span-2">
+                <p className="text-sm font-black text-text-strong">
+                  BOPA land capacity check
+                </p>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-button bg-background p-3">
+                    <p className="text-xs font-bold text-text-muted">
+                      Gross land
+                    </p>
+                    <p className="mt-1 font-black text-text-strong">
+                      {formatSquareMetres(capacity.grossLandSizeSqm)} sqm
+                    </p>
+                  </div>
+
+                  <div className="rounded-button bg-background p-3">
+                    <p className="text-xs font-bold text-text-muted">
+                      Usable land
+                    </p>
+                    <p className="mt-1 font-black text-text-strong">
+                      {formatSquareMetres(capacity.usableLandSizeSqm)} sqm
+                    </p>
+                  </div>
+
+                  <div className="rounded-button bg-background p-3">
+                    <p className="text-xs font-bold text-text-muted">
+                      Max plots
+                    </p>
+                    <p className="mt-1 font-black text-text-strong">
+                      {capacity.maximumPlots}
+                    </p>
+                  </div>
+
+                  <div className="rounded-button bg-background p-3">
+                    <p className="text-xs font-bold text-text-muted">
+                      Requested
+                    </p>
+                    <p
+                      className={
+                        exceedsCapacity
+                          ? "mt-1 font-black text-danger"
+                          : "mt-1 font-black text-text-strong"
+                      }
+                    >
+                      {requestedPlots || 0}
+                    </p>
+                  </div>
+                </div>
+
+                {exceedsCapacity ? (
+                  <div className="mt-4 rounded-button bg-danger-soft px-4 py-3 text-sm font-bold leading-6 text-danger">
+                    You are trying to create more plots than this land can
+                    carry. Reduce the number of plots, increase land size, or
+                    reduce reserved/common area.
+                  </div>
+                ) : null}
+              </div>
 
               <Input
                 label="Number of plots to generate"
@@ -464,16 +698,10 @@ export function DeveloperEstateForm() {
                 min="1"
                 max="500"
                 step="1"
-                placeholder="Example: 200"
+                value={numberOfPlots}
+                onChange={(event) => setNumberOfPlots(event.target.value)}
+                placeholder="Example: 16"
                 error={state.fieldErrors?.numberOfPlots?.[0]}
-                required
-              />
-
-              <Input
-                label="Size of each plot"
-                name="plotSizeLabel"
-                placeholder="Example: 500 sqm"
-                error={state.fieldErrors?.plotSizeLabel?.[0]}
                 required
               />
 
@@ -572,7 +800,11 @@ export function DeveloperEstateForm() {
         </CardContent>
 
         <CardFooter>
-          <Button type="submit" isLoading={isPending}>
+          <Button
+            type="submit"
+            isLoading={isPending}
+            disabled={exceedsCapacity}
+          >
             Create Estate and Generate Plots
           </Button>
         </CardFooter>

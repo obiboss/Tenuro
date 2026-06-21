@@ -1,5 +1,14 @@
 import "server-only";
 
+import {
+  buildRentReminderWhatsappMessage,
+  getPropertyUnitLabel,
+} from "@/lib/rent-reminder-message";
+import {
+  DUE_SOON_DAYS,
+  getDaysUntilDueDate,
+  isDueWithinDays,
+} from "@/lib/rent-status-labels";
 import { getActiveRentAlertTenanciesForLandlord } from "@/server/repositories/renewals.repository";
 import type { LandlordRentAlertTenancyRow } from "@/server/repositories/renewals.repository";
 import { requireLandlordPlatformOperator } from "@/server/services/auth.service";
@@ -25,101 +34,26 @@ export type LandlordRentAlerts = {
   owingCount: number;
 };
 
-const DUE_SOON_DAYS = 30;
-
-function startOfToday() {
-  const today = new Date();
-
-  return new Date(today.getFullYear(), today.getMonth(), today.getDate());
-}
-
-function getDaysUntil(dateValue: string | null) {
-  if (!dateValue) {
-    return null;
-  }
-
-  const dueDate = new Date(`${dateValue}T00:00:00`);
-  const today = startOfToday();
-  const differenceMs = dueDate.getTime() - today.getTime();
-
-  return Math.ceil(differenceMs / (1000 * 60 * 60 * 24));
-}
-
-function isDueWithinThirtyDays(nextRentChargeDate: string | null) {
-  const daysUntilDue = getDaysUntil(nextRentChargeDate);
-
-  return (
-    daysUntilDue !== null && daysUntilDue >= 0 && daysUntilDue <= DUE_SOON_DAYS
-  );
-}
-
-function formatNaira(amount: number) {
-  return new Intl.NumberFormat("en-NG", {
-    style: "currency",
-    currency: "NGN",
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
-
-function formatDate(value: string | null) {
-  if (!value) {
-    return "not set";
-  }
-
-  return new Intl.DateTimeFormat("en-NG", {
-    dateStyle: "medium",
-  }).format(new Date(`${value}T00:00:00`));
-}
-
-function getPropertyUnitLabel(tenancy: LandlordRentAlertTenancyRow) {
-  const propertyName =
-    tenancy.units?.properties?.property_name ?? "the property";
-  const unitIdentifier = tenancy.units?.unit_identifier ?? "the unit";
-
-  return `${propertyName}, ${unitIdentifier}`;
-}
-
 function buildRentAlertWhatsappMessage(params: {
   tenancy: LandlordRentAlertTenancyRow;
   status: RentAlertStatus;
   amountDue: number;
   dueDate: string | null;
   daysUntilDue: number | null;
+  landlordName: string;
 }) {
-  const tenantName = params.tenancy.tenants?.full_name ?? "Tenant";
-  const propertyUnit = getPropertyUnitLabel(params.tenancy);
-
-  if (params.status === "owing") {
-    return [
-      `Hello ${tenantName},`,
-      "",
-      `This is a reminder that your rent balance of ${formatNaira(
-        params.amountDue,
-      )} for ${propertyUnit} is still outstanding.`,
-      "",
-      "Please make payment or contact the landlord if you have already paid.",
-    ].join("\n");
-  }
-
-  const dueText =
-    params.daysUntilDue === 0
-      ? "today"
-      : params.daysUntilDue === 1
-        ? "in 1 day"
-        : params.daysUntilDue !== null
-          ? `in ${params.daysUntilDue} days`
-          : `on ${formatDate(params.dueDate)}`;
-
-  return [
-    `Hello ${tenantName},`,
-    "",
-    `This is a rent reminder for ${propertyUnit}.`,
-    "",
-    `Amount due: ${formatNaira(params.amountDue)}`,
-    `Due date: ${formatDate(params.dueDate)} (${dueText})`,
-    "",
-    "Please prepare for payment before the due date.",
-  ].join("\n");
+  return buildRentReminderWhatsappMessage({
+    tenantName: params.tenancy.tenants?.full_name ?? "Tenant",
+    propertyUnitLabel: getPropertyUnitLabel({
+      propertyName: params.tenancy.units?.properties?.property_name,
+      unitIdentifier: params.tenancy.units?.unit_identifier,
+    }),
+    amount: params.amountDue,
+    outstandingBalance: params.status === "owing" ? params.amountDue : 0,
+    dueDate: params.dueDate,
+    daysUntilDue: params.daysUntilDue,
+    landlordName: params.landlordName,
+  });
 }
 
 function sortRentAlerts(a: LandlordRentAlertItem, b: LandlordRentAlertItem) {
@@ -154,7 +88,10 @@ export async function getCurrentLandlordRentAlerts(): Promise<LandlordRentAlerts
         balance.outstanding_balance,
       );
       const isOwing = outstandingBalance > 0;
-      const dueSoon = isDueWithinThirtyDays(tenancy.next_rent_charge_date);
+      const dueSoon = isDueWithinDays(
+        tenancy.next_rent_charge_date,
+        DUE_SOON_DAYS,
+      );
 
       if (!isOwing && !dueSoon) {
         return null;
@@ -165,7 +102,7 @@ export async function getCurrentLandlordRentAlerts(): Promise<LandlordRentAlerts
         ? outstandingBalance
         : Number(tenancy.rent_amount);
       const dueDate = tenancy.next_rent_charge_date;
-      const daysUntilDue = getDaysUntil(dueDate);
+      const daysUntilDue = getDaysUntilDueDate(dueDate);
 
       return {
         tenancy,
@@ -180,6 +117,7 @@ export async function getCurrentLandlordRentAlerts(): Promise<LandlordRentAlerts
           amountDue,
           dueDate,
           daysUntilDue,
+          landlordName: landlord.fullName,
         }),
       };
     }),

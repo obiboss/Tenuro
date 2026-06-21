@@ -42,22 +42,20 @@ function buildReceiptWhatsAppMessage(params: {
     "the property";
   const unitIdentifier =
     params.payment.tenancies?.units?.unit_identifier ?? "your unit";
-  const receiptNumber = params.payment.receipt_number ?? "your receipt";
+  const propertyUnitLabel = `${propertyName}, ${unitIdentifier}`;
+  const rentPeriod =
+    params.payment.payment_for_period_start &&
+    params.payment.payment_for_period_end
+      ? `${formatReceiptDate(params.payment.payment_for_period_start)} - ${formatReceiptDate(params.payment.payment_for_period_end)}`
+      : formatReceiptDate(params.payment.payment_date);
 
   return [
-    `Hello ${tenantName},`,
-    "",
-    `Your rent receipt ${receiptNumber} is ready on BOPA.`,
-    "",
-    `Property: ${propertyName}`,
-    `Unit: ${unitIdentifier}`,
-    `Amount paid: ${formatNaira(Number(params.payment.amount_paid))}`,
-    `Payment date: ${formatReceiptDate(params.payment.payment_date)}`,
-    "",
-    `Download receipt: ${params.receiptDownloadUrl}`,
-    "",
-    "Thank you.",
-  ].join("\n");
+    `Good day ${tenantName}.`,
+    `Your rent receipt for ${propertyUnitLabel} has been generated with BOPA.`,
+    `Amount: ${formatNaira(Number(params.payment.amount_paid))}.`,
+    `Rent period: ${rentPeriod}.`,
+    `View/download your receipt here: ${params.receiptDownloadUrl}`,
+  ].join(" ");
 }
 
 async function generateRentReceiptWithClient(params: {

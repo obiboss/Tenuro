@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { LandSizeUnit } from "@/lib/developer/land-capacity";
 
 export type DeveloperEstateStatus =
   | "planning"
@@ -33,6 +34,13 @@ export type DeveloperEstateRow = {
   balance_spread_months: number;
   installment_interval: DeveloperEstateInstallmentInterval;
   default_payment_plan_mode: DeveloperEstatePaymentPlanMode;
+  land_size_value: number | null;
+  land_size_unit: LandSizeUnit | null;
+  gross_land_size_sqm: number | null;
+  reserved_land_percentage: number | null;
+  usable_land_size_sqm: number | null;
+  default_plot_size_sqm: number | null;
+  planned_plot_count: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -59,6 +67,13 @@ const DEVELOPER_ESTATE_SELECT = `
   balance_spread_months,
   installment_interval,
   default_payment_plan_mode,
+  land_size_value,
+  land_size_unit,
+  gross_land_size_sqm,
+  reserved_land_percentage,
+  usable_land_size_sqm,
+  default_plot_size_sqm,
+  planned_plot_count,
   created_at,
   updated_at
 `;
@@ -78,6 +93,13 @@ const DEVELOPER_ESTATE_SUMMARY_SELECT = `
   balance_spread_months,
   installment_interval,
   default_payment_plan_mode,
+  land_size_value,
+  land_size_unit,
+  gross_land_size_sqm,
+  reserved_land_percentage,
+  usable_land_size_sqm,
+  default_plot_size_sqm,
+  planned_plot_count,
   created_at,
   updated_at,
   developer_plots (
@@ -140,6 +162,13 @@ export async function createDeveloperEstate(
     balanceSpreadMonths: number;
     installmentInterval: DeveloperEstateInstallmentInterval;
     defaultPaymentPlanMode: DeveloperEstatePaymentPlanMode;
+    landSizeValue: number;
+    landSizeUnit: LandSizeUnit;
+    grossLandSizeSqm: number;
+    reservedLandPercentage: number;
+    usableLandSizeSqm: number;
+    defaultPlotSizeSqm: number;
+    plannedPlotCount: number;
   },
 ) {
   const { data, error } = await supabase
@@ -157,6 +186,13 @@ export async function createDeveloperEstate(
       balance_spread_months: params.balanceSpreadMonths,
       installment_interval: params.installmentInterval,
       default_payment_plan_mode: params.defaultPaymentPlanMode,
+      land_size_value: params.landSizeValue,
+      land_size_unit: params.landSizeUnit,
+      gross_land_size_sqm: params.grossLandSizeSqm,
+      reserved_land_percentage: params.reservedLandPercentage,
+      usable_land_size_sqm: params.usableLandSizeSqm,
+      default_plot_size_sqm: params.defaultPlotSizeSqm,
+      planned_plot_count: params.plannedPlotCount,
     })
     .select(DEVELOPER_ESTATE_SELECT)
     .single<DeveloperEstateRow>();

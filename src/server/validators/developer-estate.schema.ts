@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { calculateLandCapacity } from "@/lib/developer/land-capacity";
+import type { LandSizeUnit } from "@/lib/developer/land-capacity";
 import { NIGERIA_STATES_LGAS } from "@/server/constants/nigeria-states-lgas";
 
 const validStates = new Set(NIGERIA_STATES_LGAS.map((item) => item.state));
@@ -22,6 +24,8 @@ export const estatePlotNumberingStyleSchema = z.enum([
   "prefixed_numeric",
   "block_numeric",
 ]);
+
+export const landSizeUnitSchema = z.enum(["sqm", "hectare", "acre"]);
 
 export type EstatePlotNumberingStyle = z.infer<
   typeof estatePlotNumberingStyleSchema
@@ -66,21 +70,24 @@ export const createDeveloperEstateSchema = z
       .int("Balance spread must be a whole number.")
       .min(0, "Balance spread cannot be negative.")
       .max(120, "Balance spread is too long."),
-    landSize: z
-      .string()
-      .trim()
-      .min(2, "Enter the total land size.")
-      .max(120, "Land size is too long."),
+    landSizeValue: z.coerce
+      .number()
+      .positive("Enter the total land size.")
+      .max(999_999_999, "Land size is too high."),
+    landSizeUnit: landSizeUnitSchema,
+    reservedLandPercentage: z.coerce
+      .number()
+      .min(0, "Reserved land cannot be negative.")
+      .max(95, "Reserved land is too high."),
     numberOfPlots: z.coerce
       .number()
       .int("Number of plots must be a whole number.")
       .min(1, "Enter at least one plot.")
       .max(500, "You can generate a maximum of 500 plots at once."),
-    plotSizeLabel: z
-      .string()
-      .trim()
-      .min(1, "Enter the size of each plot.")
-      .max(80, "Plot size is too long."),
+    plotSizeSqm: z.coerce
+      .number()
+      .positive("Enter the size of each plot in sqm.")
+      .max(999_999, "Plot size is too high."),
     pricePerPlot: z.coerce
       .number()
       .positive("Enter the selling price per plot.")
@@ -120,6 +127,23 @@ export const createDeveloperEstateSchema = z
       path: ["balanceSpreadMonths"],
       message:
         "Enter how many months buyers have to pay the balance, or set initial payment to 100%.",
+    },
+  )
+  .refine(
+    (value) => {
+      const capacity = calculateLandCapacity({
+        landSizeValue: value.landSizeValue,
+        landSizeUnit: value.landSizeUnit as LandSizeUnit,
+        reservedLandPercentage: value.reservedLandPercentage,
+        plotSizeSqm: value.plotSizeSqm,
+      });
+
+      return value.numberOfPlots <= capacity.maximumPlots;
+    },
+    {
+      path: ["numberOfPlots"],
+      message:
+        "The number of plots is more than the usable land can carry. Reduce the plots, increase land size, or reduce reserved land.",
     },
   );
 
