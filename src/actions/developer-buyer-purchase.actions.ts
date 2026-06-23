@@ -87,7 +87,7 @@ export async function startDeveloperBuyerPurchaseAction(
       developerProfileId: developer.id,
       estateId: parsed.estateId,
       plotId: parsed.plotId,
-      buyerPhone: buyerPhone.e164,
+      buyerPhone: buyerPhone.national,
       buyerName: nullableText(parsed.buyerName),
       buyerEmail: nullableText(parsed.buyerEmail),
       note: nullableText(parsed.note),
@@ -100,6 +100,9 @@ export async function startDeveloperBuyerPurchaseAction(
       message:
         "Buyer purchase link created. Send this link to the buyer so they can complete their details and make payment.",
       purchaseUrl: result.purchaseUrl,
+      buyerPhone: buyerPhone.national,
+      buyerName: nullableText(parsed.buyerName) ?? "Buyer",
+      companyName: account.company_name,
     };
   } catch (error) {
     return toActionError(error);

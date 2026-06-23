@@ -10,6 +10,7 @@ import {
   type DeveloperStaffTitle,
 } from "@/constants/developer-staff-permissions";
 import { Button } from "@/components/ui/button";
+import { WhatsAppShareActions } from "@/components/ui/whatsapp-share-actions";
 
 type DeveloperStaffRoleLinksProps = {
   acceptedCountsByTitle: Partial<Record<DeveloperStaffTitle, number>>;
@@ -62,14 +63,21 @@ export function DeveloperStaffRoleLinks({
             {state.staffTitleLabel ?? "Staff"} link
           </p>
           <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-            Copy this link and send it by WhatsApp, SMS, or email. It expires in
-            30 days.
+            Send this invite link to the staff member. It expires in 30 days.
           </p>
           <input
             readOnly
             value={state.onboardingUrl}
             className="mt-3 min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-bold text-text-strong outline-none"
           />
+          <div className="mt-3">
+            <WhatsAppShareActions
+              message={`Join our team on BOPA using this secure staff link: ${state.onboardingUrl}`}
+              copyText={state.onboardingUrl}
+              whatsappLabel="Send on WhatsApp"
+              copyLabel="Copy link"
+            />
+          </div>
         </div>
       ) : null}
 

@@ -61,7 +61,15 @@ function getReceiptBadge(payment: RentPaymentRow) {
     return <Badge tone="danger">Receipt failed</Badge>;
   }
 
-  return <Badge tone="warning">Receipt pending</Badge>;
+  return <Badge tone="warning">Send receipt</Badge>;
+}
+
+function getPaymentSourceLabel(payment: RentPaymentRow) {
+  if (payment.payment_method === "paystack_gateway") {
+    return "Verified by BOPA";
+  }
+
+  return "Recorded by landlord";
 }
 
 export function PaymentList({
@@ -82,20 +90,20 @@ export function PaymentList({
   return (
     <div className="space-y-3">
       {payments.map((payment) => (
-        <Card key={payment.id}>
+        <Card key={payment.id} className="p-4">
           <div className="space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <h3 className="truncate font-extrabold text-text-strong">
+                <h3 className="truncate text-base font-extrabold text-text-strong">
                   {payment.tenants?.full_name ?? "Tenant"}
                 </h3>
 
-                <p className="mt-1 text-sm font-semibold text-text-muted">
+                <p className="mt-0.5 text-sm font-semibold text-text-muted">
                   {getUnitLabel(payment)}
                 </p>
               </div>
 
-              <div className="flex flex-col items-end gap-2">
+              <div className="flex flex-col items-end gap-1.5">
                 <Badge
                   tone={payment.status === "posted" ? "success" : "danger"}
                 >
@@ -106,19 +114,18 @@ export function PaymentList({
               </div>
             </div>
 
-            <div className="rounded-button bg-background p-3">
+            <div className="rounded-button bg-background px-3 py-2.5">
               <p className="text-lg font-extrabold text-text-strong">
                 {formatNaira(payment.amount_paid)}
               </p>
 
-              <p className="mt-1 text-sm leading-6 text-text-muted">
+              <p className="mt-1 text-sm leading-5 text-text-muted">
                 {paymentMethodLabel(payment.payment_method)} ·{" "}
                 {getPaymentPeriod(payment)}
               </p>
 
-              <p className="mt-1 text-sm leading-6 text-text-muted">
-                {payment.tenancies?.units?.properties?.property_name ??
-                  "Property"}
+              <p className="mt-1 text-xs font-semibold text-text-muted">
+                {getPaymentSourceLabel(payment)}
               </p>
 
               {payment.payment_reference ? (
@@ -129,13 +136,16 @@ export function PaymentList({
             </div>
 
             {payment.status === "posted" ? (
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-2 sm:grid-cols-2">
                 <ReceiptDownloadButton
                   paymentId={payment.id}
                   receiptPath={payment.receipt_path}
                 />
 
-                <ReceiptWhatsAppButton paymentId={payment.id} />
+                <ReceiptWhatsAppButton
+                  paymentId={payment.id}
+                  label="Send receipt"
+                />
               </div>
             ) : null}
           </div>

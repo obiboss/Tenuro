@@ -252,8 +252,9 @@ export default async function NotificationsPage() {
   return (
     <main>
       <PageHeader
+        compact
         title="Rent Alerts"
-        description="See tenants whose rent is due within 30 days or who currently have an outstanding balance."
+        description="Tenants owing or due within 30 days."
       />
 
       <SectionCard

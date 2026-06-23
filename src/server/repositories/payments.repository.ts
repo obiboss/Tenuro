@@ -19,6 +19,14 @@ export type RentPaymentRow = {
   balance_after: number;
   verified_by_landlord: boolean;
   verified_at: string | null;
+  recorded_by_role:
+    | "landlord"
+    | "tenant"
+    | "caretaker"
+    | "agent"
+    | "developer"
+    | "platform_admin"
+    | null;
   receipt_status: "pending" | "generated" | "failed" | "voided";
   receipt_generated: boolean;
   receipt_path: string | null;
@@ -74,6 +82,7 @@ const RENT_PAYMENT_SELECT = `
   balance_after,
   verified_by_landlord,
   verified_at,
+  recorded_by_role,
   receipt_status,
   receipt_generated,
   receipt_path,
@@ -131,6 +140,33 @@ export async function getRentPaymentsForLandlord(
   }
 
   return data;
+}
+
+/** RLS scopes results to tenants on caretaker-assigned properties. */
+export async function getVisibleRentPaymentsForCaretaker(
+  supabase: SupabaseClient,
+  filter: RentPaymentFilter = {},
+) {
+  let query = supabase
+    .from("rent_payments")
+    .select(RENT_PAYMENT_SELECT)
+    .order("payment_date", { ascending: false });
+
+  if (filter.dateFrom) {
+    query = query.gte("payment_date", filter.dateFrom);
+  }
+
+  if (filter.dateTo) {
+    query = query.lt("payment_date", filter.dateTo);
+  }
+
+  const { data, error } = await query.returns<RentPaymentRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data ?? [];
 }
 
 export async function getRentCollectedForLandlord(

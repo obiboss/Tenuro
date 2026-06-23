@@ -47,7 +47,7 @@ function getPostLoginRedirect(role: ProfileRole) {
   }
 
   if (role === "caretaker") {
-    return "/overview";
+    return "/caretaker/overview";
   }
 
   return "/overview";

@@ -56,7 +56,7 @@ export default async function PaymentsPage({
       {isThisYearFilter ? (
         <Link
           href="/overview"
-          className="mb-5 inline-flex items-center gap-2 text-sm font-bold text-primary hover:text-primary-hover"
+          className="mb-3 inline-flex items-center gap-2 text-sm font-bold text-primary hover:text-primary-hover"
         >
           <ArrowLeft aria-hidden="true" size={18} strokeWidth={2.6} />
           Back to overview
@@ -64,45 +64,46 @@ export default async function PaymentsPage({
       ) : null}
 
       <PageHeader
+        compact
         title="Payments"
         description={
           isThisYearFilter
-            ? "Showing rent payments recorded this year."
-            : "Record rent payments, view tenant payment history, and keep your ledger accurate."
+            ? "Rent recorded this year."
+            : "Record payments and send receipts."
         }
         action={
           isThisYearFilter ? <Badge tone="primary">This Year</Badge> : undefined
         }
       />
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
-        <SectionCard
-          title={isThisYearFilter ? "This Year’s Payments" : "Payment History"}
-          description={
-            isThisYearFilter
-              ? "These are the payments included in Rent Collected on your overview."
-              : "All posted manual and gateway payments appear here."
-          }
-        >
-          <PaymentList
-            payments={payments}
-            emptyTitle={
-              isThisYearFilter
-                ? "No rent collected this year"
-                : "No payments recorded yet"
-            }
-            emptyDescription={
-              isThisYearFilter
-                ? "Payments you record this year will appear here."
-                : "When you record rent payments, they will appear here with receipt status."
-            }
-          />
-        </SectionCard>
-
-        <div className="xl:sticky xl:top-28 xl:self-start">
+      <div className="grid gap-4 xl:grid-cols-[1fr_400px]">
+        <div className="order-2 xl:order-1">
           <SectionCard
-            title="Record Manual Payment"
-            description="Use this for bank transfers, cash, and offline rent payments."
+            title={isThisYearFilter ? "This Year’s Payments" : "Payment History"}
+            contentClassName="p-4 md:p-5"
+            className="[&>div:first-child]:px-4 [&>div:first-child]:py-3 [&>div:first-child]:md:px-5"
+          >
+            <PaymentList
+              payments={payments}
+              emptyTitle={
+                isThisYearFilter
+                  ? "No rent collected this year"
+                  : "No payments recorded yet"
+              }
+              emptyDescription={
+                isThisYearFilter
+                  ? "Payments you record this year will appear here."
+                  : "Recorded payments appear here with receipt status."
+              }
+            />
+          </SectionCard>
+        </div>
+
+        <div className="order-1 xl:order-2 xl:sticky xl:top-28 xl:self-start">
+          <SectionCard
+            title="Record Payment"
+            contentClassName="p-4 md:p-5"
+            className="[&>div:first-child]:px-4 [&>div:first-child]:py-3 [&>div:first-child]:md:px-5"
           >
             <ManualPaymentForm tenancies={activeTenancies} />
           </SectionCard>

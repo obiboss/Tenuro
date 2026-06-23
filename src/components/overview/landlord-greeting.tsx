@@ -42,11 +42,11 @@ export function LandlordGreeting({ landlordName }: LandlordGreetingProps) {
   );
 
   return (
-    <div>
-      <p className="text-sm font-semibold text-text-muted">
+    <div className="min-w-0">
+      <p className="text-xs font-semibold text-text-muted">
         {greetingPrefix}, {landlordName}
       </p>
-      <h1 className="mt-1 text-2xl font-black tracking-tight text-text-strong md:text-3xl">
+      <h1 className="text-lg font-black tracking-tight text-text-strong">
         Rent control
       </h1>
     </div>

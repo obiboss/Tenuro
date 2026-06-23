@@ -324,6 +324,8 @@ export function DeveloperSaleDetail({
         <DeveloperBuyerPortalLinkForm
           saleId={sale.id}
           buyerName={sale.developer_buyers?.full_name ?? "Buyer"}
+          buyerPhone={sale.developer_buyers?.phone_number ?? null}
+          estatePlotLabel={`${sale.developer_estates?.estate_name ?? "Estate"} · Plot ${sale.developer_plots?.plot_number ?? ""}`}
         />
       ) : null}
 

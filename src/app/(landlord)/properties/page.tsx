@@ -12,8 +12,9 @@ export default async function PropertiesPage() {
   return (
     <div>
       <PageHeader
+        compact
         title="Properties"
-        description="Manage your buildings, flats, rooms, shops, and rental units."
+        description="Your buildings, units, and occupancy."
         action={
           <Link href="/properties/new">
             <Button>Add Property</Button>
@@ -24,7 +25,7 @@ export default async function PropertiesPage() {
       {properties.length === 0 ? (
         <EmptyState
           title="No property added yet"
-          description="Add your first property to start tracking tenants, rent, and receipts."
+          description="Add your first property to start tracking tenants and rent."
           icon={<Building2 aria-hidden="true" size={24} strokeWidth={2.6} />}
           action={
             <Link href="/properties/new">
@@ -33,7 +34,7 @@ export default async function PropertiesPage() {
           }
         />
       ) : (
-        <div className="grid gap-5">
+        <div className="grid gap-3">
           {properties.map((property) => (
             <PropertyCard key={property.id} property={property} />
           ))}

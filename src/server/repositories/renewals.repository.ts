@@ -87,3 +87,24 @@ export async function getActiveRentAlertTenanciesForLandlord(
 
   return data;
 }
+
+/** RLS on tenancies scopes results to caretaker-assigned properties. */
+export async function getActiveRentAlertTenanciesForCaretaker(
+  supabase: SupabaseClient,
+) {
+  const { data, error } = await supabase
+    .from("tenancies")
+    .select(RENT_ALERT_TENANCY_SELECT)
+    .eq("tenancy_status", "active")
+    .not("agreement_live_at", "is", null)
+    .is("deleted_at", null)
+    .is("archived_at", null)
+    .order("next_rent_charge_date", { ascending: true })
+    .returns<LandlordRentAlertTenancyRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data ?? [];
+}

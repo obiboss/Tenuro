@@ -5,7 +5,6 @@ import {
   ReceiptText,
   UserPlus,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import type { OverviewPrimaryAction } from "@/server/services/rent-control-overview.service";
 
@@ -44,7 +43,7 @@ export function OverviewActionButtons({
   primaryAction,
 }: OverviewActionButtonsProps) {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div className="grid grid-cols-2 gap-2">
       {actions.map((action) => {
         const Icon = action.icon;
         const isPrimary = primaryAction === action.id;
@@ -54,7 +53,7 @@ export function OverviewActionButtons({
             key={action.id}
             href={action.href}
             className={cn(
-              "block rounded-card border p-3 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+              "block rounded-xl border px-2 py-2.5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
               isPrimary
                 ? "border-primary bg-primary text-white shadow-soft"
                 : "border-border-soft bg-white text-text-strong hover:bg-background",
@@ -62,11 +61,11 @@ export function OverviewActionButtons({
           >
             <span
               className={cn(
-                "flex min-h-11 flex-col items-center justify-center gap-2 text-center text-sm font-extrabold",
+                "flex min-h-10 flex-col items-center justify-center gap-1 text-center text-xs font-extrabold sm:text-sm",
                 isPrimary ? "text-white" : "text-text-strong",
               )}
             >
-              <Icon aria-hidden="true" size={20} strokeWidth={2.6} />
+              <Icon aria-hidden="true" size={18} strokeWidth={2.6} />
               {action.label}
             </span>
           </Link>
@@ -78,9 +77,12 @@ export function OverviewActionButtons({
 
 export function OverviewEmptyStateActions() {
   return (
-    <div className="flex flex-wrap gap-3">
-      <Link href="/tenants/new">
-        <Button>Add tenant</Button>
+    <div className="flex flex-wrap gap-2">
+      <Link
+        href="/tenants/new"
+        className="inline-flex min-h-10 items-center justify-center rounded-button bg-primary px-4 py-2 text-sm font-extrabold text-white shadow-soft"
+      >
+        Add tenant
       </Link>
     </div>
   );
@@ -88,15 +90,24 @@ export function OverviewEmptyStateActions() {
 
 export function OverviewUpToDateActions() {
   return (
-    <div className="flex flex-wrap gap-3">
-      <Link href="/payments">
-        <Button variant="secondary">Send receipt</Button>
+    <div className="flex flex-wrap gap-2">
+      <Link
+        href="/payments"
+        className="inline-flex min-h-10 items-center justify-center rounded-button border border-border-soft bg-white px-4 py-2 text-sm font-extrabold text-text-strong"
+      >
+        Send receipt
       </Link>
-      <Link href="/tenants">
-        <Button variant="secondary">View all tenants</Button>
+      <Link
+        href="/tenants"
+        className="inline-flex min-h-10 items-center justify-center rounded-button border border-border-soft bg-white px-4 py-2 text-sm font-extrabold text-text-strong"
+      >
+        View all tenants
       </Link>
-      <Link href="/tenants/new">
-        <Button variant="secondary">Add tenant</Button>
+      <Link
+        href="/tenants/new"
+        className="inline-flex min-h-10 items-center justify-center rounded-button border border-border-soft bg-white px-4 py-2 text-sm font-extrabold text-text-strong"
+      >
+        Add tenant
       </Link>
     </div>
   );

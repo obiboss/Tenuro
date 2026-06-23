@@ -1,22 +1,14 @@
-import { ShieldCheck } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { EmptyState } from "@/components/ui/empty-state";
-import { PageHeader } from "@/components/ui/page-header";
+import { CaretakersPageClient } from "@/components/caretaker/caretakers-page-client";
+import { getLandlordCaretakersPageData } from "@/server/services/caretaker-invites.service";
 
-export default function CaretakersPage() {
+export default async function CaretakersPage() {
+  const data = await getLandlordCaretakersPageData();
+
   return (
-    <div>
-      <PageHeader
-        title="Caretakers"
-        description="Invite caretakers and control what they can view or manage."
-        action={<Badge tone="warning">Coming Soon</Badge>}
-      />
-
-      <EmptyState
-        title="Caretaker access is coming soon"
-        description="When this is active, you will be able to invite caretakers and assign them to specific properties."
-        icon={<ShieldCheck aria-hidden="true" size={24} strokeWidth={2.6} />}
-      />
-    </div>
+    <CaretakersPageClient
+      caretakers={data.caretakers}
+      pendingInvites={data.pendingInvites}
+      properties={data.properties}
+    />
   );
 }

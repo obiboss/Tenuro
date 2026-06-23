@@ -6,7 +6,9 @@ import { startDeveloperBuyerPurchaseAction } from "@/actions/developer-buyer-pur
 import { initialDeveloperBuyerPurchaseActionState } from "@/actions/developer-buyer-purchase.state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { WhatsAppShareActions } from "@/components/ui/whatsapp-share-actions";
 import { formatNairaCompact } from "@/lib/money/naira";
+import { buildDeveloperBuyerPurchaseWhatsappMessage } from "@/lib/whatsapp-messages";
 import type { DeveloperPlotRow } from "@/server/repositories/developer-plots.repository";
 
 type DeveloperStartBuyerPurchaseFormProps = {
@@ -46,6 +48,14 @@ export function DeveloperStartBuyerPurchaseForm({
     Boolean(state.message) && !state.ok && isPayoutSetupError(state.message);
 
   const canStart = plots.length > 0;
+  const purchaseMessage =
+    state.purchaseUrl && state.companyName
+      ? buildDeveloperBuyerPurchaseWhatsappMessage({
+          buyerName: state.buyerName ?? "Buyer",
+          companyName: state.companyName,
+          purchaseUrl: state.purchaseUrl,
+        })
+      : "";
 
   return (
     <form action={formAction} className="space-y-5">
@@ -84,28 +94,14 @@ export function DeveloperStartBuyerPurchaseForm({
             {state.purchaseUrl}
           </p>
 
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => {
-                void navigator.clipboard.writeText(state.purchaseUrl ?? "");
-              }}
-            >
-              Copy link
-            </Button>
-
-            <a
-              href={`https://wa.me/?text=${encodeURIComponent(
-                `Hello, use this secure link to complete your plot purchase on Boldverse Property: ${state.purchaseUrl}`,
-              )}`}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex min-h-11 items-center justify-center rounded-button bg-primary px-5 py-2.5 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary-hover"
-            >
-              Send buyer link
-            </a>
-          </div>
+          <WhatsAppShareActions
+            phoneNumber={state.buyerPhone ?? null}
+            message={purchaseMessage}
+            copyText={state.purchaseUrl ?? purchaseMessage}
+            whatsappLabel="Send on WhatsApp"
+            copyLabel="Copy link"
+            compact
+          />
         </div>
       ) : null}
 

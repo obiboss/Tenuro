@@ -1,8 +1,7 @@
 "use client";
 
 import { MessageCircle } from "lucide-react";
-import { buildWaMeUrl } from "@/lib/whatsapp";
-import { tryNormalisePhoneNumber } from "@/lib/phone";
+import { buildWaMeUrl, resolveWhatsAppShareTarget } from "@/lib/whatsapp";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -18,19 +17,19 @@ export function WhatsAppSendButton({
   label = "Send via WhatsApp",
 }: WhatsAppSendButtonProps) {
   const { showToast } = useToast();
-  const recipient = tryNormalisePhoneNumber(phoneNumber);
+  const target = resolveWhatsAppShareTarget(phoneNumber);
   const whatsappUrl = buildWaMeUrl({ phoneNumber, message });
 
   function handleClick(event: React.MouseEvent<HTMLAnchorElement>) {
-    if (recipient) {
+    if (target.mode !== "invalid") {
       return;
     }
 
     event.preventDefault();
     showToast({
-      title: "Phone number missing",
+      title: "Invalid phone number",
       description:
-        "This tenant does not have a valid Nigerian phone number for WhatsApp.",
+        "Add a valid phone number before sending on WhatsApp.",
       tone: "error",
     });
   }

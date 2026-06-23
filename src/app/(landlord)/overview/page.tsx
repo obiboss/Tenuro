@@ -23,9 +23,9 @@ type OverviewPageProps = {
 
 function PropertyFilterFallback() {
   return (
-    <div className="inline-flex min-h-11 items-center rounded-button border border-border-soft bg-white px-4 py-2 text-sm font-bold text-text-muted">
-      Loading properties...
-    </div>
+    <span className="inline-flex h-8 items-center rounded-full border border-border-soft bg-white px-3 text-xs font-bold text-text-muted">
+      Loading...
+    </span>
   );
 }
 
@@ -38,11 +38,11 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
   const showEmptyOnboarding = !overview.hasTenants;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-2">
         <LandlordGreeting landlordName={overview.landlordName} />
 
-        <div className="flex items-center gap-3 self-start">
+        <div className="flex shrink-0 items-center gap-2 pt-0.5">
           <Suspense fallback={<PropertyFilterFallback />}>
             <OverviewPropertyFilter
               properties={overview.properties}
@@ -54,27 +54,27 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
           <Link
             href="/notifications"
             aria-label="Rent alerts"
-            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-button border border-border-soft bg-white text-text-strong transition hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border-soft bg-white text-text-strong transition hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
           >
-            <Bell aria-hidden="true" size={18} strokeWidth={2.6} />
+            <Bell aria-hidden="true" size={16} strokeWidth={2.6} />
           </Link>
         </div>
       </div>
 
       {showEmptyOnboarding ? (
-        <div className="rounded-card border border-primary/15 bg-linear-to-br from-primary-soft to-white p-5 shadow-card">
-          <p className="text-lg font-extrabold text-text-strong">
+        <div className="rounded-card border border-primary/15 bg-linear-to-br from-primary-soft to-white p-4 shadow-card">
+          <p className="text-base font-extrabold text-text-strong">
             Add your first tenant to start tracking rent
           </p>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-text-muted">
-            Add your first tenant to start tracking rent, receipts, and reminders.
+          <p className="mt-1 text-sm leading-5 text-text-muted">
+            Track rent, receipts, and reminders from here.
           </p>
-          <div className="mt-4">
+          <div className="mt-3">
             <OverviewEmptyStateActions />
           </div>
         </div>
       ) : (
-        <>
+        <div className="space-y-2">
           <OverviewSummaryCards
             paidCount={overview.summary.paidCount}
             owingCount={overview.summary.owingCount}
@@ -82,30 +82,27 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
             totalOutstanding={overview.summary.totalOutstanding}
           />
 
-          <SectionCard
-            title="Main actions"
-            description="Take the next rent step quickly."
-          >
-            <OverviewActionButtons primaryAction={overview.primaryAction} />
-          </SectionCard>
-        </>
+          <OverviewActionButtons primaryAction={overview.primaryAction} />
+        </div>
       )}
 
       {!showEmptyOnboarding ? (
-        <div id="needs-attention">
+        <div id="needs-attention" className="pt-1">
           <SectionCard
             title="Needs Attention"
             description={
               overview.needsAttention.length > 0
-                ? "Tenants who need a reminder, payment, or receipt."
+                ? undefined
                 : "All tenants are up to date."
             }
+            contentClassName="p-4 md:p-5"
+            className="[&>div:first-child]:px-4 [&>div:first-child]:py-3 [&>div:first-child]:md:px-5"
           >
             {overview.needsAttention.length > 0 ? (
               <OverviewNeedsAttentionList items={overview.needsAttention} />
             ) : (
-              <div className="space-y-4">
-                <p className="text-sm font-semibold leading-6 text-text-muted">
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-text-muted">
                   All tenants are up to date.
                 </p>
                 <OverviewUpToDateActions />
@@ -120,10 +117,10 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
       ) : null}
 
       {overview.hasTenants ? (
-        <div className="flex justify-center pt-2">
+        <div className="flex justify-center">
           <Link href="/tenants">
-            <Button variant="secondary">
-              <Users aria-hidden="true" size={18} strokeWidth={2.6} />
+            <Button variant="secondary" size="sm">
+              <Users aria-hidden="true" size={16} strokeWidth={2.6} />
               View all tenants
             </Button>
           </Link>

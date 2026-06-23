@@ -31,65 +31,48 @@ export function PropertyCard({ property }: PropertyCardProps) {
   ).length;
 
   return (
-    <Card>
-      <div className="flex items-start gap-4">
-        <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary">
-          <Building2 aria-hidden="true" size={24} strokeWidth={2.6} />
+    <Card className="p-4">
+      <div className="flex items-start gap-3">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary">
+          <Building2 aria-hidden="true" size={20} strokeWidth={2.6} />
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h2 className="text-lg font-extrabold tracking-tight text-text-strong">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h2 className="truncate text-base font-extrabold text-text-strong">
                 {property.property_name}
               </h2>
 
-              <p className="mt-1 text-sm leading-6 text-text-muted">
-                {property.address}, {property.lga}, {property.state}
+              <p className="mt-0.5 truncate text-sm font-semibold text-text-muted">
+                {property.address}, {property.lga}
               </p>
             </div>
 
-            <Badge tone="primary">
-              {propertyTypeLabel(property.property_type)}
-            </Badge>
+            <Badge tone="primary">{propertyTypeLabel(property.property_type)}</Badge>
           </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-button bg-background p-3">
-              <div className="flex items-center gap-2 text-text-muted">
-                <Home aria-hidden="true" size={18} strokeWidth={2.5} />
-                <p className="text-xs font-bold">Total Units</p>
-              </div>
-              <p className="mt-1 text-lg font-extrabold text-text-strong">
-                {totalUnits}
-              </p>
-            </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <span className="inline-flex items-center gap-1 rounded-full bg-background px-2.5 py-1 text-xs font-bold text-text-strong">
+              <Home aria-hidden="true" size={12} strokeWidth={2.5} />
+              {totalUnits} units
+            </span>
 
-            <div className="rounded-button bg-success-soft p-3">
-              <div className="flex items-center gap-2 text-success">
-                <Users aria-hidden="true" size={18} strokeWidth={2.5} />
-                <p className="text-xs font-bold">Occupied</p>
-              </div>
-              <p className="mt-1 text-lg font-extrabold text-text-strong">
-                {occupiedUnits}
-              </p>
-            </div>
+            <span className="inline-flex items-center gap-1 rounded-full bg-success-soft px-2.5 py-1 text-xs font-bold text-success">
+              <Users aria-hidden="true" size={12} strokeWidth={2.5} />
+              {occupiedUnits} occupied
+            </span>
 
-            <div className="rounded-button bg-warning-soft p-3">
-              <div className="flex items-center gap-2 text-warning">
-                <Home aria-hidden="true" size={18} strokeWidth={2.5} />
-                <p className="text-xs font-bold">Vacant</p>
-              </div>
-              <p className="mt-1 text-lg font-extrabold text-text-strong">
-                {vacantUnits}
-              </p>
-            </div>
+            <span className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-2.5 py-1 text-xs font-bold text-warning">
+              <Home aria-hidden="true" size={12} strokeWidth={2.5} />
+              {vacantUnits} vacant
+            </span>
           </div>
 
-          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+          <div className="mt-3 flex flex-wrap gap-2">
             <Link
               href={`/properties/${property.id}`}
-              className="inline-flex min-h-11 items-center justify-center rounded-button bg-surface px-5 py-2.5 text-sm font-semibold text-text-strong shadow-soft ring-1 ring-border-soft transition hover:bg-primary-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+              className="inline-flex min-h-9 items-center justify-center rounded-button bg-surface px-4 py-2 text-xs font-extrabold text-text-strong shadow-soft ring-1 ring-border-soft transition hover:bg-primary-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
             >
               View Property
             </Link>

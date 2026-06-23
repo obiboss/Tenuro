@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { BarChart3, Bell, ShieldCheck, Settings, X } from "lucide-react";
+import { BarChart3, Bell, Settings, ShieldCheck, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
@@ -14,6 +15,13 @@ const moreItems = [
     icon: Bell,
     status: "available",
     description: "View alerts and prepared WhatsApp messages.",
+  },
+  {
+    label: "Caretakers",
+    href: "/caretakers",
+    icon: ShieldCheck,
+    status: "available",
+    description: "Invite caretakers and manage property access.",
   },
   {
     label: "Settings",
@@ -29,14 +37,7 @@ const moreItems = [
     status: "coming_soon",
     description: "This section is not active yet.",
   },
-  {
-    label: "Caretakers",
-    href: "/caretakers",
-    icon: ShieldCheck,
-    status: "coming_soon",
-    description: "This section is not active yet.",
-  },
-];
+] as const;
 
 type MobileMoreMenuProps = {
   platformAccessLocked?: boolean;
@@ -45,6 +46,7 @@ type MobileMoreMenuProps = {
 export function MobileMoreMenu({
   platformAccessLocked = false,
 }: MobileMoreMenuProps) {
+  const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
 
   void platformAccessLocked;
@@ -71,16 +73,11 @@ export function MobileMoreMenu({
             onClick={() => setIsOpen(false)}
           />
 
-          <div className="absolute inset-x-0 bottom-0 rounded-t-4xl bg-white p-5 shadow-2xl">
-            <div className="mb-5 flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-extrabold text-text-strong">
-                  More
-                </h2>
-                <p className="text-sm text-text-muted">
-                  Extra BOPA tools and settings.
-                </p>
-              </div>
+          <div className="absolute inset-x-0 bottom-0 rounded-t-4xl bg-white p-4 pb-6 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-base font-extrabold text-text-strong">
+                More
+              </h2>
 
               <Button
                 type="button"
@@ -91,9 +88,12 @@ export function MobileMoreMenu({
               </Button>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2">
               {moreItems.map((item) => {
                 const Icon = item.icon;
+                const active =
+                  pathname === item.href ||
+                  pathname.startsWith(`${item.href}/`);
                 const comingSoon = item.status === "coming_soon";
 
                 return (
@@ -102,20 +102,29 @@ export function MobileMoreMenu({
                     href={item.href}
                     onClick={() => setIsOpen(false)}
                     className={cn(
-                      "flex items-center justify-between rounded-card border border-border-soft bg-surface p-4 transition",
-                      "hover:border-primary/30 hover:bg-primary-soft",
+                      "flex items-center justify-between rounded-card border p-3 transition",
+                      active
+                        ? "border-primary/30 bg-primary-soft"
+                        : "border-border-soft bg-surface hover:border-primary/30 hover:bg-primary-soft",
                     )}
                   >
-                    <span className="flex items-center gap-3">
-                      <span className="flex size-11 items-center justify-center rounded-2xl bg-primary-soft text-primary">
-                        <Icon aria-hidden="true" size={22} strokeWidth={2.6} />
+                    <span className="flex min-w-0 items-center gap-3">
+                      <span
+                        className={cn(
+                          "flex size-10 shrink-0 items-center justify-center rounded-2xl",
+                          active
+                            ? "bg-primary text-white"
+                            : "bg-primary-soft text-primary",
+                        )}
+                      >
+                        <Icon aria-hidden="true" size={20} strokeWidth={2.6} />
                       </span>
 
-                      <span>
+                      <span className="min-w-0">
                         <span className="block font-extrabold text-text-strong">
                           {item.label}
                         </span>
-                        <span className="text-sm text-text-muted">
+                        <span className="block truncate text-xs font-semibold text-text-muted">
                           {item.description}
                         </span>
                       </span>

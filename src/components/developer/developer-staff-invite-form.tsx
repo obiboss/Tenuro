@@ -11,6 +11,7 @@ import {
 } from "@/constants/developer-staff-permissions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { WhatsAppShareActions } from "@/components/ui/whatsapp-share-actions";
 
 function GenerateRoleLinkButton({ title }: { title: DeveloperStaffTitle }) {
   const { pending } = useFormStatus();
@@ -66,6 +67,14 @@ export function DeveloperStaffInviteForm() {
               value={state.onboardingUrl}
               className="mt-3 min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-bold text-text-strong outline-none"
             />
+            <div className="mt-3">
+              <WhatsAppShareActions
+                message={`Join our team on BOPA using this secure staff link: ${state.onboardingUrl}`}
+                copyText={state.onboardingUrl}
+                whatsappLabel="Send on WhatsApp"
+                copyLabel="Copy link"
+              />
+            </div>
           </div>
         ) : null}
 

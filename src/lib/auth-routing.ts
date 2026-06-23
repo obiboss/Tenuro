@@ -13,5 +13,9 @@ export function getHomePathForRole(role: UserRole) {
     return "/agent/overview";
   }
 
+  if (role === "caretaker") {
+    return "/caretaker/overview";
+  }
+
   return "/overview";
 }

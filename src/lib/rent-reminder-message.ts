@@ -83,6 +83,7 @@ export function buildRentReminderWhatsappMessage(params: {
   dueDate: string | null;
   daysUntilDue?: number | null;
   landlordName: string;
+  contactPhrase?: string;
 }) {
   const timing = getRentTimingPhrase({
     outstandingBalance: params.outstandingBalance,
@@ -90,11 +91,15 @@ export function buildRentReminderWhatsappMessage(params: {
     daysUntilDue: params.daysUntilDue ?? null,
   });
 
+  const contactLine = params.contactPhrase
+    ? params.contactPhrase
+    : `Please make payment or contact ${params.landlordName}.`;
+
   return [
     `Good day ${params.tenantName}.`,
     `This is a rent reminder for ${params.propertyUnitLabel}.`,
     `Your rent of ${formatNaira(params.amount)} is ${timing}.`,
-    `Please make payment or contact ${params.landlordName}.`,
+    contactLine,
     "Sent with BOPA.",
   ].join(" ");
 }

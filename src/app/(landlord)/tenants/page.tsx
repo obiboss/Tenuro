@@ -6,63 +6,70 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { getCurrentLandlordTenantsWithPipeline } from "@/server/services/tenants.service";
 
+function TenantPageActions({ layout = "header" }: { layout?: "header" | "empty" }) {
+  const isEmpty = layout === "empty";
+
+  return (
+    <div
+      className={
+        isEmpty
+          ? "flex w-full flex-col gap-2"
+          : "grid w-full gap-2 sm:w-auto sm:min-w-70"
+      }
+    >
+      <Link href="/tenants/new" className="block">
+        <Button fullWidth>Add Tenant</Button>
+      </Link>
+
+      <div className="grid grid-cols-2 gap-2">
+        <Link href="/existing-tenant-claims" className="block">
+          <Button variant="secondary" fullWidth size="sm">
+            Review Claims
+          </Button>
+        </Link>
+
+        <Link href="/tenants/existing/new" className="block">
+          <Button variant="secondary" fullWidth size="sm">
+            {isEmpty ? (
+              <span className="inline-flex items-center gap-1.5">
+                <UserRoundCheck
+                  aria-hidden="true"
+                  size={15}
+                  strokeWidth={2.6}
+                />
+                Invite Existing
+              </span>
+            ) : (
+              "Invite Existing"
+            )}
+          </Button>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 export default async function TenantsPage() {
   const tenants = await getCurrentLandlordTenantsWithPipeline();
 
   return (
     <div>
       <PageHeader
+        compact
         title="Tenants"
-        description="Keep tenant records, rental units, profile status, and payment history organised."
-        action={
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Link href="/existing-tenant-claims">
-              <Button variant="secondary">Review Existing Claims</Button>
-            </Link>
-
-            <Link href="/tenants/existing/new">
-              <Button variant="secondary">Invite Existing Tenant</Button>
-            </Link>
-
-            <Link href="/tenants/new">
-              <Button>Add Tenant</Button>
-            </Link>
-          </div>
-        }
+        description="Manage tenant records and onboarding."
+        action={<TenantPageActions />}
       />
 
       {tenants.length === 0 ? (
         <EmptyState
           title="No tenant added yet"
-          description="Add a new tenant or invite an existing tenant to confirm their tenancy details."
+          description="Add a tenant or invite an existing one."
           icon={<Users aria-hidden="true" size={24} strokeWidth={2.6} />}
-          action={
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Link href="/existing-tenant-claims">
-                <Button variant="secondary">Review Existing Claims</Button>
-              </Link>
-
-              <Link href="/tenants/existing/new">
-                <Button variant="secondary">
-                  <span className="inline-flex items-center gap-2">
-                    <UserRoundCheck
-                      aria-hidden="true"
-                      size={18}
-                      strokeWidth={2.6}
-                    />
-                    Invite Existing Tenant
-                  </span>
-                </Button>
-              </Link>
-
-              <Link href="/tenants/new">
-                <Button>Add Tenant</Button>
-              </Link>
-            </div>
-          }
+          action={<TenantPageActions layout="empty" />}
         />
       ) : (
-        <div className="grid gap-5">
+        <div className="grid gap-3">
           {tenants.map(({ tenant, pipelineStatus }) => (
             <TenantCard
               key={tenant.id}
