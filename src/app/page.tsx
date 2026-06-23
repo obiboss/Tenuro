@@ -4,12 +4,14 @@ import {
   Building2,
   FileCheck2,
   FileText,
+  Landmark,
   ReceiptText,
   ShieldCheck,
   Users,
 } from "lucide-react";
+import { Developer3DShowcase } from "@/components/developer/developer-3d-showcase";
 import { LandingHeaderLogin } from "@/components/landing/landing-header-login";
-import { LandingHeroActions } from "@/components/landing/landing-hero-actions";
+import { LandingHeroRotator } from "@/components/landing/landing-hero-rotator";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -17,8 +19,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { StatCard } from "@/components/ui/stat-card";
-import { TrustNotice } from "@/components/ui/trust-notice";
 
 const features = [
   {
@@ -72,6 +72,27 @@ const publicTools = [
   },
 ];
 
+const workspaceCards = [
+  {
+    title: "Landlord",
+    description: "Manage tenants, rent records, receipts, and agreements.",
+    href: "/register?role=landlord",
+    icon: Building2,
+  },
+  {
+    title: "Agent",
+    description: "Submit properties and manage tenant application workflows.",
+    href: "/register?role=agent",
+    icon: Users,
+  },
+  {
+    title: "Developer",
+    description: "Manage estates, plots, buyers, installments, and documents.",
+    href: "/developers",
+    icon: Landmark,
+  },
+];
+
 export default function HomePage() {
   return (
     <main className="min-h-screen bg-background">
@@ -97,67 +118,65 @@ export default function HomePage() {
           </div>
         </header>
 
-        <div className="grid gap-10 py-16 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:py-24">
-          <div>
-            <Badge tone="primary" size="md">
-              Built for Nigerian landlords
-            </Badge>
-
-            <h1 className="mt-6 max-w-4xl text-4xl font-extrabold tracking-tight text-text-strong md:text-5xl lg:text-6xl">
-              Manage tenants, rent payments, and receipts without confusion.
-            </h1>
-
-            <p className="mt-6 max-w-2xl text-base leading-8 text-text-muted md:text-lg">
-              BOPA — Boldverse Property App — helps landlords keep proper rental
-              records, track who has paid, know who is owing, and send clear
-              receipts without relying on notebooks or scattered WhatsApp
-              messages.
-            </p>
-
-            <LandingHeroActions />
-
-            <div className="mt-8">
-              <TrustNotice
-                title="Designed for proper landlord records"
-                description="Boldverse Property keeps a clear history of every payment, correction, tenant profile, and receipt."
-                icon={
-                  <ShieldCheck aria-hidden="true" size={22} strokeWidth={2.6} />
-                }
-              />
-            </div>
-          </div>
-
-          <div className="rounded-4xl bg-surface p-5 shadow-card md:p-6">
-            <div className="rounded-3xl bg-background p-5">
-              <div className="grid gap-4">
-                <StatCard
-                  title="Total Units"
-                  value="24"
-                  description="Across 4 properties"
-                  icon={<Building2 size={22} strokeWidth={2.6} />}
-                />
-
-                <StatCard
-                  title="Tenants"
-                  value="21"
-                  description="Active rental records"
-                  tone="success"
-                  icon={<Users size={22} strokeWidth={2.6} />}
-                />
-
-                <StatCard
-                  title="Rent Collected"
-                  value="₦18.6M"
-                  description="Track annual rent payments"
-                  tone="gold"
-                  icon={<ReceiptText size={22} strokeWidth={2.6} />}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
+        <LandingHeroRotator />
 
         <section className="rounded-4xl bg-surface px-5 py-8 shadow-card md:px-8 lg:px-10">
+          <div className="max-w-3xl">
+            <Badge tone="primary">Choose your workspace</Badge>
+
+            <h2 className="mt-4 text-2xl font-extrabold tracking-tight text-text-strong md:text-3xl">
+              Use BOPA for the property work you actually do.
+            </h2>
+
+            <p className="mt-4 text-base leading-8 text-text-muted md:text-lg">
+              Whether you manage tenants, sell plots, or coordinate property
+              records, BOPA gives you a cleaner way to organise the work.
+            </p>
+          </div>
+
+          <div className="mt-8 grid gap-5 md:grid-cols-3">
+            {workspaceCards.map((workspace) => {
+              const Icon = workspace.icon;
+
+              return (
+                <Link
+                  key={workspace.title}
+                  href={workspace.href}
+                  className="group rounded-card border border-border-soft bg-background p-5 transition hover:border-primary/40 hover:bg-primary-soft/40 md:p-6"
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+                      <Icon aria-hidden="true" size={24} strokeWidth={2.6} />
+                    </div>
+
+                    <div className="min-w-0">
+                      <h3 className="text-lg font-black tracking-tight text-text-strong">
+                        {workspace.title}
+                      </h3>
+
+                      <p className="mt-2 text-sm leading-6 text-text-muted">
+                        {workspace.description}
+                      </p>
+
+                      <span className="mt-4 inline-flex items-center gap-2 text-sm font-extrabold text-primary group-hover:text-primary-hover">
+                        {workspace.title === "Developer"
+                          ? "Explore Developer Tools"
+                          : `Sign up as ${workspace.title}`}
+                        <ArrowRight
+                          aria-hidden="true"
+                          size={17}
+                          strokeWidth={2.6}
+                        />
+                      </span>
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="mt-8 rounded-4xl bg-surface px-5 py-8 shadow-card md:px-8 lg:px-10">
           <div className="max-w-3xl">
             <Badge tone="primary">Free landlord tools</Badge>
 
@@ -213,6 +232,10 @@ export default function HomePage() {
           </div>
         </section>
 
+        <section className="mt-8">
+          <Developer3DShowcase />
+        </section>
+
         <section className="mt-8 rounded-4xl bg-surface px-5 py-8 shadow-card md:px-8 lg:px-10">
           <div className="max-w-3xl">
             <h2 className="text-2xl font-extrabold tracking-tight text-text-strong md:text-3xl">
@@ -221,10 +244,10 @@ export default function HomePage() {
 
             <p className="mt-4 text-base leading-8 text-text-muted md:text-lg">
               BOPA is a Nigerian property management platform built for
-              independent landlords managing rental properties in Lagos and
-              across Nigeria. Track who has paid, know who is owing, send
-              professional receipts, and manage tenancy agreements — all from
-              your phone.
+              landlords, agents, caretakers, and real estate developers. Track
+              who has paid, know who is owing, send professional receipts,
+              manage tenancy records, and organise estate sales operations from
+              one clean platform.
             </p>
           </div>
         </section>
@@ -248,7 +271,6 @@ export default function HomePage() {
           })}
         </section>
 
-        {/* Footer */}
         <footer className="mt-16 border-t border-border-soft pt-8 pb-4">
           <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
             <p className="text-sm text-text-muted">
