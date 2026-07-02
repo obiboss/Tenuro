@@ -280,6 +280,13 @@ export default function HomePage() {
 
             <div className="flex flex-wrap items-center justify-center gap-5 text-sm text-text-muted sm:justify-end">
               <Link
+                href="/blog"
+                className="transition-colors hover:text-text-strong"
+              >
+                Blog
+              </Link>
+
+              <Link
                 href="/privacy"
                 className="transition-colors hover:text-text-strong"
               >

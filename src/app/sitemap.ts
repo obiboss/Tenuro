@@ -3,6 +3,7 @@ import {
   agreementGeneratorLocations,
   agreementGeneratorTemplates,
 } from "@/lib/agreement-generator-seo";
+import { getAllBlogPosts, getBlogCanonicalUrl } from "@/lib/blog";
 import { receiptGeneratorLocations } from "@/lib/receipt-generator-locations";
 
 const appUrl = "https://boldverseproperty.com";
@@ -29,7 +30,20 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "daily",
       priority: 0.95,
     },
+    {
+      url: getBlogCanonicalUrl(),
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 0.9,
+    },
   ];
+
+  const blogPages: MetadataRoute.Sitemap = getAllBlogPosts().map((post) => ({
+    url: getBlogCanonicalUrl(post.slug),
+    lastModified: new Date(post.date),
+    changeFrequency: "monthly",
+    priority: 0.8,
+  }));
 
   const receiptLocationPages: MetadataRoute.Sitemap =
     receiptGeneratorLocations.map((location) => ({
@@ -57,6 +71,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   return [
     ...staticPages,
+    ...blogPages,
     ...receiptLocationPages,
     ...agreementLocationPages,
     ...agreementTemplatePages,

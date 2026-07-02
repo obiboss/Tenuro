@@ -6,6 +6,8 @@ export type GatewayPaymentEventRow = {
   event_type: string;
   payment_reference: string;
   gateway_payment_intent_id: string | null;
+  developer_payment_intent_id: string | null;
+  developer_sale_payment_id: string | null;
   processed_payment_id: string | null;
   processing_status: "pending" | "processed" | "failed" | "ignored";
   error_message: string | null;
@@ -16,8 +18,33 @@ export type GatewayPaymentEventDetailRow = GatewayPaymentEventRow & {
   processed_at: string | null;
 };
 
-const GATEWAY_PAYMENT_EVENT_DETAIL_SELECT =
-  "id, provider, event_type, payment_reference, gateway_payment_intent_id, processed_payment_id, processing_status, error_message, created_at, processed_at";
+const GATEWAY_PAYMENT_EVENT_SELECT = `
+  id,
+  provider,
+  event_type,
+  payment_reference,
+  gateway_payment_intent_id,
+  developer_payment_intent_id,
+  developer_sale_payment_id,
+  processed_payment_id,
+  processing_status,
+  error_message
+`;
+
+const GATEWAY_PAYMENT_EVENT_DETAIL_SELECT = `
+  id,
+  provider,
+  event_type,
+  payment_reference,
+  gateway_payment_intent_id,
+  developer_payment_intent_id,
+  developer_sale_payment_id,
+  processed_payment_id,
+  processing_status,
+  error_message,
+  created_at,
+  processed_at
+`;
 
 export async function registerGatewayPaymentEvent(
   supabase: SupabaseClient,
@@ -38,9 +65,7 @@ export async function registerGatewayPaymentEvent(
       signature: params.signature,
       processing_status: "pending",
     })
-    .select(
-      "id, provider, event_type, payment_reference, gateway_payment_intent_id, processed_payment_id, processing_status, error_message",
-    )
+    .select(GATEWAY_PAYMENT_EVENT_SELECT)
     .single<GatewayPaymentEventRow>();
 
   if (!error && data) {
@@ -56,9 +81,7 @@ export async function registerGatewayPaymentEvent(
 
   const { data: existing, error: existingError } = await supabase
     .from("gateway_payment_events")
-    .select(
-      "id, provider, event_type, payment_reference, gateway_payment_intent_id, processed_payment_id, processing_status, error_message",
-    )
+    .select(GATEWAY_PAYMENT_EVENT_SELECT)
     .eq("provider", "paystack")
     .eq("event_type", params.eventType)
     .eq("payment_reference", params.paymentReference)
@@ -78,16 +101,20 @@ export async function markGatewayPaymentEventProcessed(
   supabase: SupabaseClient,
   params: {
     eventId: string;
-    gatewayPaymentIntentId: string;
-    processedPaymentId: string;
+    gatewayPaymentIntentId?: string | null;
+    developerPaymentIntentId?: string | null;
+    developerSalePaymentId?: string | null;
+    processedPaymentId?: string | null;
     verifiedPayload: Record<string, unknown>;
   },
 ) {
   const { error } = await supabase
     .from("gateway_payment_events")
     .update({
-      gateway_payment_intent_id: params.gatewayPaymentIntentId,
-      processed_payment_id: params.processedPaymentId,
+      gateway_payment_intent_id: params.gatewayPaymentIntentId ?? null,
+      developer_payment_intent_id: params.developerPaymentIntentId ?? null,
+      developer_sale_payment_id: params.developerSalePaymentId ?? null,
+      processed_payment_id: params.processedPaymentId ?? null,
       verified_payload: params.verifiedPayload,
       processing_status: "processed",
       error_message: null,
@@ -106,6 +133,8 @@ export async function markGatewayPaymentEventIgnored(
     eventId: string;
     reason: string;
     gatewayPaymentIntentId?: string | null;
+    developerPaymentIntentId?: string | null;
+    developerSalePaymentId?: string | null;
     verifiedPayload?: Record<string, unknown>;
   },
 ) {
@@ -113,6 +142,8 @@ export async function markGatewayPaymentEventIgnored(
     .from("gateway_payment_events")
     .update({
       gateway_payment_intent_id: params.gatewayPaymentIntentId ?? null,
+      developer_payment_intent_id: params.developerPaymentIntentId ?? null,
+      developer_sale_payment_id: params.developerSalePaymentId ?? null,
       verified_payload: params.verifiedPayload ?? {},
       processing_status: "ignored",
       error_message: params.reason,
@@ -153,9 +184,7 @@ export async function getGatewayPaymentEventByProviderEventReference(
 ) {
   const { data, error } = await supabase
     .from("gateway_payment_events")
-    .select(
-      "id, provider, event_type, payment_reference, gateway_payment_intent_id, processed_payment_id, processing_status, error_message",
-    )
+    .select(GATEWAY_PAYMENT_EVENT_SELECT)
     .eq("provider", params.provider)
     .eq("event_type", params.eventType)
     .eq("payment_reference", params.paymentReference)
@@ -174,6 +203,8 @@ export async function markGatewayPaymentEventFailed(
     eventId: string;
     reason: string;
     gatewayPaymentIntentId?: string | null;
+    developerPaymentIntentId?: string | null;
+    developerSalePaymentId?: string | null;
     verifiedPayload?: Record<string, unknown>;
   },
 ) {
@@ -181,6 +212,8 @@ export async function markGatewayPaymentEventFailed(
     .from("gateway_payment_events")
     .update({
       gateway_payment_intent_id: params.gatewayPaymentIntentId ?? null,
+      developer_payment_intent_id: params.developerPaymentIntentId ?? null,
+      developer_sale_payment_id: params.developerSalePaymentId ?? null,
       verified_payload: params.verifiedPayload ?? {},
       processing_status: "failed",
       error_message: params.reason,

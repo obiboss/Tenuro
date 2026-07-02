@@ -23,7 +23,7 @@ export async function POST(request: Request) {
         paymentId: result.paymentId ?? null,
       },
       {
-        status: 200,
+        status: result.status === "failed" ? 500 : 200,
       },
     );
   } catch (error) {

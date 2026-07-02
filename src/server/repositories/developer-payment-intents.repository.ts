@@ -149,4 +149,42 @@ export async function createDeveloperPaymentIntent(
   return data;
 }
 
+export async function markDeveloperPaymentIntentExpired(
+  supabase: SupabaseClient,
+  params: {
+    intentId: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("developer_payment_intents")
+    .update({
+      status: "expired",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", params.intentId)
+    .eq("status", "initialized")
+    .select(DEVELOPER_PAYMENT_INTENT_SELECT)
+    .maybeSingle<DeveloperPaymentIntentRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  if (data) {
+    return data;
+  }
+
+  const { data: existing, error: existingError } = await supabase
+    .from("developer_payment_intents")
+    .select(DEVELOPER_PAYMENT_INTENT_SELECT)
+    .eq("id", params.intentId)
+    .single<DeveloperPaymentIntentRow>();
+
+  if (existingError) {
+    throw existingError;
+  }
+
+  return existing;
+}
+
 export { DEVELOPER_PAYMENT_INTENT_SELECT };

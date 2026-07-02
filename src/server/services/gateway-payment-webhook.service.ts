@@ -5,6 +5,7 @@ import {
   AUDIT_EVENT_TYPES,
 } from "@/server/constants/audit-events";
 import { AppError, isAppError } from "@/server/errors/app-error";
+import { getDeveloperPaymentIntentByReference } from "@/server/repositories/developer-payment-intents.repository";
 import {
   getGatewayPaymentIntentByReference,
   markGatewayPaymentIntentFailed,
@@ -48,6 +49,10 @@ export type GatewayPaymentWebhookResult = {
   status: "processed" | "duplicate" | "ignored" | "failed";
   message: string;
   paymentId?: string;
+  gatewayPaymentIntentId?: string;
+  developerPaymentIntentId?: string;
+  developerSalePaymentId?: string;
+  verifiedPayload?: Record<string, unknown>;
 };
 
 function toRecord(value: unknown): Record<string, unknown> {
@@ -137,6 +142,18 @@ function isDeveloperInstallmentWebhook(params: {
     metadata.product === "boldverse_developer_module" ||
     metadata.payment_type === "developer_installment"
   );
+}
+
+async function findDeveloperIntentByReferenceSafely(reference: string) {
+  try {
+    return await getDeveloperPaymentIntentByReference(
+      createSupabaseAdminClient(),
+      reference,
+    );
+  } catch (error) {
+    console.error("Failed to resolve developer payment intent:", error);
+    return null;
+  }
 }
 
 async function markUnitOccupiedAfterFirstRentPayment(params: {
@@ -272,6 +289,7 @@ async function returnDuplicateGatewayPaymentResult(params: {
     status: "duplicate" as const,
     message: "Gateway payment already recorded.",
     paymentId: params.paymentId,
+    gatewayPaymentIntentId: params.intent.id,
   };
 }
 
@@ -286,7 +304,6 @@ export async function processVerifiedGatewayPaymentReference(
   },
 ): Promise<GatewayPaymentWebhookResult> {
   const supabase = createSupabaseAdminClient();
-
   const intent = await getGatewayPaymentIntentByReference(supabase, reference);
 
   if (!intent) {
@@ -336,6 +353,7 @@ export async function processVerifiedGatewayPaymentReference(
     return {
       status: "ignored",
       message: "Payment intent is no longer eligible for verification.",
+      gatewayPaymentIntentId: intent.id,
     };
   }
 
@@ -343,6 +361,7 @@ export async function processVerifiedGatewayPaymentReference(
     return {
       status: "ignored",
       message: "Payment intent is not in a verifiable state.",
+      gatewayPaymentIntentId: intent.id,
     };
   }
 
@@ -399,6 +418,8 @@ export async function processVerifiedGatewayPaymentReference(
     return {
       status: "ignored",
       message: "Payment was not successful.",
+      gatewayPaymentIntentId: intent.id,
+      verifiedPayload,
     };
   }
 
@@ -471,6 +492,8 @@ export async function processVerifiedGatewayPaymentReference(
         ).toLocaleString("en-NG")} confirmed.`
       : "Gateway payment already recorded.",
     paymentId,
+    gatewayPaymentIntentId: intent.id,
+    verifiedPayload,
   };
 }
 
@@ -497,6 +520,9 @@ async function processVerifiedDeveloperPaymentReference(reference: string) {
         ? "Developer payment already recorded."
         : "Developer payment confirmed.",
     paymentId: result.paymentId,
+    developerPaymentIntentId: result.paymentIntentId,
+    developerSalePaymentId: result.paymentId,
+    verifiedPayload: result.verifiedPayload,
   } satisfies GatewayPaymentWebhookResult;
 }
 
@@ -510,7 +536,7 @@ async function processVerifiedPaystackReferenceWithFallback(
       | "reconciliation";
     rawPayload?: Record<string, unknown>;
   },
-) {
+): Promise<GatewayPaymentWebhookResult> {
   try {
     return await processVerifiedGatewayPaymentReference(reference, options);
   } catch (error) {
@@ -572,12 +598,22 @@ async function resolveDuplicateWebhookEvent(params: {
 
   if (
     params.registeredEvent.event.processing_status === "processed" &&
-    params.registeredEvent.event.processed_payment_id
+    (params.registeredEvent.event.processed_payment_id ||
+      params.registeredEvent.event.developer_sale_payment_id)
   ) {
     return {
       status: "duplicate",
       message: "Payment webhook already processed.",
-      paymentId: params.registeredEvent.event.processed_payment_id,
+      paymentId:
+        params.registeredEvent.event.processed_payment_id ??
+        params.registeredEvent.event.developer_sale_payment_id ??
+        undefined,
+      gatewayPaymentIntentId:
+        params.registeredEvent.event.gateway_payment_intent_id ?? undefined,
+      developerPaymentIntentId:
+        params.registeredEvent.event.developer_payment_intent_id ?? undefined,
+      developerSalePaymentId:
+        params.registeredEvent.event.developer_sale_payment_id ?? undefined,
     };
   }
 
@@ -605,6 +641,7 @@ async function resolveDuplicateWebhookEvent(params: {
       status: "duplicate",
       message: "Payment webhook already processed.",
       paymentId: intent.processed_payment_id,
+      gatewayPaymentIntentId: intent.id,
     };
   }
 
@@ -627,6 +664,7 @@ async function resolveDuplicateWebhookEvent(params: {
       status: "duplicate",
       message: "Payment webhook already processed.",
       paymentId: existingPayment.id,
+      gatewayPaymentIntentId: intent.id,
     };
   }
 
@@ -665,15 +703,17 @@ export async function processGatewayPaystackWebhook(params: {
 
   try {
     if (webhook.event !== "charge.success") {
-      await markGatewayPaymentEventIgnored(supabase, {
-        eventId: registeredEvent.event.id,
-        reason: `Unsupported Paystack event: ${webhook.event}`,
-      });
-
       const ignoredIntent = await getGatewayPaymentIntentByReference(
         supabase,
         webhook.data.reference,
       );
+
+      await markGatewayPaymentEventIgnored(supabase, {
+        eventId: registeredEvent.event.id,
+        reason: `Unsupported Paystack event: ${webhook.event}`,
+        gatewayPaymentIntentId: ignoredIntent?.id ?? null,
+        verifiedPayload: rawPayload,
+      });
 
       await writeSystemAuditLog({
         landlordId: ignoredIntent?.landlord_id ?? null,
@@ -696,6 +736,7 @@ export async function processGatewayPaystackWebhook(params: {
       return {
         status: "ignored",
         message: "Webhook ignored.",
+        gatewayPaymentIntentId: ignoredIntent?.id ?? undefined,
       };
     }
 
@@ -715,24 +756,41 @@ export async function processGatewayPaystackWebhook(params: {
     await markGatewayPaymentEventProcessed(supabase, {
       eventId: registeredEvent.event.id,
       gatewayPaymentIntentId:
-        intent?.id ?? result.paymentId ?? registeredEvent.event.id,
-      processedPaymentId: result.paymentId ?? "",
-      verifiedPayload: intent?.verified_payload ?? rawPayload,
+        result.gatewayPaymentIntentId ?? intent?.id ?? null,
+      developerPaymentIntentId: result.developerPaymentIntentId ?? null,
+      developerSalePaymentId: result.developerSalePaymentId ?? null,
+      processedPaymentId: result.paymentId ?? null,
+      verifiedPayload:
+        result.verifiedPayload ?? intent?.verified_payload ?? rawPayload,
     });
 
     return result;
   } catch (error) {
     const message = getErrorMessage(error);
 
-    await markGatewayPaymentEventFailed(supabase, {
-      eventId: registeredEvent.event.id,
-      reason: message,
-    });
-
     const failedIntent = await getGatewayPaymentIntentByReference(
       supabase,
       webhook.data.reference,
     );
+
+    const failedDeveloperIntent =
+      failedIntent === null &&
+      isDeveloperInstallmentWebhook({
+        reference: webhook.data.reference,
+        rawPayload,
+      })
+        ? await findDeveloperIntentByReferenceSafely(webhook.data.reference)
+        : null;
+
+    await markGatewayPaymentEventFailed(supabase, {
+      eventId: registeredEvent.event.id,
+      reason: message,
+      gatewayPaymentIntentId: failedIntent?.id ?? null,
+      developerPaymentIntentId: failedDeveloperIntent?.id ?? null,
+      developerSalePaymentId:
+        failedDeveloperIntent?.processed_payment_id ?? null,
+      verifiedPayload: rawPayload,
+    });
 
     await writeSystemAuditLog({
       landlordId: failedIntent?.landlord_id ?? null,
@@ -740,10 +798,16 @@ export async function processGatewayPaystackWebhook(params: {
       tenancyId: failedIntent?.tenancy_id ?? null,
       eventType: AUDIT_EVENT_TYPES.gatewayPaymentFailed,
       entityType: AUDIT_ENTITY_TYPES.payment,
-      entityId: failedIntent?.id ?? registeredEvent.event.id,
+      entityId:
+        failedIntent?.id ??
+        failedDeveloperIntent?.id ??
+        registeredEvent.event.id,
       description: "Paystack webhook processing failed.",
       metadata: {
         gateway_payment_intent_id: failedIntent?.id ?? null,
+        developer_payment_intent_id: failedDeveloperIntent?.id ?? null,
+        developer_sale_payment_id:
+          failedDeveloperIntent?.processed_payment_id ?? null,
         gateway_payment_event_id: registeredEvent.event.id,
         paystack_reference: webhook.data.reference,
         webhook_event: webhook.event,
@@ -756,6 +820,10 @@ export async function processGatewayPaystackWebhook(params: {
     return {
       status: "failed",
       message,
+      gatewayPaymentIntentId: failedIntent?.id ?? undefined,
+      developerPaymentIntentId: failedDeveloperIntent?.id ?? undefined,
+      developerSalePaymentId:
+        failedDeveloperIntent?.processed_payment_id ?? undefined,
     };
   }
 }

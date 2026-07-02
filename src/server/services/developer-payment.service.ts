@@ -13,6 +13,8 @@ import {
   createDeveloperPaymentIntent,
   getDeveloperPaymentIntentByIdempotencyKey,
   getDeveloperPaymentIntentByReference,
+  markDeveloperPaymentIntentExpired,
+  type DeveloperPaymentIntentRow,
 } from "@/server/repositories/developer-payment-intents.repository";
 import {
   getActiveDeveloperPaymentPlanForSale,
@@ -190,6 +192,61 @@ function compareOutstandingScheduleItems(
   }
 
   return left.label.localeCompare(right.label);
+}
+
+function getTimestamp(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const timestamp = new Date(value).getTime();
+
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+function isInitializedDeveloperPaymentExpired(
+  intent: DeveloperPaymentIntentRow,
+) {
+  const expiresAt = getTimestamp(intent.expires_at);
+
+  return (
+    intent.status === "initialized" &&
+    expiresAt !== null &&
+    expiresAt <= Date.now()
+  );
+}
+
+function isVerifiedDeveloperPaymentAfterExpiry(params: {
+  intent: DeveloperPaymentIntentRow;
+  verifiedPaidAt: string;
+}) {
+  const expiresAt = getTimestamp(params.intent.expires_at);
+  const paidAt = getTimestamp(params.verifiedPaidAt);
+
+  if (expiresAt === null) {
+    return false;
+  }
+
+  if (paidAt === null) {
+    return true;
+  }
+
+  return paidAt > expiresAt;
+}
+
+async function rejectExpiredDeveloperPaymentIntent(params: {
+  supabase: SupabaseClient;
+  intent: DeveloperPaymentIntentRow;
+}) {
+  await markDeveloperPaymentIntentExpired(params.supabase, {
+    intentId: params.intent.id,
+  });
+
+  throw new AppError(
+    "DEVELOPER_PAYMENT_INTENT_EXPIRED",
+    "This developer payment link has expired. Please request a fresh payment link.",
+    410,
+  );
 }
 
 async function getFirstOutstandingScheduleItem(params: {
@@ -465,9 +522,16 @@ export async function createDeveloperPaymentRequest(params: {
 
   if (
     existingIntent?.status === "initialized" &&
-    existingIntent.authorization_url
+    existingIntent.authorization_url &&
+    !isInitializedDeveloperPaymentExpired(existingIntent)
   ) {
     return existingIntent;
+  }
+
+  if (existingIntent?.status === "initialized") {
+    await markDeveloperPaymentIntentExpired(params.supabase, {
+      intentId: existingIntent.id,
+    });
   }
 
   const reference = createDeveloperPaymentReference();
@@ -711,6 +775,7 @@ export async function verifyAndPostDeveloperPaymentReference(params: {
 
     return {
       status: "duplicate" as const,
+      paymentIntentId: intent.id,
       paymentId: intent.processed_payment_id,
       buyerPortalUrl: buyerPortal?.portalUrl ?? null,
     };
@@ -725,6 +790,7 @@ export async function verifyAndPostDeveloperPaymentReference(params: {
   }
 
   const verified = await verifyPaystackTransaction(params.reference);
+  const verifiedPayload = toRecord(verified);
 
   if (verified.reference !== intent.paystack_reference) {
     throw new AppError(
@@ -743,6 +809,13 @@ export async function verifyAndPostDeveloperPaymentReference(params: {
   }
 
   if (verified.status !== "success") {
+    if (isInitializedDeveloperPaymentExpired(intent)) {
+      await rejectExpiredDeveloperPaymentIntent({
+        supabase: params.supabase,
+        intent,
+      });
+    }
+
     throw new AppError(
       "DEVELOPER_PAYSTACK_NOT_SUCCESSFUL",
       "Payment was not successful.",
@@ -755,12 +828,26 @@ export async function verifyAndPostDeveloperPaymentReference(params: {
     expectedAmountInNaira: intent.total_amount,
   });
 
+  const verifiedPaidAt = verified.paid_at ?? new Date().toISOString();
+
+  if (
+    isVerifiedDeveloperPaymentAfterExpiry({
+      intent,
+      verifiedPaidAt,
+    })
+  ) {
+    await rejectExpiredDeveloperPaymentIntent({
+      supabase: params.supabase,
+      intent,
+    });
+  }
+
   const { data, error } = await params.supabase
     .rpc("post_developer_verified_payment", {
       p_payment_intent_id: intent.id,
       p_paystack_reference: intent.paystack_reference,
       p_verified_total_amount: intent.total_amount,
-      p_verified_paid_at: verified.paid_at ?? new Date().toISOString(),
+      p_verified_paid_at: verifiedPaidAt,
     })
     .single<{ id: string }>();
 
@@ -780,8 +867,9 @@ export async function verifyAndPostDeveloperPaymentReference(params: {
 
   return {
     status: "processed" as const,
+    paymentIntentId: intent.id,
     paymentId: data.id,
-    verifiedPayload: toRecord(verified),
+    verifiedPayload,
     buyerPortalUrl: buyerPortal?.portalUrl ?? null,
   };
 }
