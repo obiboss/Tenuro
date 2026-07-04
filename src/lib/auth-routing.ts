@@ -17,5 +17,13 @@ export function getHomePathForRole(role: UserRole) {
     return "/caretaker/overview";
   }
 
+  if (role === "developer") {
+    return "/developer";
+  }
+
+  if (role === "manager") {
+    return "/manager";
+  }
+
   return "/overview";
 }

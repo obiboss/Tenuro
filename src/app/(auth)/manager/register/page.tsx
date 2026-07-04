@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { EmailRegisterForm } from "@/components/auth/email-register-form";
+import { ManagerRegisterForm } from "@/components/manager/manager-register-form";
 import { PageHeader } from "@/components/ui/page-header";
 import { TrustNotice } from "@/components/ui/trust-notice";
 
@@ -7,17 +7,17 @@ export default function PropertyManagerRegisterPage() {
   return (
     <>
       <PageHeader
-        title="Create your property manager account"
-        description="Register with your work email and password. BOPA will verify your email before granting access."
+        title="Create your BOPA Manager account"
+        description="Start with your personal work login. You will set up your property management organization after signing in."
       />
 
       <div className="space-y-6">
         <TrustNotice
-          title="Built for property operations teams"
-          description="Use your firm email to create a secure account for managing properties, staff workflows, and rental operations at scale."
+          title="Built for property management firms"
+          description="BOPA Manager is for teams that manage properties for multiple landlords and need clear rent records."
         />
 
-        <EmailRegisterForm />
+        <ManagerRegisterForm />
 
         <p className="text-center text-sm text-text-muted">
           Already have an account?{" "}
@@ -27,7 +27,7 @@ export default function PropertyManagerRegisterPage() {
         </p>
 
         <p className="text-center text-sm text-text-muted">
-          Managing your own properties?{" "}
+          Managing only your own properties?{" "}
           <Link href="/register" className="font-bold text-primary">
             Create landlord account
           </Link>

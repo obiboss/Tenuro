@@ -1,37 +1,28 @@
 import Link from "next/link";
-import { EmailLoginForm } from "@/components/auth/email-login-form";
-import { MagicLinkForm } from "@/components/auth/magic-link-form";
+import { ManagerLoginForm } from "@/components/manager/manager-login-form";
 import { PageHeader } from "@/components/ui/page-header";
-import { SectionCard } from "@/components/ui/section-card";
 import { TrustNotice } from "@/components/ui/trust-notice";
 
 export default function PropertyManagerLoginPage() {
   return (
     <>
       <PageHeader
-        title="Property manager sign in"
-        description="Use your verified work email and password to access your property operations workspace."
+        title="BOPA Manager sign in"
+        description="Access your property management workspace with your verified work email."
       />
 
       <div className="space-y-6">
         <TrustNotice
-          title="Secure firm access"
-          description="Property manager accounts use email verification for multi-staff property operations."
+          title="For structured property managers"
+          description="Use this workspace to manage landlord clients, properties, tenants, rents, and payment records."
         />
 
-        <EmailLoginForm />
-
-        <SectionCard
-          title="Magic link sign in"
-          description="Receive a secure sign-in link in your inbox if you prefer passwordless access."
-        >
-          <MagicLinkForm />
-        </SectionCard>
+        <ManagerLoginForm />
 
         <p className="text-center text-sm text-text-muted">
           New property management firm?{" "}
           <Link href="/manager/register" className="font-bold text-primary">
-            Create property manager account
+            Create BOPA Manager account
           </Link>
         </p>
 

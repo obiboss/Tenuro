@@ -83,6 +83,22 @@ export async function requireDeveloperUser(): Promise<ServerSessionUser> {
   return user;
 }
 
+export async function requireManagerUser(): Promise<ServerSessionUser> {
+  const user = await fetchSessionUserProfile();
+
+  if (!user) {
+    redirect("/manager/login");
+  }
+
+  assertRole({
+    role: user.role,
+    allowedRoles: ["manager"],
+    message: "You do not have permission to view this manager workspace.",
+  });
+
+  return user;
+}
+
 export async function requireRole(params: {
   allowedRoles: readonly UserRole[];
   message?: string;
@@ -148,6 +164,10 @@ export async function requireAgent() {
 
 export async function requireDeveloper() {
   return requireDeveloperUser();
+}
+
+export async function requireManager() {
+  return requireManagerUser();
 }
 
 export async function requireLandlordOrCaretaker() {

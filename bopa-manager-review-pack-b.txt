@@ -1,0 +1,1527 @@
+
+
+==================== src/server/types/auth.types.ts ====================
+
+export type UserRole =
+  | "landlord"
+  | "tenant"
+  | "caretaker"
+  | "agent"
+  | "developer"
+  | "platform_admin";
+
+export type NormalizedPhoneNumber = {
+  e164: string;
+  local: string;
+  countryCode: "NG";
+};
+
+export type ServerSessionUser = {
+  id: string;
+  role: UserRole;
+  fullName: string;
+  phoneNumber: string | null;
+  email: string | null;
+};
+
+export type AuthActionState = {
+  ok: boolean;
+  message: string;
+  phoneNumber?: string;
+  maskedPhoneNumber?: string;
+  fieldErrors?: Record<string, string[]>;
+};
+
+/**
+ * Legacy OTP types retained for compatibility only.
+ */
+export type OtpPurpose =
+  | "login"
+  | "register"
+  | "device_verification"
+  | "session_expired";
+
+export type OtpDeliveryChannel = "whatsapp" | "sms";
+export type OtpDeliveryStatus = "pending" | "sent" | "failed";
+
+export type OtpRequestResult = {
+  phoneNumber: string;
+  maskedPhoneNumber: string;
+  deliveryChannel: OtpDeliveryChannel;
+  expiresAt: string;
+};
+
+export type OtpVerifyResult = {
+  userId: string;
+  role: UserRole;
+  phoneNumber: string;
+};
+
+
+
+==================== src/components/auth/email-login-form.tsx ====================
+
+"use client";
+
+import { useActionState } from "react";
+import { emailPasswordLoginAction } from "@/actions/auth.actions";
+import { initialAuthActionState } from "@/actions/auth.state";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+
+export function EmailLoginForm() {
+  const [state, formAction, isPending] = useActionState(
+    emailPasswordLoginAction,
+    initialAuthActionState,
+  );
+
+  return (
+    <form action={formAction}>
+      <Card>
+        <CardContent>
+          {state.message ? (
+            <div
+              role="alert"
+              className={
+                state.ok
+                  ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
+                  : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
+              }
+            >
+              {state.message}
+            </div>
+          ) : null}
+
+          <Input
+            label="Email address"
+            name="email"
+            type="email"
+            placeholder="you@example.com"
+            error={state.fieldErrors?.email?.[0]}
+            required
+          />
+
+          <Input
+            label="Password"
+            name="password"
+            type="password"
+            placeholder="Enter your password"
+            error={state.fieldErrors?.password?.[0]}
+            required
+          />
+        </CardContent>
+
+        <CardFooter>
+          <Button type="submit" isLoading={isPending} fullWidth>
+            Sign In With Email
+          </Button>
+        </CardFooter>
+      </Card>
+    </form>
+  );
+}
+
+
+
+==================== src/components/auth/email-register-form.tsx ====================
+
+"use client";
+
+import { useActionState } from "react";
+import { emailPasswordRegisterAction } from "@/actions/auth.actions";
+import { initialAuthActionState } from "@/actions/auth.state";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+
+export function EmailRegisterForm() {
+  const [state, formAction, isPending] = useActionState(
+    emailPasswordRegisterAction,
+    initialAuthActionState,
+  );
+
+  return (
+    <form action={formAction}>
+      <Card>
+        <CardContent>
+          {state.message ? (
+            <div
+              role="alert"
+              className={
+                state.ok
+                  ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
+                  : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
+              }
+            >
+              {state.message}
+            </div>
+          ) : null}
+
+          <Input
+            label="Full name"
+            name="fullName"
+            placeholder="Enter your full name"
+            autoComplete="name"
+            error={state.fieldErrors?.fullName?.[0]}
+            required
+          />
+
+          <Input
+            label="Work email address"
+            name="email"
+            type="email"
+            placeholder="you@firm.com"
+            autoComplete="email"
+            error={state.fieldErrors?.email?.[0]}
+            required
+          />
+
+          <Input
+            label="Password"
+            name="password"
+            type="password"
+            placeholder="Create a secure password"
+            autoComplete="new-password"
+            error={state.fieldErrors?.password?.[0]}
+            required
+          />
+        </CardContent>
+
+        <CardFooter>
+          <Button type="submit" isLoading={isPending} fullWidth>
+            Create Account
+          </Button>
+        </CardFooter>
+      </Card>
+    </form>
+  );
+}
+
+
+
+==================== src/actions/developer-auth.actions.ts ====================
+
+"use server";
+
+import { redirect } from "next/navigation";
+import { errorResult } from "@/server/errors/result";
+import { createDeveloperAccountWithOwnerProfile } from "@/server/repositories/developer.repository";
+import {
+  getProfileById,
+  upsertProfile,
+} from "@/server/repositories/profiles.repository";
+import { createSupabaseAdminClient } from "@/server/supabase/admin";
+import { createSupabaseServerClient } from "@/server/supabase/server";
+import type { AuthActionState } from "@/server/types/auth.types";
+import { normalisePhoneNumber } from "@/server/utils/phone";
+import {
+  developerLoginSchema,
+  registerDeveloperSchema,
+} from "@/server/validators/developer-auth.schema";
+
+function toActionError(error: unknown): AuthActionState {
+  const result = errorResult(error);
+
+  return {
+    ok: false,
+    message: result.message,
+    fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
+  };
+}
+
+function nullableText(value: string) {
+  const trimmed = value.trim();
+
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+export async function registerDeveloperAction(
+  _previousState: AuthActionState,
+  formData: FormData,
+): Promise<AuthActionState> {
+  let shouldRedirect = false;
+
+  try {
+    const parsed = registerDeveloperSchema.parse({
+      fullName: formData.get("fullName"),
+      phoneNumber: formData.get("phoneNumber"),
+      password: formData.get("password"),
+      companyName: formData.get("companyName"),
+      companyEmail: formData.get("companyEmail"),
+      rcNumber: formData.get("rcNumber"),
+      officeAddress: formData.get("officeAddress"),
+    });
+
+    const normalizedPhone = normalisePhoneNumber(parsed.phoneNumber);
+    const supabase = await createSupabaseServerClient();
+
+    const { data, error } = await supabase.auth.signUp({
+      phone: normalizedPhone.e164,
+      password: parsed.password,
+      options: {
+        data: {
+          full_name: parsed.fullName,
+          role: "developer",
+        },
+      },
+    });
+
+    if (error || !data.user) {
+      return {
+        ok: false,
+        message: error?.message ?? "Developer account could not be created.",
+      };
+    }
+
+    const adminSupabase = createSupabaseAdminClient();
+
+    await upsertProfile(adminSupabase, {
+      id: data.user.id,
+      role: "developer",
+      fullName: parsed.fullName,
+      phoneNumber: normalizedPhone.e164,
+      email: data.user.email?.trim() ? data.user.email.trim() : null,
+    });
+
+    await createDeveloperAccountWithOwnerProfile(adminSupabase, {
+      ownerProfileId: data.user.id,
+      fullName: parsed.fullName,
+      phoneNumber: normalizedPhone.e164,
+      email: data.user.email?.trim() ? data.user.email.trim() : null,
+      companyName: parsed.companyName,
+      companyPhone: normalizedPhone.e164,
+      companyEmail: nullableText(parsed.companyEmail),
+      rcNumber: nullableText(parsed.rcNumber),
+      officeAddress: nullableText(parsed.officeAddress),
+    });
+
+    shouldRedirect = true;
+  } catch (error) {
+    console.error("registerDeveloperAction failed:", error);
+    return toActionError(error);
+  }
+
+  if (shouldRedirect) {
+    redirect("/developer");
+  }
+
+  return {
+    ok: true,
+    message: "Developer account created successfully.",
+  };
+}
+
+export async function developerLoginAction(
+  _previousState: AuthActionState,
+  formData: FormData,
+): Promise<AuthActionState> {
+  let shouldRedirect = false;
+
+  try {
+    const parsed = developerLoginSchema.parse({
+      phoneNumber: formData.get("phoneNumber"),
+      password: formData.get("password"),
+    });
+
+    const normalizedPhone = normalisePhoneNumber(parsed.phoneNumber);
+    const supabase = await createSupabaseServerClient();
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      phone: normalizedPhone.e164,
+      password: parsed.password,
+    });
+
+    if (error || !data.user) {
+      return {
+        ok: false,
+        message: "That phone number or password is incorrect.",
+      };
+    }
+
+    const adminSupabase = createSupabaseAdminClient();
+    const profile = await getProfileById(adminSupabase, data.user.id);
+
+    if (!profile || profile.role !== "developer") {
+      await supabase.auth.signOut();
+
+      return {
+        ok: false,
+        message:
+          "This login is only for developer accounts. Please use the correct login page.",
+      };
+    }
+
+    shouldRedirect = true;
+  } catch (error) {
+    return toActionError(error);
+  }
+
+  if (shouldRedirect) {
+    redirect("/developer");
+  }
+
+  return {
+    ok: true,
+    message: "Signed in successfully.",
+  };
+}
+
+export async function developerSignOutAction() {
+  const supabase = await createSupabaseServerClient();
+  await supabase.auth.signOut();
+
+  redirect("/developer/login");
+}
+
+
+
+==================== src/actions/developer-auth.state.ts ====================
+
+import type { AuthActionState } from "@/server/types/auth.types";
+
+export const initialDeveloperAuthActionState: AuthActionState = {
+  ok: false,
+  message: "",
+};
+
+
+
+==================== src/server/repositories/developer.repository.ts ====================
+
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { DeveloperStaffTitle } from "@/constants/developer-staff-permissions";
+
+export type DeveloperAccountStatus =
+  | "active"
+  | "suspended"
+  | "pending_verification";
+
+export type DeveloperSubscriptionPlan = "starter" | "growth" | "pro";
+
+export type DeveloperProfileRole =
+  | "developer_owner"
+  | "developer_staff"
+  | "developer_accountant";
+
+export type DeveloperAccountRow = {
+  id: string;
+  owner_profile_id: string;
+  company_name: string;
+  company_phone: string;
+  company_email: string | null;
+  rc_number: string | null;
+  office_address: string | null;
+  status: DeveloperAccountStatus;
+  subscription_plan: DeveloperSubscriptionPlan;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DeveloperProfileRow = {
+  id: string;
+  developer_account_id: string;
+  profile_id: string;
+  full_name: string;
+  phone_number: string;
+  email: string | null;
+  role: DeveloperProfileRole;
+  staff_title: DeveloperStaffTitle | null;
+  is_active: boolean;
+  invited_by_profile_id: string | null;
+  manager_developer_profile_id: string | null;
+  accepted_at: string | null;
+  revoked_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DeveloperAccountWithProfile = DeveloperAccountRow & {
+  developer_profiles: DeveloperProfileRow[];
+};
+
+const DEVELOPER_ACCOUNT_SELECT = `
+  id,
+  owner_profile_id,
+  company_name,
+  company_phone,
+  company_email,
+  rc_number,
+  office_address,
+  status,
+  subscription_plan,
+  created_at,
+  updated_at
+`;
+
+const DEVELOPER_PROFILE_SELECT = `
+  id,
+  developer_account_id,
+  profile_id,
+  full_name,
+  phone_number,
+  email,
+  role,
+  staff_title,
+  is_active,
+  invited_by_profile_id,
+  manager_developer_profile_id,
+  accepted_at,
+  revoked_at,
+  created_at,
+  updated_at
+`;
+
+export async function getDeveloperAccountByOwnerProfileId(
+  supabase: SupabaseClient,
+  ownerProfileId: string,
+) {
+  const { data, error } = await supabase
+    .from("developer_accounts")
+    .select(DEVELOPER_ACCOUNT_SELECT)
+    .eq("owner_profile_id", ownerProfileId)
+    .maybeSingle<DeveloperAccountRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getDeveloperProfileByProfileId(
+  supabase: SupabaseClient,
+  profileId: string,
+) {
+  const { data, error } = await supabase
+    .from("developer_profiles")
+    .select(DEVELOPER_PROFILE_SELECT)
+    .eq("profile_id", profileId)
+    .eq("is_active", true)
+    .maybeSingle<DeveloperProfileRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getDeveloperAccountByProfileId(
+  supabase: SupabaseClient,
+  profileId: string,
+) {
+  const developerProfile = await getDeveloperProfileByProfileId(
+    supabase,
+    profileId,
+  );
+
+  if (!developerProfile) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("developer_accounts")
+    .select(DEVELOPER_ACCOUNT_SELECT)
+    .eq("id", developerProfile.developer_account_id)
+    .maybeSingle<DeveloperAccountRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  return {
+    account: data,
+    profile: developerProfile,
+  };
+}
+
+export async function createDeveloperAccountWithOwnerProfile(
+  supabase: SupabaseClient,
+  params: {
+    ownerProfileId: string;
+    fullName: string;
+    phoneNumber: string;
+    email: string | null;
+    companyName: string;
+    companyPhone: string;
+    companyEmail: string | null;
+    rcNumber: string | null;
+    officeAddress: string | null;
+  },
+) {
+  const { data: account, error: accountError } = await supabase
+    .from("developer_accounts")
+    .insert({
+      owner_profile_id: params.ownerProfileId,
+      company_name: params.companyName,
+      company_phone: params.companyPhone,
+      company_email: params.companyEmail,
+      rc_number: params.rcNumber,
+      office_address: params.officeAddress,
+      status: "active",
+      subscription_plan: "starter",
+    })
+    .select(DEVELOPER_ACCOUNT_SELECT)
+    .single<DeveloperAccountRow>();
+
+  if (accountError) {
+    throw accountError;
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from("developer_profiles")
+    .insert({
+      developer_account_id: account.id,
+      profile_id: params.ownerProfileId,
+      full_name: params.fullName,
+      phone_number: params.phoneNumber,
+      email: params.email,
+      role: "developer_owner",
+      staff_title: null,
+      is_active: true,
+    })
+    .select(DEVELOPER_PROFILE_SELECT)
+    .single<DeveloperProfileRow>();
+
+  if (profileError) {
+    throw profileError;
+  }
+
+  return {
+    account,
+    profile,
+  };
+}
+
+
+
+==================== src/server/repositories/developer-staff.repository.ts ====================
+
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type {
+  DeveloperStaffPermissionKey,
+  DeveloperStaffTitle,
+} from "@/constants/developer-staff-permissions";
+import type { DeveloperProfileRole } from "@/server/repositories/developer.repository";
+
+export type DeveloperStaffRoleLinkStatus = "active" | "revoked" | "expired";
+
+export type DeveloperStaffRoleLinkRow = {
+  id: string;
+  developer_account_id: string;
+  created_by_profile_id: string;
+  token_hash: string;
+  staff_title: DeveloperStaffTitle;
+  developer_profile_role: DeveloperProfileRole;
+  permissions: DeveloperStaffPermissionKey[];
+  status: DeveloperStaffRoleLinkStatus;
+  expires_at: string;
+  accepted_count: number;
+  revoked_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DeveloperStaffPermissionRow = {
+  id: string;
+  developer_account_id: string;
+  developer_profile_id: string;
+  permission_key: DeveloperStaffPermissionKey;
+  granted_by_profile_id: string | null;
+  created_at: string;
+};
+
+export type DeveloperStaffMemberRow = {
+  id: string;
+  developer_account_id: string;
+  profile_id: string;
+  full_name: string;
+  phone_number: string;
+  email: string | null;
+  role: DeveloperProfileRole;
+  staff_title: DeveloperStaffTitle | null;
+  is_active: boolean;
+  invited_by_profile_id: string | null;
+  manager_developer_profile_id: string | null;
+  accepted_at: string | null;
+  revoked_at: string | null;
+  created_at: string;
+  updated_at: string;
+  developer_staff_permissions: {
+    permission_key: DeveloperStaffPermissionKey;
+  }[];
+};
+
+const DEVELOPER_STAFF_ROLE_LINK_SELECT = `
+  id,
+  developer_account_id,
+  created_by_profile_id,
+  token_hash,
+  staff_title,
+  developer_profile_role,
+  permissions,
+  status,
+  expires_at,
+  accepted_count,
+  revoked_at,
+  created_at,
+  updated_at
+`;
+
+const DEVELOPER_STAFF_MEMBER_SELECT = `
+  id,
+  developer_account_id,
+  profile_id,
+  full_name,
+  phone_number,
+  email,
+  role,
+  staff_title,
+  is_active,
+  invited_by_profile_id,
+  manager_developer_profile_id,
+  accepted_at,
+  revoked_at,
+  created_at,
+  updated_at,
+  developer_staff_permissions (
+    permission_key
+  )
+`;
+
+export async function createDeveloperStaffRoleLink(
+  supabase: SupabaseClient,
+  params: {
+    developerAccountId: string;
+    createdByProfileId: string;
+    tokenHash: string;
+    staffTitle: DeveloperStaffTitle;
+    developerProfileRole: DeveloperProfileRole;
+    permissions: DeveloperStaffPermissionKey[];
+    expiresAt: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("developer_staff_role_links")
+    .insert({
+      developer_account_id: params.developerAccountId,
+      created_by_profile_id: params.createdByProfileId,
+      token_hash: params.tokenHash,
+      staff_title: params.staffTitle,
+      developer_profile_role: params.developerProfileRole,
+      permissions: params.permissions,
+      status: "active",
+      expires_at: params.expiresAt,
+    })
+    .select(DEVELOPER_STAFF_ROLE_LINK_SELECT)
+    .single<DeveloperStaffRoleLinkRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function listDeveloperStaffRoleLinks(
+  supabase: SupabaseClient,
+  developerAccountId: string,
+) {
+  const { data, error } = await supabase
+    .from("developer_staff_role_links")
+    .select(DEVELOPER_STAFF_ROLE_LINK_SELECT)
+    .eq("developer_account_id", developerAccountId)
+    .order("created_at", { ascending: false })
+    .returns<DeveloperStaffRoleLinkRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getDeveloperStaffRoleLinkByHash(
+  supabase: SupabaseClient,
+  tokenHash: string,
+) {
+  const { data, error } = await supabase
+    .from("developer_staff_role_links")
+    .select(DEVELOPER_STAFF_ROLE_LINK_SELECT)
+    .eq("token_hash", tokenHash)
+    .maybeSingle<DeveloperStaffRoleLinkRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function createDeveloperStaffProfile(
+  supabase: SupabaseClient,
+  params: {
+    developerAccountId: string;
+    profileId: string;
+    fullName: string;
+    phoneNumber: string;
+    email: string | null;
+    role: DeveloperProfileRole;
+    staffTitle: DeveloperStaffTitle;
+    invitedByProfileId: string;
+    managerDeveloperProfileId: string | null;
+  },
+) {
+  const { data, error } = await supabase
+    .from("developer_profiles")
+    .insert({
+      developer_account_id: params.developerAccountId,
+      profile_id: params.profileId,
+      full_name: params.fullName,
+      phone_number: params.phoneNumber,
+      email: params.email,
+      role: params.role,
+      staff_title: params.staffTitle,
+      invited_by_profile_id: params.invitedByProfileId,
+      manager_developer_profile_id: params.managerDeveloperProfileId,
+      accepted_at: new Date().toISOString(),
+      is_active: true,
+    })
+    .select(
+      `
+        id,
+        developer_account_id,
+        profile_id,
+        full_name,
+        phone_number,
+        email,
+        role,
+        staff_title,
+        is_active,
+        invited_by_profile_id,
+        manager_developer_profile_id,
+        accepted_at,
+        revoked_at,
+        created_at,
+        updated_at
+      `,
+    )
+    .single<Omit<DeveloperStaffMemberRow, "developer_staff_permissions">>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function createDeveloperStaffPermissions(
+  supabase: SupabaseClient,
+  params: {
+    developerAccountId: string;
+    developerProfileId: string;
+    grantedByProfileId: string;
+    permissions: DeveloperStaffPermissionKey[];
+  },
+) {
+  if (params.permissions.length === 0) {
+    return 0;
+  }
+
+  const { data, error } = await supabase
+    .from("developer_staff_permissions")
+    .insert(
+      params.permissions.map((permission) => ({
+        developer_account_id: params.developerAccountId,
+        developer_profile_id: params.developerProfileId,
+        permission_key: permission,
+        granted_by_profile_id: params.grantedByProfileId,
+      })),
+    )
+    .select("id")
+    .returns<{ id: string }[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data.length;
+}
+
+export async function incrementDeveloperStaffRoleLinkAcceptedCount(
+  supabase: SupabaseClient,
+  roleLinkId: string,
+) {
+  const { error } = await supabase.rpc(
+    "increment_developer_staff_role_link_accepted_count",
+    {
+      p_role_link_id: roleLinkId,
+    },
+  );
+
+  if (error) {
+    throw error;
+  }
+}
+
+export async function listDeveloperStaffMembers(
+  supabase: SupabaseClient,
+  developerAccountId: string,
+) {
+  const { data, error } = await supabase
+    .from("developer_profiles")
+    .select(DEVELOPER_STAFF_MEMBER_SELECT)
+    .eq("developer_account_id", developerAccountId)
+    .in("role", ["developer_staff", "developer_accountant"])
+    .order("created_at", { ascending: false })
+    .returns<DeveloperStaffMemberRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+
+
+==================== src/server/services/developer-staff.service.ts ====================
+
+import "server-only";
+
+import crypto from "node:crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  DEVELOPER_STAFF_TITLE_PERMISSION_PRESETS,
+  getDeveloperStaffTitleLabel,
+  type DeveloperStaffTitle,
+} from "@/constants/developer-staff-permissions";
+import { AppError } from "@/server/errors/app-error";
+import {
+  createDeveloperStaffPermissions,
+  createDeveloperStaffProfile,
+  createDeveloperStaffRoleLink,
+  getDeveloperStaffRoleLinkByHash,
+  incrementDeveloperStaffRoleLinkAcceptedCount,
+} from "@/server/repositories/developer-staff.repository";
+import {
+  getDeveloperAccountByOwnerProfileId,
+  getDeveloperProfileByProfileId,
+  type DeveloperProfileRole,
+} from "@/server/repositories/developer.repository";
+import { normalisePhoneNumber } from "@/server/utils/phone";
+import type { AcceptDeveloperStaffRoleLinkInput } from "@/server/validators/developer-staff.schema";
+
+const STAFF_ROLE_LINK_TTL_DAYS = 30;
+
+function getAppUrl() {
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
+
+  if (!appUrl) {
+    throw new AppError(
+      "APP_URL_MISSING",
+      "Application URL is not configured.",
+      500,
+    );
+  }
+
+  return appUrl.replace(/\/$/, "");
+}
+
+function createRawRoleLinkToken() {
+  return crypto.randomBytes(32).toString("base64url");
+}
+
+export function hashDeveloperStaffRoleLinkToken(token: string) {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+function getRoleLinkExpiryDate() {
+  return new Date(
+    Date.now() + STAFF_ROLE_LINK_TTL_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString();
+}
+
+function getDeveloperProfileRoleForStaffTitle(
+  title: DeveloperStaffTitle,
+): DeveloperProfileRole {
+  if (title === "accountant") {
+    return "developer_accountant";
+  }
+
+  return "developer_staff";
+}
+
+function assertRoleLinkIsUsable(roleLink: {
+  status: string;
+  expires_at: string;
+}) {
+  if (roleLink.status !== "active") {
+    throw new AppError(
+      "DEVELOPER_STAFF_ROLE_LINK_NOT_ACTIVE",
+      "This staff onboarding link is no longer active.",
+      400,
+    );
+  }
+
+  if (new Date(roleLink.expires_at).getTime() < Date.now()) {
+    throw new AppError(
+      "DEVELOPER_STAFF_ROLE_LINK_EXPIRED",
+      "This staff onboarding link has expired.",
+      410,
+    );
+  }
+}
+
+export async function createDeveloperStaffRoleLinkForTitle(params: {
+  supabase: SupabaseClient;
+  ownerProfileId: string;
+  staffTitle: DeveloperStaffTitle;
+}) {
+  const account = await getDeveloperAccountByOwnerProfileId(
+    params.supabase,
+    params.ownerProfileId,
+  );
+
+  if (!account || account.status !== "active") {
+    throw new AppError(
+      "DEVELOPER_ACCOUNT_NOT_ACTIVE",
+      "Developer account is not active.",
+      403,
+    );
+  }
+
+  const ownerDeveloperProfile = await getDeveloperProfileByProfileId(
+    params.supabase,
+    params.ownerProfileId,
+  );
+
+  if (
+    !ownerDeveloperProfile ||
+    ownerDeveloperProfile.developer_account_id !== account.id ||
+    ownerDeveloperProfile.role !== "developer_owner"
+  ) {
+    throw new AppError(
+      "DEVELOPER_STAFF_ROLE_LINK_FORBIDDEN",
+      "Only the company owner can generate staff onboarding links at this stage.",
+      403,
+    );
+  }
+
+  const rawToken = createRawRoleLinkToken();
+  const permissions = [
+    ...DEVELOPER_STAFF_TITLE_PERMISSION_PRESETS[params.staffTitle],
+  ];
+
+  const roleLink = await createDeveloperStaffRoleLink(params.supabase, {
+    developerAccountId: account.id,
+    createdByProfileId: params.ownerProfileId,
+    tokenHash: hashDeveloperStaffRoleLinkToken(rawToken),
+    staffTitle: params.staffTitle,
+    developerProfileRole: getDeveloperProfileRoleForStaffTitle(
+      params.staffTitle,
+    ),
+    permissions,
+    expiresAt: getRoleLinkExpiryDate(),
+  });
+
+  return {
+    roleLink,
+    onboardingUrl: `${getAppUrl()}/developer/staff/invite/${rawToken}`,
+  };
+}
+
+export async function getPublicDeveloperStaffRoleLinkByToken(params: {
+  supabase: SupabaseClient;
+  token: string;
+}) {
+  const token = params.token.trim();
+
+  if (!token) {
+    return null;
+  }
+
+  const roleLink = await getDeveloperStaffRoleLinkByHash(
+    params.supabase,
+    hashDeveloperStaffRoleLinkToken(token),
+  );
+
+  if (!roleLink) {
+    return null;
+  }
+
+  if (roleLink.status !== "active") {
+    return null;
+  }
+
+  if (new Date(roleLink.expires_at).getTime() < Date.now()) {
+    return null;
+  }
+
+  return {
+    id: roleLink.id,
+    staffTitle: roleLink.staff_title,
+    staffTitleLabel: getDeveloperStaffTitleLabel(roleLink.staff_title),
+    expiresAt: roleLink.expires_at,
+  };
+}
+
+export async function acceptDeveloperStaffRoleLink(params: {
+  supabase: SupabaseClient;
+  input: AcceptDeveloperStaffRoleLinkInput;
+}) {
+  const roleLink = await getDeveloperStaffRoleLinkByHash(
+    params.supabase,
+    hashDeveloperStaffRoleLinkToken(params.input.token),
+  );
+
+  if (!roleLink) {
+    throw new AppError(
+      "DEVELOPER_STAFF_ROLE_LINK_INVALID",
+      "This staff onboarding link is invalid.",
+      404,
+    );
+  }
+
+  assertRoleLinkIsUsable(roleLink);
+
+  const phone = normalisePhoneNumber(params.input.phoneNumber);
+  const email =
+    params.input.email.trim().length > 0 ? params.input.email.trim() : null;
+
+  const { data: createdUser, error: createUserError } =
+    await params.supabase.auth.admin.createUser({
+      phone: phone.e164,
+      password: params.input.password,
+      phone_confirm: true,
+      ...(email
+        ? {
+            email,
+            email_confirm: true,
+          }
+        : {}),
+      user_metadata: {
+        full_name: params.input.fullName,
+        role: "developer",
+        developer_account_id: roleLink.developer_account_id,
+        staff_title: roleLink.staff_title,
+      },
+    });
+
+  if (createUserError || !createdUser.user) {
+    throw new AppError(
+      "DEVELOPER_STAFF_AUTH_CREATE_FAILED",
+      createUserError?.message || "Staff login account could not be created.",
+      400,
+    );
+  }
+
+  const profileId = createdUser.user.id;
+
+  try {
+    const { error: profileError } = await params.supabase
+      .from("profiles")
+      .insert({
+        id: profileId,
+        role: "developer",
+        full_name: params.input.fullName,
+        phone_number: phone.e164,
+        email,
+        country_code: "NG",
+        preferred_currency: "NGN",
+        is_active: true,
+      });
+
+    if (profileError) {
+      throw profileError;
+    }
+
+    const developerProfile = await createDeveloperStaffProfile(
+      params.supabase,
+      {
+        developerAccountId: roleLink.developer_account_id,
+        profileId,
+        fullName: params.input.fullName,
+        phoneNumber: phone.e164,
+        email,
+        role: roleLink.developer_profile_role,
+        staffTitle: roleLink.staff_title,
+        invitedByProfileId: roleLink.created_by_profile_id,
+        managerDeveloperProfileId: null,
+      },
+    );
+
+    await createDeveloperStaffPermissions(params.supabase, {
+      developerAccountId: roleLink.developer_account_id,
+      developerProfileId: developerProfile.id,
+      grantedByProfileId: roleLink.created_by_profile_id,
+      permissions: roleLink.permissions,
+    });
+
+    await incrementDeveloperStaffRoleLinkAcceptedCount(
+      params.supabase,
+      roleLink.id,
+    );
+
+    return {
+      profileId,
+      developerProfileId: developerProfile.id,
+    };
+  } catch (error) {
+    await params.supabase.auth.admin.deleteUser(profileId);
+
+    throw error;
+  }
+}
+
+
+
+==================== src/server/validators/developer-auth.schema.ts ====================
+
+import { z } from "zod";
+import {
+  passwordSchema,
+  phoneNumberSchema,
+} from "@/server/validators/auth.schema";
+
+export const developerLoginSchema = z.object({
+  phoneNumber: phoneNumberSchema,
+  password: passwordSchema,
+});
+
+export const registerDeveloperSchema = z.object({
+  fullName: z
+    .string()
+    .trim()
+    .min(2, "Enter your full name.")
+    .max(120, "Name is too long."),
+  phoneNumber: phoneNumberSchema,
+  password: passwordSchema,
+  companyName: z
+    .string()
+    .trim()
+    .min(2, "Enter the developer company name.")
+    .max(160, "Company name is too long."),
+  companyEmail: z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) => value || "")
+    .refine(
+      (value) => value.length === 0 || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
+      "Enter a valid company email address.",
+    ),
+  rcNumber: z
+    .string()
+    .trim()
+    .max(40, "RC number is too long.")
+    .optional()
+    .transform((value) => value || ""),
+  officeAddress: z
+    .string()
+    .trim()
+    .max(240, "Office address is too long.")
+    .optional()
+    .transform((value) => value || ""),
+});
+
+export type DeveloperLoginInput = z.infer<typeof developerLoginSchema>;
+export type RegisterDeveloperInput = z.infer<typeof registerDeveloperSchema>;
+
+
+
+==================== src/server/validators/developer-staff.schema.ts ====================
+
+import { z } from "zod";
+import { DEVELOPER_STAFF_TITLES } from "@/constants/developer-staff-permissions";
+
+export const developerStaffTitleSchema = z.enum(DEVELOPER_STAFF_TITLES);
+
+export const createDeveloperStaffRoleLinkSchema = z.object({
+  staffTitle: developerStaffTitleSchema,
+});
+
+export const acceptDeveloperStaffRoleLinkSchema = z
+  .object({
+    token: z.string().trim().min(20, "Staff onboarding link is invalid."),
+    fullName: z
+      .string()
+      .trim()
+      .min(2, "Enter your full name.")
+      .max(120, "Full name is too long."),
+    phoneNumber: z
+      .string()
+      .trim()
+      .min(7, "Enter your phone number.")
+      .max(30, "Phone number is too long."),
+    email: z
+      .string()
+      .trim()
+      .email("Enter a valid email address.")
+      .optional()
+      .or(z.literal(""))
+      .transform((value) => value || ""),
+    password: z
+      .string()
+      .min(8, "Password must be at least 8 characters long.")
+      .max(72, "Password is too long."),
+    confirmPassword: z.string().min(1, "Confirm your password."),
+  })
+  .refine((value) => value.password === value.confirmPassword, {
+    path: ["confirmPassword"],
+    message: "Passwords do not match.",
+  });
+
+export type CreateDeveloperStaffRoleLinkInput = z.infer<
+  typeof createDeveloperStaffRoleLinkSchema
+>;
+
+export type AcceptDeveloperStaffRoleLinkInput = z.infer<
+  typeof acceptDeveloperStaffRoleLinkSchema
+>;
+
+
+
+==================== src/components/developer/developer-register-form.tsx ====================
+
+"use client";
+
+import Link from "next/link";
+import { useActionState, useState } from "react";
+import { registerDeveloperAction } from "@/actions/developer-auth.actions";
+import { initialDeveloperAuthActionState } from "@/actions/developer-auth.state";
+import { PhoneNumberInput } from "@/components/auth/phone-number-input";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { TrustNotice } from "@/components/ui/trust-notice";
+
+export function DeveloperRegisterForm() {
+  const [phoneNumber, setPhoneNumber] = useState("");
+
+  const [state, formAction, isPending] = useActionState(
+    registerDeveloperAction,
+    initialDeveloperAuthActionState,
+  );
+
+  return (
+    <div className="space-y-5">
+      <TrustNotice
+        title="Create a developer workspace"
+        description="This account is separate from BOPA landlord access and is built for estate sales, buyer records, plot inventory, and payment tracking."
+      />
+
+      <form action={formAction}>
+        <Card>
+          <CardContent>
+            {state.message ? (
+              <div
+                role="alert"
+                className={
+                  state.ok
+                    ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
+                    : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
+                }
+              >
+                {state.message}
+              </div>
+            ) : null}
+
+            <Input
+              label="Full name"
+              name="fullName"
+              placeholder="Enter your full name"
+              autoComplete="name"
+              error={state.fieldErrors?.fullName?.[0]}
+              required
+            />
+
+            <PhoneNumberInput
+              label="Phone number"
+              name="phoneNumber"
+              value={phoneNumber}
+              onChange={setPhoneNumber}
+              error={state.fieldErrors?.phoneNumber?.[0]}
+              helperText="Enter your number without the first 0. Example: 8149761904."
+              required
+            />
+
+            <Input
+              label="Password"
+              name="password"
+              type="password"
+              autoComplete="new-password"
+              placeholder="At least 8 characters"
+              error={state.fieldErrors?.password?.[0]}
+              required
+            />
+
+            <Input
+              label="Developer company name"
+              name="companyName"
+              placeholder="Example: Greenfield Homes Ltd"
+              autoComplete="organization"
+              error={state.fieldErrors?.companyName?.[0]}
+              required
+            />
+
+            <Input
+              label="Company email"
+              name="companyEmail"
+              type="email"
+              placeholder="company@example.com"
+              autoComplete="email"
+              error={state.fieldErrors?.companyEmail?.[0]}
+            />
+
+            <Input
+              label="RC number"
+              name="rcNumber"
+              placeholder="Optional"
+              error={state.fieldErrors?.rcNumber?.[0]}
+            />
+
+            <Input
+              label="Office address"
+              name="officeAddress"
+              placeholder="Optional"
+              autoComplete="street-address"
+              error={state.fieldErrors?.officeAddress?.[0]}
+            />
+          </CardContent>
+
+          <CardFooter className="items-stretch">
+            <Button type="submit" isLoading={isPending} fullWidth>
+              Create Developer Account
+            </Button>
+
+            <p className="text-center text-sm text-text-muted sm:text-left">
+              Already have a developer account?{" "}
+              <Link href="/developer/login" className="font-bold text-primary">
+                Sign in
+              </Link>
+            </p>
+          </CardFooter>
+        </Card>
+      </form>
+    </div>
+  );
+}
+
+
+
+==================== src/components/developer/developer-staff-invite-form.tsx ====================
+
+"use client";
+
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
+import { createDeveloperStaffRoleLinkAction } from "@/actions/developer-staff.actions";
+import { initialDeveloperStaffRoleLinkActionState } from "@/actions/developer-staff.state";
+import {
+  DEVELOPER_STAFF_TITLE_OPTIONS,
+  getDeveloperStaffTitleLabel,
+  type DeveloperStaffTitle,
+} from "@/constants/developer-staff-permissions";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { WhatsAppShareActions } from "@/components/ui/whatsapp-share-actions";
+
+function GenerateRoleLinkButton({ title }: { title: DeveloperStaffTitle }) {
+  const { pending } = useFormStatus();
+
+  return (
+    <Button type="submit" isLoading={pending} disabled={pending}>
+      Generate {getDeveloperStaffTitleLabel(title)} Link
+    </Button>
+  );
+}
+
+export function DeveloperStaffInviteForm() {
+  const [state, formAction] = useActionState(
+    createDeveloperStaffRoleLinkAction,
+    initialDeveloperStaffRoleLinkActionState,
+  );
+
+  return (
+    <Card>
+      <CardContent className="space-y-5">
+        <div className="rounded-card bg-primary-soft p-5">
+          <p className="font-black text-text-strong">Staff onboarding links</p>
+          <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
+            Generate a role link and send it to the staff member. The staff
+            fills their own details and creates their own password.
+          </p>
+        </div>
+
+        {state.message ? (
+          <div
+            role="alert"
+            className={
+              state.ok
+                ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
+                : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
+            }
+          >
+            {state.message}
+          </div>
+        ) : null}
+
+        {state.onboardingUrl ? (
+          <div className="rounded-card border border-primary/20 bg-primary-soft p-4">
+            <p className="text-sm font-black text-text-strong">
+              {state.staffTitleLabel ?? "Staff"} onboarding link
+            </p>
+            <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+              Copy this link and send it by WhatsApp, SMS, or email. It expires
+              in 30 days.
+            </p>
+            <input
+              readOnly
+              value={state.onboardingUrl}
+              className="mt-3 min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-bold text-text-strong outline-none"
+            />
+            <div className="mt-3">
+              <WhatsAppShareActions
+                message={`Join our team on BOPA using this secure staff link: ${state.onboardingUrl}`}
+                copyText={state.onboardingUrl}
+                whatsappLabel="Send on WhatsApp"
+                copyLabel="Copy link"
+              />
+            </div>
+          </div>
+        ) : null}
+
+        <div className="grid gap-4 md:grid-cols-2">
+          {DEVELOPER_STAFF_TITLE_OPTIONS.map((option) => (
+            <form
+              key={option.value}
+              action={formAction}
+              className="rounded-card border border-border-soft bg-background p-4"
+            >
+              <input type="hidden" name="staffTitle" value={option.value} />
+
+              <p className="font-black text-text-strong">{option.label}</p>
+              <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
+                {option.description}
+              </p>
+
+              <div className="mt-4">
+                <GenerateRoleLinkButton title={option.value} />
+              </div>
+            </form>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+

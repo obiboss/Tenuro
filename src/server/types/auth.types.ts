@@ -4,6 +4,7 @@ export type UserRole =
   | "caretaker"
   | "agent"
   | "developer"
+  | "manager"
   | "platform_admin";
 
 export type NormalizedPhoneNumber = {

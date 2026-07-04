@@ -26,6 +26,10 @@ import {
 import { writeSystemAuditLog } from "@/server/services/audit-log.service";
 import { verifyAgentTenantProcessingFeeReference } from "@/server/services/agent-processing-fee.service";
 import { verifyAndPostDeveloperPaymentReference } from "@/server/services/developer-payment.service";
+import {
+  isManagerPaystackWebhook,
+  verifyAndPostManagerPaystackPaymentReference,
+} from "@/server/services/manager-paystack.service";
 import { verifyTenantApplicationProcessingFeeReference } from "@/server/services/tenant-application-processing-fees.service";
 import {
   auditGatewayPaymentReplayIgnored,
@@ -52,6 +56,8 @@ export type GatewayPaymentWebhookResult = {
   gatewayPaymentIntentId?: string;
   developerPaymentIntentId?: string;
   developerSalePaymentId?: string;
+  managerPaymentRequestId?: string;
+  managerRentPaymentId?: string;
   verifiedPayload?: Record<string, unknown>;
 };
 
@@ -526,6 +532,22 @@ async function processVerifiedDeveloperPaymentReference(reference: string) {
   } satisfies GatewayPaymentWebhookResult;
 }
 
+async function processVerifiedManagerPaymentReference(reference: string) {
+  const result = await verifyAndPostManagerPaystackPaymentReference({
+    supabase: createSupabaseAdminClient(),
+    reference,
+  });
+
+  return {
+    status: result.status,
+    message: result.message,
+    paymentId: result.paymentId,
+    managerPaymentRequestId: result.paymentRequestId,
+    managerRentPaymentId: result.paymentId,
+    verifiedPayload: result.verifiedPayload,
+  } satisfies GatewayPaymentWebhookResult;
+}
+
 async function processVerifiedPaystackReferenceWithFallback(
   reference: string,
   options?: {
@@ -574,6 +596,15 @@ async function processVerifiedPaystackReferenceWithFallback(
       }
 
       if (
+        isManagerPaystackWebhook({
+          reference,
+          rawPayload: options?.rawPayload,
+        })
+      ) {
+        return processVerifiedManagerPaymentReference(reference);
+      }
+
+      if (
         isDeveloperInstallmentWebhook({
           reference,
           rawPayload: options?.rawPayload,
@@ -599,7 +630,8 @@ async function resolveDuplicateWebhookEvent(params: {
   if (
     params.registeredEvent.event.processing_status === "processed" &&
     (params.registeredEvent.event.processed_payment_id ||
-      params.registeredEvent.event.developer_sale_payment_id)
+      params.registeredEvent.event.developer_sale_payment_id ||
+      params.registeredEvent.event.manager_rent_payment_id)
   ) {
     return {
       status: "duplicate",
@@ -607,6 +639,7 @@ async function resolveDuplicateWebhookEvent(params: {
       paymentId:
         params.registeredEvent.event.processed_payment_id ??
         params.registeredEvent.event.developer_sale_payment_id ??
+        params.registeredEvent.event.manager_rent_payment_id ??
         undefined,
       gatewayPaymentIntentId:
         params.registeredEvent.event.gateway_payment_intent_id ?? undefined,
@@ -614,6 +647,10 @@ async function resolveDuplicateWebhookEvent(params: {
         params.registeredEvent.event.developer_payment_intent_id ?? undefined,
       developerSalePaymentId:
         params.registeredEvent.event.developer_sale_payment_id ?? undefined,
+      managerPaymentRequestId:
+        params.registeredEvent.event.manager_payment_request_id ?? undefined,
+      managerRentPaymentId:
+        params.registeredEvent.event.manager_rent_payment_id ?? undefined,
     };
   }
 
@@ -759,7 +796,11 @@ export async function processGatewayPaystackWebhook(params: {
         result.gatewayPaymentIntentId ?? intent?.id ?? null,
       developerPaymentIntentId: result.developerPaymentIntentId ?? null,
       developerSalePaymentId: result.developerSalePaymentId ?? null,
-      processedPaymentId: result.paymentId ?? null,
+      managerPaymentRequestId: result.managerPaymentRequestId ?? null,
+      managerRentPaymentId: result.managerRentPaymentId ?? null,
+      processedPaymentId: result.managerPaymentRequestId
+        ? null
+        : (result.paymentId ?? null),
       verifiedPayload:
         result.verifiedPayload ?? intent?.verified_payload ?? rawPayload,
     });
@@ -782,6 +823,14 @@ export async function processGatewayPaystackWebhook(params: {
         ? await findDeveloperIntentByReferenceSafely(webhook.data.reference)
         : null;
 
+    const failedManagerWebhook =
+      failedIntent === null &&
+      failedDeveloperIntent === null &&
+      isManagerPaystackWebhook({
+        reference: webhook.data.reference,
+        rawPayload,
+      });
+
     await markGatewayPaymentEventFailed(supabase, {
       eventId: registeredEvent.event.id,
       reason: message,
@@ -789,6 +838,8 @@ export async function processGatewayPaystackWebhook(params: {
       developerPaymentIntentId: failedDeveloperIntent?.id ?? null,
       developerSalePaymentId:
         failedDeveloperIntent?.processed_payment_id ?? null,
+      managerPaymentRequestId: null,
+      managerRentPaymentId: null,
       verifiedPayload: rawPayload,
     });
 
@@ -808,6 +859,7 @@ export async function processGatewayPaystackWebhook(params: {
         developer_payment_intent_id: failedDeveloperIntent?.id ?? null,
         developer_sale_payment_id:
           failedDeveloperIntent?.processed_payment_id ?? null,
+        manager_payment_webhook: failedManagerWebhook,
         gateway_payment_event_id: registeredEvent.event.id,
         paystack_reference: webhook.data.reference,
         webhook_event: webhook.event,
@@ -824,6 +876,8 @@ export async function processGatewayPaystackWebhook(params: {
       developerPaymentIntentId: failedDeveloperIntent?.id ?? undefined,
       developerSalePaymentId:
         failedDeveloperIntent?.processed_payment_id ?? undefined,
+      managerPaymentRequestId: undefined,
+      managerRentPaymentId: undefined,
     };
   }
 }

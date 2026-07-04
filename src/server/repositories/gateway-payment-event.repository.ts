@@ -8,6 +8,8 @@ export type GatewayPaymentEventRow = {
   gateway_payment_intent_id: string | null;
   developer_payment_intent_id: string | null;
   developer_sale_payment_id: string | null;
+  manager_payment_request_id: string | null;
+  manager_rent_payment_id: string | null;
   processed_payment_id: string | null;
   processing_status: "pending" | "processed" | "failed" | "ignored";
   error_message: string | null;
@@ -26,6 +28,8 @@ const GATEWAY_PAYMENT_EVENT_SELECT = `
   gateway_payment_intent_id,
   developer_payment_intent_id,
   developer_sale_payment_id,
+  manager_payment_request_id,
+  manager_rent_payment_id,
   processed_payment_id,
   processing_status,
   error_message
@@ -39,6 +43,8 @@ const GATEWAY_PAYMENT_EVENT_DETAIL_SELECT = `
   gateway_payment_intent_id,
   developer_payment_intent_id,
   developer_sale_payment_id,
+  manager_payment_request_id,
+  manager_rent_payment_id,
   processed_payment_id,
   processing_status,
   error_message,
@@ -104,6 +110,8 @@ export async function markGatewayPaymentEventProcessed(
     gatewayPaymentIntentId?: string | null;
     developerPaymentIntentId?: string | null;
     developerSalePaymentId?: string | null;
+    managerPaymentRequestId?: string | null;
+    managerRentPaymentId?: string | null;
     processedPaymentId?: string | null;
     verifiedPayload: Record<string, unknown>;
   },
@@ -114,6 +122,8 @@ export async function markGatewayPaymentEventProcessed(
       gateway_payment_intent_id: params.gatewayPaymentIntentId ?? null,
       developer_payment_intent_id: params.developerPaymentIntentId ?? null,
       developer_sale_payment_id: params.developerSalePaymentId ?? null,
+      manager_payment_request_id: params.managerPaymentRequestId ?? null,
+      manager_rent_payment_id: params.managerRentPaymentId ?? null,
       processed_payment_id: params.processedPaymentId ?? null,
       verified_payload: params.verifiedPayload,
       processing_status: "processed",
@@ -135,6 +145,8 @@ export async function markGatewayPaymentEventIgnored(
     gatewayPaymentIntentId?: string | null;
     developerPaymentIntentId?: string | null;
     developerSalePaymentId?: string | null;
+    managerPaymentRequestId?: string | null;
+    managerRentPaymentId?: string | null;
     verifiedPayload?: Record<string, unknown>;
   },
 ) {
@@ -144,6 +156,8 @@ export async function markGatewayPaymentEventIgnored(
       gateway_payment_intent_id: params.gatewayPaymentIntentId ?? null,
       developer_payment_intent_id: params.developerPaymentIntentId ?? null,
       developer_sale_payment_id: params.developerSalePaymentId ?? null,
+      manager_payment_request_id: params.managerPaymentRequestId ?? null,
+      manager_rent_payment_id: params.managerRentPaymentId ?? null,
       verified_payload: params.verifiedPayload ?? {},
       processing_status: "ignored",
       error_message: params.reason,
@@ -205,6 +219,8 @@ export async function markGatewayPaymentEventFailed(
     gatewayPaymentIntentId?: string | null;
     developerPaymentIntentId?: string | null;
     developerSalePaymentId?: string | null;
+    managerPaymentRequestId?: string | null;
+    managerRentPaymentId?: string | null;
     verifiedPayload?: Record<string, unknown>;
   },
 ) {
@@ -214,6 +230,8 @@ export async function markGatewayPaymentEventFailed(
       gateway_payment_intent_id: params.gatewayPaymentIntentId ?? null,
       developer_payment_intent_id: params.developerPaymentIntentId ?? null,
       developer_sale_payment_id: params.developerSalePaymentId ?? null,
+      manager_payment_request_id: params.managerPaymentRequestId ?? null,
+      manager_rent_payment_id: params.managerRentPaymentId ?? null,
       verified_payload: params.verifiedPayload ?? {},
       processing_status: "failed",
       error_message: params.reason,
