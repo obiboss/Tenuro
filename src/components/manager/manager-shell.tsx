@@ -1,112 +1,188 @@
-import type {
-  ManagerLandlordPaystackAccountRow,
-  ManagerPaystackAccountRow,
-} from "@/server/repositories/manager-paystack-accounts.repository";
-import type { ManagerLandlordClientRow } from "@/server/repositories/manager.repository";
+"use client";
 
-type ManagerPaystackAccountListProps = {
-  landlordClients: ManagerLandlordClientRow[];
-  managerAccounts: ManagerPaystackAccountRow[];
-  landlordAccounts: ManagerLandlordPaystackAccountRow[];
+import type { ReactNode } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { managerSignOutAction } from "@/actions/manager-auth.actions";
+import { cn } from "@/lib/cn";
+
+type ManagerShellProps = {
+  children: ReactNode;
+  managerName: string;
+  organizationName?: string | null;
 };
 
-function maskAccountNumber(accountNumber: string) {
-  if (accountNumber.length < 4) {
-    return accountNumber;
-  }
+const navItems = [
+  {
+    label: "Overview",
+    href: "/manager/overview",
+  },
+  {
+    label: "Landlords",
+    href: "/manager/landlords",
+  },
+  {
+    label: "Properties",
+    href: "/manager/properties",
+  },
+  {
+    label: "Tenants",
+    href: "/manager/tenants",
+  },
+  {
+    label: "Payments",
+    href: "/manager/payments",
+  },
+  {
+    label: "Payouts",
+    href: "/manager/payouts",
+  },
+  {
+    label: "Remittances",
+    href: "/manager/remittances",
+  },
+  {
+    label: "Reports",
+    href: "/manager/reports",
+  },
+  {
+    label: "Maintenance",
+    href: "/manager/maintenance",
+  },
+] as const;
 
-  return `******${accountNumber.slice(-4)}`;
+function getFirstName(fullName: string) {
+  return fullName.trim().split(/\s+/)[0] || "Manager";
 }
 
-function formatDate(value: string | null) {
-  if (!value) {
-    return "Not confirmed";
-  }
-
-  return new Intl.DateTimeFormat("en-NG", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(value));
-}
-
-export function ManagerPaystackAccountList({
-  landlordClients,
-  managerAccounts,
-  landlordAccounts,
-}: ManagerPaystackAccountListProps) {
-  const landlordNameById = new Map(
-    landlordClients.map((client) => [client.id, client.landlord_name]),
-  );
-
-  const activeManagerAccount =
-    managerAccounts.find((account) => account.is_active) ?? null;
-
-  const activeLandlordAccounts = landlordAccounts.filter(
-    (account) => account.is_active,
-  );
-
+function BoldverseManagerBrand() {
   return (
-    <section className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
-      <div>
-        <h2 className="text-lg font-black tracking-tight text-text-strong">
-          Saved payout accounts
-        </h2>
-        <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-          BOPA uses active accounts when creating online rent payment links.
+    <Link href="/manager" className="flex min-w-0 items-center gap-3">
+      <div className="flex size-11 items-center justify-center rounded-2xl bg-primary text-2xl font-extrabold tracking-tight text-white shadow-soft">
+        B
+      </div>
+
+      <div className="min-w-0">
+        <p className="truncate text-lg font-extrabold tracking-tight text-text-strong">
+          BOPA Manager
+        </p>
+        <p className="truncate text-xs font-semibold text-text-muted">
+          Property management workspace
         </p>
       </div>
+    </Link>
+  );
+}
 
-      <div className="mt-4 space-y-4">
-        <div className="rounded-card bg-surface p-4">
-          <p className="text-sm font-black text-text-strong">Manager account</p>
+export function ManagerShell({
+  children,
+  managerName,
+  organizationName,
+}: ManagerShellProps) {
+  const pathname = usePathname();
+  const firstName = getFirstName(managerName);
 
-          {activeManagerAccount ? (
-            <div className="mt-3 space-y-1 text-sm font-semibold text-text-muted">
-              <p className="font-black text-text-strong">
-                {activeManagerAccount.business_name}
+  return (
+    <div className="min-h-screen bg-background">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-border-soft bg-white px-5 py-6 lg:block">
+        <BoldverseManagerBrand />
+
+        <nav className="mt-8 space-y-2">
+          {navItems.map((item) => {
+            const active =
+              pathname === item.href || pathname.startsWith(`${item.href}/`);
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex min-h-12 items-center rounded-button px-4 text-sm font-extrabold transition",
+                  active
+                    ? "bg-primary text-white shadow-soft"
+                    : "text-text-muted hover:bg-primary-soft hover:text-primary",
+                )}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+      </aside>
+
+      <div className="lg:pl-72">
+        <header className="sticky top-0 z-30 border-b border-border-soft bg-white/95 px-4 py-4 backdrop-blur md:px-6">
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
+            <div className="lg:hidden">
+              <BoldverseManagerBrand />
+            </div>
+
+            <div className="hidden lg:block">
+              <p className="text-sm font-semibold text-text-muted">
+                Welcome back,
               </p>
-              <p>{activeManagerAccount.bank_name}</p>
-              <p>{activeManagerAccount.account_name}</p>
-              <p>{maskAccountNumber(activeManagerAccount.account_number)}</p>
-              <p>Confirmed: {formatDate(activeManagerAccount.verified_at)}</p>
+              <h1 className="text-lg font-black tracking-tight text-text-strong">
+                {firstName}
+              </h1>
             </div>
-          ) : (
-            <p className="mt-3 text-sm font-semibold leading-6 text-text-muted">
-              No active manager payout account saved yet.
-            </p>
-          )}
-        </div>
 
-        <div>
-          <p className="text-sm font-black text-text-strong">
-            Landlord accounts
-          </p>
+            <div className="flex items-center gap-3">
+              <div className="hidden text-right sm:block">
+                <p className="text-sm font-extrabold text-text-strong">
+                  {organizationName ?? "Manager setup"}
+                </p>
+                <p className="text-xs font-semibold text-text-muted">
+                  BOPA Manager
+                </p>
+              </div>
 
-          {activeLandlordAccounts.length > 0 ? (
-            <div className="mt-3 divide-y divide-border-soft">
-              {activeLandlordAccounts.map((account) => (
-                <article key={account.id} className="py-3">
-                  <p className="text-sm font-black text-text-strong">
-                    {landlordNameById.get(account.landlord_client_id) ??
-                      account.business_name}
-                  </p>
-                  <div className="mt-1 space-y-1 text-sm font-semibold text-text-muted">
-                    <p>{account.bank_name}</p>
-                    <p>{account.account_name}</p>
-                    <p>{maskAccountNumber(account.account_number)}</p>
-                    <p>Confirmed: {formatDate(account.verified_at)}</p>
-                  </div>
-                </article>
-              ))}
+              <span className="rounded-full bg-primary-soft px-3 py-1 text-xs font-black uppercase tracking-wide text-primary">
+                Manager
+              </span>
+
+              <form action={managerSignOutAction}>
+                <button
+                  type="submit"
+                  className="min-h-10 rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+                >
+                  Sign out
+                </button>
+              </form>
             </div>
-          ) : (
-            <p className="mt-3 rounded-card bg-surface p-4 text-sm font-semibold leading-6 text-text-muted">
-              No active landlord payout account saved yet.
-            </p>
-          )}
-        </div>
+          </div>
+        </header>
+
+        <main className="mx-auto max-w-7xl px-4 py-6 pb-28 md:px-6 lg:pb-8">
+          {children}
+        </main>
       </div>
-    </section>
+
+      <nav
+        aria-label="Mobile manager navigation"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-border-soft bg-white px-2 py-2 shadow-2xl lg:hidden"
+      >
+        <div className="flex gap-1 overflow-x-auto pb-1">
+          {navItems.map((item) => {
+            const active =
+              pathname === item.href || pathname.startsWith(`${item.href}/`);
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex min-w-24 items-center justify-center rounded-2xl px-3 py-3 text-xs font-bold transition",
+                  active
+                    ? "bg-primary-soft text-primary"
+                    : "text-text-muted hover:bg-primary-soft hover:text-primary",
+                )}
+              >
+                <span className="truncate">{item.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+    </div>
   );
 }
