@@ -1,0 +1,319 @@
+import "server-only";
+
+import crypto from "node:crypto";
+import type { Readable } from "node:stream";
+import { pdf } from "@react-pdf/renderer";
+import { AppError } from "@/server/errors/app-error";
+import { ManagerLandlordStatementPdf } from "@/server/pdf/manager-landlord-statement-pdf";
+import { ManagerRemittanceSummaryPdf } from "@/server/pdf/manager-remittance-summary-pdf";
+import {
+  getManagerLandlordStatementSnapshot,
+  MANAGER_STATEMENT_DOCUMENTS_BUCKET,
+  upsertManagerStatementDocument,
+  type ManagerStatementDocumentType,
+} from "@/server/repositories/manager-statement-documents.repository";
+import { getManagerOrganizationForCurrentUser } from "@/server/repositories/manager.repository";
+import { createSupabaseAdminClient } from "@/server/supabase/admin";
+import { createSupabaseServerClient } from "@/server/supabase/server";
+import type { ManagerStatementDocumentQueryInput } from "@/server/validators/manager-statement-documents.schema";
+
+type ManagerStatementDownload = {
+  fileName: string;
+  fileBuffer: ArrayBuffer;
+};
+
+type PdfOutput = Buffer | Readable | ReadableStream<Uint8Array>;
+
+function createHash(value: string) {
+  return crypto.createHash("sha256").update(value).digest("hex").slice(0, 16);
+}
+
+function createDocumentNumber(params: {
+  documentType: ManagerStatementDocumentType;
+  landlordClientId: string;
+  dateFrom: string | null;
+  dateTo: string | null;
+}) {
+  const prefix =
+    params.documentType === "landlord_statement" ? "BMS" : "BMR";
+  const dateScope = `${params.dateFrom ?? "start"}-${params.dateTo ?? "today"}`;
+  const shortHash = createHash(
+    `${params.landlordClientId}:${dateScope}`,
+  ).toUpperCase();
+
+  return `${prefix}-${shortHash}`;
+}
+
+function createIdempotencyKey(params: {
+  organizationId: string;
+  landlordClientId: string;
+  documentType: ManagerStatementDocumentType;
+  dateFrom: string | null;
+  dateTo: string | null;
+}) {
+  return [
+    "manager-statement-document",
+    params.documentType,
+    params.organizationId,
+    params.landlordClientId,
+    params.dateFrom ?? "start",
+    params.dateTo ?? "today",
+  ].join(":");
+}
+
+function createFileName(params: {
+  documentType: ManagerStatementDocumentType;
+  documentNumber: string;
+}) {
+  const label =
+    params.documentType === "landlord_statement"
+      ? "landlord-statement"
+      : "remittance-summary";
+
+  return `${label}-${params.documentNumber}.pdf`;
+}
+
+function createStoragePath(params: {
+  organizationId: string;
+  landlordClientId: string;
+  documentType: ManagerStatementDocumentType;
+  fileName: string;
+}) {
+  return `${params.organizationId}/${params.landlordClientId}/${params.documentType}/${params.fileName}`;
+}
+
+async function webReadableStreamToBuffer(stream: ReadableStream<Uint8Array>) {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+
+  try {
+    let done = false;
+
+    while (!done) {
+      const result = await reader.read();
+      done = result.done;
+
+      if (result.value) {
+        chunks.push(result.value);
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return Buffer.concat(chunks);
+}
+
+async function nodeReadableStreamToBuffer(stream: Readable) {
+  const chunks: Uint8Array[] = [];
+
+  for await (const chunk of stream as AsyncIterable<
+    Buffer | Uint8Array | string
+  >) {
+    if (typeof chunk === "string") {
+      chunks.push(Buffer.from(chunk));
+    } else {
+      chunks.push(chunk);
+    }
+  }
+
+  return Buffer.concat(chunks);
+}
+
+async function pdfOutputToBuffer(output: PdfOutput) {
+  if (Buffer.isBuffer(output)) {
+    return output;
+  }
+
+  if ("getReader" in output && typeof output.getReader === "function") {
+    return webReadableStreamToBuffer(output);
+  }
+
+  return nodeReadableStreamToBuffer(output);
+}
+
+async function renderDocumentBuffer(params: {
+  documentType: ManagerStatementDocumentType;
+  documentNumber: string;
+  snapshot: Awaited<ReturnType<typeof getManagerLandlordStatementSnapshot>>;
+}) {
+  if (!params.snapshot) {
+    throw new AppError(
+      "MANAGER_STATEMENT_NOT_FOUND",
+      "Statement details could not be found.",
+      404,
+    );
+  }
+
+  const document =
+    params.documentType === "landlord_statement" ? (
+      <ManagerLandlordStatementPdf
+        documentNumber={params.documentNumber}
+        snapshot={params.snapshot}
+      />
+    ) : (
+      <ManagerRemittanceSummaryPdf
+        documentNumber={params.documentNumber}
+        snapshot={params.snapshot}
+      />
+    );
+
+  const rendered = (await pdf(document).toBuffer()) as PdfOutput;
+
+  return pdfOutputToBuffer(rendered);
+}
+
+async function uploadPdf(params: {
+  storagePath: string;
+  fileBuffer: Buffer;
+}) {
+  const supabase = createSupabaseAdminClient();
+
+  const { error } = await supabase.storage
+    .from(MANAGER_STATEMENT_DOCUMENTS_BUCKET)
+    .upload(params.storagePath, params.fileBuffer, {
+      contentType: "application/pdf",
+      upsert: true,
+    });
+
+  if (error) {
+    throw error;
+  }
+}
+
+async function downloadPdf(storagePath: string) {
+  const supabase = createSupabaseAdminClient();
+
+  const { data, error } = await supabase.storage
+    .from(MANAGER_STATEMENT_DOCUMENTS_BUCKET)
+    .download(storagePath);
+
+  if (error || !data) {
+    throw error;
+  }
+
+  return data.arrayBuffer();
+}
+
+async function requireManagerOrganization(managerProfileId: string) {
+  const supabase = await createSupabaseServerClient();
+  const organization = await getManagerOrganizationForCurrentUser(
+    supabase,
+    managerProfileId,
+  );
+
+  if (!organization || organization.status !== "active") {
+    throw new AppError(
+      "MANAGER_ORGANIZATION_REQUIRED",
+      "Create an active BOPA Manager organization before continuing.",
+      403,
+    );
+  }
+
+  return organization;
+}
+
+export async function generateManagerStatementDocument(params: {
+  managerProfileId: string;
+  documentType: ManagerStatementDocumentType;
+  input: ManagerStatementDocumentQueryInput;
+}) {
+  const organization = await requireManagerOrganization(params.managerProfileId);
+  const adminSupabase = createSupabaseAdminClient();
+
+  const snapshot = await getManagerLandlordStatementSnapshot(adminSupabase, {
+    organizationId: organization.id,
+    landlordClientId: params.input.landlordClientId,
+    dateFrom: params.input.dateFrom,
+    dateTo: params.input.dateTo,
+  });
+
+  if (!snapshot) {
+    throw new AppError(
+      "MANAGER_STATEMENT_NOT_FOUND",
+      "Statement details could not be found.",
+      404,
+    );
+  }
+
+  const documentNumber = createDocumentNumber({
+    documentType: params.documentType,
+    landlordClientId: params.input.landlordClientId,
+    dateFrom: params.input.dateFrom,
+    dateTo: params.input.dateTo,
+  });
+
+  const fileName = createFileName({
+    documentType: params.documentType,
+    documentNumber,
+  });
+
+  const storagePath = createStoragePath({
+    organizationId: organization.id,
+    landlordClientId: params.input.landlordClientId,
+    documentType: params.documentType,
+    fileName,
+  });
+
+  const idempotencyKey = createIdempotencyKey({
+    organizationId: organization.id,
+    landlordClientId: params.input.landlordClientId,
+    documentType: params.documentType,
+    dateFrom: params.input.dateFrom,
+    dateTo: params.input.dateTo,
+  });
+
+  const fileBuffer = await renderDocumentBuffer({
+    documentType: params.documentType,
+    documentNumber,
+    snapshot,
+  });
+
+  await uploadPdf({
+    storagePath,
+    fileBuffer,
+  });
+
+  const document = await upsertManagerStatementDocument(adminSupabase, {
+    organizationId: organization.id,
+    landlordClientId: params.input.landlordClientId,
+    documentType: params.documentType,
+    idempotencyKey,
+    dateFrom: params.input.dateFrom,
+    dateTo: params.input.dateTo,
+    documentNumber,
+    storagePath,
+    fileName,
+    generatedByProfileId: params.managerProfileId,
+    metadata: {
+      source: "bopa_manager_statement_generation",
+      document_type: params.documentType,
+      landlord_name: snapshot.landlord.name,
+      manager_company_name: snapshot.organization.name,
+      date_from: params.input.dateFrom,
+      date_to: params.input.dateTo,
+      total_rent_recorded: snapshot.totals.totalRentRecorded,
+      manager_commission: snapshot.totals.managerCommission,
+      amount_due_to_landlord: snapshot.totals.amountDueToLandlord,
+      amount_remitted: snapshot.totals.amountRemitted,
+      balance_due: snapshot.totals.pendingLandlordBalance,
+      powered_by: "BOPA - Boldverse Property App",
+    },
+  });
+
+  return document;
+}
+
+export async function getManagerStatementDocumentDownload(params: {
+  managerProfileId: string;
+  documentType: ManagerStatementDocumentType;
+  input: ManagerStatementDocumentQueryInput;
+}): Promise<ManagerStatementDownload> {
+  const document = await generateManagerStatementDocument(params);
+  const fileBuffer = await downloadPdf(document.storage_path);
+
+  return {
+    fileName: document.file_name,
+    fileBuffer,
+  };
+}

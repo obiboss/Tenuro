@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { Readable } from "node:stream";
 import { pdf } from "@react-pdf/renderer";
 import { AppError } from "@/server/errors/app-error";
 import { ManagerRentReceiptPdf } from "@/server/pdf/manager-rent-receipt-pdf";
@@ -19,6 +20,8 @@ type ManagerReceiptDownload = {
   receipt: ManagerRentPaymentReceiptRow;
   fileBuffer: ArrayBuffer;
 };
+
+type PdfOutput = Buffer | Readable | ReadableStream<Uint8Array>;
 
 function createReceiptNumber(params: {
   paymentId: string;
@@ -56,20 +59,70 @@ function canGenerateReceipt(
   return status === "verified" || status === "recorded";
 }
 
+async function webReadableStreamToBuffer(stream: ReadableStream<Uint8Array>) {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+
+  try {
+    let done = false;
+
+    while (!done) {
+      const result = await reader.read();
+      done = result.done;
+
+      if (result.value) {
+        chunks.push(result.value);
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return Buffer.concat(chunks);
+}
+
+async function nodeReadableStreamToBuffer(stream: Readable) {
+  const chunks: Uint8Array[] = [];
+
+  for await (const chunk of stream as AsyncIterable<
+    Buffer | Uint8Array | string
+  >) {
+    if (typeof chunk === "string") {
+      chunks.push(Buffer.from(chunk));
+    } else {
+      chunks.push(chunk);
+    }
+  }
+
+  return Buffer.concat(chunks);
+}
+
+async function pdfOutputToBuffer(output: PdfOutput) {
+  if (Buffer.isBuffer(output)) {
+    return output;
+  }
+
+  if ("getReader" in output && typeof output.getReader === "function") {
+    return webReadableStreamToBuffer(output);
+  }
+
+  return nodeReadableStreamToBuffer(output);
+}
+
 async function renderReceiptPdfBuffer(params: {
   receiptNumber: string;
   generatedAt: string;
   snapshot: ManagerRentReceiptSnapshot;
 }) {
-  const rendered = await pdf(
+  const rendered = (await pdf(
     <ManagerRentReceiptPdf
       receiptNumber={params.receiptNumber}
       generatedAt={params.generatedAt}
       snapshot={params.snapshot}
     />,
-  ).toBuffer();
+  ).toBuffer()) as PdfOutput;
 
-  return Buffer.isBuffer(rendered) ? rendered : Buffer.from(rendered);
+  return pdfOutputToBuffer(rendered);
 }
 
 async function uploadReceiptPdf(params: {
