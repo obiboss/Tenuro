@@ -1,7 +1,7 @@
 import "server-only";
 
 import crypto from "node:crypto";
-import type { Readable } from "node:stream";
+import { Readable } from "node:stream";
 import { pdf } from "@react-pdf/renderer";
 import { AppError } from "@/server/errors/app-error";
 import { ManagerLandlordStatementPdf } from "@/server/pdf/manager-landlord-statement-pdf";
@@ -22,7 +22,8 @@ type ManagerStatementDownload = {
   fileBuffer: ArrayBuffer;
 };
 
-type PdfOutput = Buffer | Readable | ReadableStream<Uint8Array>;
+type WebPdfReadableStream = ReadableStream<Uint8Array<ArrayBufferLike>>;
+type PdfOutput = Buffer | Readable | WebPdfReadableStream;
 
 function createHash(value: string) {
   return crypto.createHash("sha256").update(value).digest("hex").slice(0, 16);
@@ -34,8 +35,7 @@ function createDocumentNumber(params: {
   dateFrom: string | null;
   dateTo: string | null;
 }) {
-  const prefix =
-    params.documentType === "landlord_statement" ? "BMS" : "BMR";
+  const prefix = params.documentType === "landlord_statement" ? "BMS" : "BMR";
   const dateScope = `${params.dateFrom ?? "start"}-${params.dateTo ?? "today"}`;
   const shortHash = createHash(
     `${params.landlordClientId}:${dateScope}`,
@@ -82,9 +82,19 @@ function createStoragePath(params: {
   return `${params.organizationId}/${params.landlordClientId}/${params.documentType}/${params.fileName}`;
 }
 
-async function webReadableStreamToBuffer(stream: ReadableStream<Uint8Array>) {
+function isWebReadableStream(
+  output: PdfOutput,
+): output is WebPdfReadableStream {
+  return typeof (output as { getReader?: unknown }).getReader === "function";
+}
+
+function isNodeReadableStream(output: PdfOutput): output is Readable {
+  return output instanceof Readable;
+}
+
+async function webReadableStreamToBuffer(stream: WebPdfReadableStream) {
   const reader = stream.getReader();
-  const chunks: Uint8Array[] = [];
+  const chunks: Buffer[] = [];
 
   try {
     let done = false;
@@ -94,7 +104,7 @@ async function webReadableStreamToBuffer(stream: ReadableStream<Uint8Array>) {
       done = result.done;
 
       if (result.value) {
-        chunks.push(result.value);
+        chunks.push(Buffer.from(result.value));
       }
     }
   } finally {
@@ -105,16 +115,25 @@ async function webReadableStreamToBuffer(stream: ReadableStream<Uint8Array>) {
 }
 
 async function nodeReadableStreamToBuffer(stream: Readable) {
-  const chunks: Uint8Array[] = [];
+  const chunks: Buffer[] = [];
 
-  for await (const chunk of stream as AsyncIterable<
-    Buffer | Uint8Array | string
-  >) {
+  for await (const chunk of stream as AsyncIterable<unknown>) {
     if (typeof chunk === "string") {
       chunks.push(Buffer.from(chunk));
-    } else {
-      chunks.push(chunk);
+      continue;
     }
+
+    if (Buffer.isBuffer(chunk)) {
+      chunks.push(chunk);
+      continue;
+    }
+
+    if (chunk instanceof Uint8Array) {
+      chunks.push(Buffer.from(chunk));
+      continue;
+    }
+
+    chunks.push(Buffer.from(String(chunk)));
   }
 
   return Buffer.concat(chunks);
@@ -125,11 +144,19 @@ async function pdfOutputToBuffer(output: PdfOutput) {
     return output;
   }
 
-  if ("getReader" in output && typeof output.getReader === "function") {
+  if (isWebReadableStream(output)) {
     return webReadableStreamToBuffer(output);
   }
 
-  return nodeReadableStreamToBuffer(output);
+  if (isNodeReadableStream(output)) {
+    return nodeReadableStreamToBuffer(output);
+  }
+
+  throw new AppError(
+    "MANAGER_STATEMENT_PDF_RENDER_FAILED",
+    "Document could not be prepared.",
+    500,
+  );
 }
 
 async function renderDocumentBuffer(params: {
@@ -163,10 +190,7 @@ async function renderDocumentBuffer(params: {
   return pdfOutputToBuffer(rendered);
 }
 
-async function uploadPdf(params: {
-  storagePath: string;
-  fileBuffer: Buffer;
-}) {
+async function uploadPdf(params: { storagePath: string; fileBuffer: Buffer }) {
   const supabase = createSupabaseAdminClient();
 
   const { error } = await supabase.storage
@@ -218,7 +242,9 @@ export async function generateManagerStatementDocument(params: {
   documentType: ManagerStatementDocumentType;
   input: ManagerStatementDocumentQueryInput;
 }) {
-  const organization = await requireManagerOrganization(params.managerProfileId);
+  const organization = await requireManagerOrganization(
+    params.managerProfileId,
+  );
   const adminSupabase = createSupabaseAdminClient();
 
   const snapshot = await getManagerLandlordStatementSnapshot(adminSupabase, {

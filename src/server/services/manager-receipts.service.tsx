@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { Readable } from "node:stream";
+import { Readable } from "node:stream";
 import { pdf } from "@react-pdf/renderer";
 import { AppError } from "@/server/errors/app-error";
 import { ManagerRentReceiptPdf } from "@/server/pdf/manager-rent-receipt-pdf";
@@ -21,7 +21,8 @@ type ManagerReceiptDownload = {
   fileBuffer: ArrayBuffer;
 };
 
-type PdfOutput = Buffer | Readable | ReadableStream<Uint8Array>;
+type WebPdfReadableStream = ReadableStream<Uint8Array<ArrayBufferLike>>;
+type PdfOutput = Buffer | Readable | WebPdfReadableStream;
 
 function createReceiptNumber(params: {
   paymentId: string;
@@ -59,9 +60,19 @@ function canGenerateReceipt(
   return status === "verified" || status === "recorded";
 }
 
-async function webReadableStreamToBuffer(stream: ReadableStream<Uint8Array>) {
+function isWebReadableStream(
+  output: PdfOutput,
+): output is WebPdfReadableStream {
+  return typeof (output as { getReader?: unknown }).getReader === "function";
+}
+
+function isNodeReadableStream(output: PdfOutput): output is Readable {
+  return output instanceof Readable;
+}
+
+async function webReadableStreamToBuffer(stream: WebPdfReadableStream) {
   const reader = stream.getReader();
-  const chunks: Uint8Array[] = [];
+  const chunks: Buffer[] = [];
 
   try {
     let done = false;
@@ -71,7 +82,7 @@ async function webReadableStreamToBuffer(stream: ReadableStream<Uint8Array>) {
       done = result.done;
 
       if (result.value) {
-        chunks.push(result.value);
+        chunks.push(Buffer.from(result.value));
       }
     }
   } finally {
@@ -82,16 +93,25 @@ async function webReadableStreamToBuffer(stream: ReadableStream<Uint8Array>) {
 }
 
 async function nodeReadableStreamToBuffer(stream: Readable) {
-  const chunks: Uint8Array[] = [];
+  const chunks: Buffer[] = [];
 
-  for await (const chunk of stream as AsyncIterable<
-    Buffer | Uint8Array | string
-  >) {
+  for await (const chunk of stream as AsyncIterable<unknown>) {
     if (typeof chunk === "string") {
       chunks.push(Buffer.from(chunk));
-    } else {
-      chunks.push(chunk);
+      continue;
     }
+
+    if (Buffer.isBuffer(chunk)) {
+      chunks.push(chunk);
+      continue;
+    }
+
+    if (chunk instanceof Uint8Array) {
+      chunks.push(Buffer.from(chunk));
+      continue;
+    }
+
+    chunks.push(Buffer.from(String(chunk)));
   }
 
   return Buffer.concat(chunks);
@@ -102,11 +122,19 @@ async function pdfOutputToBuffer(output: PdfOutput) {
     return output;
   }
 
-  if ("getReader" in output && typeof output.getReader === "function") {
+  if (isWebReadableStream(output)) {
     return webReadableStreamToBuffer(output);
   }
 
-  return nodeReadableStreamToBuffer(output);
+  if (isNodeReadableStream(output)) {
+    return nodeReadableStreamToBuffer(output);
+  }
+
+  throw new AppError(
+    "MANAGER_RECEIPT_PDF_RENDER_FAILED",
+    "Receipt could not be prepared.",
+    500,
+  );
 }
 
 async function renderReceiptPdfBuffer(params: {
