@@ -449,88 +449,88 @@ export function LandingHeroRotator() {
 
   return (
     <div className="grid gap-10 py-16 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:py-24">
-      <div className="relative min-h-153 sm:min-h-130 lg:min-h-120">
-        {heroSlides.map((slide) => {
-          const active = slide.key === activeSlide.key;
+      <div>
+        <div className="grid">
+          {heroSlides.map((slide) => {
+            const active = slide.key === activeSlide.key;
 
-          return (
-            <div
-              key={slide.key}
-              aria-hidden={!active}
-              className={cn(
-                "absolute inset-0 transition-all duration-700 ease-out",
-                active
-                  ? "pointer-events-auto translate-y-0 opacity-100"
-                  : "pointer-events-none translate-y-5 opacity-0",
-              )}
-            >
-              <Badge tone="primary" size="md">
-                {slide.pill}
-              </Badge>
-
-              <h1 className="mt-6 max-w-4xl text-4xl font-extrabold tracking-tight text-text-strong md:text-5xl lg:text-6xl">
-                {slide.title}
-              </h1>
-
-              <p className="mt-6 max-w-2xl text-base leading-8 text-text-muted md:text-lg">
-                {slide.description}
-              </p>
-
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <Link href={slide.primaryHref} tabIndex={active ? 0 : -1}>
-                  <Button type="button" fullWidth>
-                    {slide.primaryLabel}
-                    <ArrowRight
-                      aria-hidden="true"
-                      size={17}
-                      strokeWidth={2.6}
-                    />
-                  </Button>
-                </Link>
-
-                <Link href={slide.secondaryHref} tabIndex={active ? 0 : -1}>
-                  <Button type="button" variant="secondary" fullWidth>
-                    {slide.secondaryLabel}
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          );
-        })}
-
-        <div className="absolute bottom-0 left-0 right-0">
-          <div className="flex flex-wrap gap-2">
-            {heroSlides.map((slide) => (
-              <button
+            return (
+              <div
                 key={slide.key}
-                type="button"
-                onClick={() => setActiveKey(slide.key)}
+                aria-hidden={!active}
                 className={cn(
-                  "rounded-full px-4 py-2 text-xs font-black transition duration-300",
-                  activeKey === slide.key
-                    ? "bg-primary text-white shadow-soft"
-                    : "bg-white text-text-muted hover:bg-primary-soft hover:text-primary",
+                  "col-start-1 row-start-1 transition-all duration-700 ease-out",
+                  active
+                    ? "pointer-events-auto translate-y-0 opacity-100"
+                    : "pointer-events-none translate-y-5 opacity-0",
                 )}
               >
-                {slide.navLabel}
-              </button>
-            ))}
-          </div>
+                <Badge tone="primary" size="md">
+                  {slide.pill}
+                </Badge>
 
-          <div className="mt-8 rounded-card border border-border-soft bg-white p-4">
-            <div className="flex items-start gap-3">
-              <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary">
-                <ShieldCheck aria-hidden="true" size={22} strokeWidth={2.6} />
-              </div>
-              <div>
-                <p className="font-black text-text-strong">
-                  Built for cleaner property records
+                <h1 className="mt-6 max-w-4xl text-4xl font-extrabold tracking-tight text-text-strong md:text-5xl lg:text-6xl">
+                  {slide.title}
+                </h1>
+
+                <p className="mt-6 max-w-2xl text-base leading-8 text-text-muted md:text-lg">
+                  {slide.description}
                 </p>
-                <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-                  Track payments, buyers, tenants, documents, and actions with
-                  better accountability.
-                </p>
+
+                <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                  <Link href={slide.primaryHref} tabIndex={active ? 0 : -1}>
+                    <Button type="button" fullWidth>
+                      {slide.primaryLabel}
+                      <ArrowRight
+                        aria-hidden="true"
+                        size={17}
+                        strokeWidth={2.6}
+                      />
+                    </Button>
+                  </Link>
+
+                  <Link href={slide.secondaryHref} tabIndex={active ? 0 : -1}>
+                    <Button type="button" variant="secondary" fullWidth>
+                      {slide.secondaryLabel}
+                    </Button>
+                  </Link>
+                </div>
               </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-8 flex flex-wrap gap-2">
+          {heroSlides.map((slide) => (
+            <button
+              key={slide.key}
+              type="button"
+              onClick={() => setActiveKey(slide.key)}
+              className={cn(
+                "rounded-full px-4 py-2 text-xs font-black transition duration-300",
+                activeKey === slide.key
+                  ? "bg-primary text-white shadow-soft"
+                  : "bg-white text-text-muted hover:bg-primary-soft hover:text-primary",
+              )}
+            >
+              {slide.navLabel}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-6 rounded-card border border-border-soft bg-white p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+              <ShieldCheck aria-hidden="true" size={22} strokeWidth={2.6} />
+            </div>
+            <div>
+              <p className="font-black text-text-strong">
+                Built for cleaner property records
+              </p>
+              <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                Track payments, buyers, tenants, documents, and actions with
+                better accountability.
+              </p>
             </div>
           </div>
         </div>
