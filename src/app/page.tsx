@@ -102,14 +102,94 @@ const workspaceCards = [
 
 function getWorkspaceCta(title: string) {
   if (title === "Developer") {
-    return "Explore Developer Tools";
+    return "Learn More";
   }
 
   if (title === "Manager") {
-    return "Explore Manager Tools";
+    return "Learn More";
   }
 
   return `Sign up as ${title}`;
+}
+
+function HeaderInfoLinks() {
+  return (
+    <nav className="hidden items-center gap-2 rounded-full border border-border-soft bg-white px-2 py-2 shadow-soft md:flex">
+      <Link
+        href="/developers"
+        className="rounded-full px-4 py-2 text-sm font-extrabold text-text-muted transition hover:bg-primary-soft hover:text-primary"
+      >
+        For Developers
+      </Link>
+
+      <Link
+        href="/managers"
+        className="rounded-full px-4 py-2 text-sm font-extrabold text-text-muted transition hover:bg-primary-soft hover:text-primary"
+      >
+        For Property Managers
+      </Link>
+    </nav>
+  );
+}
+
+function MobileInfoLinks() {
+  return (
+    <nav className="mt-5 grid gap-3 sm:grid-cols-2 md:hidden">
+      <Link
+        href="/developers"
+        className="group rounded-card border border-border-soft bg-white p-4 shadow-soft transition hover:border-primary/40 hover:bg-primary-soft/40"
+      >
+        <div className="flex items-center gap-3">
+          <span className="flex size-10 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+            <Landmark aria-hidden="true" size={20} strokeWidth={2.6} />
+          </span>
+
+          <span className="min-w-0">
+            <span className="block text-sm font-black text-text-strong">
+              For Developers
+            </span>
+            <span className="mt-1 block text-xs font-semibold text-text-muted">
+              Plots, buyers, payments, and documents.
+            </span>
+          </span>
+
+          <ArrowRight
+            aria-hidden="true"
+            size={17}
+            strokeWidth={2.6}
+            className="ml-auto text-primary"
+          />
+        </div>
+      </Link>
+
+      <Link
+        href="/managers"
+        className="group rounded-card border border-border-soft bg-white p-4 shadow-soft transition hover:border-primary/40 hover:bg-primary-soft/40"
+      >
+        <div className="flex items-center gap-3">
+          <span className="flex size-10 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+            <ShieldCheck aria-hidden="true" size={20} strokeWidth={2.6} />
+          </span>
+
+          <span className="min-w-0">
+            <span className="block text-sm font-black text-text-strong">
+              For Property Managers
+            </span>
+            <span className="mt-1 block text-xs font-semibold text-text-muted">
+              Landlords, tenants, rent, reports, and remittances.
+            </span>
+          </span>
+
+          <ArrowRight
+            aria-hidden="true"
+            size={17}
+            strokeWidth={2.6}
+            className="ml-auto text-primary"
+          />
+        </div>
+      </Link>
+    </nav>
+  );
 }
 
 export default function HomePage() {
@@ -132,10 +212,13 @@ export default function HomePage() {
             </div>
           </Link>
 
-          <div className="flex shrink-0 items-center">
+          <div className="flex shrink-0 items-center gap-3">
+            <HeaderInfoLinks />
             <LandingHeaderLogin />
           </div>
         </header>
+
+        <MobileInfoLinks />
 
         <LandingHeroRotator />
 
@@ -268,6 +351,24 @@ export default function HomePage() {
               landlord remittances, and coordinate estate sales operations from
               one clean platform.
             </p>
+
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <Link
+                href="/developers"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-button bg-primary px-5 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary-hover"
+              >
+                Learn about BOPA Developer
+                <ArrowRight aria-hidden="true" size={17} strokeWidth={2.6} />
+              </Link>
+
+              <Link
+                href="/managers"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-button border border-border-soft bg-white px-5 text-sm font-extrabold text-text-strong transition hover:bg-primary-soft hover:text-primary"
+              >
+                Learn about BOPA Manager
+                <ArrowRight aria-hidden="true" size={17} strokeWidth={2.6} />
+              </Link>
+            </div>
           </div>
         </section>
 
@@ -298,6 +399,20 @@ export default function HomePage() {
             </p>
 
             <div className="flex flex-wrap items-center justify-center gap-5 text-sm text-text-muted sm:justify-end">
+              <Link
+                href="/developers"
+                className="transition-colors hover:text-text-strong"
+              >
+                Developers
+              </Link>
+
+              <Link
+                href="/managers"
+                className="transition-colors hover:text-text-strong"
+              >
+                Property Managers
+              </Link>
+
               <Link
                 href="/blog"
                 className="transition-colors hover:text-text-strong"
