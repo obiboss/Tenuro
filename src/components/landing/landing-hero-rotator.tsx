@@ -1,28 +1,30 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   BadgeCheck,
   Building2,
   CreditCard,
-  // FileText,
   Landmark,
   LayoutGrid,
   ReceiptText,
   ShieldCheck,
   Users,
+  WalletCards,
+  Wrench,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 
-type HeroSlideKey = "landlord" | "developer";
+type HeroSlideKey = "landlord" | "developer" | "manager";
 
 const heroSlides = [
   {
     key: "landlord",
+    navLabel: "Landlords",
     pill: "Built for Nigerian landlords",
     title: "Manage tenants, rent payments, and receipts without confusion.",
     description:
@@ -34,6 +36,7 @@ const heroSlides = [
   },
   {
     key: "developer",
+    navLabel: "Developers",
     pill: "For real estate developers",
     title: "Sell plots, track buyers, and manage estate payments clearly.",
     description:
@@ -42,6 +45,19 @@ const heroSlides = [
     primaryHref: "/developers",
     secondaryLabel: "Sign up as Developer",
     secondaryHref: "/developer/register",
+  },
+  {
+    key: "manager",
+    navLabel: "Property Managers",
+    pill: "For structured property managers",
+    title:
+      "Manage landlords, tenants, rent collection, and remittances clearly.",
+    description:
+      "BOPA Manager helps property management firms organise landlord clients, tenant records, rent payments, maintenance issues, receipts, reports, staff access, and landlord remittances from one clean workspace.",
+    primaryLabel: "Explore Manager Tools",
+    primaryHref: "/managers",
+    secondaryLabel: "Create Manager Account",
+    secondaryHref: "/manager/register",
   },
 ] as const;
 
@@ -257,101 +273,291 @@ function DeveloperMockup() {
   );
 }
 
+function ManagerMockup() {
+  return (
+    <div className="developer-hero-scene relative min-h-107.5">
+      <div className="developer-float-card absolute left-0 top-4 z-20 rounded-3xl border border-white/70 bg-white/90 p-4 shadow-2xl backdrop-blur">
+        <div className="flex items-center gap-3">
+          <span className="flex size-10 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+            <Building2 aria-hidden="true" size={19} strokeWidth={2.7} />
+          </span>
+          <span>
+            <span className="block text-xs font-black uppercase tracking-wide text-text-muted">
+              Landlords
+            </span>
+            <span className="block text-base font-black text-text-strong">
+              38 Clients
+            </span>
+          </span>
+        </div>
+      </div>
+
+      <div className="developer-float-card absolute right-0 top-16 z-20 rounded-3xl border border-white/70 bg-white/90 p-4 shadow-2xl backdrop-blur">
+        <div className="flex items-center gap-3">
+          <span className="flex size-10 items-center justify-center rounded-2xl bg-success/15 text-success">
+            <WalletCards aria-hidden="true" size={19} strokeWidth={2.7} />
+          </span>
+          <span>
+            <span className="block text-xs font-black uppercase tracking-wide text-text-muted">
+              Remit
+            </span>
+            <span className="block text-base font-black text-text-strong">
+              ₦42.8M
+            </span>
+          </span>
+        </div>
+      </div>
+
+      <div className="developer-tilt-card absolute inset-x-4 top-20 mx-auto max-w-md rounded-4xl border border-white/80 bg-white p-5 shadow-2xl">
+        <div className="mb-5 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-text-muted">
+              Manager workspace
+            </p>
+            <h3 className="mt-1 text-xl font-black text-text-strong">
+              Prime Estates Management
+            </h3>
+          </div>
+
+          <span className="rounded-full bg-primary-soft px-3 py-1 text-xs font-black text-primary">
+            Active
+          </span>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          <div className="rounded-2xl bg-background p-3">
+            <p className="text-xs font-bold text-text-muted">Properties</p>
+            <p className="mt-1 text-xl font-black text-text-strong">84</p>
+          </div>
+          <div className="rounded-2xl bg-background p-3">
+            <p className="text-xs font-bold text-text-muted">Tenants</p>
+            <p className="mt-1 text-xl font-black text-text-strong">312</p>
+          </div>
+          <div className="rounded-2xl bg-background p-3">
+            <p className="text-xs font-bold text-text-muted">Staff</p>
+            <p className="mt-1 text-xl font-black text-text-strong">12</p>
+          </div>
+        </div>
+
+        <div className="mt-5 rounded-3xl border border-border-soft bg-white p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-sm font-black text-text-strong">
+              Landlord statement
+            </p>
+            <ReceiptText
+              aria-hidden="true"
+              size={18}
+              strokeWidth={2.7}
+              className="text-primary"
+            />
+          </div>
+
+          <div className="space-y-3">
+            {[
+              ["Rent collected", "₦58.2M"],
+              ["Management fee", "₦5.8M"],
+              ["Landlord balance", "₦42.8M"],
+            ].map(([label, value]) => (
+              <div
+                key={label}
+                className="flex items-center justify-between rounded-2xl bg-background px-4 py-3"
+              >
+                <span className="text-xs font-bold text-text-muted">
+                  {label}
+                </span>
+                <span className="text-sm font-black text-text-strong">
+                  {value}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-3xl border border-border-soft bg-white p-4">
+            <div className="flex items-center gap-2">
+              <Wrench
+                aria-hidden="true"
+                size={18}
+                strokeWidth={2.7}
+                className="text-warning"
+              />
+              <p className="text-sm font-black text-text-strong">Maintenance</p>
+            </div>
+            <p className="mt-2 text-xs font-semibold leading-5 text-text-muted">
+              Track reported repairs, costs, vendors, and resolution status.
+            </p>
+          </div>
+
+          <div className="rounded-3xl border border-border-soft bg-white p-4">
+            <div className="flex items-center gap-2">
+              <ShieldCheck
+                aria-hidden="true"
+                size={18}
+                strokeWidth={2.7}
+                className="text-success"
+              />
+              <p className="text-sm font-black text-text-strong">Staff roles</p>
+            </div>
+            <p className="mt-2 text-xs font-semibold leading-5 text-text-muted">
+              Give accountants, officers, and managers the right access.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="developer-orb developer-orb-one" />
+      <div className="developer-orb developer-orb-two" />
+    </div>
+  );
+}
+
+function HeroVisual({ slideKey }: { slideKey: HeroSlideKey }) {
+  if (slideKey === "developer") {
+    return <DeveloperMockup />;
+  }
+
+  if (slideKey === "manager") {
+    return <ManagerMockup />;
+  }
+
+  return <LandlordMockup />;
+}
+
 export function LandingHeroRotator() {
   const [activeKey, setActiveKey] = useState<HeroSlideKey>("landlord");
 
   useEffect(() => {
     const interval = window.setInterval(() => {
-      setActiveKey((current) =>
-        current === "landlord" ? "developer" : "landlord",
-      );
-    }, 6000);
+      setActiveKey((current) => {
+        const currentIndex = heroSlides.findIndex(
+          (slide) => slide.key === current,
+        );
+        const nextIndex = (currentIndex + 1) % heroSlides.length;
+
+        return heroSlides[nextIndex]?.key ?? "landlord";
+      });
+    }, 7000);
 
     return () => window.clearInterval(interval);
   }, []);
 
-  const activeSlide =
-    heroSlides.find((slide) => slide.key === activeKey) ?? heroSlides[0];
+  const activeSlide = useMemo(
+    () => heroSlides.find((slide) => slide.key === activeKey) ?? heroSlides[0],
+    [activeKey],
+  );
 
   return (
     <div className="grid gap-10 py-16 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:py-24">
-      <div key={activeSlide.key} className="hero-slide-motion">
-        <Badge tone="primary" size="md">
-          {activeSlide.pill}
-        </Badge>
+      <div className="relative min-h-153 sm:min-h-130 lg:min-h-120">
+        {heroSlides.map((slide) => {
+          const active = slide.key === activeSlide.key;
 
-        <h1 className="mt-6 max-w-4xl text-4xl font-extrabold tracking-tight text-text-strong md:text-5xl lg:text-6xl">
-          {activeSlide.title}
-        </h1>
-
-        <p className="mt-6 max-w-2xl text-base leading-8 text-text-muted md:text-lg">
-          {activeSlide.description}
-        </p>
-
-        <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-          <Link href={activeSlide.primaryHref}>
-            <Button type="button" fullWidth>
-              {activeSlide.primaryLabel}
-              <ArrowRight aria-hidden="true" size={17} strokeWidth={2.6} />
-            </Button>
-          </Link>
-
-          <Link href={activeSlide.secondaryHref}>
-            <Button type="button" variant="secondary" fullWidth>
-              {activeSlide.secondaryLabel}
-            </Button>
-          </Link>
-        </div>
-
-        <div className="mt-8 flex flex-wrap gap-2">
-          {heroSlides.map((slide) => (
-            <button
+          return (
+            <div
               key={slide.key}
-              type="button"
-              onClick={() => setActiveKey(slide.key)}
+              aria-hidden={!active}
               className={cn(
-                "rounded-full px-4 py-2 text-xs font-black transition",
-                activeKey === slide.key
-                  ? "bg-primary text-white shadow-soft"
-                  : "bg-white text-text-muted hover:bg-primary-soft hover:text-primary",
+                "absolute inset-0 transition-all duration-700 ease-out",
+                active
+                  ? "pointer-events-auto translate-y-0 opacity-100"
+                  : "pointer-events-none translate-y-5 opacity-0",
               )}
             >
-              {slide.key === "landlord" ? "Landlords" : "Developers"}
-            </button>
-          ))}
-        </div>
+              <Badge tone="primary" size="md">
+                {slide.pill}
+              </Badge>
 
-        <div className="mt-8 rounded-card border border-border-soft bg-white p-4">
-          <div className="flex items-start gap-3">
-            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary">
-              <ShieldCheck aria-hidden="true" size={22} strokeWidth={2.6} />
+              <h1 className="mt-6 max-w-4xl text-4xl font-extrabold tracking-tight text-text-strong md:text-5xl lg:text-6xl">
+                {slide.title}
+              </h1>
+
+              <p className="mt-6 max-w-2xl text-base leading-8 text-text-muted md:text-lg">
+                {slide.description}
+              </p>
+
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                <Link href={slide.primaryHref} tabIndex={active ? 0 : -1}>
+                  <Button type="button" fullWidth>
+                    {slide.primaryLabel}
+                    <ArrowRight
+                      aria-hidden="true"
+                      size={17}
+                      strokeWidth={2.6}
+                    />
+                  </Button>
+                </Link>
+
+                <Link href={slide.secondaryHref} tabIndex={active ? 0 : -1}>
+                  <Button type="button" variant="secondary" fullWidth>
+                    {slide.secondaryLabel}
+                  </Button>
+                </Link>
+              </div>
             </div>
-            <div>
-              <p className="font-black text-text-strong">
-                Built for cleaner property records
-              </p>
-              <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-                Track payments, buyers, tenants, documents, and actions with
-                better accountability.
-              </p>
+          );
+        })}
+
+        <div className="absolute bottom-0 left-0 right-0">
+          <div className="flex flex-wrap gap-2">
+            {heroSlides.map((slide) => (
+              <button
+                key={slide.key}
+                type="button"
+                onClick={() => setActiveKey(slide.key)}
+                className={cn(
+                  "rounded-full px-4 py-2 text-xs font-black transition duration-300",
+                  activeKey === slide.key
+                    ? "bg-primary text-white shadow-soft"
+                    : "bg-white text-text-muted hover:bg-primary-soft hover:text-primary",
+                )}
+              >
+                {slide.navLabel}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-8 rounded-card border border-border-soft bg-white p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+                <ShieldCheck aria-hidden="true" size={22} strokeWidth={2.6} />
+              </div>
+              <div>
+                <p className="font-black text-text-strong">
+                  Built for cleaner property records
+                </p>
+                <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                  Track payments, buyers, tenants, documents, and actions with
+                  better accountability.
+                </p>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div key={`${activeSlide.key}-visual`} className="hero-slide-motion">
-        {activeSlide.key === "landlord" ? (
-          <LandlordMockup />
-        ) : (
-          <DeveloperMockup />
-        )}
+      <div className="relative min-h-107.5">
+        {heroSlides.map((slide) => {
+          const active = slide.key === activeSlide.key;
+
+          return (
+            <div
+              key={`${slide.key}-visual`}
+              aria-hidden={!active}
+              className={cn(
+                "absolute inset-0 transition-all duration-700 ease-out",
+                active
+                  ? "pointer-events-auto scale-100 opacity-100"
+                  : "pointer-events-none scale-[0.97] opacity-0",
+              )}
+            >
+              <HeroVisual slideKey={slide.key} />
+            </div>
+          );
+        })}
       </div>
 
       <style jsx>{`
-        .hero-slide-motion {
-          animation: hero-fade-slide 540ms ease both;
-        }
-
         .developer-hero-scene {
           perspective: 1200px;
         }
@@ -396,17 +602,6 @@ export function LandingHeroRotator() {
           animation: developer-orb-drift 11s ease-in-out infinite reverse;
         }
 
-        @keyframes hero-fade-slide {
-          from {
-            opacity: 0;
-            transform: translateY(14px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
         @keyframes developer-card-float {
           0%,
           100% {
@@ -439,7 +634,6 @@ export function LandingHeroRotator() {
         }
 
         @media (prefers-reduced-motion: reduce) {
-          .hero-slide-motion,
           .developer-tilt-card,
           .developer-float-card,
           .developer-orb {
