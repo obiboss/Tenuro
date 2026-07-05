@@ -46,9 +46,9 @@ const features = [
     icon: ShieldCheck,
   },
   {
-    title: "Built for Nigerian landlords",
+    title: "Built for Nigerian property workflows",
     description:
-      "Designed around Nigerian rental workflows, annual rent records, NGN payments, and WhatsApp-first communication.",
+      "Designed around Nigerian rental workflows, NGN payments, annual rent records, estate sales, remittances, and WhatsApp-first communication.",
     icon: Building2,
   },
 ];
@@ -91,7 +91,26 @@ const workspaceCards = [
     href: "/developers",
     icon: Landmark,
   },
+  {
+    title: "Manager",
+    description:
+      "Manage landlords, tenants, rent collection, reports, staff, and remittances.",
+    href: "/managers",
+    icon: ShieldCheck,
+  },
 ];
+
+function getWorkspaceCta(title: string) {
+  if (title === "Developer") {
+    return "Explore Developer Tools";
+  }
+
+  if (title === "Manager") {
+    return "Explore Manager Tools";
+  }
+
+  return `Sign up as ${title}`;
+}
 
 export default function HomePage() {
   return (
@@ -108,7 +127,7 @@ export default function HomePage() {
                 Boldverse Property
               </p>
               <p className="truncate text-xs font-semibold text-text-muted">
-                Property Management for Modern Landlords
+                Property Management for Modern Teams
               </p>
             </div>
           </Link>
@@ -129,12 +148,13 @@ export default function HomePage() {
             </h2>
 
             <p className="mt-4 text-base leading-8 text-text-muted md:text-lg">
-              Whether you manage tenants, sell plots, or coordinate property
-              records, BOPA gives you a cleaner way to organise the work.
+              Whether you manage tenants, sell plots, coordinate landlord
+              records, or track rent operations, BOPA gives you a cleaner way to
+              organise the work.
             </p>
           </div>
 
-          <div className="mt-8 grid gap-5 md:grid-cols-3">
+          <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
             {workspaceCards.map((workspace) => {
               const Icon = workspace.icon;
 
@@ -159,9 +179,7 @@ export default function HomePage() {
                       </p>
 
                       <span className="mt-4 inline-flex items-center gap-2 text-sm font-extrabold text-primary group-hover:text-primary-hover">
-                        {workspace.title === "Developer"
-                          ? "Explore Developer Tools"
-                          : `Sign up as ${workspace.title}`}
+                        {getWorkspaceCta(workspace.title)}
                         <ArrowRight
                           aria-hidden="true"
                           size={17}
@@ -244,9 +262,10 @@ export default function HomePage() {
 
             <p className="mt-4 text-base leading-8 text-text-muted md:text-lg">
               BOPA is a Nigerian property management platform built for
-              landlords, agents, caretakers, and real estate developers. Track
-              who has paid, know who is owing, send professional receipts,
-              manage tenancy records, and organise estate sales operations from
+              landlords, agents, caretakers, structured property managers, and
+              real estate developers. Track who has paid, know who is owing,
+              send professional receipts, manage tenancy records, organise
+              landlord remittances, and coordinate estate sales operations from
               one clean platform.
             </p>
           </div>
