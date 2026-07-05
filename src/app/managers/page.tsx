@@ -13,7 +13,7 @@ import {
   WalletCards,
   Wrench,
 } from "lucide-react";
-import { Developer3DShowcase } from "@/components/developer/developer-3d-showcase";
+import { Manager3DShowcase } from "@/components/manager/manager-3d-showcase";
 import { LandingHeaderLogin } from "@/components/landing/landing-header-login";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -142,7 +142,7 @@ export default function ManagersLandingPage() {
         </header>
 
         <div className="py-12 lg:py-16">
-          <Developer3DShowcase />
+          <Manager3DShowcase />
         </div>
 
         <section className="rounded-4xl bg-surface px-5 py-8 shadow-card md:px-8 lg:px-10">
