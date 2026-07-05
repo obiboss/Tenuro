@@ -1,11 +1,6 @@
 import { z } from "zod";
 import { passwordSchema } from "@/server/validators/auth.schema";
 
-export const managerLoginSchema = z.object({
-  email: z.string().trim().email("Enter a valid email address."),
-  password: passwordSchema,
-});
-
 export const registerManagerSchema = z
   .object({
     fullName: z
@@ -22,5 +17,10 @@ export const registerManagerSchema = z
     message: "Passwords do not match.",
   });
 
-export type ManagerLoginInput = z.infer<typeof managerLoginSchema>;
+export const managerLoginSchema = z.object({
+  email: z.string().trim().email("Enter a valid work email address."),
+  password: passwordSchema,
+});
+
 export type RegisterManagerInput = z.infer<typeof registerManagerSchema>;
+export type ManagerLoginInput = z.infer<typeof managerLoginSchema>;

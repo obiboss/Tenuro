@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { registerManagerAction } from "@/actions/manager-auth.actions";
-import { initialAuthActionState } from "@/actions/auth.state";
+import { initialManagerAuthActionState } from "@/actions/manager-auth.state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 export function ManagerRegisterForm() {
   const [state, formAction, isPending] = useActionState(
     registerManagerAction,
-    initialAuthActionState,
+    initialManagerAuthActionState,
   );
 
   const isSuccessful = state.ok;
