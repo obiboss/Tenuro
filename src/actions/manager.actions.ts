@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import type { ManagerActionState } from "@/actions/manager.state";
 import { errorResult } from "@/server/errors/result";
 import {
   createManagerLandlordClient,
@@ -12,6 +13,7 @@ import {
   recordManagerRentPayment,
   saveManagerLandlordPayoutProfile,
 } from "@/server/services/manager.service";
+import { requireManagerWorkspacePermission } from "@/server/services/manager-staff-access.service";
 import {
   createManagerLandlordClientSchema,
   createManagerOrganizationSchema,
@@ -22,7 +24,6 @@ import {
   recordManagerRentPaymentSchema,
   saveManagerLandlordPayoutProfileSchema,
 } from "@/server/validators/manager.schema";
-import type { ManagerActionState } from "@/actions/manager.state";
 
 function toActionError(error: unknown): ManagerActionState {
   const result = errorResult(error);
@@ -67,6 +68,8 @@ export async function createManagerLandlordClientAction(
   formData: FormData,
 ): Promise<ManagerActionState> {
   try {
+    await requireManagerWorkspacePermission("property.manage");
+
     const parsed = createManagerLandlordClientSchema.parse({
       landlordName: formData.get("landlordName"),
       landlordPhone: formData.get("landlordPhone"),
@@ -97,6 +100,8 @@ export async function saveManagerLandlordPayoutProfileAction(
   formData: FormData,
 ): Promise<ManagerActionState> {
   try {
+    await requireManagerWorkspacePermission("remittance.manage");
+
     const parsed = saveManagerLandlordPayoutProfileSchema.parse({
       payoutProfileId: formData.get("payoutProfileId"),
       landlordClientId: formData.get("landlordClientId"),
@@ -132,6 +137,8 @@ export async function createManagerPropertyAction(
   formData: FormData,
 ): Promise<ManagerActionState> {
   try {
+    await requireManagerWorkspacePermission("property.manage");
+
     const parsed = createManagerPropertySchema.parse({
       landlordClientId: formData.get("landlordClientId"),
       propertyName: formData.get("propertyName"),
@@ -168,6 +175,8 @@ export async function createManagerUnitAction(
   formData: FormData,
 ): Promise<ManagerActionState> {
   try {
+    await requireManagerWorkspacePermission("property.manage");
+
     const parsed = createManagerUnitSchema.parse({
       landlordClientId: formData.get("landlordClientId"),
       propertyId: formData.get("propertyId"),
@@ -198,6 +207,8 @@ export async function createManagerTenantAction(
   formData: FormData,
 ): Promise<ManagerActionState> {
   try {
+    await requireManagerWorkspacePermission("property.manage");
+
     const parsed = createManagerTenantSchema.parse({
       landlordClientId: formData.get("landlordClientId"),
       propertyId: formData.get("propertyId"),
@@ -235,6 +246,8 @@ export async function recordManagerRentPaymentAction(
   formData: FormData,
 ): Promise<ManagerActionState> {
   try {
+    await requireManagerWorkspacePermission("payment.manage");
+
     const parsed = recordManagerRentPaymentSchema.parse({
       landlordClientId: formData.get("landlordClientId"),
       propertyId: formData.get("propertyId"),
@@ -273,6 +286,8 @@ export async function recordManagerLandlordRemittanceAction(
   formData: FormData,
 ): Promise<ManagerActionState> {
   try {
+    await requireManagerWorkspacePermission("remittance.manage");
+
     const parsed = recordManagerLandlordRemittanceSchema.parse({
       landlordClientId: formData.get("landlordClientId"),
       payoutProfileId: formData.get("payoutProfileId"),

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { ManagerActionState } from "@/actions/manager.state";
 import { errorResult } from "@/server/errors/result";
 import { createManagerMaintenanceRequest } from "@/server/services/manager-maintenance.service";
+import { requireManagerWorkspacePermission } from "@/server/services/manager-staff-access.service";
 import { createManagerMaintenanceRequestSchema } from "@/server/validators/manager-maintenance.schema";
 
 function toActionError(error: unknown): ManagerActionState {
@@ -21,6 +22,8 @@ export async function createManagerMaintenanceRequestAction(
   formData: FormData,
 ): Promise<ManagerActionState> {
   try {
+    await requireManagerWorkspacePermission("maintenance.manage");
+
     const parsed = createManagerMaintenanceRequestSchema.parse({
       landlordClientId: formData.get("landlordClientId"),
       propertyId: formData.get("propertyId"),

@@ -22,6 +22,10 @@ type ManagerStatementDownload = {
   fileBuffer: ArrayBuffer;
 };
 
+export type ManagerStatementShareLink = {
+  whatsappUrl: string;
+};
+
 type WebPdfReadableStream = ReadableStream<Uint8Array<ArrayBufferLike>>;
 type PdfOutput = Buffer | Readable | WebPdfReadableStream;
 
@@ -219,6 +223,48 @@ async function downloadPdf(storagePath: string) {
   return data.arrayBuffer();
 }
 
+async function createStatementSignedUrl(storagePath: string) {
+  const supabase = createSupabaseAdminClient();
+
+  const { data, error } = await supabase.storage
+    .from(MANAGER_STATEMENT_DOCUMENTS_BUCKET)
+    .createSignedUrl(storagePath, 60 * 60 * 24 * 7);
+
+  if (error || !data?.signedUrl) {
+    throw error;
+  }
+
+  return data.signedUrl;
+}
+
+function normalizeWhatsAppPhone(phoneNumber: string | null) {
+  if (!phoneNumber) {
+    return null;
+  }
+
+  const cleaned = phoneNumber.replace(/\D/g, "");
+
+  if (!cleaned) {
+    return null;
+  }
+
+  if (cleaned.startsWith("234")) {
+    return cleaned;
+  }
+
+  if (cleaned.startsWith("0")) {
+    return `234${cleaned.slice(1)}`;
+  }
+
+  return cleaned;
+}
+
+function buildWhatsAppUrl(params: { phoneNumber: string; message: string }) {
+  return `https://wa.me/${params.phoneNumber}?text=${encodeURIComponent(
+    params.message,
+  )}`;
+}
+
 async function requireManagerOrganization(managerProfileId: string) {
   const supabase = await createSupabaseServerClient();
   const organization = await getManagerOrganizationForCurrentUser(
@@ -341,5 +387,75 @@ export async function getManagerStatementDocumentDownload(params: {
   return {
     fileName: document.file_name,
     fileBuffer,
+  };
+}
+
+export async function getManagerStatementWhatsAppLink(params: {
+  managerProfileId: string;
+  documentType: ManagerStatementDocumentType;
+  input: ManagerStatementDocumentQueryInput;
+}): Promise<ManagerStatementShareLink> {
+  const organization = await requireManagerOrganization(
+    params.managerProfileId,
+  );
+  const adminSupabase = createSupabaseAdminClient();
+
+  const snapshot = await getManagerLandlordStatementSnapshot(adminSupabase, {
+    organizationId: organization.id,
+    landlordClientId: params.input.landlordClientId,
+    dateFrom: params.input.dateFrom,
+    dateTo: params.input.dateTo,
+  });
+
+  if (!snapshot) {
+    throw new AppError(
+      "MANAGER_STATEMENT_NOT_FOUND",
+      "Statement details could not be found.",
+      404,
+    );
+  }
+
+  const document = await generateManagerStatementDocument(params);
+  const signedUrl = await createStatementSignedUrl(document.storage_path);
+  const phoneNumber = normalizeWhatsAppPhone(snapshot.landlord.phone);
+
+  if (!phoneNumber) {
+    throw new AppError(
+      "MANAGER_LANDLORD_PHONE_MISSING",
+      "Landlord phone number is missing.",
+      400,
+    );
+  }
+
+  const label =
+    params.documentType === "landlord_statement"
+      ? "landlord statement"
+      : "remittance summary";
+
+  const message = [
+    `Hello ${snapshot.landlord.name},`,
+    "",
+    `Your ${label} from ${snapshot.organization.name} is ready.`,
+    "",
+    `Document number: ${document.document_number}`,
+    `Amount remitted: ${new Intl.NumberFormat("en-NG", {
+      style: "currency",
+      currency: "NGN",
+      maximumFractionDigits: 0,
+    }).format(snapshot.totals.amountRemitted)}`,
+    `Balance due: ${new Intl.NumberFormat("en-NG", {
+      style: "currency",
+      currency: "NGN",
+      maximumFractionDigits: 0,
+    }).format(snapshot.totals.pendingLandlordBalance)}`,
+    "",
+    `Download document: ${signedUrl}`,
+  ].join("\n");
+
+  return {
+    whatsappUrl: buildWhatsAppUrl({
+      phoneNumber,
+      message,
+    }),
   };
 }

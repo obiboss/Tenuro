@@ -5,11 +5,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { managerSignOutAction } from "@/actions/manager-auth.actions";
 import { cn } from "@/lib/cn";
+import type { ManagerWorkspaceRole } from "@/server/repositories/manager-staff.repository";
+import {
+  MANAGER_STAFF_ROLE_LABELS,
+  canManagerRoleAccessPath,
+} from "@/server/services/manager-staff-access.service";
 
 type ManagerShellProps = {
   children: ReactNode;
   managerName: string;
   organizationName?: string | null;
+  staffRole: ManagerWorkspaceRole;
 };
 
 const navItems = [
@@ -49,6 +55,10 @@ const navItems = [
     label: "Maintenance",
     href: "/manager/maintenance",
   },
+  {
+    label: "Staff",
+    href: "/manager/staff",
+  },
 ] as const;
 
 function getFirstName(fullName: string) {
@@ -78,9 +88,13 @@ export function ManagerShell({
   children,
   managerName,
   organizationName,
+  staffRole,
 }: ManagerShellProps) {
   const pathname = usePathname();
   const firstName = getFirstName(managerName);
+  const visibleNavItems = navItems.filter((item) =>
+    canManagerRoleAccessPath(staffRole, item.href),
+  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -88,7 +102,7 @@ export function ManagerShell({
         <BoldverseManagerBrand />
 
         <nav className="mt-8 space-y-2">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const active =
               pathname === item.href || pathname.startsWith(`${item.href}/`);
 
@@ -132,12 +146,12 @@ export function ManagerShell({
                   {organizationName ?? "Manager setup"}
                 </p>
                 <p className="text-xs font-semibold text-text-muted">
-                  BOPA Manager
+                  {MANAGER_STAFF_ROLE_LABELS[staffRole]}
                 </p>
               </div>
 
               <span className="rounded-full bg-primary-soft px-3 py-1 text-xs font-black uppercase tracking-wide text-primary">
-                Manager
+                {MANAGER_STAFF_ROLE_LABELS[staffRole]}
               </span>
 
               <form action={managerSignOutAction}>
@@ -162,7 +176,7 @@ export function ManagerShell({
         className="fixed inset-x-0 bottom-0 z-40 border-t border-border-soft bg-white px-2 py-2 shadow-2xl lg:hidden"
       >
         <div className="flex gap-1 overflow-x-auto pb-1">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const active =
               pathname === item.href || pathname.startsWith(`${item.href}/`);
 

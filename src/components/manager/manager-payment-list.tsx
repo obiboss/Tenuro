@@ -63,7 +63,7 @@ function getPaymentStatusClassName(status: ManagerRentPaymentRow["status"]) {
   return "bg-danger-soft text-danger";
 }
 
-function canDownloadReceipt(status: ManagerRentPaymentRow["status"]) {
+function canShareReceipt(status: ManagerRentPaymentRow["status"]) {
   return status === "verified" || status === "recorded";
 }
 
@@ -177,13 +177,23 @@ export function ManagerPaymentList({
                 </div>
               </div>
 
-              {canDownloadReceipt(payment.status) ? (
-                <Link
-                  href={`/manager/receipts/${payment.id}/download`}
-                  className="inline-flex min-h-11 items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
-                >
-                  Download Receipt
-                </Link>
+              {canShareReceipt(payment.status) ? (
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Link
+                    href={`/manager/receipts/${payment.id}/download`}
+                    className="inline-flex min-h-11 items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+                  >
+                    Download Receipt
+                  </Link>
+
+                  <Link
+                    href={`/manager/receipts/${payment.id}/share`}
+                    target="_blank"
+                    className="inline-flex min-h-11 items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
+                  >
+                    Send via WhatsApp
+                  </Link>
+                </div>
               ) : (
                 <p className="rounded-card bg-warning-soft p-3 text-sm font-semibold text-warning">
                   Receipt will be available after this payment is confirmed.

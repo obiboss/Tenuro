@@ -7,6 +7,20 @@ type ManagerStatementDocumentActionsProps = {
   dateTo?: string | null;
 };
 
+function buildQuery(params: {
+  landlordClientId: string;
+  dateFrom?: string | null;
+  dateTo?: string | null;
+}) {
+  const searchParams = new URLSearchParams({
+    landlordClientId: params.landlordClientId,
+    dateFrom: params.dateFrom ?? "",
+    dateTo: params.dateTo ?? "",
+  });
+
+  return searchParams.toString();
+}
+
 export function ManagerStatementDocumentActions({
   landlordClients,
   selectedLandlordClientId,
@@ -17,11 +31,19 @@ export function ManagerStatementDocumentActions({
     (client) => client.status === "active",
   );
 
+  const query = selectedLandlordClientId
+    ? buildQuery({
+        landlordClientId: selectedLandlordClientId,
+        dateFrom,
+        dateTo,
+      })
+    : "";
+
   return (
     <section className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
       <div>
         <h2 className="text-lg font-black tracking-tight text-text-strong">
-          Download landlord documents
+          Share landlord documents
         </h2>
         <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
           Choose a landlord and date range. BOPA will create the documents from
@@ -101,27 +123,37 @@ export function ManagerStatementDocumentActions({
       </form>
 
       {selectedLandlordClientId ? (
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <a
-            href={`/manager/reports/landlord-statement/download?landlordClientId=${encodeURIComponent(
-              selectedLandlordClientId,
-            )}&dateFrom=${encodeURIComponent(dateFrom ?? "")}&dateTo=${encodeURIComponent(
-              dateTo ?? "",
-            )}`}
-            className="inline-flex min-h-11 items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
+            href={`/manager/reports/landlord-statement/download?${query}`}
+            className="inline-flex min-h-11 items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
           >
-            Download Statement PDF
+            Download Statement
           </a>
 
           <a
-            href={`/manager/remittances/summary/download?landlordClientId=${encodeURIComponent(
-              selectedLandlordClientId,
-            )}&dateFrom=${encodeURIComponent(dateFrom ?? "")}&dateTo=${encodeURIComponent(
-              dateTo ?? "",
-            )}`}
+            href={`/manager/reports/landlord-statement/share?${query}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-h-11 items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
+          >
+            Send Statement
+          </a>
+
+          <a
+            href={`/manager/remittances/summary/download?${query}`}
             className="inline-flex min-h-11 items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
           >
-            Download Remittance Summary
+            Download Remittance
+          </a>
+
+          <a
+            href={`/manager/remittances/summary/share?${query}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-h-11 items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
+          >
+            Send Remittance
           </a>
         </div>
       ) : null}

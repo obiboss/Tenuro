@@ -21,6 +21,10 @@ type ManagerReceiptDownload = {
   fileBuffer: ArrayBuffer;
 };
 
+export type ManagerReceiptShareLink = {
+  whatsappUrl: string;
+};
+
 type WebPdfReadableStream = ReadableStream<Uint8Array<ArrayBufferLike>>;
 type PdfOutput = Buffer | Readable | WebPdfReadableStream;
 
@@ -185,6 +189,48 @@ async function downloadReceiptPdf(storagePath: string) {
   return data.arrayBuffer();
 }
 
+async function createReceiptSignedUrl(storagePath: string) {
+  const supabase = createSupabaseAdminClient();
+
+  const { data, error } = await supabase.storage
+    .from(MANAGER_RENT_RECEIPTS_BUCKET)
+    .createSignedUrl(storagePath, 60 * 60 * 24 * 7);
+
+  if (error || !data?.signedUrl) {
+    throw error;
+  }
+
+  return data.signedUrl;
+}
+
+function normalizeWhatsAppPhone(phoneNumber: string | null) {
+  if (!phoneNumber) {
+    return null;
+  }
+
+  const cleaned = phoneNumber.replace(/\D/g, "");
+
+  if (!cleaned) {
+    return null;
+  }
+
+  if (cleaned.startsWith("234")) {
+    return cleaned;
+  }
+
+  if (cleaned.startsWith("0")) {
+    return `234${cleaned.slice(1)}`;
+  }
+
+  return cleaned;
+}
+
+function buildWhatsAppUrl(params: { phoneNumber: string; message: string }) {
+  return `https://wa.me/${params.phoneNumber}?text=${encodeURIComponent(
+    params.message,
+  )}`;
+}
+
 async function requireManagerOrganization(managerProfileId: string) {
   const supabase = await createSupabaseServerClient();
   const organization = await getManagerOrganizationForCurrentUser(
@@ -299,5 +345,59 @@ export async function getManagerRentReceiptDownload(params: {
   return {
     receipt,
     fileBuffer,
+  };
+}
+
+export async function getManagerRentReceiptWhatsAppLink(params: {
+  managerProfileId: string;
+  rentPaymentId: string;
+}): Promise<ManagerReceiptShareLink> {
+  const organization = await requireManagerOrganization(
+    params.managerProfileId,
+  );
+  const adminSupabase = createSupabaseAdminClient();
+
+  const snapshot = await getManagerRentReceiptSnapshot(adminSupabase, {
+    organizationId: organization.id,
+    rentPaymentId: params.rentPaymentId,
+  });
+
+  if (!snapshot) {
+    throw new AppError(
+      "MANAGER_PAYMENT_NOT_FOUND",
+      "Payment record was not found.",
+      404,
+    );
+  }
+
+  const receipt = await getOrCreateManagerRentReceipt(params);
+  const signedUrl = await createReceiptSignedUrl(receipt.storage_path);
+  const phoneNumber = normalizeWhatsAppPhone(snapshot.tenant.phone);
+
+  if (!phoneNumber) {
+    throw new AppError(
+      "MANAGER_RECEIPT_PHONE_MISSING",
+      "Tenant phone number is missing.",
+      400,
+    );
+  }
+
+  const message = [
+    `Hello ${snapshot.tenant.name},`,
+    "",
+    `Your rent receipt from ${snapshot.organization.name} is ready.`,
+    "",
+    `Receipt number: ${receipt.receipt_number}`,
+    `Property: ${snapshot.property.name}`,
+    `Unit: ${snapshot.unit.label}`,
+    "",
+    `Download receipt: ${signedUrl}`,
+  ].join("\n");
+
+  return {
+    whatsappUrl: buildWhatsAppUrl({
+      phoneNumber,
+      message,
+    }),
   };
 }

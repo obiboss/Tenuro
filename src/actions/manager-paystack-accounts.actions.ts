@@ -7,6 +7,7 @@ import {
   saveManagerLandlordPaystackAccount,
   saveManagerOrganizationPaystackAccount,
 } from "@/server/services/manager-paystack-accounts.service";
+import { requireManagerWorkspacePermission } from "@/server/services/manager-staff-access.service";
 import {
   saveManagerLandlordPaystackAccountSchema,
   saveManagerOrganizationPaystackAccountSchema,
@@ -27,6 +28,8 @@ export async function saveManagerOrganizationPaystackAccountAction(
   formData: FormData,
 ): Promise<ManagerActionState> {
   try {
+    await requireManagerWorkspacePermission("payout.manage");
+
     const parsed = saveManagerOrganizationPaystackAccountSchema.parse({
       businessName: formData.get("businessName"),
       contactName: formData.get("contactName"),
@@ -57,6 +60,8 @@ export async function saveManagerLandlordPaystackAccountAction(
   formData: FormData,
 ): Promise<ManagerActionState> {
   try {
+    await requireManagerWorkspacePermission("payout.manage");
+
     const parsed = saveManagerLandlordPaystackAccountSchema.parse({
       landlordClientId: formData.get("landlordClientId"),
       businessName: formData.get("businessName"),

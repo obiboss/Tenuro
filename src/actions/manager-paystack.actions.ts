@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { ManagerActionState } from "@/actions/manager.state";
 import { errorResult } from "@/server/errors/result";
 import { createManagerPaystackPaymentRequest } from "@/server/services/manager-paystack.service";
+import { requireManagerWorkspacePermission } from "@/server/services/manager-staff-access.service";
 import { createManagerPaystackPaymentRequestSchema } from "@/server/validators/manager-paystack.schema";
 
 function toActionError(error: unknown): ManagerActionState {
@@ -21,6 +22,8 @@ export async function createManagerPaystackPaymentRequestAction(
   formData: FormData,
 ): Promise<ManagerActionState> {
   try {
+    await requireManagerWorkspacePermission("payment.manage");
+
     const parsed = createManagerPaystackPaymentRequestSchema.parse({
       tenantId: formData.get("tenantId"),
       periodStart: formData.get("periodStart"),
