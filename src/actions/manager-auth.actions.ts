@@ -24,6 +24,48 @@ function toActionError(error: unknown): AuthActionState {
   };
 }
 
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
+async function getExistingProfileByEmail(email: string) {
+  const adminSupabase = createSupabaseAdminClient();
+
+  const { data, error } = await adminSupabase
+    .from("profiles")
+    .select("id, role, email")
+    .eq("email", email)
+    .maybeSingle<{
+      id: string;
+      role: string;
+      email: string | null;
+    }>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+function getSupabaseAuthErrorMessage(message: string | undefined) {
+  const normalized = message?.toLowerCase() ?? "";
+
+  if (normalized.includes("rate limit")) {
+    return "Too many email attempts. Please wait before trying again.";
+  }
+
+  if (
+    normalized.includes("already registered") ||
+    normalized.includes("already exists") ||
+    normalized.includes("user already")
+  ) {
+    return "An account already exists with this email. Please check your email or sign in.";
+  }
+
+  return message ?? "Manager account could not be created.";
+}
+
 export async function registerManagerAction(
   _previousState: AuthActionState,
   formData: FormData,
@@ -39,10 +81,23 @@ export async function registerManagerAction(
       confirmPassword: formData.get("confirmPassword"),
     });
 
+    const email = normalizeEmail(parsed.email);
+    const existingProfile = await getExistingProfileByEmail(email);
+
+    if (existingProfile) {
+      return {
+        ok: false,
+        message:
+          existingProfile.role === "manager"
+            ? "A manager account already exists with this email. Please check your email or sign in."
+            : "This email is already used for another BOPA account. Please sign in with the correct account or use another work email.",
+      };
+    }
+
     const supabase = await createSupabaseServerClient();
 
     const { data, error } = await supabase.auth.signUp({
-      email: parsed.email,
+      email,
       password: parsed.password,
       options: {
         data: {
@@ -55,7 +110,7 @@ export async function registerManagerAction(
     if (error || !data.user) {
       return {
         ok: false,
-        message: error?.message ?? "Manager account could not be created.",
+        message: getSupabaseAuthErrorMessage(error?.message),
       };
     }
 
@@ -68,7 +123,7 @@ export async function registerManagerAction(
       role: "manager",
       fullName: parsed.fullName,
       phoneNumber: null,
-      email: parsed.email,
+      email,
     });
 
     if (data.session) {
@@ -105,11 +160,11 @@ export async function registerManagerAction(
   };
 }
 
-export async function managerLoginAction(
+export async function loginManagerAction(
   _previousState: AuthActionState,
   formData: FormData,
 ): Promise<AuthActionState> {
-  let shouldRedirect = false;
+  let redirectTo: string | null = null;
 
   try {
     const parsed = managerLoginSchema.parse({
@@ -120,7 +175,7 @@ export async function managerLoginAction(
     const supabase = await createSupabaseServerClient();
 
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: parsed.email,
+      email: normalizeEmail(parsed.email),
       password: parsed.password,
     });
 
@@ -139,18 +194,17 @@ export async function managerLoginAction(
 
       return {
         ok: false,
-        message:
-          "This login is only for BOPA Manager accounts. Please use the correct login page.",
+        message: "We could not find your BOPA Manager profile.",
       };
     }
 
-    shouldRedirect = true;
+    redirectTo = "/manager";
   } catch (error) {
     return toActionError(error);
   }
 
-  if (shouldRedirect) {
-    redirect("/manager");
+  if (redirectTo) {
+    redirect(redirectTo);
   }
 
   return {
