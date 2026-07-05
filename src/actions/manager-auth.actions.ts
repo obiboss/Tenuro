@@ -160,7 +160,7 @@ export async function registerManagerAction(
   };
 }
 
-export async function loginManagerAction(
+export async function managerLoginAction(
   _previousState: AuthActionState,
   formData: FormData,
 ): Promise<AuthActionState> {
@@ -212,6 +212,8 @@ export async function loginManagerAction(
     message: "Signed in successfully.",
   };
 }
+
+export const loginManagerAction = managerLoginAction;
 
 export async function managerSignOutAction() {
   const supabase = await createSupabaseServerClient();
