@@ -12,9 +12,8 @@ import {
   upsertManagerStatementDocument,
   type ManagerStatementDocumentType,
 } from "@/server/repositories/manager-statement-documents.repository";
-import { getManagerOrganizationForCurrentUser } from "@/server/repositories/manager.repository";
+import { requireManagerWorkspacePermission } from "@/server/services/manager-staff-access.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
-import { createSupabaseServerClient } from "@/server/supabase/server";
 import type { ManagerStatementDocumentQueryInput } from "@/server/validators/manager-statement-documents.schema";
 
 type ManagerStatementDownload = {
@@ -265,22 +264,27 @@ function buildWhatsAppUrl(params: { phoneNumber: string; message: string }) {
   )}`;
 }
 
-async function requireManagerOrganization(managerProfileId: string) {
-  const supabase = await createSupabaseServerClient();
-  const organization = await getManagerOrganizationForCurrentUser(
-    supabase,
-    managerProfileId,
-  );
+async function requireManagerStatementAccess(managerProfileId: string) {
+  const { manager, access } =
+    await requireManagerWorkspacePermission("reports.view");
 
-  if (!organization || organization.status !== "active") {
+  if (manager.id !== managerProfileId) {
+    throw new AppError(
+      "MANAGER_SESSION_MISMATCH",
+      "Please sign in again to continue.",
+      401,
+    );
+  }
+
+  if (!access.organization || access.organization.status !== "active") {
     throw new AppError(
       "MANAGER_ORGANIZATION_REQUIRED",
-      "Create an active BOPA Manager organization before continuing.",
+      "Create or join an active BOPA Manager organization before continuing.",
       403,
     );
   }
 
-  return organization;
+  return access.organization;
 }
 
 export async function generateManagerStatementDocument(params: {
@@ -288,7 +292,7 @@ export async function generateManagerStatementDocument(params: {
   documentType: ManagerStatementDocumentType;
   input: ManagerStatementDocumentQueryInput;
 }) {
-  const organization = await requireManagerOrganization(
+  const organization = await requireManagerStatementAccess(
     params.managerProfileId,
   );
   const adminSupabase = createSupabaseAdminClient();
@@ -395,7 +399,7 @@ export async function getManagerStatementWhatsAppLink(params: {
   documentType: ManagerStatementDocumentType;
   input: ManagerStatementDocumentQueryInput;
 }): Promise<ManagerStatementShareLink> {
-  const organization = await requireManagerOrganization(
+  const organization = await requireManagerStatementAccess(
     params.managerProfileId,
   );
   const adminSupabase = createSupabaseAdminClient();

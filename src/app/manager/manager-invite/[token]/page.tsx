@@ -1,9 +1,7 @@
 import Link from "next/link";
 import { acceptManagerStaffInviteAction } from "@/actions/manager-staff.actions";
-import {
-  getManagerStaffInvitePreview,
-  MANAGER_STAFF_ROLE_LABELS,
-} from "@/server/services/manager-staff-access.service";
+import { MANAGER_STAFF_ROLE_LABELS } from "@/lib/manager-staff-permission";
+import { getManagerStaffInvitePreview } from "@/server/services/manager-staff-access.service";
 
 type ManagerInvitePageProps = {
   params: Promise<{

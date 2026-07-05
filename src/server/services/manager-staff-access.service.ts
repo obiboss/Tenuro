@@ -3,73 +3,26 @@ import "server-only";
 import crypto from "node:crypto";
 import { AppError } from "@/server/errors/app-error";
 import {
-  createManagerStaffInvite,
+  createManagerStaffInvite as createManagerStaffInviteRecord,
   createManagerStaffMember,
   getActiveManagerStaffMemberByProfileAndOrganization,
   getManagerStaffInviteByToken,
   listManagerStaffInvites,
   listManagerStaffMembers,
   type ManagerStaffRole,
-  type ManagerWorkspaceRole,
 } from "@/server/repositories/manager-staff.repository";
 import {
   getManagerOrganizationAccessForCurrentUser,
   type ManagerOrganizationAccess,
 } from "@/server/repositories/manager.repository";
-import { requireManager } from "@/server/services/auth.service";
+import {
+  managerRoleHasPermission,
+  type ManagerWorkspacePermission,
+} from "@/lib/manager-staff-permission";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
+import type { ServerSessionUser } from "@/server/types/auth.types";
 import type { CreateManagerStaffInviteInput } from "@/server/validators/manager-staff.schema";
-
-export type ManagerWorkspacePermission =
-  | "overview.view"
-  | "property.manage"
-  | "payment.manage"
-  | "remittance.manage"
-  | "reports.view"
-  | "maintenance.manage"
-  | "payout.manage"
-  | "staff.manage";
-
-export const MANAGER_STAFF_ROLE_LABELS: Record<ManagerWorkspaceRole, string> = {
-  owner: "Owner",
-  manager: "Manager",
-  accountant: "Accountant",
-  property_officer: "Property Officer",
-  maintenance_officer: "Maintenance Officer",
-};
-
-const ROLE_PERMISSIONS: Record<
-  ManagerWorkspaceRole,
-  ManagerWorkspacePermission[]
-> = {
-  owner: [
-    "overview.view",
-    "property.manage",
-    "payment.manage",
-    "remittance.manage",
-    "reports.view",
-    "maintenance.manage",
-    "payout.manage",
-    "staff.manage",
-  ],
-  manager: [
-    "overview.view",
-    "property.manage",
-    "payment.manage",
-    "remittance.manage",
-    "reports.view",
-    "maintenance.manage",
-  ],
-  accountant: [
-    "overview.view",
-    "payment.manage",
-    "remittance.manage",
-    "reports.view",
-  ],
-  property_officer: ["overview.view", "property.manage"],
-  maintenance_officer: ["overview.view", "maintenance.manage"],
-};
 
 function getAppBaseUrl() {
   const configuredUrl =
@@ -90,73 +43,17 @@ function nullableText(value: string | undefined) {
   return trimmed ? trimmed : null;
 }
 
-export function managerRoleHasPermission(
-  role: ManagerWorkspaceRole,
-  permission: ManagerWorkspacePermission,
-) {
-  return ROLE_PERMISSIONS[role].includes(permission);
-}
+async function requireManagerSession(): Promise<ServerSessionUser> {
+  const { requireManager } = await import("@/server/services/auth.service");
 
-export function canManagerRoleAccessPath(
-  role: ManagerWorkspaceRole,
-  pathname: string,
-) {
-  if (
-    !pathname ||
-    pathname === "/manager" ||
-    pathname === "/manager/overview"
-  ) {
-    return true;
-  }
-
-  if (role === "owner") {
-    return true;
-  }
-
-  if (pathname.startsWith("/manager/onboarding")) {
-    return false;
-  }
-
-  if (pathname.startsWith("/manager/staff")) {
-    return managerRoleHasPermission(role, "staff.manage");
-  }
-
-  if (pathname.startsWith("/manager/payouts")) {
-    return managerRoleHasPermission(role, "payout.manage");
-  }
-
-  if (
-    pathname.startsWith("/manager/landlords") ||
-    pathname.startsWith("/manager/properties") ||
-    pathname.startsWith("/manager/tenants")
-  ) {
-    return managerRoleHasPermission(role, "property.manage");
-  }
-
-  if (pathname.startsWith("/manager/payments")) {
-    return managerRoleHasPermission(role, "payment.manage");
-  }
-
-  if (pathname.startsWith("/manager/remittances")) {
-    return managerRoleHasPermission(role, "remittance.manage");
-  }
-
-  if (pathname.startsWith("/manager/reports")) {
-    return managerRoleHasPermission(role, "reports.view");
-  }
-
-  if (pathname.startsWith("/manager/maintenance")) {
-    return managerRoleHasPermission(role, "maintenance.manage");
-  }
-
-  return true;
+  return requireManager();
 }
 
 export async function getCurrentManagerOrganizationAccess(): Promise<{
-  manager: Awaited<ReturnType<typeof requireManager>>;
+  manager: ServerSessionUser;
   access: ManagerOrganizationAccess | null;
 }> {
-  const manager = await requireManager();
+  const manager = await requireManagerSession();
   const supabase = await createSupabaseServerClient();
 
   const access = await getManagerOrganizationAccessForCurrentUser(
@@ -209,7 +106,7 @@ export async function createManagerStaffInvite(
     Date.now() + 1000 * 60 * 60 * 24 * 14,
   ).toISOString();
 
-  return createManagerStaffInvite(supabase, {
+  return createManagerStaffInviteRecord(supabase, {
     organizationId: access.organization.id,
     staffName: input.staffName,
     staffEmail: input.staffEmail.toLowerCase(),
@@ -250,7 +147,7 @@ export async function getManagerStaffInvitePreview(token: string) {
 }
 
 export async function acceptManagerStaffInvite(token: string) {
-  const manager = await requireManager();
+  const manager = await requireManagerSession();
   const adminSupabase = createSupabaseAdminClient();
 
   const invite = await getManagerStaffInviteByToken(adminSupabase, token);
@@ -305,6 +202,9 @@ export async function acceptManagerStaffInvite(token: string) {
     });
 
   if (existingMember) {
+    const { markManagerStaffInviteAccepted } =
+      await import("@/server/repositories/manager-staff.repository");
+
     await markManagerStaffInviteAccepted(adminSupabase, {
       inviteId: invite.id,
       acceptedByProfileId: manager.id,
@@ -322,6 +222,9 @@ export async function acceptManagerStaffInvite(token: string) {
     invitedByProfileId: invite.invited_by_profile_id,
     acceptedInviteId: invite.id,
   });
+
+  const { markManagerStaffInviteAccepted } =
+    await import("@/server/repositories/manager-staff.repository");
 
   await markManagerStaffInviteAccepted(adminSupabase, {
     inviteId: invite.id,

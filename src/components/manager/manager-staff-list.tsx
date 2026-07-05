@@ -2,7 +2,7 @@ import type {
   ManagerStaffInviteRow,
   ManagerStaffMemberRow,
 } from "@/server/repositories/manager-staff.repository";
-import { MANAGER_STAFF_ROLE_LABELS } from "@/server/services/manager-staff-access.service";
+import { MANAGER_STAFF_ROLE_LABELS } from "@/lib/manager-staff-permission";
 
 type ManagerStaffListProps = {
   members: ManagerStaffMemberRow[];

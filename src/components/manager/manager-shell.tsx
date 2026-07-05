@@ -5,11 +5,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { managerSignOutAction } from "@/actions/manager-auth.actions";
 import { cn } from "@/lib/cn";
-import type { ManagerWorkspaceRole } from "@/server/repositories/manager-staff.repository";
 import {
   MANAGER_STAFF_ROLE_LABELS,
   canManagerRoleAccessPath,
-} from "@/server/services/manager-staff-access.service";
+} from "@/lib/manager-staff-permission";
+import type { ManagerWorkspaceRole } from "@/server/repositories/manager-staff.repository";
 
 type ManagerShellProps = {
   children: ReactNode;

@@ -11,6 +11,10 @@ import type {
   ManagerTenantStatus,
   ManagerUnitStatus,
 } from "@/constants/manager";
+import {
+  getActiveManagerStaffMemberForProfile,
+  type ManagerWorkspaceRole,
+} from "@/server/repositories/manager-staff.repository";
 
 export type ManagerOrganizationStatus = "active" | "suspended" | "inactive";
 export type ManagerClientStatus = "active" | "inactive" | "archived";
@@ -29,6 +33,13 @@ export type ManagerOrganizationRow = {
   status: ManagerOrganizationStatus;
   created_at: string;
   updated_at: string;
+};
+
+export type ManagerOrganizationAccess = {
+  organization: ManagerOrganizationRow;
+  staffRole: ManagerWorkspaceRole;
+  isOwner: boolean;
+  staffMemberId: string | null;
 };
 
 export type ManagerLandlordClientRow = {
@@ -377,21 +388,72 @@ const MANAGER_RENT_PAYMENT_SELECT = `
   updated_at
 `;
 
+export async function getManagerOrganizationAccessForCurrentUser(
+  supabase: SupabaseClient,
+  profileId: string,
+): Promise<ManagerOrganizationAccess | null> {
+  const { data: ownedOrganization, error: ownedOrganizationError } =
+    await supabase
+      .from("manager_organizations")
+      .select(MANAGER_ORGANIZATION_SELECT)
+      .eq("owner_profile_id", profileId)
+      .maybeSingle<ManagerOrganizationRow>();
+
+  if (ownedOrganizationError) {
+    throw ownedOrganizationError;
+  }
+
+  if (ownedOrganization) {
+    return {
+      organization: ownedOrganization,
+      staffRole: "owner",
+      isOwner: true,
+      staffMemberId: null,
+    };
+  }
+
+  const staffMember = await getActiveManagerStaffMemberForProfile(
+    supabase,
+    profileId,
+  );
+
+  if (!staffMember) {
+    return null;
+  }
+
+  const { data: staffOrganization, error: staffOrganizationError } =
+    await supabase
+      .from("manager_organizations")
+      .select(MANAGER_ORGANIZATION_SELECT)
+      .eq("id", staffMember.organization_id)
+      .maybeSingle<ManagerOrganizationRow>();
+
+  if (staffOrganizationError) {
+    throw staffOrganizationError;
+  }
+
+  if (!staffOrganization) {
+    return null;
+  }
+
+  return {
+    organization: staffOrganization,
+    staffRole: staffMember.staff_role,
+    isOwner: false,
+    staffMemberId: staffMember.id,
+  };
+}
+
 export async function getManagerOrganizationForCurrentUser(
   supabase: SupabaseClient,
   ownerProfileId: string,
 ) {
-  const { data, error } = await supabase
-    .from("manager_organizations")
-    .select(MANAGER_ORGANIZATION_SELECT)
-    .eq("owner_profile_id", ownerProfileId)
-    .maybeSingle<ManagerOrganizationRow>();
+  const access = await getManagerOrganizationAccessForCurrentUser(
+    supabase,
+    ownerProfileId,
+  );
 
-  if (error) {
-    throw error;
-  }
-
-  return data;
+  return access?.organization ?? null;
 }
 
 export async function createManagerOrganization(

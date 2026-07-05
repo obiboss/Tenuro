@@ -1,8 +1,8 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { ManagerShell } from "@/components/manager/manager-shell";
+import { canManagerRoleAccessPath } from "@/lib/manager-staff-permission";
 import { getManagerOrganizationAccessForCurrentUser } from "@/server/repositories/manager.repository";
-import { canManagerRoleAccessPath } from "@/server/services/manager-staff-access.service";
 import { requireManager } from "@/server/services/auth.service";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 
