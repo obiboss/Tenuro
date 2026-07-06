@@ -8,6 +8,11 @@ export const registerManagerSchema = z
       .trim()
       .min(2, "Enter your full name.")
       .max(120, "Name is too long."),
+    organizationName: z
+      .string()
+      .trim()
+      .min(2, "Enter your property management business name.")
+      .max(180, "Business name is too long."),
     email: z.string().trim().email("Enter a valid work email address."),
     password: passwordSchema,
     confirmPassword: z.string().min(1, "Confirm your password."),

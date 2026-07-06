@@ -48,6 +48,25 @@ async function getExistingProfileByEmail(email: string) {
   return data;
 }
 
+async function createManagerOrganizationForSignup(params: {
+  ownerProfileId: string;
+  organizationName: string;
+  organizationEmail: string;
+}) {
+  const adminSupabase = createSupabaseAdminClient();
+
+  const { error } = await adminSupabase.from("manager_organizations").insert({
+    owner_profile_id: params.ownerProfileId,
+    organization_name: params.organizationName,
+    organization_email: params.organizationEmail,
+    status: "active",
+  });
+
+  if (error) {
+    throw error;
+  }
+}
+
 function getSupabaseAuthErrorMessage(message: string | undefined) {
   const normalized = message?.toLowerCase() ?? "";
 
@@ -76,6 +95,7 @@ export async function registerManagerAction(
   try {
     const parsed = registerManagerSchema.parse({
       fullName: formData.get("fullName"),
+      organizationName: formData.get("organizationName"),
       email: formData.get("email"),
       password: formData.get("password"),
       confirmPassword: formData.get("confirmPassword"),
@@ -102,6 +122,7 @@ export async function registerManagerAction(
       options: {
         data: {
           full_name: parsed.fullName,
+          organization_name: parsed.organizationName,
           role: "manager",
         },
       },
@@ -126,15 +147,21 @@ export async function registerManagerAction(
       email,
     });
 
+    await createManagerOrganizationForSignup({
+      ownerProfileId: data.user.id,
+      organizationName: parsed.organizationName,
+      organizationEmail: email,
+    });
+
     if (data.session) {
-      redirectTo = "/manager/onboarding";
+      redirectTo = "/manager/overview";
     }
 
     if (!redirectTo) {
       return {
         ok: true,
         message:
-          "Manager account created. Please check your email, verify your account, then sign in.",
+          "Account created. Please check your email, verify your account, then sign in.",
       };
     }
   } catch (error) {

@@ -1,0 +1,1822 @@
+====================================================================================================
+FILE: src/actions/manager-paystack.actions.ts
+====================================================================================================
+
+"use server";
+
+import { revalidatePath } from "next/cache";
+import type { ManagerActionState } from "@/actions/manager.state";
+import { errorResult } from "@/server/errors/result";
+import { createManagerPaystackPaymentRequest } from "@/server/services/manager-paystack.service";
+import { requireManagerWorkspacePermission } from "@/server/services/manager-staff-access.service";
+import { createManagerPaystackPaymentRequestSchema } from "@/server/validators/manager-paystack.schema";
+
+function toActionError(error: unknown): ManagerActionState {
+  const result = errorResult(error);
+
+  return {
+    ok: false,
+    message: result.message,
+    fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
+  };
+}
+
+export async function createManagerPaystackPaymentRequestAction(
+  _previousState: ManagerActionState,
+  formData: FormData,
+): Promise<ManagerActionState> {
+  try {
+    await requireManagerWorkspacePermission("payment.manage");
+
+    const parsed = createManagerPaystackPaymentRequestSchema.parse({
+      tenantId: formData.get("tenantId"),
+      periodStart: formData.get("periodStart"),
+      periodEnd: formData.get("periodEnd"),
+      notes: formData.get("notes"),
+    });
+
+    await createManagerPaystackPaymentRequest(parsed);
+
+    revalidatePath("/manager");
+    revalidatePath("/manager/overview");
+    revalidatePath("/manager/payments");
+    revalidatePath("/manager/reports");
+    revalidatePath("/manager/remittances");
+
+    return {
+      ok: true,
+      message:
+        "Paystack rent payment link created. Open or send it from the payment link list.",
+    };
+  } catch (error) {
+    return toActionError(error);
+  }
+}
+
+
+====================================================================================================
+MISSING FILE: src/actions/manager-paystack.state.ts
+====================================================================================================
+
+====================================================================================================
+FILE: src/server/services/manager-paystack.service.ts
+====================================================================================================
+
+import "server-only";
+
+import crypto from "node:crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  calculateManagerPaymentBreakdown,
+  roundMoney,
+} from "@/lib/manager-automation";
+import { AppError, isAppError } from "@/server/errors/app-error";
+import {
+  getActiveManagerLandlordPaystackAccount,
+  getActiveManagerPaystackAccount,
+} from "@/server/repositories/manager-paystack-accounts.repository";
+import {
+  createPendingManagerPaystackPaymentRequest,
+  getManagerPaystackPaymentRequestByReference,
+  getManagerRentPaymentByPaymentReference,
+  getManagerTenantForPaystackRequest,
+  markManagerPaystackPaymentRequestFailed,
+  markManagerPaystackPaymentRequestInitialized,
+  markManagerPaystackPaymentRequestPaid,
+} from "@/server/repositories/manager-paystack.repository";
+import {
+  getManagerOrganizationForCurrentUser,
+  getManagerPropertyById,
+  getManagerUnitById,
+  recordManagerRentPayment as recordManagerRentPaymentRecord,
+} from "@/server/repositories/manager.repository";
+import {
+  assertPaystackAmountMatchesExpected,
+  convertNairaToKobo,
+  createAgentDealTransactionSplit,
+  initializePaystackMultiSplitTransaction,
+  initializePaystackTransaction,
+  verifyPaystackTransaction,
+} from "@/server/services/paystack.service";
+import { createSupabaseAdminClient } from "@/server/supabase/admin";
+import { createSupabaseServerClient } from "@/server/supabase/server";
+import type { CreateManagerPaystackPaymentRequestInput } from "@/server/validators/manager-paystack.schema";
+
+type ManagerProfileRow = {
+  id: string;
+  role: string;
+  full_name: string;
+  phone_number: string | null;
+  email: string | null;
+  is_active: boolean;
+};
+
+type ManagerSettlementInitialization = {
+  authorizationUrl: string;
+  accessCode: string;
+  reference: string;
+  settlementMetadata: Record<string, unknown>;
+};
+
+export type ManagerPaystackVerificationResult = {
+  status: "processed" | "duplicate";
+  message: string;
+  paymentRequestId: string;
+  paymentId: string;
+  verifiedPayload: Record<string, unknown>;
+};
+
+function nullableText(value: string | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function nullableDate(value: string | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function generatePaystackReference() {
+  return `BPM-${crypto.randomUUID().replaceAll("-", "").slice(0, 22).toUpperCase()}`;
+}
+
+function generatePaymentToken() {
+  return crypto.randomBytes(24).toString("hex");
+}
+
+function getAppBaseUrl() {
+  const configuredUrl =
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.BOPA_APP_URL ??
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
+
+  if (!configuredUrl) {
+    throw new AppError(
+      "APP_URL_MISSING",
+      "App URL is not configured for payment callback.",
+      500,
+    );
+  }
+
+  return configuredUrl.replace(/\/$/, "");
+}
+
+function getManagerPaystackCallbackUrl(reference: string) {
+  return `${getAppBaseUrl()}/pay/manager/callback?reference=${encodeURIComponent(
+    reference,
+  )}`;
+}
+
+function resolvePaystackCustomerEmail(params: {
+  tenantEmail: string | null;
+  tenantPhone: string;
+  organizationEmail: string | null;
+}) {
+  const tenantEmail = params.tenantEmail?.trim().toLowerCase();
+
+  if (tenantEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(tenantEmail)) {
+    return tenantEmail;
+  }
+
+  const organizationEmail = params.organizationEmail?.trim().toLowerCase();
+
+  if (
+    organizationEmail &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(organizationEmail)
+  ) {
+    return organizationEmail;
+  }
+
+  const sanitizedPhone = params.tenantPhone.replace(/\D/g, "");
+
+  if (sanitizedPhone.length >= 7) {
+    return `manager-tenant-${sanitizedPhone}@boldverseproperty.com`;
+  }
+
+  return "payments@boldverseproperty.com";
+}
+
+function toRecord(value: unknown): Record<string, unknown> {
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  return {};
+}
+
+function isManagerPaymentNotFoundError(error: unknown) {
+  return (
+    isAppError(error) &&
+    error.code === "MANAGER_PAYSTACK_PAYMENT_REQUEST_NOT_FOUND"
+  );
+}
+
+export function isManagerPaystackReference(reference: string) {
+  const normalized = reference.trim().toUpperCase();
+
+  return normalized.startsWith("BPM-") || normalized.startsWith("BOPA_MGR_");
+}
+
+export function isManagerPaystackMetadata(
+  rawPayload?: Record<string, unknown>,
+) {
+  if (!rawPayload) {
+    return false;
+  }
+
+  const data = toRecord(rawPayload.data);
+  const metadata = toRecord(data.metadata);
+
+  return (
+    metadata.product === "bopa_manager" ||
+    metadata.payment_type === "manager_rent_payment" ||
+    metadata.source === "bopa_manager_paystack_request"
+  );
+}
+
+export function isManagerPaystackWebhook(params: {
+  reference: string;
+  rawPayload?: Record<string, unknown>;
+}) {
+  return (
+    isManagerPaystackReference(params.reference) ||
+    isManagerPaystackMetadata(params.rawPayload)
+  );
+}
+
+async function getCurrentManagerProfile() {
+  const supabase = await createSupabaseServerClient();
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    throw new AppError(
+      "MANAGER_AUTH_REQUIRED",
+      "Please sign in to continue.",
+      401,
+    );
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("id, role, full_name, phone_number, email, is_active")
+    .eq("id", user.id)
+    .maybeSingle<ManagerProfileRow>();
+
+  if (profileError) {
+    throw profileError;
+  }
+
+  if (!profile || !profile.is_active) {
+    throw new AppError(
+      "MANAGER_PROFILE_NOT_FOUND",
+      "We could not find your active BOPA profile.",
+      403,
+    );
+  }
+
+  if (profile.role !== "manager") {
+    throw new AppError(
+      "MANAGER_ROLE_REQUIRED",
+      "This action is only available to BOPA Manager accounts.",
+      403,
+    );
+  }
+
+  return {
+    supabase,
+    profile,
+  };
+}
+
+async function requireManagerOrganization() {
+  const { supabase, profile } = await getCurrentManagerProfile();
+
+  const organization = await getManagerOrganizationForCurrentUser(
+    supabase,
+    profile.id,
+  );
+
+  if (!organization || organization.status !== "active") {
+    throw new AppError(
+      "MANAGER_ORGANIZATION_REQUIRED",
+      "Create an active BOPA Manager organization before continuing.",
+      403,
+    );
+  }
+
+  return {
+    supabase,
+    profile,
+    organization,
+  };
+}
+
+async function initializeManagerPaymentSettlement(params: {
+  supabase: SupabaseClient;
+  organizationId: string;
+  landlordClientId: string;
+  reference: string;
+  customerEmail: string;
+  amountRequested: number;
+  managerCommission: number;
+  landlordShare: number;
+  bopaPlatformFee: number;
+  collectionMode: "automatic_split" | "manager_collects" | "landlord_direct";
+  callbackUrl: string;
+  metadata: Record<string, unknown>;
+}): Promise<ManagerSettlementInitialization> {
+  const amountKobo = convertNairaToKobo(params.amountRequested);
+  const bopaPlatformFeeKobo = convertNairaToKobo(params.bopaPlatformFee);
+
+  if (params.collectionMode === "manager_collects") {
+    const managerAccount = await getActiveManagerPaystackAccount(
+      params.supabase,
+      params.organizationId,
+    );
+
+    if (!managerAccount || managerAccount.verification_status !== "verified") {
+      throw new AppError(
+        "MANAGER_PAYOUT_ACCOUNT_REQUIRED",
+        "Set up the manager payout account before creating this payment link.",
+        400,
+      );
+    }
+
+    const initialized = await initializePaystackTransaction({
+      email: params.customerEmail,
+      amountKobo,
+      reference: params.reference,
+      callbackUrl: params.callbackUrl,
+      subaccountCode: managerAccount.paystack_subaccount_code,
+      transactionChargeKobo: bopaPlatformFeeKobo,
+      currencyCode: "NGN",
+      metadata: {
+        ...params.metadata,
+        settlement_mode: "manager_collects",
+        manager_subaccount_code: managerAccount.paystack_subaccount_code,
+      },
+    });
+
+    return {
+      authorizationUrl: initialized.authorization_url,
+      accessCode: initialized.access_code,
+      reference: initialized.reference,
+      settlementMetadata: {
+        settlement_mode: "manager_collects",
+        manager_paystack_account_id: managerAccount.id,
+        manager_subaccount_code: managerAccount.paystack_subaccount_code,
+      },
+    };
+  }
+
+  const landlordAccount = await getActiveManagerLandlordPaystackAccount(
+    params.supabase,
+    {
+      organizationId: params.organizationId,
+      landlordClientId: params.landlordClientId,
+    },
+  );
+
+  if (!landlordAccount || landlordAccount.verification_status !== "verified") {
+    throw new AppError(
+      "MANAGER_LANDLORD_PAYOUT_ACCOUNT_REQUIRED",
+      "Set up this landlord payout account before creating this payment link.",
+      400,
+    );
+  }
+
+  if (
+    params.collectionMode === "automatic_split" &&
+    params.managerCommission > 0
+  ) {
+    const managerAccount = await getActiveManagerPaystackAccount(
+      params.supabase,
+      params.organizationId,
+    );
+
+    if (!managerAccount || managerAccount.verification_status !== "verified") {
+      throw new AppError(
+        "MANAGER_PAYOUT_ACCOUNT_REQUIRED",
+        "Set up the manager payout account before using automatic split.",
+        400,
+      );
+    }
+
+    const split = await createAgentDealTransactionSplit({
+      name: `BOPA Manager Rent ${params.reference}`,
+      landlordSubaccountCode: landlordAccount.paystack_subaccount_code,
+      landlordShareKobo: convertNairaToKobo(params.landlordShare),
+      agentSubaccountCode: managerAccount.paystack_subaccount_code,
+      agentShareKobo: convertNairaToKobo(params.managerCommission),
+      currencyCode: "NGN",
+    });
+
+    const initialized = await initializePaystackMultiSplitTransaction({
+      email: params.customerEmail,
+      amountKobo,
+      reference: params.reference,
+      callbackUrl: params.callbackUrl,
+      splitCode: split.split_code,
+      currencyCode: "NGN",
+      metadata: {
+        ...params.metadata,
+        settlement_mode: "automatic_split",
+        split_code: split.split_code,
+        landlord_subaccount_code: landlordAccount.paystack_subaccount_code,
+        manager_subaccount_code: managerAccount.paystack_subaccount_code,
+      },
+    });
+
+    return {
+      authorizationUrl: initialized.authorization_url,
+      accessCode: initialized.access_code,
+      reference: initialized.reference,
+      settlementMetadata: {
+        settlement_mode: "automatic_split",
+        split_code: split.split_code,
+        split_id: split.id,
+        landlord_paystack_account_id: landlordAccount.id,
+        manager_paystack_account_id: managerAccount.id,
+        landlord_subaccount_code: landlordAccount.paystack_subaccount_code,
+        manager_subaccount_code: managerAccount.paystack_subaccount_code,
+      },
+    };
+  }
+
+  const initialized = await initializePaystackTransaction({
+    email: params.customerEmail,
+    amountKobo,
+    reference: params.reference,
+    callbackUrl: params.callbackUrl,
+    subaccountCode: landlordAccount.paystack_subaccount_code,
+    transactionChargeKobo: bopaPlatformFeeKobo,
+    currencyCode: "NGN",
+    metadata: {
+      ...params.metadata,
+      settlement_mode:
+        params.collectionMode === "automatic_split"
+          ? "landlord_direct_no_manager_fee"
+          : "landlord_direct",
+      landlord_subaccount_code: landlordAccount.paystack_subaccount_code,
+    },
+  });
+
+  return {
+    authorizationUrl: initialized.authorization_url,
+    accessCode: initialized.access_code,
+    reference: initialized.reference,
+    settlementMetadata: {
+      settlement_mode:
+        params.collectionMode === "automatic_split"
+          ? "landlord_direct_no_manager_fee"
+          : "landlord_direct",
+      landlord_paystack_account_id: landlordAccount.id,
+      landlord_subaccount_code: landlordAccount.paystack_subaccount_code,
+    },
+  };
+}
+
+export async function createManagerPaystackPaymentRequest(
+  input: CreateManagerPaystackPaymentRequestInput,
+) {
+  const { supabase, profile, organization } =
+    await requireManagerOrganization();
+
+  const tenant = await getManagerTenantForPaystackRequest(supabase, {
+    organizationId: organization.id,
+    tenantId: input.tenantId,
+  });
+
+  if (!tenant || tenant.status !== "active") {
+    throw new AppError(
+      "MANAGER_PAYSTACK_TENANT_NOT_FOUND",
+      "The selected active tenant could not be found.",
+      404,
+    );
+  }
+
+  const property = await getManagerPropertyById(supabase, {
+    organizationId: organization.id,
+    landlordClientId: tenant.landlord_client_id,
+    propertyId: tenant.property_id,
+  });
+
+  if (!property || property.status !== "active") {
+    throw new AppError(
+      "MANAGER_PAYSTACK_PROPERTY_NOT_FOUND",
+      "The selected property could not be found.",
+      404,
+    );
+  }
+
+  const unit = await getManagerUnitById(supabase, {
+    organizationId: organization.id,
+    landlordClientId: tenant.landlord_client_id,
+    propertyId: tenant.property_id,
+    unitId: tenant.unit_id,
+  });
+
+  if (!unit || unit.status === "inactive") {
+    throw new AppError(
+      "MANAGER_PAYSTACK_UNIT_NOT_FOUND",
+      "The selected unit could not be found.",
+      404,
+    );
+  }
+
+  const amountRequested = roundMoney(
+    Number(tenant.current_balance) > 0
+      ? Number(tenant.current_balance)
+      : Number(tenant.rent_amount),
+  );
+
+  if (amountRequested <= 0) {
+    throw new AppError(
+      "MANAGER_PAYSTACK_AMOUNT_INVALID",
+      "This tenant does not have a payable rent amount.",
+      400,
+    );
+  }
+
+  const breakdown = calculateManagerPaymentBreakdown({
+    amountPaid: amountRequested,
+    managementFeeType: property.management_fee_type,
+    managementFeeValue: Number(property.management_fee_value),
+  });
+
+  const reference = generatePaystackReference();
+  const token = generatePaymentToken();
+
+  const customerEmail = resolvePaystackCustomerEmail({
+    tenantEmail: tenant.email,
+    tenantPhone: tenant.phone_number,
+    organizationEmail: organization.organization_email,
+  });
+
+  const paymentRequest = await createPendingManagerPaystackPaymentRequest(
+    supabase,
+    {
+      organizationId: organization.id,
+      landlordClientId: tenant.landlord_client_id,
+      propertyId: tenant.property_id,
+      unitId: tenant.unit_id,
+      tenantId: tenant.id,
+      token,
+      reference,
+      amountRequested,
+      collectionMode: property.collection_mode,
+      paystackChargeBearer: property.paystack_charge_bearer,
+      managementFeeType: property.management_fee_type,
+      managementFeeValue: Number(property.management_fee_value),
+      managementFeeAmount: breakdown.managerCommission,
+      landlordNetAmount: breakdown.landlordShare,
+      bopaPlatformFee: breakdown.bopaPlatformFee,
+      paystackChargeAmount: breakdown.paystackCharge,
+      periodStart: nullableDate(input.periodStart),
+      periodEnd: nullableDate(input.periodEnd),
+      tenantNameSnapshot: tenant.full_name,
+      tenantPhoneSnapshot: tenant.phone_number,
+      tenantEmailSnapshot: tenant.email,
+      createdByProfileId: profile.id,
+      notes: nullableText(input.notes),
+      metadata: {
+        product: "bopa_manager",
+        payment_type: "manager_rent_payment",
+        source: "bopa_manager_paystack_request",
+        organization_id: organization.id,
+        landlord_client_id: tenant.landlord_client_id,
+        property_id: tenant.property_id,
+        unit_id: tenant.unit_id,
+        tenant_id: tenant.id,
+        property_name_snapshot: property.property_name,
+        unit_label_snapshot: unit.unit_label,
+        tenant_balance_before_request: Number(tenant.current_balance),
+        customer_email_used_for_paystack: customerEmail,
+      },
+    },
+  );
+
+  const metadata = {
+    product: "bopa_manager",
+    payment_type: "manager_rent_payment",
+    source: "bopa_manager_paystack_request",
+    manager_payment_request_id: paymentRequest.id,
+    organization_id: organization.id,
+    landlord_client_id: tenant.landlord_client_id,
+    property_id: tenant.property_id,
+    unit_id: tenant.unit_id,
+    tenant_id: tenant.id,
+    amount_requested: amountRequested,
+    manager_commission_amount: breakdown.managerCommission,
+    landlord_net_amount: breakdown.landlordShare,
+    bopa_platform_fee: breakdown.bopaPlatformFee,
+    paystack_charge_amount: breakdown.paystackCharge,
+    property_name_snapshot: property.property_name,
+    unit_label_snapshot: unit.unit_label,
+  };
+
+  const initialized = await initializeManagerPaymentSettlement({
+    supabase,
+    organizationId: organization.id,
+    landlordClientId: tenant.landlord_client_id,
+    reference,
+    customerEmail,
+    amountRequested,
+    managerCommission: breakdown.managerCommission,
+    landlordShare: breakdown.landlordShare,
+    bopaPlatformFee: breakdown.bopaPlatformFee,
+    collectionMode: property.collection_mode,
+    callbackUrl: getManagerPaystackCallbackUrl(reference),
+    metadata,
+  });
+
+  return markManagerPaystackPaymentRequestInitialized(supabase, {
+    organizationId: organization.id,
+    reference,
+    authorizationUrl: initialized.authorizationUrl,
+    accessCode: initialized.accessCode,
+  });
+}
+
+export async function verifyAndPostManagerPaystackPaymentReference(params: {
+  supabase?: SupabaseClient;
+  reference: string;
+}): Promise<ManagerPaystackVerificationResult> {
+  const supabase = params.supabase ?? createSupabaseAdminClient();
+  const paymentRequest = await getManagerPaystackPaymentRequestByReference(
+    supabase,
+    params.reference,
+  );
+
+  if (!paymentRequest) {
+    throw new AppError(
+      "MANAGER_PAYSTACK_PAYMENT_REQUEST_NOT_FOUND",
+      "Manager payment request was not found.",
+      404,
+    );
+  }
+
+  if (paymentRequest.status === "paid" && paymentRequest.processed_payment_id) {
+    return {
+      status: "duplicate",
+      message: "Manager rent payment already recorded.",
+      paymentRequestId: paymentRequest.id,
+      paymentId: paymentRequest.processed_payment_id,
+      verifiedPayload: paymentRequest.verified_payload ?? {},
+    };
+  }
+
+  if (
+    paymentRequest.status !== "initialized" &&
+    paymentRequest.status !== "pending"
+  ) {
+    throw new AppError(
+      "MANAGER_PAYSTACK_PAYMENT_NOT_PAYABLE",
+      "This manager payment request can no longer be verified.",
+      400,
+    );
+  }
+
+  const verifiedTransaction = await verifyPaystackTransaction(params.reference);
+  const verifiedPayload = toRecord(verifiedTransaction);
+
+  if (verifiedTransaction.reference !== paymentRequest.reference) {
+    throw new AppError(
+      "MANAGER_PAYSTACK_REFERENCE_MISMATCH",
+      "Payment reference does not match the initialized manager payment.",
+      400,
+    );
+  }
+
+  if (verifiedTransaction.currency !== paymentRequest.currency_code) {
+    throw new AppError(
+      "MANAGER_PAYSTACK_CURRENCY_MISMATCH",
+      "Payment currency does not match the initialized manager payment.",
+      400,
+    );
+  }
+
+  if (verifiedTransaction.status !== "success") {
+    await markManagerPaystackPaymentRequestFailed(supabase, {
+      requestId: paymentRequest.id,
+      failureReason: `Paystack transaction status: ${verifiedTransaction.status}`,
+      verifiedPayload,
+      metadata: {
+        ...paymentRequest.metadata,
+        paystack_status: verifiedTransaction.status,
+      },
+    });
+
+    throw new AppError(
+      "MANAGER_PAYSTACK_PAYMENT_NOT_SUCCESSFUL",
+      "Manager rent payment was not successful.",
+      400,
+    );
+  }
+
+  assertPaystackAmountMatchesExpected({
+    paystackAmountInKobo: verifiedTransaction.amount,
+    expectedAmountInNaira: Number(paymentRequest.amount_requested),
+  });
+
+  const existingPayment = await getManagerRentPaymentByPaymentReference(
+    supabase,
+    paymentRequest.reference,
+  );
+
+  if (existingPayment) {
+    await markManagerPaystackPaymentRequestPaid(supabase, {
+      requestId: paymentRequest.id,
+      processedPaymentId: existingPayment.id,
+      paidAt: verifiedTransaction.paid_at ?? new Date().toISOString(),
+      verifiedPayload,
+      metadata: {
+        ...paymentRequest.metadata,
+        duplicate_payment_detected: true,
+      },
+    });
+
+    return {
+      status: "duplicate",
+      message: "Manager rent payment already recorded.",
+      paymentRequestId: paymentRequest.id,
+      paymentId: existingPayment.id,
+      verifiedPayload,
+    };
+  }
+
+  if (!paymentRequest.created_by_profile_id) {
+    throw new AppError(
+      "MANAGER_PAYSTACK_CREATOR_MISSING",
+      "Payment request creator is missing.",
+      500,
+    );
+  }
+
+  const tenant = await getManagerTenantForPaystackRequest(supabase, {
+    organizationId: paymentRequest.organization_id,
+    tenantId: paymentRequest.tenant_id,
+  });
+
+  const rentPayment = await recordManagerRentPaymentRecord(supabase, {
+    organizationId: paymentRequest.organization_id,
+    landlordClientId: paymentRequest.landlord_client_id,
+    propertyId: paymentRequest.property_id,
+    unitId: paymentRequest.unit_id,
+    tenantId: paymentRequest.tenant_id,
+    collectionMode: paymentRequest.collection_mode,
+    paymentReceiver: "bopa_verified",
+    paystackChargeBearer: paymentRequest.paystack_charge_bearer,
+    amountPaid: Number(paymentRequest.amount_requested),
+    paymentMethod: "other",
+    paymentReference: paymentRequest.reference,
+    paymentDate:
+      verifiedTransaction.paid_at?.slice(0, 10) ??
+      new Date().toISOString().slice(0, 10),
+    periodStart: paymentRequest.period_start,
+    periodEnd: paymentRequest.period_end,
+    managementFeeType: paymentRequest.management_fee_type,
+    managementFeeValue: Number(paymentRequest.management_fee_value),
+    managementFeeAmount: Number(paymentRequest.management_fee_amount),
+    landlordNetAmount: Number(paymentRequest.landlord_net_amount),
+    status: "verified",
+    recordedByProfileId: paymentRequest.created_by_profile_id,
+    notes: paymentRequest.notes,
+    metadata: {
+      source: "bopa_manager_paystack_webhook",
+      payment_request_id: paymentRequest.id,
+      paystack_reference: paymentRequest.reference,
+      tenant_balance_before_payment: Number(tenant?.current_balance ?? 0),
+      manager_commission: Number(paymentRequest.management_fee_amount),
+      landlord_share: Number(paymentRequest.landlord_net_amount),
+      bopa_platform_fee: Number(paymentRequest.bopa_platform_fee),
+      paystack_charge: Number(paymentRequest.paystack_charge_amount),
+      collection_mode_snapshot: paymentRequest.collection_mode,
+      payment_receiver_snapshot: "bopa_verified",
+      paystack_charge_bearer_snapshot: paymentRequest.paystack_charge_bearer,
+      management_fee_type_snapshot: paymentRequest.management_fee_type,
+      management_fee_value_snapshot: Number(
+        paymentRequest.management_fee_value,
+      ),
+      verified_payload: verifiedPayload,
+    },
+  });
+
+  await markManagerPaystackPaymentRequestPaid(supabase, {
+    requestId: paymentRequest.id,
+    processedPaymentId: rentPayment.id,
+    paidAt: verifiedTransaction.paid_at ?? new Date().toISOString(),
+    verifiedPayload,
+    metadata: {
+      ...paymentRequest.metadata,
+      processed_payment_id: rentPayment.id,
+      paid_via: "central_paystack_payment_confirmation",
+    },
+  });
+
+  return {
+    status: "processed",
+    message: "Manager rent payment confirmed.",
+    paymentRequestId: paymentRequest.id,
+    paymentId: rentPayment.id,
+    verifiedPayload,
+  };
+}
+
+export async function getManagerPaystackCallbackState(reference: string) {
+  try {
+    const result = await verifyAndPostManagerPaystackPaymentReference({
+      reference,
+      supabase: createSupabaseAdminClient(),
+    });
+
+    return {
+      ok: true,
+      status: result.status,
+      message: result.message,
+    };
+  } catch (error) {
+    if (isManagerPaymentNotFoundError(error)) {
+      return {
+        ok: false,
+        status: "not_found" as const,
+        message: "Payment request was not found.",
+      };
+    }
+
+    if (isAppError(error)) {
+      return {
+        ok: false,
+        status: "failed" as const,
+        message: error.userMessage,
+      };
+    }
+
+    return {
+      ok: false,
+      status: "failed" as const,
+      message: "Payment could not be verified.",
+    };
+  }
+}
+
+
+====================================================================================================
+FILE: src/server/repositories/manager-paystack.repository.ts
+====================================================================================================
+
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type {
+  ManagerCollectionMode,
+  ManagerManagementFeeType,
+  ManagerPaymentReceiver,
+  ManagerPaystackChargeBearer,
+  ManagerTenantStatus,
+} from "@/constants/manager";
+
+export type ManagerRentPaymentRequestStatus =
+  | "pending"
+  | "initialized"
+  | "paid"
+  | "failed"
+  | "cancelled"
+  | "expired";
+
+export type ManagerPaystackPaymentTenantRow = {
+  id: string;
+  organization_id: string;
+  landlord_client_id: string;
+  property_id: string;
+  unit_id: string;
+  full_name: string;
+  phone_number: string;
+  email: string | null;
+  rent_amount: number;
+  current_balance: number;
+  status: ManagerTenantStatus;
+};
+
+export type ManagerRentPaymentRequestRow = {
+  id: string;
+  organization_id: string;
+  landlord_client_id: string;
+  property_id: string;
+  unit_id: string;
+  tenant_id: string;
+  token: string;
+  reference: string;
+  amount_requested: number;
+  currency_code: "NGN";
+  collection_mode: ManagerCollectionMode;
+  payment_receiver: ManagerPaymentReceiver;
+  paystack_charge_bearer: ManagerPaystackChargeBearer;
+  management_fee_type: ManagerManagementFeeType;
+  management_fee_value: number;
+  management_fee_amount: number;
+  landlord_net_amount: number;
+  bopa_platform_fee: number;
+  paystack_charge_amount: number;
+  period_start: string | null;
+  period_end: string | null;
+  tenant_name_snapshot: string;
+  tenant_phone_snapshot: string;
+  tenant_email_snapshot: string | null;
+  authorization_url: string | null;
+  access_code: string | null;
+  status: ManagerRentPaymentRequestStatus;
+  initialized_at: string | null;
+  paid_at: string | null;
+  failed_at: string | null;
+  cancelled_at: string | null;
+  expires_at: string | null;
+  processed_payment_id: string | null;
+  verified_payload: Record<string, unknown>;
+  failure_reason: string | null;
+  created_by_profile_id: string | null;
+  notes: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+const MANAGER_PAYSTACK_PAYMENT_TENANT_SELECT = `
+  id,
+  organization_id,
+  landlord_client_id,
+  property_id,
+  unit_id,
+  full_name,
+  phone_number,
+  email,
+  rent_amount,
+  current_balance,
+  status
+`;
+
+const MANAGER_RENT_PAYMENT_REQUEST_SELECT = `
+  id,
+  organization_id,
+  landlord_client_id,
+  property_id,
+  unit_id,
+  tenant_id,
+  token,
+  reference,
+  amount_requested,
+  currency_code,
+  collection_mode,
+  payment_receiver,
+  paystack_charge_bearer,
+  management_fee_type,
+  management_fee_value,
+  management_fee_amount,
+  landlord_net_amount,
+  bopa_platform_fee,
+  paystack_charge_amount,
+  period_start,
+  period_end,
+  tenant_name_snapshot,
+  tenant_phone_snapshot,
+  tenant_email_snapshot,
+  authorization_url,
+  access_code,
+  status,
+  initialized_at,
+  paid_at,
+  failed_at,
+  cancelled_at,
+  expires_at,
+  processed_payment_id,
+  verified_payload,
+  failure_reason,
+  created_by_profile_id,
+  notes,
+  metadata,
+  created_at,
+  updated_at
+`;
+
+export async function getManagerTenantForPaystackRequest(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    tenantId: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_tenants")
+    .select(MANAGER_PAYSTACK_PAYMENT_TENANT_SELECT)
+    .eq("organization_id", params.organizationId)
+    .eq("id", params.tenantId)
+    .maybeSingle<ManagerPaystackPaymentTenantRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function createPendingManagerPaystackPaymentRequest(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    landlordClientId: string;
+    propertyId: string;
+    unitId: string;
+    tenantId: string;
+    token: string;
+    reference: string;
+    amountRequested: number;
+    collectionMode: ManagerCollectionMode;
+    paystackChargeBearer: ManagerPaystackChargeBearer;
+    managementFeeType: ManagerManagementFeeType;
+    managementFeeValue: number;
+    managementFeeAmount: number;
+    landlordNetAmount: number;
+    bopaPlatformFee: number;
+    paystackChargeAmount: number;
+    periodStart: string | null;
+    periodEnd: string | null;
+    tenantNameSnapshot: string;
+    tenantPhoneSnapshot: string;
+    tenantEmailSnapshot: string | null;
+    createdByProfileId: string;
+    notes: string | null;
+    metadata: Record<string, unknown>;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_rent_payment_requests")
+    .insert({
+      organization_id: params.organizationId,
+      landlord_client_id: params.landlordClientId,
+      property_id: params.propertyId,
+      unit_id: params.unitId,
+      tenant_id: params.tenantId,
+      token: params.token,
+      reference: params.reference,
+      amount_requested: params.amountRequested,
+      currency_code: "NGN",
+      collection_mode: params.collectionMode,
+      payment_receiver: "bopa_verified",
+      paystack_charge_bearer: params.paystackChargeBearer,
+      management_fee_type: params.managementFeeType,
+      management_fee_value: params.managementFeeValue,
+      management_fee_amount: params.managementFeeAmount,
+      landlord_net_amount: params.landlordNetAmount,
+      bopa_platform_fee: params.bopaPlatformFee,
+      paystack_charge_amount: params.paystackChargeAmount,
+      period_start: params.periodStart,
+      period_end: params.periodEnd,
+      tenant_name_snapshot: params.tenantNameSnapshot,
+      tenant_phone_snapshot: params.tenantPhoneSnapshot,
+      tenant_email_snapshot: params.tenantEmailSnapshot,
+      status: "pending",
+      created_by_profile_id: params.createdByProfileId,
+      notes: params.notes,
+      metadata: params.metadata,
+    })
+    .select(MANAGER_RENT_PAYMENT_REQUEST_SELECT)
+    .single<ManagerRentPaymentRequestRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function markManagerPaystackPaymentRequestInitialized(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    reference: string;
+    authorizationUrl: string;
+    accessCode: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_rent_payment_requests")
+    .update({
+      authorization_url: params.authorizationUrl,
+      access_code: params.accessCode,
+      status: "initialized",
+      initialized_at: new Date().toISOString(),
+    })
+    .eq("organization_id", params.organizationId)
+    .eq("reference", params.reference)
+    .select(MANAGER_RENT_PAYMENT_REQUEST_SELECT)
+    .single<ManagerRentPaymentRequestRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getManagerPaystackPaymentRequestByReference(
+  supabase: SupabaseClient,
+  reference: string,
+) {
+  const { data, error } = await supabase
+    .from("manager_rent_payment_requests")
+    .select(MANAGER_RENT_PAYMENT_REQUEST_SELECT)
+    .eq("reference", reference)
+    .maybeSingle<ManagerRentPaymentRequestRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function markManagerPaystackPaymentRequestPaid(
+  supabase: SupabaseClient,
+  params: {
+    requestId: string;
+    processedPaymentId: string;
+    paidAt: string;
+    verifiedPayload: Record<string, unknown>;
+    metadata: Record<string, unknown>;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_rent_payment_requests")
+    .update({
+      status: "paid",
+      paid_at: params.paidAt,
+      processed_payment_id: params.processedPaymentId,
+      verified_payload: params.verifiedPayload,
+      failure_reason: null,
+      metadata: params.metadata,
+    })
+    .eq("id", params.requestId)
+    .select(MANAGER_RENT_PAYMENT_REQUEST_SELECT)
+    .single<ManagerRentPaymentRequestRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function markManagerPaystackPaymentRequestFailed(
+  supabase: SupabaseClient,
+  params: {
+    requestId: string;
+    failureReason: string;
+    verifiedPayload: Record<string, unknown>;
+    metadata: Record<string, unknown>;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_rent_payment_requests")
+    .update({
+      status: "failed",
+      failed_at: new Date().toISOString(),
+      failure_reason: params.failureReason,
+      verified_payload: params.verifiedPayload,
+      metadata: params.metadata,
+    })
+    .eq("id", params.requestId)
+    .select(MANAGER_RENT_PAYMENT_REQUEST_SELECT)
+    .single<ManagerRentPaymentRequestRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function listManagerPaystackPaymentRequests(
+  supabase: SupabaseClient,
+  organizationId: string,
+) {
+  const { data, error } = await supabase
+    .from("manager_rent_payment_requests")
+    .select(MANAGER_RENT_PAYMENT_REQUEST_SELECT)
+    .eq("organization_id", organizationId)
+    .order("created_at", { ascending: false })
+    .limit(50)
+    .returns<ManagerRentPaymentRequestRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getManagerRentPaymentByPaymentReference(
+  supabase: SupabaseClient,
+  paymentReference: string,
+) {
+  const { data, error } = await supabase
+    .from("manager_rent_payments")
+    .select("id")
+    .eq("payment_reference", paymentReference)
+    .maybeSingle<{ id: string }>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+
+====================================================================================================
+FILE: src/server/validators/manager-paystack.schema.ts
+====================================================================================================
+
+import { z } from "zod";
+
+function emptyStringToUndefined(value: unknown) {
+  if (typeof value === "string" && value.trim().length === 0) {
+    return undefined;
+  }
+
+  return value;
+}
+
+const uuidSchema = z.string().trim().uuid("Invalid tenant selected.");
+
+const optionalDateSchema = z.preprocess(
+  emptyStringToUndefined,
+  z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid date.")
+    .optional(),
+);
+
+const optionalTextSchema = (max: number, message: string) =>
+  z.preprocess(
+    emptyStringToUndefined,
+    z.string().trim().max(max, message).optional(),
+  );
+
+export const createManagerPaystackPaymentRequestSchema = z
+  .object({
+    tenantId: uuidSchema,
+    periodStart: optionalDateSchema,
+    periodEnd: optionalDateSchema,
+    notes: optionalTextSchema(600, "Notes are too long."),
+  })
+  .refine(
+    (value) => {
+      if (!value.periodStart || !value.periodEnd) {
+        return true;
+      }
+
+      return value.periodEnd >= value.periodStart;
+    },
+    {
+      path: ["periodEnd"],
+      message: "Period end date cannot be before period start date.",
+    },
+  );
+
+export type CreateManagerPaystackPaymentRequestInput = z.infer<
+  typeof createManagerPaystackPaymentRequestSchema
+>;
+
+
+====================================================================================================
+FILE: src/components/manager/manager-paystack-payment-link-form.tsx
+====================================================================================================
+
+"use client";
+
+import { useMemo, useState, useActionState } from "react";
+import { createManagerPaystackPaymentRequestAction } from "@/actions/manager-paystack.actions";
+import { initialManagerActionState } from "@/actions/manager.state";
+import {
+  MANAGER_COLLECTION_MODE_LABELS,
+  MANAGER_MANAGEMENT_FEE_TYPE_LABELS,
+} from "@/constants/manager";
+import { calculateManagerPaymentBreakdown } from "@/lib/manager-automation";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import type {
+  ManagerLandlordClientRow,
+  ManagerPropertyRow,
+  ManagerTenantRow,
+  ManagerUnitRow,
+} from "@/server/repositories/manager.repository";
+
+type ManagerPaystackPaymentLinkFormProps = {
+  landlordClients: ManagerLandlordClientRow[];
+  properties: ManagerPropertyRow[];
+  units: ManagerUnitRow[];
+  tenants: ManagerTenantRow[];
+};
+
+function formatNaira(amount: number) {
+  return new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency: "NGN",
+    maximumFractionDigits: 0,
+  }).format(Number.isFinite(amount) ? amount : 0);
+}
+
+export function ManagerPaystackPaymentLinkForm({
+  landlordClients,
+  properties,
+  units,
+  tenants,
+}: ManagerPaystackPaymentLinkFormProps) {
+  const activeTenants = tenants.filter((tenant) => tenant.status === "active");
+  const [selectedTenantId, setSelectedTenantId] = useState(
+    activeTenants[0]?.id ?? "",
+  );
+
+  const [state, formAction, isPending] = useActionState(
+    createManagerPaystackPaymentRequestAction,
+    initialManagerActionState,
+  );
+
+  const selectedTenant = useMemo(
+    () =>
+      activeTenants.find((tenant) => tenant.id === selectedTenantId) ?? null,
+    [activeTenants, selectedTenantId],
+  );
+
+  const selectedProperty = useMemo(
+    () =>
+      selectedTenant
+        ? (properties.find(
+            (property) => property.id === selectedTenant.property_id,
+          ) ?? null)
+        : null,
+    [properties, selectedTenant],
+  );
+
+  const selectedUnit = useMemo(
+    () =>
+      selectedTenant
+        ? (units.find((unit) => unit.id === selectedTenant.unit_id) ?? null)
+        : null,
+    [selectedTenant, units],
+  );
+
+  const selectedLandlordClient = useMemo(
+    () =>
+      selectedTenant
+        ? (landlordClients.find(
+            (client) => client.id === selectedTenant.landlord_client_id,
+          ) ?? null)
+        : null,
+    [landlordClients, selectedTenant],
+  );
+
+  const amountToPay = selectedTenant
+    ? Number(selectedTenant.current_balance) > 0
+      ? Number(selectedTenant.current_balance)
+      : Number(selectedTenant.rent_amount)
+    : 0;
+
+  const breakdown = selectedProperty
+    ? calculateManagerPaymentBreakdown({
+        amountPaid: amountToPay,
+        managementFeeType: selectedProperty.management_fee_type,
+        managementFeeValue: Number(selectedProperty.management_fee_value),
+      })
+    : calculateManagerPaymentBreakdown({
+        amountPaid: 0,
+        managementFeeType: "percentage",
+        managementFeeValue: 0,
+      });
+
+  if (activeTenants.length === 0) {
+    return (
+      <Card>
+        <CardContent>
+          <h2 className="text-lg font-black tracking-tight text-text-strong">
+            Create Paystack link
+          </h2>
+          <div className="rounded-card bg-surface p-4">
+            <p className="text-sm font-semibold leading-6 text-text-muted">
+              Add an active tenant before creating Paystack payment links.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <form action={formAction}>
+      <Card>
+        <CardContent>
+          <div>
+            <h2 className="text-lg font-black tracking-tight text-text-strong">
+              Create Paystack link
+            </h2>
+            <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+              Select the tenant. BOPA fills the rent amount and split details
+              automatically.
+            </p>
+          </div>
+
+          {state.message ? (
+            <div
+              role="alert"
+              className={
+                state.ok
+                  ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
+                  : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
+              }
+            >
+              {state.message}
+            </div>
+          ) : null}
+
+          <div className="space-y-2">
+            <label
+              htmlFor="manager-paystack-tenant"
+              className="text-sm font-bold text-text-strong"
+            >
+              Tenant
+            </label>
+            <select
+              id="manager-paystack-tenant"
+              name="tenantId"
+              value={selectedTenantId}
+              onChange={(event) => setSelectedTenantId(event.target.value)}
+              className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
+              required
+            >
+              {activeTenants.map((tenant) => (
+                <option key={tenant.id} value={tenant.id}>
+                  {tenant.full_name}
+                </option>
+              ))}
+            </select>
+            {state.fieldErrors?.tenantId?.[0] ? (
+              <p className="text-sm font-semibold text-danger">
+                {state.fieldErrors.tenantId[0]}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="rounded-card bg-surface p-4">
+            <p className="text-sm font-black text-text-strong">
+              {selectedTenant?.full_name ?? "Tenant"}
+            </p>
+            <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
+              Landlord Client:{" "}
+              <span className="font-black text-text-strong">
+                {selectedLandlordClient?.landlord_name ?? "Not available"}
+              </span>
+            </p>
+            <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+              Property:{" "}
+              <span className="font-black text-text-strong">
+                {selectedProperty?.property_name ?? "Not available"}
+              </span>
+            </p>
+            <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+              Unit:{" "}
+              <span className="font-black text-text-strong">
+                {selectedUnit?.unit_label ?? "Not available"}
+              </span>
+            </p>
+            <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+              Amount to pay:{" "}
+              <span className="font-black text-text-strong">
+                {formatNaira(amountToPay)}
+              </span>
+            </p>
+            <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+              Collection mode:{" "}
+              <span className="font-black text-text-strong">
+                {selectedProperty
+                  ? MANAGER_COLLECTION_MODE_LABELS[
+                      selectedProperty.collection_mode
+                    ]
+                  : "Not available"}
+              </span>
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input
+              label="Rent period start"
+              name="periodStart"
+              type="date"
+              error={state.fieldErrors?.periodStart?.[0]}
+            />
+
+            <Input
+              label="Rent period end"
+              name="periodEnd"
+              type="date"
+              error={state.fieldErrors?.periodEnd?.[0]}
+            />
+          </div>
+
+          <div className="rounded-card border border-primary/20 bg-primary-soft p-4">
+            <p className="text-sm font-black text-text-strong">
+              Automatic breakdown
+            </p>
+
+            <div className="mt-3 space-y-2 text-sm font-semibold text-text-muted">
+              <div className="flex items-center justify-between gap-4">
+                <span>Amount paid</span>
+                <span className="font-black text-text-strong">
+                  {formatNaira(breakdown.amountPaid)}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between gap-4">
+                <span>
+                  Management fee
+                  {selectedProperty ? (
+                    <>
+                      {" "}
+                      ·{" "}
+                      {
+                        MANAGER_MANAGEMENT_FEE_TYPE_LABELS[
+                          selectedProperty.management_fee_type
+                        ]
+                      }
+                    </>
+                  ) : null}
+                </span>
+                <span className="font-black text-text-strong">
+                  {formatNaira(breakdown.managerCommission)}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between gap-4">
+                <span>Amount due to landlord</span>
+                <span className="font-black text-text-strong">
+                  {formatNaira(breakdown.landlordShare)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label
+              htmlFor="manager-paystack-notes"
+              className="text-sm font-bold text-text-strong"
+            >
+              Notes
+            </label>
+            <textarea
+              id="manager-paystack-notes"
+              name="notes"
+              rows={3}
+              placeholder="Optional note"
+              className="w-full rounded-button border border-border-soft bg-white px-4 py-3 text-sm font-semibold text-text-strong outline-none transition placeholder:text-text-muted focus:border-primary"
+            />
+            {state.fieldErrors?.notes?.[0] ? (
+              <p className="text-sm font-semibold text-danger">
+                {state.fieldErrors.notes[0]}
+              </p>
+            ) : null}
+          </div>
+        </CardContent>
+
+        <CardFooter>
+          <Button type="submit" isLoading={isPending} fullWidth>
+            Create Paystack Link
+          </Button>
+        </CardFooter>
+      </Card>
+    </form>
+  );
+}
+
+
+====================================================================================================
+FILE: src/components/manager/manager-paystack-payment-link-list.tsx
+====================================================================================================
+
+import type { ManagerRentPaymentRequestRow } from "@/server/repositories/manager-paystack.repository";
+import type {
+  ManagerPropertyRow,
+  ManagerTenantRow,
+  ManagerUnitRow,
+} from "@/server/repositories/manager.repository";
+
+type ManagerPaystackPaymentLinkListProps = {
+  properties: ManagerPropertyRow[];
+  units: ManagerUnitRow[];
+  tenants: ManagerTenantRow[];
+  paymentRequests: ManagerRentPaymentRequestRow[];
+};
+
+function formatNaira(amount: number) {
+  return new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency: "NGN",
+    maximumFractionDigits: 0,
+  }).format(Number(amount));
+}
+
+function formatDateTime(date: string | null) {
+  if (!date) {
+    return "Not set";
+  }
+
+  return new Intl.DateTimeFormat("en-NG", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(date));
+}
+
+function getStatusLabel(status: ManagerRentPaymentRequestRow["status"]) {
+  const labels: Record<ManagerRentPaymentRequestRow["status"], string> = {
+    pending: "Pending",
+    initialized: "Ready",
+    paid: "Paid",
+    failed: "Failed",
+    cancelled: "Cancelled",
+    expired: "Expired",
+  };
+
+  return labels[status];
+}
+
+function buildWhatsAppUrl(params: {
+  phoneNumber: string;
+  tenantName: string;
+  amount: number;
+  paymentUrl: string;
+}) {
+  const cleanedPhone = params.phoneNumber.replace(/\D/g, "");
+  const phone =
+    cleanedPhone.startsWith("234") || cleanedPhone.startsWith("1")
+      ? cleanedPhone
+      : `234${cleanedPhone.replace(/^0/, "")}`;
+
+  const message = [
+    `Hello ${params.tenantName},`,
+    "",
+    `Your BOPA rent payment link is ready.`,
+    `Amount: ${formatNaira(params.amount)}`,
+    "",
+    params.paymentUrl,
+    "",
+    "Please pay through this secure Paystack link.",
+  ].join("\n");
+
+  return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+}
+
+export function ManagerPaystackPaymentLinkList({
+  properties,
+  units,
+  tenants,
+  paymentRequests,
+}: ManagerPaystackPaymentLinkListProps) {
+  const propertyNameById = new Map(
+    properties.map((property) => [property.id, property.property_name]),
+  );
+  const unitLabelById = new Map(
+    units.map((unit) => [unit.id, unit.unit_label]),
+  );
+  const tenantById = new Map(tenants.map((tenant) => [tenant.id, tenant]));
+
+  return (
+    <section className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
+      <div>
+        <h2 className="text-lg font-black tracking-tight text-text-strong">
+          Paystack payment links
+        </h2>
+        <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+          Links become verified only after central Paystack confirmation.
+        </p>
+      </div>
+
+      {paymentRequests.length > 0 ? (
+        <div className="mt-4 divide-y divide-border-soft">
+          {paymentRequests.map((request) => {
+            const tenant = tenantById.get(request.tenant_id);
+            const tenantName =
+              tenant?.full_name ?? request.tenant_name_snapshot;
+
+            return (
+              <article key={request.id} className="space-y-3 py-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="font-black text-text-strong">{tenantName}</p>
+                    <p className="mt-1 text-sm font-semibold text-text-muted">
+                      {propertyNameById.get(request.property_id) ?? "Property"}{" "}
+                      · {unitLabelById.get(request.unit_id) ?? "Unit"}
+                    </p>
+                  </div>
+
+                  <span className="w-fit rounded-full bg-primary-soft px-3 py-1 text-xs font-black uppercase tracking-wide text-primary">
+                    {getStatusLabel(request.status)}
+                  </span>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-card bg-surface p-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+                      Amount
+                    </p>
+                    <p className="mt-1 text-sm font-black text-text-strong">
+                      {formatNaira(request.amount_requested)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-card bg-surface p-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+                      Manager fee
+                    </p>
+                    <p className="mt-1 text-sm font-black text-text-strong">
+                      {formatNaira(request.management_fee_amount)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-card bg-surface p-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+                      Landlord share
+                    </p>
+                    <p className="mt-1 text-sm font-black text-text-strong">
+                      {formatNaira(request.landlord_net_amount)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-card bg-surface p-3">
+                  <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+                    Created
+                  </p>
+                  <p className="mt-1 text-sm font-black text-text-strong">
+                    {formatDateTime(request.created_at)}
+                  </p>
+                </div>
+
+                {request.authorization_url &&
+                request.status === "initialized" ? (
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <a
+                      href={buildWhatsAppUrl({
+                        phoneNumber:
+                          tenant?.phone_number ?? request.tenant_phone_snapshot,
+                        tenantName,
+                        amount: Number(request.amount_requested),
+                        paymentUrl: request.authorization_url,
+                      })}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex min-h-11 items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
+                    >
+                      Send via WhatsApp
+                    </a>
+
+                    <a
+                      href={request.authorization_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex min-h-11 items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+                    >
+                      Open Paystack Link
+                    </a>
+                  </div>
+                ) : null}
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="mt-4 rounded-card bg-surface p-4">
+          <p className="text-sm font-semibold leading-6 text-text-muted">
+            No Paystack payment link has been created yet.
+          </p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+

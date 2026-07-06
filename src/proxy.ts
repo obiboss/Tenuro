@@ -14,10 +14,16 @@ function applySecurityHeaders(response: NextResponse) {
 }
 
 export function proxy(request: NextRequest) {
-  const response = applySecurityHeaders(NextResponse.next());
-  response.headers.set("x-pathname", request.nextUrl.pathname);
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-pathname", request.nextUrl.pathname);
 
-  return response;
+  const response = NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
+
+  return applySecurityHeaders(response);
 }
 
 export const config = {

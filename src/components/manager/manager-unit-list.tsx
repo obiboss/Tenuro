@@ -1,12 +1,24 @@
-import { MANAGER_UNIT_STATUS_LABELS } from "@/constants/manager";
+import Link from "next/link";
 import type {
   ManagerPropertyRow,
+  ManagerTenantRow,
   ManagerUnitRow,
 } from "@/server/repositories/manager.repository";
 
 type ManagerUnitListProps = {
   properties: ManagerPropertyRow[];
   units: ManagerUnitRow[];
+  tenants?: ManagerTenantRow[];
+  showTenantActions?: boolean;
+};
+
+type UnitStatus = "vacant" | "reserved" | "occupied" | "inactive";
+
+const UNIT_STATUS_LABELS: Record<UnitStatus, string> = {
+  vacant: "Vacant",
+  reserved: "Reserved",
+  occupied: "Occupied",
+  inactive: "Inactive",
 };
 
 function formatNaira(amount: number) {
@@ -14,58 +26,257 @@ function formatNaira(amount: number) {
     style: "currency",
     currency: "NGN",
     maximumFractionDigits: 0,
-  }).format(Number(amount));
+  }).format(Number.isFinite(Number(amount)) ? Number(amount) : 0);
 }
 
-export function ManagerUnitList({ properties, units }: ManagerUnitListProps) {
+function getUnitStatusLabel(status: string) {
+  return UNIT_STATUS_LABELS[status as UnitStatus] ?? "Unit";
+}
+
+function getStatusClassName(status: string) {
+  if (status === "occupied") {
+    return "bg-success-soft text-success";
+  }
+
+  if (status === "vacant") {
+    return "bg-warning-soft text-warning";
+  }
+
+  if (status === "reserved") {
+    return "bg-primary-soft text-primary";
+  }
+
+  return "bg-surface text-text-muted";
+}
+
+export function ManagerUnitList({
+  properties,
+  units,
+  tenants = [],
+  showTenantActions = false,
+}: ManagerUnitListProps) {
   const propertyNameById = new Map(
     properties.map((property) => [property.id, property.property_name]),
   );
 
+  const activeTenantByUnitId = new Map(
+    tenants
+      .filter((tenant) => tenant.status === "active")
+      .map((tenant) => [tenant.unit_id, tenant]),
+  );
+
   return (
-    <section className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
-      <div className="flex flex-col gap-1">
-        <h2 className="text-lg font-black tracking-tight text-text-strong">
-          Units
-        </h2>
-        <p className="text-sm font-semibold leading-6 text-text-muted">
-          Units are the rentable spaces under each property.
-        </p>
+    <section
+      id="units"
+      className="rounded-card border border-border-soft bg-white shadow-sm"
+    >
+      <div className="flex flex-col gap-3 border-b border-border-soft p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-lg font-black tracking-tight text-text-strong">
+            Units
+          </h2>
+          <p className="text-sm font-semibold leading-6 text-text-muted">
+            Add tenants from vacant units only.
+          </p>
+        </div>
+
+        {showTenantActions ? (
+          <Link
+            href="#add-unit"
+            prefetch={false}
+            className="inline-flex min-h-10 items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+          >
+            Add unit
+          </Link>
+        ) : null}
       </div>
 
       {units.length > 0 ? (
-        <div className="mt-4 divide-y divide-border-soft">
-          {units.map((unit) => (
-            <article
-              key={unit.id}
-              className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div className="min-w-0">
-                <p className="truncate font-black text-text-strong">
-                  {unit.unit_label}
-                </p>
-                <p className="mt-1 text-sm font-semibold text-text-muted">
-                  {propertyNameById.get(unit.property_id) ?? "Property"}
-                </p>
-                <p className="mt-1 text-sm font-semibold text-text-muted">
-                  {unit.unit_type ?? "Unit"} · {formatNaira(unit.rent_amount)}
-                </p>
-              </div>
+        <>
+          <div className="hidden overflow-x-auto md:block">
+            <table className="min-w-full divide-y divide-border-soft text-left">
+              <thead className="bg-surface">
+                <tr>
+                  <th className="px-4 py-3 text-xs font-black uppercase tracking-wide text-text-muted">
+                    Unit
+                  </th>
+                  <th className="px-4 py-3 text-xs font-black uppercase tracking-wide text-text-muted">
+                    Type
+                  </th>
+                  <th className="px-4 py-3 text-xs font-black uppercase tracking-wide text-text-muted">
+                    Rent
+                  </th>
+                  <th className="px-4 py-3 text-xs font-black uppercase tracking-wide text-text-muted">
+                    Tenant
+                  </th>
+                  <th className="px-4 py-3 text-xs font-black uppercase tracking-wide text-text-muted">
+                    Status
+                  </th>
+                  {showTenantActions ? (
+                    <th className="px-4 py-3 text-right text-xs font-black uppercase tracking-wide text-text-muted">
+                      Action
+                    </th>
+                  ) : null}
+                </tr>
+              </thead>
 
-              <span className="w-fit rounded-full bg-primary-soft px-3 py-1 text-xs font-black uppercase tracking-wide text-primary">
-                {MANAGER_UNIT_STATUS_LABELS[unit.status]}
-              </span>
-            </article>
-          ))}
-        </div>
+              <tbody className="divide-y divide-border-soft bg-white">
+                {units.map((unit) => {
+                  const tenant = activeTenantByUnitId.get(unit.id);
+
+                  return (
+                    <tr key={unit.id} className="align-top">
+                      <td className="px-4 py-4">
+                        <p className="text-sm font-black text-text-strong">
+                          {unit.unit_label}
+                        </p>
+                        <p className="mt-1 text-xs font-semibold text-text-muted">
+                          {propertyNameById.get(unit.property_id) ?? "Property"}
+                        </p>
+                      </td>
+
+                      <td className="px-4 py-4 text-sm font-bold text-text-strong">
+                        {unit.unit_type ?? "Unit"}
+                      </td>
+
+                      <td className="px-4 py-4 text-sm font-bold text-text-strong">
+                        {formatNaira(unit.rent_amount)}
+                      </td>
+
+                      <td className="px-4 py-4 text-sm font-bold text-text-strong">
+                        {tenant ? (
+                          <Link
+                            href={`/manager/tenants#tenant-${tenant.id}`}
+                            prefetch={false}
+                            className="text-primary underline-offset-4 hover:underline"
+                          >
+                            {tenant.full_name}
+                          </Link>
+                        ) : (
+                          <span className="text-text-muted">None</span>
+                        )}
+                      </td>
+
+                      <td className="px-4 py-4">
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${getStatusClassName(
+                            unit.status,
+                          )}`}
+                        >
+                          {getUnitStatusLabel(unit.status)}
+                        </span>
+                      </td>
+
+                      {showTenantActions ? (
+                        <td className="px-4 py-4 text-right">
+                          {unit.status === "vacant" ? (
+                            <Link
+                              href={`/manager/properties/${unit.property_id}?onboardUnit=${unit.id}#tenant-onboarding`}
+                              prefetch={false}
+                              className="inline-flex min-h-10 items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
+                            >
+                              Add tenant
+                            </Link>
+                          ) : tenant ? (
+                            <Link
+                              href={`/manager/tenants#tenant-${tenant.id}`}
+                              prefetch={false}
+                              className="inline-flex min-h-10 items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+                            >
+                              View tenant
+                            </Link>
+                          ) : (
+                            <span className="text-sm font-bold text-text-muted">
+                              No action
+                            </span>
+                          )}
+                        </td>
+                      ) : null}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="divide-y divide-border-soft md:hidden">
+            {units.map((unit) => {
+              const tenant = activeTenantByUnitId.get(unit.id);
+
+              return (
+                <article key={unit.id} className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-black text-text-strong">
+                        {unit.unit_label}
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-text-muted">
+                        {unit.unit_type ?? "Unit"} ·{" "}
+                        {formatNaira(unit.rent_amount)}
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-text-muted">
+                        Tenant:{" "}
+                        <span className="font-black text-text-strong">
+                          {tenant?.full_name ?? "None"}
+                        </span>
+                      </p>
+                    </div>
+
+                    <span
+                      className={`shrink-0 rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${getStatusClassName(
+                        unit.status,
+                      )}`}
+                    >
+                      {getUnitStatusLabel(unit.status)}
+                    </span>
+                  </div>
+
+                  {showTenantActions ? (
+                    <div className="mt-4">
+                      {unit.status === "vacant" ? (
+                        <Link
+                          href={`/manager/properties/${unit.property_id}?onboardUnit=${unit.id}#tenant-onboarding`}
+                          prefetch={false}
+                          className="inline-flex min-h-10 w-full items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
+                        >
+                          Add tenant
+                        </Link>
+                      ) : tenant ? (
+                        <Link
+                          href={`/manager/tenants#tenant-${tenant.id}`}
+                          prefetch={false}
+                          className="inline-flex min-h-10 w-full items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+                        >
+                          View tenant
+                        </Link>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
+        </>
       ) : (
-        <div className="mt-4 rounded-card bg-surface p-4">
-          <p className="text-sm font-semibold leading-6 text-text-muted">
-            No unit has been added yet.
-          </p>
+        <div className="p-4">
+          <div className="rounded-card bg-surface p-4">
+            <h3 className="font-black text-text-strong">No unit yet</h3>
+            <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+              Add the first unit before adding tenants.
+            </p>
+
+            {showTenantActions ? (
+              <Link
+                href="#add-unit"
+                prefetch={false}
+                className="mt-3 inline-flex min-h-10 items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
+              >
+                Add unit
+              </Link>
+            ) : null}
+          </div>
         </div>
       )}
     </section>
   );
 }
-

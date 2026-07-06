@@ -1,0 +1,2100 @@
+====================================================================================================
+FILE: src/actions/existing-tenant-claims.actions.ts
+====================================================================================================
+
+"use server";
+
+import { revalidatePath } from "next/cache";
+import type { ExistingTenantClaimActionState } from "@/actions/existing-tenant-claims.state";
+import { errorResult } from "@/server/errors/result";
+import {
+  approveExistingTenantClaimForCurrentLandlord,
+  createExistingTenantClaimForCurrentLandlord,
+  rejectExistingTenantClaimForCurrentLandlord,
+  submitExistingTenantClaimByToken,
+  updateExistingTenantClaimArrearsForCurrentLandlord,
+} from "@/server/services/existing-tenant-claims.service";
+import {
+  approveExistingTenantClaimSchema,
+  createExistingTenantClaimSchema,
+  rejectExistingTenantClaimSchema,
+  submitExistingTenantClaimSchema,
+  updateExistingTenantClaimArrearsSchema,
+} from "@/server/validators/existing-tenant-claim.schema";
+
+function parseRentCyclesJson(formData: FormData) {
+  const raw = formData.get("rentCyclesJson");
+
+  if (typeof raw !== "string" || raw.trim().length === 0) {
+    throw new Error("Rent history data is missing.");
+  }
+
+  return JSON.parse(raw) as unknown;
+}
+
+export async function createExistingTenantClaimAction(
+  _previousState: ExistingTenantClaimActionState,
+  formData: FormData,
+): Promise<ExistingTenantClaimActionState> {
+  try {
+    const parsed = createExistingTenantClaimSchema.parse({
+      unitId: formData.get("unitId"),
+      fullName: formData.get("fullName"),
+      phoneNumber: formData.get("phoneNumber"),
+      email: formData.get("email"),
+      note: formData.get("note"),
+    });
+
+    const result = await createExistingTenantClaimForCurrentLandlord(parsed);
+
+    revalidatePath("/tenants");
+    revalidatePath("/tenants/existing/new");
+    revalidatePath("/existing-tenant-claims");
+
+    return {
+      ok: true,
+      message: "Opening WhatsApp with the existing tenant link.",
+      claimId: result.claim.id,
+      claimUrl: result.claimUrl,
+      whatsappMessage: result.whatsappMessage,
+      tenantWhatsappNumber: result.tenantWhatsappNumber,
+      expiresAt: result.expiresAt,
+    };
+  } catch (error) {
+    const result = errorResult(error);
+
+    return {
+      ok: false,
+      message: result.message,
+      fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
+    };
+  }
+}
+
+export async function submitExistingTenantClaimAction(
+  _previousState: ExistingTenantClaimActionState,
+  formData: FormData,
+): Promise<ExistingTenantClaimActionState> {
+  try {
+    const parsed = submitExistingTenantClaimSchema.parse({
+      token: formData.get("token"),
+      fullName: formData.get("fullName"),
+      phoneNumber: formData.get("phoneNumber"),
+      email: formData.get("email"),
+      occupation: formData.get("occupation"),
+      idType: formData.get("idType"),
+      idNumber: formData.get("idNumber"),
+      moveInDate: formData.get("moveInDate"),
+      statedRentDueDate: formData.get("statedRentDueDate"),
+      claimedRentAmount: formData.get("claimedRentAmount"),
+      paymentFrequency: formData.get("paymentFrequency"),
+      tenantNotes: formData.get("tenantNotes"),
+    });
+
+    await submitExistingTenantClaimByToken(parsed);
+
+    revalidatePath(`/claim/${parsed.token}`);
+    revalidatePath("/existing-tenant-claims");
+    revalidatePath("/tenants");
+    revalidatePath("/notifications");
+
+    return {
+      ok: true,
+      message:
+        "Your details have been submitted. Your landlord will review and confirm your tenancy shortly.",
+    };
+  } catch (error) {
+    const result = errorResult(error);
+
+    return {
+      ok: false,
+      message: result.message,
+      fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
+    };
+  }
+}
+
+export async function updateExistingTenantClaimArrearsAction(
+  _previousState: ExistingTenantClaimActionState,
+  formData: FormData,
+): Promise<ExistingTenantClaimActionState> {
+  try {
+    const parsed = updateExistingTenantClaimArrearsSchema.parse({
+      claimId: formData.get("claimId"),
+      cycles: parseRentCyclesJson(formData),
+    });
+
+    await updateExistingTenantClaimArrearsForCurrentLandlord(parsed);
+
+    revalidatePath("/existing-tenant-claims");
+    revalidatePath(`/existing-tenant-claims/${parsed.claimId}`);
+
+    return {
+      ok: true,
+      message: "Rent history saved.",
+    };
+  } catch (error) {
+    const result = errorResult(error);
+
+    return {
+      ok: false,
+      message: result.message,
+      fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
+    };
+  }
+}
+
+export async function approveExistingTenantClaimAction(
+  _previousState: ExistingTenantClaimActionState,
+  formData: FormData,
+): Promise<ExistingTenantClaimActionState> {
+  try {
+    const parsed = approveExistingTenantClaimSchema.parse({
+      claimId: formData.get("claimId"),
+      confirmedRentAmount: formData.get("confirmedRentAmount"),
+      confirmedMoveInDate: formData.get("confirmedMoveInDate"),
+      confirmedCurrentDueDate: formData.get("confirmedCurrentDueDate"),
+      openingBalance: formData.get("openingBalance"),
+      reviewNotes: formData.get("reviewNotes"),
+    });
+
+    const result = await approveExistingTenantClaimForCurrentLandlord(parsed);
+
+    revalidatePath("/existing-tenant-claims");
+    revalidatePath(`/existing-tenant-claims/${parsed.claimId}`);
+    revalidatePath(`/tenants/${result.tenantId}`);
+    revalidatePath("/tenants");
+    revalidatePath("/tenancies");
+    revalidatePath("/renewals");
+    revalidatePath("/notifications");
+    revalidatePath("/overview");
+
+    return {
+      ok: true,
+      message: `${result.tenantName}'s tenancy has been created.`,
+      tenantId: result.tenantId,
+      tenancyId: result.tenancyId,
+      tenantName: result.tenantName,
+    };
+  } catch (error) {
+    const result = errorResult(error);
+
+    return {
+      ok: false,
+      message: result.message,
+      fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
+    };
+  }
+}
+
+export async function rejectExistingTenantClaimAction(
+  _previousState: ExistingTenantClaimActionState,
+  formData: FormData,
+): Promise<ExistingTenantClaimActionState> {
+  try {
+    const parsed = rejectExistingTenantClaimSchema.parse({
+      claimId: formData.get("claimId"),
+      reason: formData.get("reason"),
+    });
+
+    await rejectExistingTenantClaimForCurrentLandlord(parsed);
+
+    revalidatePath("/existing-tenant-claims");
+    revalidatePath(`/existing-tenant-claims/${parsed.claimId}`);
+
+    return {
+      ok: true,
+      message: "Existing tenant claim rejected.",
+    };
+  } catch (error) {
+    const result = errorResult(error);
+
+    return {
+      ok: false,
+      message: result.message,
+      fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
+    };
+  }
+}
+
+
+====================================================================================================
+FILE: src/server/services/existing-tenant-claims.service.ts
+====================================================================================================
+
+import "server-only";
+
+import crypto from "node:crypto";
+import {
+  AUDIT_ACTOR_ROLES,
+  AUDIT_ENTITY_TYPES,
+  AUDIT_EVENT_TYPES,
+} from "@/server/constants/audit-events";
+import { AppError } from "@/server/errors/app-error";
+import {
+  approveExistingTenantClaim,
+  createExistingTenantClaim,
+  getExistingTenantClaimById,
+  getExistingTenantClaimByTokenHash,
+  listExistingTenantClaimsForLandlord,
+  markExistingTenantClaimExpired,
+  rejectExistingTenantClaim,
+  submitExistingTenantClaim,
+  updateExistingTenantClaimArrears,
+  type ExistingTenantClaimPaymentFrequency,
+} from "@/server/repositories/existing-tenant-claims.repository";
+import {
+  postExistingTenantHistoricalPayments,
+  postExistingTenantHistoricalRentCharges,
+  postExistingTenantOpeningBalanceEntry,
+} from "@/server/repositories/ledger.repository";
+import {
+  createLiveExistingTenantTenancy,
+  getActiveTenancyForUnit,
+  getPendingAgreementTenancyForUnit,
+} from "@/server/repositories/tenancies.repository";
+import { createTenantFromExistingClaim } from "@/server/repositories/tenants.repository";
+import {
+  getUnitById,
+  getUnitWithPropertyById,
+  markUnitOccupied,
+  type UnitStatus,
+  type UnitType,
+} from "@/server/repositories/units.repository";
+import { writeAuditLog } from "@/server/services/audit-log.service";
+import { queueLandlordInAppNotification } from "@/server/services/notification-queue.service";
+import { createSupabaseAdminClient } from "@/server/supabase/admin";
+import {
+  addMonths,
+  calculateArrearsFromCycles,
+  deriveArrearsStartDate,
+  isCompleteExistingTenantPayment,
+  normalizeRentCycleAfterEdit,
+  parseDateOnly,
+  toDateOnly,
+  type ExistingTenantRentCycle,
+} from "@/lib/existing-tenant-arrears";
+import { getFrequencyMonths } from "@/lib/existing-tenant-arrears";
+import { createSupabaseServerClient } from "@/server/supabase/server";
+import { normalisePhoneNumber } from "@/server/utils/phone";
+import type {
+  ApproveExistingTenantClaimInput,
+  CreateExistingTenantClaimInput,
+  ExistingTenantRentCycleInput,
+  RejectExistingTenantClaimInput,
+  SubmitExistingTenantClaimInput,
+  UpdateExistingTenantClaimArrearsInput,
+} from "@/server/validators/existing-tenant-claim.schema";
+import { requireLandlordPlatformOperator } from "./auth.service";
+
+type ExistingTenantClaimAuditEventType = Parameters<
+  typeof writeAuditLog
+>[0]["eventType"];
+
+type ExistingTenantClaimUnitProperty = {
+  id: string;
+  property_name: string;
+  landlord_id: string;
+};
+
+export type ExistingTenantClaimUnitOption = {
+  label: string;
+  value: string;
+  propertyName: string;
+  unitIdentifier: string;
+  buildingName: string | null;
+  unitType: UnitType;
+  annualRent: number | null;
+  monthlyRent: number | null;
+  currencyCode: string;
+  status: UnitStatus;
+};
+
+const EXISTING_TENANT_CLAIM_TOKEN_BYTES = 32;
+const EXISTING_TENANT_CLAIM_TOKEN_DAYS = 7;
+
+function createSecureToken() {
+  return crypto
+    .randomBytes(EXISTING_TENANT_CLAIM_TOKEN_BYTES)
+    .toString("base64url");
+}
+
+function hashToken(token: string) {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+function getAppBaseUrl() {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+
+  if (!appUrl) {
+    throw new AppError("APP_URL_MISSING", "App URL is not configured.", 500);
+  }
+
+  return appUrl.replace(/\/$/, "");
+}
+
+function buildExistingTenantClaimUrl(token: string) {
+  return `${getAppBaseUrl()}/claim/${encodeURIComponent(token)}`;
+}
+
+function buildExistingTenantClaimReviewPath(claimId: string) {
+  return `/existing-tenant-claims/${claimId}`;
+}
+
+function getTokenExpiry() {
+  return new Date(
+    Date.now() + EXISTING_TENANT_CLAIM_TOKEN_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString();
+}
+
+function resolveUnitProperty(
+  unitWithProperty: Awaited<ReturnType<typeof getUnitWithPropertyById>>,
+): ExistingTenantClaimUnitProperty | null {
+  const propertyRelation = unitWithProperty.properties as
+    | ExistingTenantClaimUnitProperty
+    | ExistingTenantClaimUnitProperty[]
+    | null;
+
+  if (Array.isArray(propertyRelation)) {
+    return propertyRelation[0] ?? null;
+  }
+
+  return propertyRelation;
+}
+
+function calculateCurrentPeriodEnd(params: {
+  currentPeriodStart: string;
+  paymentFrequency: ExistingTenantClaimPaymentFrequency;
+}) {
+  return toDateOnly(
+    addMonths(
+      parseDateOnly(params.currentPeriodStart),
+      getFrequencyMonths(params.paymentFrequency),
+    ),
+  );
+}
+
+function mapCycleInputToRentCycle(
+  cycle: ExistingTenantRentCycleInput,
+): ExistingTenantRentCycle {
+  return {
+    id: cycle.periodStart,
+    label: "",
+    periodStart: cycle.periodStart,
+    periodEnd: cycle.periodEnd,
+    rentCharged: Number(cycle.rentCharged),
+    assumedPaid: cycle.assumedPaid,
+    payments: cycle.payments
+      .filter(isCompleteExistingTenantPayment)
+      .map((payment) => ({
+        amount: Number(payment.amount),
+        paidAt: payment.paidAt,
+        note: payment.note?.trim() ?? "",
+      })),
+  };
+}
+
+function calculateExistingTenantArrears(params: {
+  moveInDate: string;
+  rentAmount: number;
+  paymentFrequency: ExistingTenantClaimPaymentFrequency;
+  cycles: ExistingTenantRentCycleInput[];
+}) {
+  const mappedCycles = params.cycles
+    .map(mapCycleInputToRentCycle)
+    .map(normalizeRentCycleAfterEdit);
+  const arrearsStartDate = deriveArrearsStartDate({
+    moveInDate: params.moveInDate,
+    paymentFrequency: params.paymentFrequency,
+    cycles: mappedCycles,
+  });
+  const summary = calculateArrearsFromCycles({
+    moveInDate: params.moveInDate,
+    paymentFrequency: params.paymentFrequency,
+    cycles: mappedCycles,
+  });
+
+  return {
+    calculatedCurrentDueDate: summary.currentDueDate,
+    calculatedOutstandingBalance: summary.amountOwed,
+    calculatedMonthsOwed: summary.monthsOwed,
+    normalizedPayments: summary.paymentHistory,
+    countedPayments: summary.paymentHistory,
+    metadata: {
+      move_in_date: params.moveInDate,
+      arrears_start_date: arrearsStartDate,
+      rent_amount: params.rentAmount,
+      payment_frequency: params.paymentFrequency,
+      frequency_months: getFrequencyMonths(params.paymentFrequency),
+      cycles: summary.cycles,
+      total_rent_charges: summary.totalRentDue,
+      payment_history: summary.paymentHistory,
+      counted_payment_history: summary.paymentHistory,
+      total_payments: summary.totalPaymentsCounted,
+      calculated_current_due_date: summary.currentDueDate,
+      calculated_months_owed: summary.monthsOwed,
+      calculated_outstanding_balance: summary.amountOwed,
+      calculated_at: new Date().toISOString(),
+    },
+  };
+}
+
+async function notifyLandlordExistingTenantClaimSubmitted(params: {
+  landlordId: string;
+  claimId: string;
+  tenantName: string;
+  propertyName: string;
+  unitIdentifier: string;
+}) {
+  const reviewPath = buildExistingTenantClaimReviewPath(params.claimId);
+
+  await queueLandlordInAppNotification({
+    landlordId: params.landlordId,
+    messageBody: `${params.tenantName} has submitted their details for ${params.propertyName} · ${params.unitIdentifier}. Review: ${reviewPath}`,
+  });
+}
+
+function assertClaimPubliclySubmittable(params: {
+  status: string;
+  tokenExpiresAt: string;
+}) {
+  if (new Date(params.tokenExpiresAt).getTime() < Date.now()) {
+    throw new AppError(
+      "EXISTING_TENANT_CLAIM_EXPIRED",
+      "This existing tenant claim link has expired. Please ask the landlord to send a new link.",
+      410,
+    );
+  }
+
+  if (params.status !== "pending") {
+    throw new AppError(
+      "EXISTING_TENANT_CLAIM_NOT_AVAILABLE",
+      "This existing tenant claim link is no longer available.",
+      400,
+    );
+  }
+}
+
+function buildClaimWhatsappMessage(params: {
+  tenantName: string;
+  propertyName: string;
+  unitIdentifier: string;
+  claimUrl: string;
+}) {
+  return [
+    `Hello ${params.tenantName},`,
+    "",
+    `Your landlord has invited you to confirm your tenancy details for ${params.unitIdentifier} at ${params.propertyName} on BOPA (Boldverse Property).`,
+    "",
+    "Please use this secure link to confirm your rent amount, move-in date, and identity details:",
+    params.claimUrl,
+    "",
+    "Your landlord will review and confirm the rent cycle before the tenancy record goes live.",
+  ].join("\n");
+}
+
+async function writeExistingTenantClaimAudit(params: {
+  landlordId: string;
+  unitId: string;
+  propertyId: string | null;
+  actorProfileId: string | null;
+  actorRole:
+    | typeof AUDIT_ACTOR_ROLES.landlord
+    | typeof AUDIT_ACTOR_ROLES.tenant;
+  eventType: ExistingTenantClaimAuditEventType;
+  entityId: string;
+  description: string;
+  metadata: Record<string, unknown>;
+}) {
+  await writeAuditLog({
+    landlordId: params.landlordId,
+    tenantId: null,
+    tenancyId: null,
+    unitId: params.unitId,
+    propertyId: params.propertyId,
+    actorProfileId: params.actorProfileId,
+    actorRole: params.actorRole,
+    eventType: params.eventType,
+    entityType: AUDIT_ENTITY_TYPES.onboarding,
+    entityId: params.entityId,
+    description: params.description,
+    metadata: params.metadata,
+  });
+}
+
+export async function getCurrentLandlordExistingTenantClaimUnitOptions() {
+  const landlord = await requireLandlordPlatformOperator();
+  const supabase = await createSupabaseServerClient();
+
+  const { data, error } = await supabase
+    .from("units")
+    .select(
+      `
+      id,
+      unit_identifier,
+      building_name,
+      unit_type,
+      annual_rent,
+      monthly_rent,
+      currency_code,
+      status,
+      properties!inner (
+        id,
+        landlord_id,
+        property_name
+      )
+    `,
+    )
+    .eq("properties.landlord_id", landlord.id)
+    .is("deleted_at", null)
+    .not("status", "in", "(archived,unavailable,under_renovation)")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  return data.map((unit) => {
+    const property = Array.isArray(unit.properties)
+      ? unit.properties[0]
+      : unit.properties;
+
+    const propertyName = property?.property_name ?? "Property";
+    const unitIdentifier = String(unit.unit_identifier);
+    const buildingName =
+      typeof unit.building_name === "string" ? unit.building_name : null;
+
+    return {
+      label: `${propertyName} · ${
+        buildingName ? `${buildingName} · ` : ""
+      }${unitIdentifier}`,
+      value: String(unit.id),
+      propertyName,
+      unitIdentifier,
+      buildingName,
+      unitType: unit.unit_type as UnitType,
+      annualRent:
+        typeof unit.annual_rent === "number" ? unit.annual_rent : null,
+      monthlyRent:
+        typeof unit.monthly_rent === "number" ? unit.monthly_rent : null,
+      currencyCode:
+        typeof unit.currency_code === "string" ? unit.currency_code : "NGN",
+      status: unit.status as UnitStatus,
+    } satisfies ExistingTenantClaimUnitOption;
+  });
+}
+
+export async function createExistingTenantClaimForCurrentLandlord(
+  input: CreateExistingTenantClaimInput,
+) {
+  const landlord = await requireLandlordPlatformOperator();
+  const supabase = await createSupabaseServerClient();
+  const adminSupabase = createSupabaseAdminClient();
+
+  const [unit, unitWithProperty] = await Promise.all([
+    getUnitById(supabase, input.unitId),
+    getUnitWithPropertyById(supabase, input.unitId),
+  ]);
+
+  const property = resolveUnitProperty(unitWithProperty);
+
+  if (!property || property.landlord_id !== landlord.id) {
+    throw new AppError(
+      "FORBIDDEN",
+      "You do not have permission to invite an existing tenant for this unit.",
+      403,
+    );
+  }
+
+  if (
+    unit.status === "archived" ||
+    unit.status === "unavailable" ||
+    unit.status === "under_renovation"
+  ) {
+    throw new AppError(
+      "UNIT_NOT_AVAILABLE",
+      "This unit cannot receive an existing tenant claim link.",
+      400,
+    );
+  }
+
+  const normalizedPhone = normalisePhoneNumber(input.phoneNumber);
+  const token = createSecureToken();
+  const tokenHash = hashToken(token);
+  const tokenExpiresAt = getTokenExpiry();
+
+  const claim = await createExistingTenantClaim(adminSupabase, {
+    landlordId: landlord.id,
+    unitId: input.unitId,
+    tokenHash,
+    tokenExpiresAt,
+    invitedTenantFullName: input.fullName,
+    invitedTenantPhoneNumber: normalizedPhone.e164,
+    invitedTenantEmail: input.email?.trim()
+      ? input.email.trim().toLowerCase()
+      : null,
+    note: input.note?.trim() || null,
+  });
+
+  const claimUrl = buildExistingTenantClaimUrl(token);
+  const whatsappMessage = buildClaimWhatsappMessage({
+    tenantName: input.fullName,
+    propertyName: property.property_name,
+    unitIdentifier: unitWithProperty.unit_identifier,
+    claimUrl,
+  });
+
+  await writeExistingTenantClaimAudit({
+    landlordId: landlord.id,
+    unitId: unit.id,
+    propertyId: property.id,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.onboardingLinkSent,
+    entityId: claim.id,
+    description: `Existing tenant claim link created for ${unitWithProperty.unit_identifier}.`,
+    metadata: {
+      existing_tenant_claim_id: claim.id,
+      invited_tenant_full_name: input.fullName,
+      invited_tenant_phone_number: normalizedPhone.e164,
+      unit_identifier: unitWithProperty.unit_identifier,
+      property_name: property.property_name,
+      token_expires_at: tokenExpiresAt,
+    },
+  });
+
+  return {
+    claim,
+    claimUrl,
+    whatsappMessage,
+    tenantWhatsappNumber: normalizedPhone.national,
+    expiresAt: tokenExpiresAt,
+  };
+}
+
+export async function resolveExistingTenantClaimToken(token: string) {
+  const supabase = createSupabaseAdminClient();
+  const tokenHash = hashToken(token);
+  const claim = await getExistingTenantClaimByTokenHash(supabase, tokenHash);
+
+  if (!claim) {
+    throw new AppError(
+      "EXISTING_TENANT_CLAIM_NOT_FOUND",
+      "This existing tenant claim link is invalid.",
+      404,
+    );
+  }
+
+  if (
+    claim.status === "pending" &&
+    new Date(claim.token_expires_at).getTime() < Date.now()
+  ) {
+    await markExistingTenantClaimExpired(supabase, claim.id);
+
+    throw new AppError(
+      "EXISTING_TENANT_CLAIM_EXPIRED",
+      "This existing tenant claim link has expired. Please ask the landlord to send a new link.",
+      410,
+    );
+  }
+
+  return claim;
+}
+
+export async function submitExistingTenantClaimByToken(
+  input: SubmitExistingTenantClaimInput,
+) {
+  const supabase = createSupabaseAdminClient();
+  const tokenHash = hashToken(input.token);
+  const claim = await getExistingTenantClaimByTokenHash(supabase, tokenHash);
+
+  if (!claim) {
+    throw new AppError(
+      "EXISTING_TENANT_CLAIM_NOT_FOUND",
+      "This existing tenant claim link is invalid.",
+      404,
+    );
+  }
+
+  assertClaimPubliclySubmittable({
+    status: claim.status,
+    tokenExpiresAt: claim.token_expires_at,
+  });
+
+  const normalizedPhone = normalisePhoneNumber(input.phoneNumber);
+
+  const submittedClaim = await submitExistingTenantClaim(supabase, {
+    claimId: claim.id,
+    fullName: input.fullName,
+    phoneNumber: normalizedPhone.e164,
+    email: input.email?.trim() ? input.email.trim().toLowerCase() : null,
+    occupation: input.occupation?.trim() || null,
+    idType: input.idType,
+    idNumber: input.idNumber,
+    moveInDate: input.moveInDate,
+    statedRentDueDate: input.statedRentDueDate,
+    claimedRentAmount: input.claimedRentAmount,
+    paymentFrequency: input.paymentFrequency,
+    tenantNotes: input.tenantNotes?.trim() || null,
+  });
+
+  const propertyName =
+    submittedClaim.units?.properties?.property_name ?? "your property";
+  const unitIdentifier =
+    submittedClaim.units?.unit_identifier ?? "the selected unit";
+
+  await notifyLandlordExistingTenantClaimSubmitted({
+    landlordId: submittedClaim.landlord_id,
+    claimId: submittedClaim.id,
+    tenantName: submittedClaim.tenant_full_name ?? "A tenant",
+    propertyName,
+    unitIdentifier,
+  });
+
+  await writeExistingTenantClaimAudit({
+    landlordId: submittedClaim.landlord_id,
+    unitId: submittedClaim.unit_id,
+    propertyId: submittedClaim.units?.properties?.id ?? null,
+    actorProfileId: null,
+    actorRole: AUDIT_ACTOR_ROLES.tenant,
+    eventType: AUDIT_EVENT_TYPES.tenantKycSubmitted,
+    entityId: submittedClaim.id,
+    description:
+      "Existing tenant submitted tenancy details for landlord review.",
+    metadata: {
+      existing_tenant_claim_id: submittedClaim.id,
+      tenant_full_name: submittedClaim.tenant_full_name,
+      tenant_phone_number: submittedClaim.tenant_phone_number,
+      tenant_occupation: submittedClaim.tenant_occupation,
+      tenant_id_type: submittedClaim.tenant_id_type,
+      tenant_claimed_rent_amount: submittedClaim.tenant_claimed_rent_amount,
+      tenant_move_in_date: submittedClaim.tenant_move_in_date,
+      payment_frequency: submittedClaim.tenant_payment_frequency,
+    },
+  });
+
+  return submittedClaim;
+}
+
+export async function getCurrentLandlordExistingTenantClaims() {
+  const landlord = await requireLandlordPlatformOperator();
+  const supabase = await createSupabaseServerClient();
+
+  return listExistingTenantClaimsForLandlord(supabase, landlord.id);
+}
+
+export async function getCurrentLandlordExistingTenantClaim(claimId: string) {
+  const landlord = await requireLandlordPlatformOperator();
+  const supabase = await createSupabaseServerClient();
+  const claim = await getExistingTenantClaimById(supabase, claimId);
+
+  if (claim.landlord_id !== landlord.id) {
+    throw new AppError(
+      "FORBIDDEN",
+      "You do not have permission to view this existing tenant claim.",
+      403,
+    );
+  }
+
+  return claim;
+}
+
+export async function updateExistingTenantClaimArrearsForCurrentLandlord(
+  input: UpdateExistingTenantClaimArrearsInput,
+) {
+  const landlord = await requireLandlordPlatformOperator();
+  const supabase = await createSupabaseServerClient();
+  const claim = await getExistingTenantClaimById(supabase, input.claimId);
+
+  if (claim.landlord_id !== landlord.id) {
+    throw new AppError(
+      "FORBIDDEN",
+      "You do not have permission to update arrears for this existing tenant claim.",
+      403,
+    );
+  }
+
+  if (claim.status !== "submitted") {
+    throw new AppError(
+      "CLAIM_NOT_READY_FOR_ARREARS",
+      "Only submitted existing tenant claims can have arrears calculated.",
+      400,
+    );
+  }
+
+  if (!claim.tenant_move_in_date || !claim.tenant_claimed_rent_amount) {
+    throw new AppError(
+      "CLAIM_RENT_DETAILS_INCOMPLETE",
+      "The tenant must submit move-in date and rent amount before arrears can be calculated.",
+      400,
+    );
+  }
+
+  const calculation = calculateExistingTenantArrears({
+    moveInDate: claim.tenant_move_in_date,
+    rentAmount: Number(claim.tenant_claimed_rent_amount),
+    paymentFrequency: claim.tenant_payment_frequency,
+    cycles: input.cycles,
+  });
+
+  const updatedClaim = await updateExistingTenantClaimArrears(supabase, {
+    claimId: input.claimId,
+    landlordId: landlord.id,
+    arrearsStartDate: calculation.metadata.arrears_start_date as string,
+    paymentHistory: calculation.normalizedPayments,
+    calculatedCurrentDueDate: calculation.calculatedCurrentDueDate,
+    calculatedOutstandingBalance: calculation.calculatedOutstandingBalance,
+    calculatedMonthsOwed: calculation.calculatedMonthsOwed,
+    calculationMetadata: calculation.metadata,
+  });
+
+  await writeExistingTenantClaimAudit({
+    landlordId: landlord.id,
+    unitId: claim.unit_id,
+    propertyId: claim.units?.properties?.id ?? null,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.tenantUpdated,
+    entityId: claim.id,
+    description:
+      "Existing tenant arrears estimate was updated from selected start cycle.",
+    metadata: {
+      existing_tenant_claim_id: claim.id,
+      tenant_full_name: claim.tenant_full_name,
+      arrears_start_date: calculation.metadata.arrears_start_date,
+      payment_history_count: calculation.normalizedPayments.length,
+      counted_payment_history_count: calculation.countedPayments.length,
+      total_payments: calculation.metadata.total_payments,
+      total_rent_charges: calculation.metadata.total_rent_charges,
+      calculated_current_due_date: calculation.calculatedCurrentDueDate,
+      calculated_outstanding_balance: calculation.calculatedOutstandingBalance,
+      calculated_months_owed: calculation.calculatedMonthsOwed,
+    },
+  });
+
+  return updatedClaim;
+}
+
+export async function approveExistingTenantClaimForCurrentLandlord(
+  input: ApproveExistingTenantClaimInput,
+) {
+  const landlord = await requireLandlordPlatformOperator();
+  const supabase = await createSupabaseServerClient();
+  const adminSupabase = createSupabaseAdminClient();
+  const claim = await getExistingTenantClaimById(supabase, input.claimId);
+
+  if (claim.landlord_id !== landlord.id) {
+    throw new AppError(
+      "FORBIDDEN",
+      "You do not have permission to approve this existing tenant claim.",
+      403,
+    );
+  }
+
+  if (claim.status !== "submitted") {
+    throw new AppError(
+      "CLAIM_NOT_READY_FOR_APPROVAL",
+      "Only submitted existing tenant claims can be approved.",
+      400,
+    );
+  }
+
+  if (
+    !claim.tenant_full_name ||
+    !claim.tenant_phone_number ||
+    !claim.tenant_move_in_date ||
+    !claim.tenant_claimed_rent_amount ||
+    !claim.tenant_id_type
+  ) {
+    throw new AppError(
+      "CLAIM_DETAILS_INCOMPLETE",
+      "The tenant claim is missing required details.",
+      400,
+    );
+  }
+
+  const [unit, existingUnitTenancy, existingPendingUnitTenancy] =
+    await Promise.all([
+      getUnitById(supabase, claim.unit_id),
+      getActiveTenancyForUnit(supabase, claim.unit_id),
+      getPendingAgreementTenancyForUnit(supabase, claim.unit_id),
+    ]);
+
+  if (existingUnitTenancy || existingPendingUnitTenancy) {
+    throw new AppError(
+      "UNIT_ALREADY_HAS_TENANCY",
+      "This unit already has an active tenancy.",
+      400,
+    );
+  }
+
+  if (
+    unit.status === "archived" ||
+    unit.status === "unavailable" ||
+    unit.status === "under_renovation"
+  ) {
+    throw new AppError(
+      "UNIT_NOT_AVAILABLE_FOR_TENANCY",
+      "This unit is not available for tenancy approval.",
+      400,
+    );
+  }
+
+  const currentPeriodEnd = calculateCurrentPeriodEnd({
+    currentPeriodStart: input.confirmedCurrentDueDate,
+    paymentFrequency: claim.tenant_payment_frequency,
+  });
+
+  const tenant = await createTenantFromExistingClaim(adminSupabase, {
+    landlordId: landlord.id,
+    unitId: claim.unit_id,
+    fullName: claim.tenant_full_name,
+    phoneNumber: claim.tenant_phone_number,
+    email: claim.tenant_email,
+    occupation: claim.tenant_occupation,
+    idType: claim.tenant_id_type,
+    approvedBy: landlord.id,
+    sourceExistingTenantClaimId: claim.id,
+    kycAnswers: {
+      source: "existing_tenant_claim",
+      existing_tenant_claim_id: claim.id,
+      tenant_id_number: claim.tenant_id_number,
+      tenant_claimed_move_in_date: claim.tenant_move_in_date,
+      tenant_claimed_rent_amount: claim.tenant_claimed_rent_amount,
+      landlord_arrears_start_date: claim.landlord_arrears_start_date,
+      landlord_payment_history: claim.landlord_payment_history,
+      landlord_confirmed_move_in_date: input.confirmedMoveInDate,
+      landlord_confirmed_current_due_date: input.confirmedCurrentDueDate,
+      landlord_confirmed_current_period_end: currentPeriodEnd,
+      landlord_confirmed_rent_amount: input.confirmedRentAmount,
+      landlord_confirmed_opening_balance: input.openingBalance,
+      landlord_review_notes: input.reviewNotes || null,
+    },
+  });
+
+  const tenancy = await createLiveExistingTenantTenancy(adminSupabase, {
+    landlordId: landlord.id,
+    tenantId: tenant.id,
+    unitId: claim.unit_id,
+    rentAmount: input.confirmedRentAmount,
+    paymentFrequency: claim.tenant_payment_frequency,
+    currencyCode: claim.units?.currency_code ?? "NGN",
+    moveInDate: input.confirmedMoveInDate,
+    currentPeriodStart: input.confirmedCurrentDueDate,
+    openingBalance: input.openingBalance,
+    openingBalanceNote:
+      input.openingBalance > 0
+        ? "Opening balance from existing tenant approval."
+        : null,
+    agreementNotes: input.reviewNotes || null,
+  });
+
+  const claimMetadata = claim.arrears_calculation_metadata ?? {};
+  const savedCycles = Array.isArray(claimMetadata.cycles)
+    ? (claimMetadata.cycles as Array<{
+        periodStart: string;
+        periodEnd: string;
+        rentCharged: number;
+        assumedPaid: boolean;
+        payments: Array<{ amount: number; paidAt: string; note?: string }>;
+      }>)
+    : [];
+
+  const activeCycles = savedCycles.filter((cycle) => !cycle.assumedPaid);
+  const ledgerMetadata = {
+    source: "existing_tenant_claim",
+    existing_tenant_claim_id: claim.id,
+  };
+
+  if (activeCycles.length > 0) {
+    await postExistingTenantHistoricalRentCharges(adminSupabase, {
+      landlordId: landlord.id,
+      tenantId: tenant.id,
+      tenancyId: tenancy.id,
+      currencyCode: tenancy.currency_code,
+      cycles: activeCycles.map((cycle) => ({
+        periodStart: cycle.periodStart,
+        periodEnd: cycle.periodEnd,
+        rentCharged: Number(cycle.rentCharged),
+      })),
+      metadata: ledgerMetadata,
+    });
+
+    await postExistingTenantHistoricalPayments(adminSupabase, {
+      landlordId: landlord.id,
+      tenantId: tenant.id,
+      tenancyId: tenancy.id,
+      currencyCode: tenancy.currency_code,
+      payments: activeCycles.flatMap((cycle) => cycle.payments ?? []),
+      metadata: ledgerMetadata,
+    });
+  } else {
+    await postExistingTenantOpeningBalanceEntry(adminSupabase, {
+      landlordId: landlord.id,
+      tenantId: tenant.id,
+      tenancyId: tenancy.id,
+      amount: input.openingBalance,
+      currencyCode: tenancy.currency_code,
+      description: "Amount owed from existing tenant onboarding.",
+      entryDate: input.confirmedCurrentDueDate,
+      metadata: {
+        ...ledgerMetadata,
+        claimed_rent_amount: claim.tenant_claimed_rent_amount,
+        confirmed_rent_amount: input.confirmedRentAmount,
+        confirmed_move_in_date: input.confirmedMoveInDate,
+        confirmed_current_due_date: input.confirmedCurrentDueDate,
+        current_period_end: currentPeriodEnd,
+        landlord_arrears_start_date: claim.landlord_arrears_start_date,
+        landlord_payment_history: claim.landlord_payment_history,
+        bopa_calculated_outstanding_balance:
+          claim.bopa_calculated_outstanding_balance,
+      },
+    });
+  }
+
+  await markUnitOccupied(adminSupabase, claim.unit_id);
+
+  const approvedClaim = await approveExistingTenantClaim(adminSupabase, {
+    claimId: claim.id,
+    landlordId: landlord.id,
+    reviewedBy: landlord.id,
+    confirmedRentAmount: input.confirmedRentAmount,
+    confirmedMoveInDate: input.confirmedMoveInDate,
+    confirmedCurrentDueDate: input.confirmedCurrentDueDate,
+    confirmedNextRentDueDate: tenancy.next_rent_charge_date ?? currentPeriodEnd,
+    openingBalance: input.openingBalance,
+    reviewNotes: input.reviewNotes?.trim() || null,
+    approvedTenantId: tenant.id,
+    approvedTenancyId: tenancy.id,
+  });
+
+  await writeExistingTenantClaimAudit({
+    landlordId: landlord.id,
+    unitId: claim.unit_id,
+    propertyId: claim.units?.properties?.id ?? null,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.tenantApproved,
+    entityId: claim.id,
+    description: "Existing tenant claim was approved and converted to tenancy.",
+    metadata: {
+      existing_tenant_claim_id: claim.id,
+      tenant_id: tenant.id,
+      tenancy_id: tenancy.id,
+      tenant_full_name: tenant.full_name,
+      confirmed_rent_amount: input.confirmedRentAmount,
+      confirmed_move_in_date: input.confirmedMoveInDate,
+      confirmed_current_due_date: input.confirmedCurrentDueDate,
+      opening_balance: input.openingBalance,
+    },
+  });
+
+  await writeAuditLog({
+    landlordId: landlord.id,
+    tenantId: tenant.id,
+    tenancyId: tenancy.id,
+    unitId: claim.unit_id,
+    propertyId: claim.units?.properties?.id ?? null,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.tenancyCreated,
+    entityType: AUDIT_ENTITY_TYPES.tenancy,
+    entityId: tenancy.id,
+    description: `Existing tenant tenancy created for ${tenant.full_name}.`,
+    metadata: {
+      source: "existing_tenant_claim",
+      existing_tenant_claim_id: claim.id,
+      tenancy_reference: tenancy.tenancy_reference,
+      rent_amount: tenancy.rent_amount,
+      payment_frequency: tenancy.payment_frequency,
+      start_date: tenancy.start_date,
+      current_period_start: tenancy.current_period_start,
+      current_period_end: tenancy.current_period_end,
+      next_rent_charge_date: tenancy.next_rent_charge_date,
+      opening_balance: input.openingBalance,
+    },
+  });
+
+  return {
+    approvedClaim,
+    tenantId: tenant.id,
+    tenancyId: tenancy.id,
+    tenantName: tenant.full_name,
+  };
+}
+
+export async function rejectExistingTenantClaimForCurrentLandlord(
+  input: RejectExistingTenantClaimInput,
+) {
+  const landlord = await requireLandlordPlatformOperator();
+  const supabase = await createSupabaseServerClient();
+  const claim = await getExistingTenantClaimById(supabase, input.claimId);
+
+  if (claim.landlord_id !== landlord.id) {
+    throw new AppError(
+      "FORBIDDEN",
+      "You do not have permission to reject this existing tenant claim.",
+      403,
+    );
+  }
+
+  const rejectedClaim = await rejectExistingTenantClaim(supabase, {
+    claimId: input.claimId,
+    landlordId: landlord.id,
+    reviewedBy: landlord.id,
+    reason: input.reason,
+  });
+
+  await writeExistingTenantClaimAudit({
+    landlordId: landlord.id,
+    unitId: claim.unit_id,
+    propertyId: claim.units?.properties?.id ?? null,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.tenantRejected,
+    entityId: claim.id,
+    description: "Existing tenant claim was rejected.",
+    metadata: {
+      existing_tenant_claim_id: claim.id,
+      tenant_full_name: claim.tenant_full_name,
+      rejected_reason: input.reason,
+    },
+  });
+
+  return rejectedClaim;
+}
+
+
+====================================================================================================
+FILE: src/server/repositories/existing-tenant-claims.repository.ts
+====================================================================================================
+
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { ExistingTenantPaymentHistoryItem } from "@/server/validators/existing-tenant-claim.schema";
+
+export type ExistingTenantClaimStatus =
+  | "pending"
+  | "submitted"
+  | "approved"
+  | "rejected"
+  | "expired"
+  | "cancelled";
+
+export type ExistingTenantClaimIdType =
+  | "nin"
+  | "passport"
+  | "drivers_license"
+  | "voters_card";
+
+export type ExistingTenantClaimPaymentFrequency =
+  | "annual"
+  | "monthly"
+  | "quarterly"
+  | "biannual";
+
+export type ExistingTenantClaimRow = {
+  id: string;
+  landlord_id: string;
+  unit_id: string;
+  token_hash: string;
+  token_expires_at: string;
+  token_used_at: string | null;
+  status: ExistingTenantClaimStatus;
+
+  invited_tenant_full_name: string | null;
+  invited_tenant_phone_number: string | null;
+  invited_tenant_email: string | null;
+
+  tenant_full_name: string | null;
+  tenant_phone_number: string | null;
+  tenant_email: string | null;
+  tenant_occupation: string | null;
+  tenant_id_type: ExistingTenantClaimIdType | null;
+  tenant_id_number: string | null;
+  tenant_move_in_date: string | null;
+  tenant_claimed_rent_amount: number | null;
+  tenant_claimed_next_rent_due_date: string | null;
+  tenant_payment_frequency: ExistingTenantClaimPaymentFrequency;
+  tenant_notes: string | null;
+  existing_agreement_path: string | null;
+  last_payment_proof_path: string | null;
+
+  landlord_confirmed_rent_amount: number | null;
+  landlord_confirmed_move_in_date: string | null;
+  landlord_confirmed_next_rent_due_date: string | null;
+  landlord_confirmed_current_due_date: string | null;
+  landlord_review_notes: string | null;
+  landlord_last_payment_amount: number | null;
+  landlord_last_payment_date: string | null;
+  landlord_payment_history: ExistingTenantPaymentHistoryItem[];
+  landlord_arrears_start_date: string | null;
+
+  bopa_calculated_current_due_date: string | null;
+  bopa_calculated_outstanding_balance: number | null;
+  bopa_calculated_months_owed: number;
+  arrears_calculation_metadata: Record<string, unknown>;
+
+  approved_tenant_id: string | null;
+  approved_tenancy_id: string | null;
+  rejected_reason: string | null;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+};
+
+export type ExistingTenantClaimDetailRow = ExistingTenantClaimRow & {
+  units: {
+    id: string;
+    unit_identifier: string;
+    building_name: string | null;
+    unit_type: string;
+    annual_rent: number | null;
+    monthly_rent: number | null;
+    currency_code: string;
+    status: string;
+    properties: {
+      id: string;
+      property_name: string;
+      address: string | null;
+      landlord_id: string;
+    } | null;
+  } | null;
+};
+
+const EXISTING_TENANT_CLAIM_SELECT = `
+  id,
+  landlord_id,
+  unit_id,
+  token_hash,
+  token_expires_at,
+  token_used_at,
+  status,
+  invited_tenant_full_name,
+  invited_tenant_phone_number,
+  invited_tenant_email,
+  tenant_full_name,
+  tenant_phone_number,
+  tenant_email,
+  tenant_occupation,
+  tenant_id_type,
+  tenant_id_number,
+  tenant_move_in_date,
+  tenant_claimed_rent_amount,
+  tenant_claimed_next_rent_due_date,
+  tenant_payment_frequency,
+  tenant_notes,
+  existing_agreement_path,
+  last_payment_proof_path,
+  landlord_confirmed_rent_amount,
+  landlord_confirmed_move_in_date,
+  landlord_confirmed_next_rent_due_date,
+  landlord_confirmed_current_due_date,
+  landlord_review_notes,
+  landlord_last_payment_amount,
+  landlord_last_payment_date,
+  landlord_payment_history,
+  landlord_arrears_start_date,
+  bopa_calculated_current_due_date,
+  bopa_calculated_outstanding_balance,
+  bopa_calculated_months_owed,
+  arrears_calculation_metadata,
+  approved_tenant_id,
+  approved_tenancy_id,
+  rejected_reason,
+  submitted_at,
+  reviewed_at,
+  reviewed_by,
+  created_at,
+  updated_at,
+  deleted_at
+`;
+
+const EXISTING_TENANT_CLAIM_DETAIL_SELECT = `
+  ${EXISTING_TENANT_CLAIM_SELECT},
+  units (
+    id,
+    unit_identifier,
+    building_name,
+    unit_type,
+    annual_rent,
+    monthly_rent,
+    currency_code,
+    status,
+    properties (
+      id,
+      property_name,
+      address,
+      landlord_id
+    )
+  )
+`;
+
+export async function createExistingTenantClaim(
+  supabase: SupabaseClient,
+  params: {
+    landlordId: string;
+    unitId: string;
+    tokenHash: string;
+    tokenExpiresAt: string;
+    invitedTenantFullName: string;
+    invitedTenantPhoneNumber: string;
+    invitedTenantEmail: string | null;
+    note: string | null;
+  },
+) {
+  const { data, error } = await supabase
+    .from("existing_tenant_claims")
+    .insert({
+      landlord_id: params.landlordId,
+      unit_id: params.unitId,
+      token_hash: params.tokenHash,
+      token_expires_at: params.tokenExpiresAt,
+      invited_tenant_full_name: params.invitedTenantFullName,
+      invited_tenant_phone_number: params.invitedTenantPhoneNumber,
+      invited_tenant_email: params.invitedTenantEmail,
+      status: "pending",
+      landlord_review_notes: params.note,
+    })
+    .select(EXISTING_TENANT_CLAIM_DETAIL_SELECT)
+    .single<ExistingTenantClaimDetailRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getExistingTenantClaimByTokenHash(
+  supabase: SupabaseClient,
+  tokenHash: string,
+) {
+  const { data, error } = await supabase
+    .from("existing_tenant_claims")
+    .select(EXISTING_TENANT_CLAIM_DETAIL_SELECT)
+    .eq("token_hash", tokenHash)
+    .is("deleted_at", null)
+    .maybeSingle<ExistingTenantClaimDetailRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getExistingTenantClaimById(
+  supabase: SupabaseClient,
+  claimId: string,
+) {
+  const { data, error } = await supabase
+    .from("existing_tenant_claims")
+    .select(EXISTING_TENANT_CLAIM_DETAIL_SELECT)
+    .eq("id", claimId)
+    .is("deleted_at", null)
+    .single<ExistingTenantClaimDetailRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function listExistingTenantClaimsForLandlord(
+  supabase: SupabaseClient,
+  landlordId: string,
+) {
+  const { data, error } = await supabase
+    .from("existing_tenant_claims")
+    .select(EXISTING_TENANT_CLAIM_DETAIL_SELECT)
+    .eq("landlord_id", landlordId)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .returns<ExistingTenantClaimDetailRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function submitExistingTenantClaim(
+  supabase: SupabaseClient,
+  params: {
+    claimId: string;
+    fullName: string;
+    phoneNumber: string;
+    email: string | null;
+    occupation: string | null;
+    idType: ExistingTenantClaimIdType;
+    idNumber: string;
+    moveInDate: string;
+    statedRentDueDate: string;
+    claimedRentAmount: number;
+    paymentFrequency: ExistingTenantClaimPaymentFrequency;
+    tenantNotes: string | null;
+  },
+) {
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("existing_tenant_claims")
+    .update({
+      tenant_full_name: params.fullName,
+      tenant_phone_number: params.phoneNumber,
+      tenant_email: params.email,
+      tenant_occupation: params.occupation,
+      tenant_id_type: params.idType,
+      tenant_id_number: params.idNumber,
+      tenant_move_in_date: params.moveInDate,
+      tenant_claimed_rent_amount: params.claimedRentAmount,
+      tenant_claimed_next_rent_due_date: params.statedRentDueDate,
+      tenant_payment_frequency: params.paymentFrequency,
+      tenant_notes: params.tenantNotes,
+      status: "submitted",
+      token_used_at: now,
+      submitted_at: now,
+      updated_at: now,
+      rejected_reason: null,
+    })
+    .eq("id", params.claimId)
+    .eq("status", "pending")
+    .is("deleted_at", null)
+    .select(EXISTING_TENANT_CLAIM_DETAIL_SELECT)
+    .single<ExistingTenantClaimDetailRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function updateExistingTenantClaimArrears(
+  supabase: SupabaseClient,
+  params: {
+    claimId: string;
+    landlordId: string;
+    arrearsStartDate: string;
+    paymentHistory: ExistingTenantPaymentHistoryItem[];
+    calculatedCurrentDueDate: string;
+    calculatedOutstandingBalance: number;
+    calculatedMonthsOwed: number;
+    calculationMetadata: Record<string, unknown>;
+  },
+) {
+  const latestPayment = params.paymentHistory
+    .slice()
+    .sort((firstPayment, secondPayment) =>
+      firstPayment.paidAt.localeCompare(secondPayment.paidAt),
+    )
+    .at(-1);
+
+  const { data, error } = await supabase
+    .from("existing_tenant_claims")
+    .update({
+      landlord_last_payment_amount: latestPayment?.amount ?? null,
+      landlord_last_payment_date: latestPayment?.paidAt ?? null,
+      landlord_payment_history: params.paymentHistory,
+      landlord_arrears_start_date: params.arrearsStartDate,
+      bopa_calculated_current_due_date: params.calculatedCurrentDueDate,
+      bopa_calculated_outstanding_balance: params.calculatedOutstandingBalance,
+      bopa_calculated_months_owed: params.calculatedMonthsOwed,
+      arrears_calculation_metadata: params.calculationMetadata,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", params.claimId)
+    .eq("landlord_id", params.landlordId)
+    .eq("status", "submitted")
+    .is("deleted_at", null)
+    .select(EXISTING_TENANT_CLAIM_DETAIL_SELECT)
+    .single<ExistingTenantClaimDetailRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function approveExistingTenantClaim(
+  supabase: SupabaseClient,
+  params: {
+    claimId: string;
+    landlordId: string;
+    reviewedBy: string;
+    confirmedRentAmount: number;
+    confirmedMoveInDate: string;
+    confirmedCurrentDueDate: string;
+    confirmedNextRentDueDate: string;
+    openingBalance: number;
+    reviewNotes: string | null;
+    approvedTenantId: string;
+    approvedTenancyId: string;
+  },
+) {
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("existing_tenant_claims")
+    .update({
+      status: "approved",
+      landlord_confirmed_rent_amount: params.confirmedRentAmount,
+      landlord_confirmed_move_in_date: params.confirmedMoveInDate,
+      landlord_confirmed_current_due_date: params.confirmedCurrentDueDate,
+      landlord_confirmed_next_rent_due_date: params.confirmedNextRentDueDate,
+      landlord_review_notes: params.reviewNotes,
+      bopa_calculated_outstanding_balance: params.openingBalance,
+      approved_tenant_id: params.approvedTenantId,
+      approved_tenancy_id: params.approvedTenancyId,
+      reviewed_at: now,
+      reviewed_by: params.reviewedBy,
+      updated_at: now,
+    })
+    .eq("id", params.claimId)
+    .eq("landlord_id", params.landlordId)
+    .eq("status", "submitted")
+    .is("deleted_at", null)
+    .select(EXISTING_TENANT_CLAIM_DETAIL_SELECT)
+    .single<ExistingTenantClaimDetailRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function rejectExistingTenantClaim(
+  supabase: SupabaseClient,
+  params: {
+    claimId: string;
+    landlordId: string;
+    reviewedBy: string;
+    reason: string;
+  },
+) {
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("existing_tenant_claims")
+    .update({
+      status: "rejected",
+      rejected_reason: params.reason,
+      reviewed_at: now,
+      reviewed_by: params.reviewedBy,
+      updated_at: now,
+    })
+    .eq("id", params.claimId)
+    .eq("landlord_id", params.landlordId)
+    .in("status", ["pending", "submitted"])
+    .is("deleted_at", null)
+    .select(EXISTING_TENANT_CLAIM_DETAIL_SELECT)
+    .single<ExistingTenantClaimDetailRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function markExistingTenantClaimExpired(
+  supabase: SupabaseClient,
+  claimId: string,
+) {
+  const { data, error } = await supabase
+    .from("existing_tenant_claims")
+    .update({
+      status: "expired",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", claimId)
+    .eq("status", "pending")
+    .is("deleted_at", null)
+    .select(EXISTING_TENANT_CLAIM_DETAIL_SELECT)
+    .single<ExistingTenantClaimDetailRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+
+====================================================================================================
+FILE: src/server/validators/existing-tenant-claim.schema.ts
+====================================================================================================
+
+import { z } from "zod";
+import {
+  dateStringSchema,
+  moneySchema,
+  optionalEmailSchema,
+  phoneSchema,
+  positiveMoneySchema,
+  uuidSchema,
+} from "./common.schema";
+
+export const existingTenantClaimIdTypeSchema = z.enum([
+  "nin",
+  "passport",
+  "drivers_license",
+  "voters_card",
+]);
+
+export const existingTenantPaymentHistoryItemSchema = z.object({
+  amount: positiveMoneySchema,
+  paidAt: dateStringSchema,
+  note: z.string().trim().max(200).optional().or(z.literal("")),
+});
+
+export const existingTenantRentCyclePaymentSchema =
+  existingTenantPaymentHistoryItemSchema;
+
+export const existingTenantRentCycleSchema = z.object({
+  periodStart: dateStringSchema,
+  periodEnd: dateStringSchema,
+  rentCharged: moneySchema,
+  assumedPaid: z.boolean(),
+  payments: z.array(existingTenantRentCyclePaymentSchema).max(24),
+});
+
+export const createExistingTenantClaimSchema = z.object({
+  unitId: uuidSchema,
+  fullName: z.string().trim().min(2, "Enter the tenant name.").max(120),
+  phoneNumber: phoneSchema,
+  email: optionalEmailSchema,
+  note: z.string().trim().max(1000).optional().or(z.literal("")),
+});
+
+export const submitExistingTenantClaimSchema = z.object({
+  token: z.string().trim().min(20, "Invalid claim link."),
+  fullName: z.string().trim().min(2, "Enter your full name.").max(120),
+  phoneNumber: phoneSchema,
+  email: optionalEmailSchema,
+  occupation: z.string().trim().max(120).optional().or(z.literal("")),
+  idType: existingTenantClaimIdTypeSchema,
+  idNumber: z.string().trim().min(3, "Enter your ID number.").max(120),
+  moveInDate: dateStringSchema,
+  statedRentDueDate: dateStringSchema,
+  claimedRentAmount: positiveMoneySchema,
+  paymentFrequency: z
+    .enum(["annual", "monthly", "quarterly", "biannual"], {
+      message: "Select your rent payment frequency.",
+    })
+    .default("annual"),
+  tenantNotes: z.string().trim().max(1000).optional().or(z.literal("")),
+});
+
+export const updateExistingTenantClaimArrearsSchema = z.object({
+  claimId: uuidSchema,
+  cycles: z
+    .array(existingTenantRentCycleSchema)
+    .min(1, "Rent history could not be built for this tenancy."),
+});
+
+export const approveExistingTenantClaimSchema = z.object({
+  claimId: uuidSchema,
+  confirmedRentAmount: positiveMoneySchema,
+  confirmedMoveInDate: dateStringSchema,
+  confirmedCurrentDueDate: dateStringSchema,
+  openingBalance: moneySchema.default(0),
+  reviewNotes: z.string().trim().max(1000).optional().or(z.literal("")),
+});
+
+export const rejectExistingTenantClaimSchema = z.object({
+  claimId: uuidSchema,
+  reason: z.string().trim().min(3, "Enter the reason.").max(500),
+});
+
+export type ExistingTenantPaymentHistoryItem = z.infer<
+  typeof existingTenantPaymentHistoryItemSchema
+>;
+
+export type ExistingTenantRentCycleInput = z.infer<
+  typeof existingTenantRentCycleSchema
+>;
+
+export type CreateExistingTenantClaimInput = z.infer<
+  typeof createExistingTenantClaimSchema
+>;
+
+export type SubmitExistingTenantClaimInput = z.infer<
+  typeof submitExistingTenantClaimSchema
+>;
+
+export type UpdateExistingTenantClaimArrearsInput = z.infer<
+  typeof updateExistingTenantClaimArrearsSchema
+>;
+
+export type ApproveExistingTenantClaimInput = z.infer<
+  typeof approveExistingTenantClaimSchema
+>;
+
+export type RejectExistingTenantClaimInput = z.infer<
+  typeof rejectExistingTenantClaimSchema
+>;
+
+
+====================================================================================================
+FILE: src/components/tenant/existing-tenant-claim-link-form.tsx
+====================================================================================================
+
+"use client";
+
+import { useActionState, useEffect, useRef } from "react";
+import { MessageCircle } from "lucide-react";
+import { createExistingTenantClaimAction } from "@/actions/existing-tenant-claims.actions";
+import { initialExistingTenantClaimActionState } from "@/actions/existing-tenant-claims.state";
+import { ActionResultToast } from "@/components/ui/action-result-toast";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { TrustNotice } from "@/components/ui/trust-notice";
+import { buildWaMeUrl } from "@/lib/whatsapp";
+import type { ExistingTenantClaimUnitOption } from "@/server/services/existing-tenant-claims.service";
+
+type ExistingTenantClaimLinkFormProps = {
+  units: ExistingTenantClaimUnitOption[];
+};
+
+export function ExistingTenantClaimLinkForm({
+  units,
+}: ExistingTenantClaimLinkFormProps) {
+  const openedMessageRef = useRef<string | null>(null);
+
+  const [state, formAction, isPending] = useActionState(
+    createExistingTenantClaimAction,
+    initialExistingTenantClaimActionState,
+  );
+
+  useEffect(() => {
+    if (
+      !state.ok ||
+      !state.whatsappMessage ||
+      !state.tenantWhatsappNumber ||
+      openedMessageRef.current === state.whatsappMessage
+    ) {
+      return;
+    }
+
+    openedMessageRef.current = state.whatsappMessage;
+
+    window.location.assign(
+      buildWaMeUrl({
+        phoneNumber: state.tenantWhatsappNumber,
+        message: state.whatsappMessage,
+      }),
+    );
+  }, [state.ok, state.tenantWhatsappNumber, state.whatsappMessage]);
+
+  const unitOptions = units.map((unit) => ({
+    label: unit.label,
+    value: unit.value,
+  }));
+
+  return (
+    <form action={formAction} className="space-y-5">
+      <ActionResultToast
+        ok={state.ok}
+        message={state.message}
+        successTitle="Opening WhatsApp"
+        errorTitle="Could not send claim link"
+      />
+
+      <TrustNotice
+        title="Send existing tenant link"
+        description="Enter the tenant name and phone number you already know, then select the unit they occupy. BOPA will create the secure link and open WhatsApp with the message ready to send."
+        icon={<MessageCircle aria-hidden="true" size={22} strokeWidth={2.6} />}
+      />
+
+      {state.message ? (
+        <div
+          role="alert"
+          className={
+            state.ok
+              ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
+              : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
+          }
+        >
+          {state.message}
+        </div>
+      ) : null}
+
+      <Select
+        label="Occupied unit"
+        name="unitId"
+        options={unitOptions}
+        error={state.fieldErrors?.unitId?.[0]}
+        required
+      />
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Input
+          label="Tenant name"
+          name="fullName"
+          placeholder="Example: Chinedu Okafor"
+          error={state.fieldErrors?.fullName?.[0]}
+          required
+        />
+
+        <Input
+          label="Tenant phone number"
+          name="phoneNumber"
+          placeholder="Example: 08012345678"
+          error={state.fieldErrors?.phoneNumber?.[0]}
+          required
+        />
+      </div>
+
+      <Input
+        label="Tenant email"
+        name="email"
+        type="email"
+        placeholder="Optional"
+        error={state.fieldErrors?.email?.[0]}
+      />
+
+      <Textarea
+        label="Internal note"
+        name="note"
+        placeholder="Optional note for your own review"
+        error={state.fieldErrors?.note?.[0]}
+      />
+
+      <Button
+        type="submit"
+        isLoading={isPending}
+        fullWidth
+        disabled={units.length === 0}
+      >
+        Send Existing Tenant Link
+      </Button>
+    </form>
+  );
+}
+
+
+====================================================================================================
+FILE: src/components/tenant/existing-tenant-claim-public-form.tsx
+====================================================================================================
+
+"use client";
+
+import { useActionState } from "react";
+import { submitExistingTenantClaimAction } from "@/actions/existing-tenant-claims.actions";
+import { initialExistingTenantClaimActionState } from "@/actions/existing-tenant-claims.state";
+import { ActionResultToast } from "@/components/ui/action-result-toast";
+import { Button } from "@/components/ui/button";
+import { CurrencyInput } from "@/components/ui/currency-input";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { TrustNotice } from "@/components/ui/trust-notice";
+
+type ExistingTenantClaimPublicFormProps = {
+  token: string;
+  invitedName: string | null;
+  invitedPhoneNumber: string | null;
+  invitedEmail: string | null;
+};
+
+const paymentFrequencyOptions = [
+  {
+    label: "Annual rent",
+    value: "annual",
+  },
+  {
+    label: "Monthly rent",
+    value: "monthly",
+  },
+  {
+    label: "Quarterly rent",
+    value: "quarterly",
+  },
+  {
+    label: "Biannual rent",
+    value: "biannual",
+  },
+];
+
+const idTypeOptions = [
+  {
+    label: "NIN",
+    value: "nin",
+  },
+  {
+    label: "International Passport",
+    value: "passport",
+  },
+  {
+    label: "Driver's License",
+    value: "drivers_license",
+  },
+  {
+    label: "Voter's Card",
+    value: "voters_card",
+  },
+];
+
+export function ExistingTenantClaimPublicForm({
+  token,
+  invitedName,
+  invitedPhoneNumber,
+  invitedEmail,
+}: ExistingTenantClaimPublicFormProps) {
+  const [state, formAction, isPending] = useActionState(
+    submitExistingTenantClaimAction,
+    initialExistingTenantClaimActionState,
+  );
+
+  if (state.ok) {
+    return (
+      <TrustNotice
+        title="Details submitted"
+        description="Your details have been submitted. Your landlord will review and confirm your tenancy shortly."
+      />
+    );
+  }
+
+  return (
+    <form action={formAction} className="space-y-5">
+      <ActionResultToast
+        ok={state.ok}
+        message={state.message}
+        successTitle="Details submitted"
+        errorTitle="Please check this form"
+      />
+
+      <input type="hidden" name="token" value={token} />
+
+      <TrustNotice
+        title="Confirm your tenancy details"
+        description="Enter your agreed move-in date, rent amount, and the rent due date you know. Your landlord will review everything before confirming."
+      />
+
+      {state.message ? (
+        <div
+          role="alert"
+          className="rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
+        >
+          {state.message}
+        </div>
+      ) : null}
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Input
+          label="Full name"
+          name="fullName"
+          defaultValue={invitedName ?? ""}
+          error={state.fieldErrors?.fullName?.[0]}
+          required
+        />
+
+        <Input
+          label="Phone number"
+          name="phoneNumber"
+          defaultValue={invitedPhoneNumber ?? ""}
+          error={state.fieldErrors?.phoneNumber?.[0]}
+          required
+        />
+      </div>
+
+      <Input
+        label="Email"
+        name="email"
+        type="email"
+        defaultValue={invitedEmail ?? ""}
+        placeholder="Optional"
+        error={state.fieldErrors?.email?.[0]}
+      />
+
+      <Input
+        label="Occupation"
+        name="occupation"
+        placeholder="Optional. Example: Trader, Accountant"
+        error={state.fieldErrors?.occupation?.[0]}
+      />
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Select
+          label="Means of identification"
+          name="idType"
+          options={idTypeOptions}
+          error={state.fieldErrors?.idType?.[0]}
+          required
+        />
+
+        <Input
+          label="ID number"
+          name="idNumber"
+          placeholder="Enter the selected ID number"
+          error={state.fieldErrors?.idNumber?.[0]}
+          required
+        />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Input
+          label="Agreed move-in date"
+          name="moveInDate"
+          type="date"
+          helperText="The date you moved into this apartment."
+          error={state.fieldErrors?.moveInDate?.[0]}
+          required
+        />
+
+        <Input
+          label="Rent due date (as you know it)"
+          name="statedRentDueDate"
+          type="date"
+          helperText="The date you believe your yearly rent is due."
+          error={state.fieldErrors?.statedRentDueDate?.[0]}
+          required
+        />
+      </div>
+
+      <Select
+        label="Payment frequency"
+        name="paymentFrequency"
+        options={paymentFrequencyOptions}
+        defaultValue="annual"
+        error={state.fieldErrors?.paymentFrequency?.[0]}
+        required
+      />
+
+      <CurrencyInput
+        label="Current rent amount"
+        name="claimedRentAmount"
+        placeholder="0.00"
+        error={state.fieldErrors?.claimedRentAmount?.[0]}
+        required
+      />
+
+      <Textarea
+        label="Additional note"
+        name="tenantNotes"
+        placeholder="Optional. Add anything the landlord should know."
+        error={state.fieldErrors?.tenantNotes?.[0]}
+      />
+
+      <Button type="submit" isLoading={isPending} fullWidth>
+        Submit for Landlord Review
+      </Button>
+    </form>
+  );
+}
+
+
+====================================================================================================
+MISSING FILE: src/app/existing-tenant-claims/link/[token]/page.tsx
+====================================================================================================
+

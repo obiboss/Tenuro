@@ -15,6 +15,8 @@ export function ManagerOnboardingForm() {
 
   return (
     <form action={formAction}>
+      <input type="hidden" name="rcNumber" value="" />
+
       <Card>
         <CardContent>
           {state.message ? (
@@ -31,7 +33,7 @@ export function ManagerOnboardingForm() {
           ) : null}
 
           <Input
-            label="Property management company name"
+            label="Business name"
             name="organizationName"
             placeholder="Example: Prime Estate Managers"
             autoComplete="organization"
@@ -40,7 +42,7 @@ export function ManagerOnboardingForm() {
           />
 
           <Input
-            label="Company phone number"
+            label="Office phone"
             name="organizationPhone"
             placeholder="Example: 08012345678"
             autoComplete="tel"
@@ -48,7 +50,7 @@ export function ManagerOnboardingForm() {
           />
 
           <Input
-            label="Company email"
+            label="Office email"
             name="organizationEmail"
             type="email"
             placeholder="office@example.com"
@@ -57,16 +59,9 @@ export function ManagerOnboardingForm() {
           />
 
           <Input
-            label="RC number"
-            name="rcNumber"
-            placeholder="Optional"
-            error={state.fieldErrors?.rcNumber?.[0]}
-          />
-
-          <Input
             label="Office address"
             name="officeAddress"
-            placeholder="Office address"
+            placeholder="Optional"
             autoComplete="street-address"
             error={state.fieldErrors?.officeAddress?.[0]}
           />
@@ -74,7 +69,7 @@ export function ManagerOnboardingForm() {
 
         <CardFooter>
           <Button type="submit" isLoading={isPending} fullWidth>
-            Create Manager Workspace
+            Continue
           </Button>
         </CardFooter>
       </Card>

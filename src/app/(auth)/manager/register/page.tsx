@@ -7,14 +7,14 @@ export default function PropertyManagerRegisterPage() {
   return (
     <>
       <PageHeader
-        title="Create your property manager account"
-        description="Register with your work email and password. BOPA will verify your email before granting access."
+        title="Create BOPA Manager account"
+        description="For property managers who manage rent records, tenants, and remittances for landlords."
       />
 
       <div className="space-y-6">
         <TrustNotice
-          title="Built for property management firms"
-          description="BOPA Manager is for teams that manage properties for multiple landlords and need clear rent records."
+          title="Built for property managers"
+          description="Know who is owing, who is due soon, what each landlord should receive, and which receipts or statements need to be sent."
         />
 
         <ManagerRegisterForm />
@@ -27,7 +27,7 @@ export default function PropertyManagerRegisterPage() {
         </p>
 
         <p className="text-center text-sm text-text-muted">
-          Managing your own properties?{" "}
+          Managing only your own property?{" "}
           <Link href="/register" className="font-bold text-primary">
             Create landlord account
           </Link>

@@ -1,23 +1,41 @@
 import { redirect } from "next/navigation";
 import { ManagerOverviewCards } from "@/components/manager/manager-overview-cards";
-import { PageHeader } from "@/components/ui/page-header";
-import { getManagerOverview } from "@/server/services/manager.service";
+import {
+  getManagerOrganizationForCurrentUser,
+  listManagerProperties,
+  listManagerRentPayments,
+  listManagerTenants,
+  listManagerUnits,
+} from "@/server/repositories/manager.repository";
+import { requireManager } from "@/server/services/auth.service";
+import { createSupabaseServerClient } from "@/server/supabase/server";
 
 export default async function ManagerOverviewPage() {
-  const overview = await getManagerOverview();
+  const manager = await requireManager();
+  const supabase = await createSupabaseServerClient();
 
-  if (!overview) {
+  const organization = await getManagerOrganizationForCurrentUser(
+    supabase,
+    manager.id,
+  );
+
+  if (!organization) {
     redirect("/manager/onboarding");
   }
 
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Manager overview"
-        description="A simple view of your landlord clients, properties, tenants, and recorded rent."
-      />
+  const [properties, units, tenants, payments] = await Promise.all([
+    listManagerProperties(supabase, organization.id),
+    listManagerUnits(supabase, { organizationId: organization.id }),
+    listManagerTenants(supabase, { organizationId: organization.id }),
+    listManagerRentPayments(supabase, organization.id),
+  ]);
 
-      <ManagerOverviewCards overview={overview} />
-    </div>
+  return (
+    <ManagerOverviewCards
+      properties={properties}
+      units={units}
+      tenants={tenants}
+      payments={payments}
+    />
   );
 }

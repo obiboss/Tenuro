@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { createManagerStaffInviteAction } from "@/actions/manager-staff.actions";
 import { initialManagerActionState } from "@/actions/manager.state";
+import { Button } from "@/components/ui/button";
 
 export function ManagerStaffInviteForm() {
   const [state, formAction, isPending] = useActionState(
@@ -122,13 +123,9 @@ export function ManagerStaffInviteForm() {
         </div>
       </div>
 
-      <button
-        type="submit"
-        disabled={isPending}
-        className="mt-5 min-h-12 w-full rounded-button bg-primary px-5 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {isPending ? "Creating invite..." : "Create Invite"}
-      </button>
+      <Button type="submit" isLoading={isPending} fullWidth className="mt-5">
+        Create invite
+      </Button>
     </form>
   );
 }

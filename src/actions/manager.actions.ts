@@ -25,6 +25,8 @@ import {
   saveManagerLandlordPayoutProfileSchema,
 } from "@/server/validators/manager.schema";
 
+const PROPERTY_DRAFT_LANDLORD_ID = "00000000-0000-4000-8000-000000000000";
+
 function toActionError(error: unknown): ManagerActionState {
   const result = errorResult(error);
 
@@ -33,6 +35,10 @@ function toActionError(error: unknown): ManagerActionState {
     message: result.message,
     fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
   };
+}
+
+function getOwnerMode(formData: FormData) {
+  return formData.get("ownerMode") === "new" ? "new" : "existing";
 }
 
 export async function createManagerOrganizationAction(
@@ -139,8 +145,13 @@ export async function createManagerPropertyAction(
   try {
     await requireManagerWorkspacePermission("property.manage");
 
-    const parsed = createManagerPropertySchema.parse({
-      landlordClientId: formData.get("landlordClientId"),
+    const ownerMode = getOwnerMode(formData);
+
+    const propertyDraft = createManagerPropertySchema.parse({
+      landlordClientId:
+        ownerMode === "new"
+          ? PROPERTY_DRAFT_LANDLORD_ID
+          : formData.get("landlordClientId"),
       propertyName: formData.get("propertyName"),
       propertyAddress: formData.get("propertyAddress"),
       city: formData.get("city"),
@@ -154,16 +165,35 @@ export async function createManagerPropertyAction(
       notes: formData.get("notes"),
     });
 
-    await createManagerProperty(parsed);
+    let landlordClientId = propertyDraft.landlordClientId;
+
+    if (ownerMode === "new") {
+      const landlord = createManagerLandlordClientSchema.parse({
+        landlordName: formData.get("newLandlordName"),
+        landlordPhone: formData.get("newLandlordPhone"),
+        landlordEmail: formData.get("newLandlordEmail"),
+        landlordAddress: formData.get("newLandlordAddress"),
+        notes: formData.get("newLandlordNotes"),
+      });
+
+      const createdLandlord = await createManagerLandlordClient(landlord);
+      landlordClientId = createdLandlord.id;
+    }
+
+    await createManagerProperty({
+      ...propertyDraft,
+      landlordClientId,
+    });
 
     revalidatePath("/manager");
     revalidatePath("/manager/overview");
+    revalidatePath("/manager/landlords");
     revalidatePath("/manager/properties");
     revalidatePath("/manager/remittances");
 
     return {
       ok: true,
-      message: "Property created successfully.",
+      message: "Property added successfully.",
     };
   } catch (error) {
     return toActionError(error);

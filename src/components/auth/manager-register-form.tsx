@@ -34,9 +34,9 @@ export function ManagerRegisterForm() {
           ) : null}
 
           <Input
-            label="Full name"
+            label="Your name"
             name="fullName"
-            placeholder="Enter your full name"
+            placeholder="Example: Ada Okafor"
             autoComplete="name"
             error={state.fieldErrors?.fullName?.[0]}
             disabled={isLocked}
@@ -44,10 +44,20 @@ export function ManagerRegisterForm() {
           />
 
           <Input
-            label="Work email address"
+            label="Property management business name"
+            name="organizationName"
+            placeholder="Example: Prime Estate Managers"
+            autoComplete="organization"
+            error={state.fieldErrors?.organizationName?.[0]}
+            disabled={isLocked}
+            required
+          />
+
+          <Input
+            label="Work email"
             name="email"
             type="email"
-            placeholder="you@firm.com"
+            placeholder="you@company.com"
             autoComplete="email"
             error={state.fieldErrors?.email?.[0]}
             disabled={isLocked}
@@ -84,7 +94,7 @@ export function ManagerRegisterForm() {
             disabled={isLocked}
             fullWidth
           >
-            {isSuccessful ? "Check your email" : "Create BOPA Manager account"}
+            {isSuccessful ? "Check your email" : "Create manager account"}
           </Button>
         </CardFooter>
       </Card>

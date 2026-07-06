@@ -481,7 +481,16 @@ export async function recordManagerLandlordRemittance(
 }
 
 export async function getManagerOverview() {
-  const { supabase, organization } = await requireManagerOrganization();
+  const { supabase, profile } = await getCurrentManagerProfile();
+
+  const organization = await getManagerOrganizationForCurrentUser(
+    supabase,
+    profile.id,
+  );
+
+  if (!organization || organization.status !== "active") {
+    return null;
+  }
 
   return getManagerOverviewRecord(supabase, organization.id);
 }

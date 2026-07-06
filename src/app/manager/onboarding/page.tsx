@@ -21,13 +21,13 @@ export default async function ManagerOnboardingPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <PageHeader
-        title="Set up your manager workspace"
-        description="Create the company profile your team will use to manage landlord clients, properties, tenants, and rent records."
+        title="What is your business name?"
+        description="This name will appear on your manager workspace, receipts, and landlord statements."
       />
 
       <TrustNotice
-        title="One workspace for your property management company"
-        description="After setup, you can add landlord clients, their properties, units, tenants, and rent payment records."
+        title="One simple workspace"
+        description="After this, start by adding a landlord, then add the property, units, and tenants."
       />
 
       <ManagerOnboardingForm />

@@ -1,0 +1,624 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+export type ManagerTenantOnboardingType =
+  | "current_occupant"
+  | "new_incoming_tenant";
+
+export type ManagerTenantOnboardingStatus =
+  | "pending"
+  | "submitted"
+  | "approved"
+  | "rejected"
+  | "cancelled"
+  | "expired"
+  | "agreement_sent"
+  | "agreement_accepted"
+  | "payment_initialized"
+  | "payment_paid"
+  | "payment_expired";
+
+export type ManagerTenantAgreementStatus =
+  | "draft"
+  | "sent_to_tenant"
+  | "accepted"
+  | "voided";
+
+export type ManagerTenantOnboardingRequestRow = {
+  id: string;
+  organization_id: string;
+  landlord_client_id: string;
+  property_id: string;
+  unit_id: string;
+  onboarding_type: ManagerTenantOnboardingType;
+  status: ManagerTenantOnboardingStatus;
+  token_hash: string;
+  token_expires_at: string;
+  token_used_at: string | null;
+  invited_tenant_full_name: string | null;
+  invited_tenant_phone_number: string | null;
+  invited_tenant_email: string | null;
+  tenant_full_name: string | null;
+  tenant_phone_number: string | null;
+  tenant_email: string | null;
+  tenant_occupation: string | null;
+  tenant_id_type: string | null;
+  tenant_id_number: string | null;
+  tenant_move_in_date: string | null;
+  tenant_claimed_next_rent_due_date: string | null;
+  tenant_claimed_rent_amount: number | null;
+  tenant_payment_frequency: "annual" | "monthly" | "quarterly" | "biannual";
+  tenant_notes: string | null;
+  manager_confirmed_rent_amount: number | null;
+  manager_confirmed_move_in_date: string | null;
+  manager_confirmed_next_rent_due_date: string | null;
+  opening_balance: number;
+  manager_review_notes: string | null;
+  approved_tenant_id: string | null;
+  approved_by_profile_id: string | null;
+  rejection_reason: string | null;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  cancelled_at: string | null;
+  expired_at: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  manager_properties: {
+    id: string;
+    property_name: string;
+    property_address: string;
+    collection_mode: "automatic_split" | "manager_collects" | "landlord_direct";
+    management_fee_type: "percentage" | "flat";
+    management_fee_value: number;
+    paystack_charge_bearer: "tenant" | "landlord" | "manager" | "bopa";
+  } | null;
+  manager_units: {
+    id: string;
+    unit_label: string;
+    unit_type: string | null;
+    rent_amount: number;
+    status: string;
+  } | null;
+  manager_landlord_clients: {
+    id: string;
+    landlord_name: string;
+    landlord_phone: string | null;
+    landlord_email: string | null;
+  } | null;
+  manager_organizations: {
+    id: string;
+    organization_name: string;
+    organization_phone: string | null;
+    organization_email: string | null;
+  } | null;
+};
+
+export type ManagerTenantAgreementDocumentRow = {
+  id: string;
+  organization_id: string;
+  landlord_client_id: string;
+  property_id: string;
+  unit_id: string;
+  tenant_id: string;
+  onboarding_request_id: string | null;
+  document_status: ManagerTenantAgreementStatus;
+  title: string;
+  manager_snapshot: Record<string, unknown>;
+  landlord_snapshot: Record<string, unknown>;
+  tenant_snapshot: Record<string, unknown>;
+  property_snapshot: Record<string, unknown>;
+  tenancy_snapshot: Record<string, unknown>;
+  agreement_body: string;
+  finalized_body: string | null;
+  finalized_at: string | null;
+  finalized_by_profile_id: string | null;
+  tenant_acceptance_token_hash: string | null;
+  tenant_acceptance_token_expires_at: string | null;
+  tenant_accepted_at: string | null;
+  tenant_acceptance_ip: string | null;
+  tenant_acceptance_user_agent: string | null;
+  pdf_bucket: string;
+  pdf_path: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+const REQUEST_SELECT = `
+  id,
+  organization_id,
+  landlord_client_id,
+  property_id,
+  unit_id,
+  onboarding_type,
+  status,
+  token_hash,
+  token_expires_at,
+  token_used_at,
+  invited_tenant_full_name,
+  invited_tenant_phone_number,
+  invited_tenant_email,
+  tenant_full_name,
+  tenant_phone_number,
+  tenant_email,
+  tenant_occupation,
+  tenant_id_type,
+  tenant_id_number,
+  tenant_move_in_date,
+  tenant_claimed_next_rent_due_date,
+  tenant_claimed_rent_amount,
+  tenant_payment_frequency,
+  tenant_notes,
+  manager_confirmed_rent_amount,
+  manager_confirmed_move_in_date,
+  manager_confirmed_next_rent_due_date,
+  opening_balance,
+  manager_review_notes,
+  approved_tenant_id,
+  approved_by_profile_id,
+  rejection_reason,
+  submitted_at,
+  reviewed_at,
+  cancelled_at,
+  expired_at,
+  metadata,
+  created_at,
+  updated_at,
+  manager_properties (
+    id,
+    property_name,
+    property_address,
+    collection_mode,
+    management_fee_type,
+    management_fee_value,
+    paystack_charge_bearer
+  ),
+  manager_units (
+    id,
+    unit_label,
+    unit_type,
+    rent_amount,
+    status
+  ),
+  manager_landlord_clients (
+    id,
+    landlord_name,
+    landlord_phone,
+    landlord_email
+  ),
+  manager_organizations (
+    id,
+    organization_name,
+    organization_phone,
+    organization_email
+  )
+`;
+
+const AGREEMENT_SELECT = `
+  id,
+  organization_id,
+  landlord_client_id,
+  property_id,
+  unit_id,
+  tenant_id,
+  onboarding_request_id,
+  document_status,
+  title,
+  manager_snapshot,
+  landlord_snapshot,
+  tenant_snapshot,
+  property_snapshot,
+  tenancy_snapshot,
+  agreement_body,
+  finalized_body,
+  finalized_at,
+  finalized_by_profile_id,
+  tenant_acceptance_token_hash,
+  tenant_acceptance_token_expires_at,
+  tenant_accepted_at,
+  tenant_acceptance_ip,
+  tenant_acceptance_user_agent,
+  pdf_bucket,
+  pdf_path,
+  metadata,
+  created_at,
+  updated_at
+`;
+
+export async function createManagerTenantOnboardingRequest(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    landlordClientId: string;
+    propertyId: string;
+    unitId: string;
+    onboardingType: ManagerTenantOnboardingType;
+    tokenHash: string;
+    tokenExpiresAt: string;
+    invitedTenantFullName: string;
+    invitedTenantPhoneNumber: string;
+    invitedTenantEmail: string | null;
+    note: string | null;
+    metadata: Record<string, unknown>;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_tenant_onboarding_requests")
+    .insert({
+      organization_id: params.organizationId,
+      landlord_client_id: params.landlordClientId,
+      property_id: params.propertyId,
+      unit_id: params.unitId,
+      onboarding_type: params.onboardingType,
+      token_hash: params.tokenHash,
+      token_expires_at: params.tokenExpiresAt,
+      invited_tenant_full_name: params.invitedTenantFullName,
+      invited_tenant_phone_number: params.invitedTenantPhoneNumber,
+      invited_tenant_email: params.invitedTenantEmail,
+      manager_review_notes: params.note,
+      status: "pending",
+      metadata: params.metadata,
+    })
+    .select(REQUEST_SELECT)
+    .single<ManagerTenantOnboardingRequestRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getManagerTenantOnboardingRequestByTokenHash(
+  supabase: SupabaseClient,
+  tokenHash: string,
+) {
+  const { data, error } = await supabase
+    .from("manager_tenant_onboarding_requests")
+    .select(REQUEST_SELECT)
+    .eq("token_hash", tokenHash)
+    .maybeSingle<ManagerTenantOnboardingRequestRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function listManagerTenantOnboardingRequests(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    propertyId?: string;
+  },
+) {
+  let query = supabase
+    .from("manager_tenant_onboarding_requests")
+    .select(REQUEST_SELECT)
+    .eq("organization_id", params.organizationId);
+
+  if (params.propertyId) {
+    query = query.eq("property_id", params.propertyId);
+  }
+
+  const { data, error } = await query
+    .order("created_at", { ascending: false })
+    .limit(50)
+    .returns<ManagerTenantOnboardingRequestRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getManagerTenantOnboardingRequestById(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    requestId: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_tenant_onboarding_requests")
+    .select(REQUEST_SELECT)
+    .eq("organization_id", params.organizationId)
+    .eq("id", params.requestId)
+    .single<ManagerTenantOnboardingRequestRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function submitManagerTenantOnboardingRequest(
+  supabase: SupabaseClient,
+  params: {
+    requestId: string;
+    fullName: string;
+    phoneNumber: string;
+    email: string | null;
+    occupation: string | null;
+    idType: string;
+    idNumber: string;
+    moveInDate: string;
+    statedRentDueDate: string;
+    claimedRentAmount: number;
+    paymentFrequency: "annual" | "monthly" | "quarterly" | "biannual";
+    tenantNotes: string | null;
+  },
+) {
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("manager_tenant_onboarding_requests")
+    .update({
+      tenant_full_name: params.fullName,
+      tenant_phone_number: params.phoneNumber,
+      tenant_email: params.email,
+      tenant_occupation: params.occupation,
+      tenant_id_type: params.idType,
+      tenant_id_number: params.idNumber,
+      tenant_move_in_date: params.moveInDate,
+      tenant_claimed_next_rent_due_date: params.statedRentDueDate,
+      tenant_claimed_rent_amount: params.claimedRentAmount,
+      tenant_payment_frequency: params.paymentFrequency,
+      tenant_notes: params.tenantNotes,
+      status: "submitted",
+      token_used_at: now,
+      submitted_at: now,
+      updated_at: now,
+    })
+    .eq("id", params.requestId)
+    .eq("status", "pending")
+    .select(REQUEST_SELECT)
+    .single<ManagerTenantOnboardingRequestRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function updateManagerTenantOnboardingRequestReviewed(
+  supabase: SupabaseClient,
+  params: {
+    requestId: string;
+    organizationId: string;
+    status: ManagerTenantOnboardingStatus;
+    approvedTenantId: string | null;
+    approvedByProfileId: string;
+    confirmedRentAmount: number | null;
+    confirmedMoveInDate: string | null;
+    confirmedNextRentDueDate: string | null;
+    openingBalance: number;
+    reviewNotes: string | null;
+    rejectionReason?: string | null;
+    metadata: Record<string, unknown>;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_tenant_onboarding_requests")
+    .update({
+      status: params.status,
+      approved_tenant_id: params.approvedTenantId,
+      approved_by_profile_id: params.approvedByProfileId,
+      manager_confirmed_rent_amount: params.confirmedRentAmount,
+      manager_confirmed_move_in_date: params.confirmedMoveInDate,
+      manager_confirmed_next_rent_due_date: params.confirmedNextRentDueDate,
+      opening_balance: params.openingBalance,
+      manager_review_notes: params.reviewNotes,
+      rejection_reason: params.rejectionReason ?? null,
+      reviewed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      metadata: params.metadata,
+    })
+    .eq("id", params.requestId)
+    .eq("organization_id", params.organizationId)
+    .eq("status", "submitted")
+    .select(REQUEST_SELECT)
+    .single<ManagerTenantOnboardingRequestRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function createManagerTenantAgreementDocument(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    landlordClientId: string;
+    propertyId: string;
+    unitId: string;
+    tenantId: string;
+    onboardingRequestId: string;
+    agreementBody: string;
+    tokenHash: string;
+    tokenExpiresAt: string;
+    finalizedByProfileId: string;
+    managerSnapshot: Record<string, unknown>;
+    landlordSnapshot: Record<string, unknown>;
+    tenantSnapshot: Record<string, unknown>;
+    propertySnapshot: Record<string, unknown>;
+    tenancySnapshot: Record<string, unknown>;
+    metadata: Record<string, unknown>;
+  },
+) {
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("manager_tenant_agreement_documents")
+    .insert({
+      organization_id: params.organizationId,
+      landlord_client_id: params.landlordClientId,
+      property_id: params.propertyId,
+      unit_id: params.unitId,
+      tenant_id: params.tenantId,
+      onboarding_request_id: params.onboardingRequestId,
+      document_status: "sent_to_tenant",
+      title: "Tenancy Agreement",
+      agreement_body: params.agreementBody,
+      finalized_body: params.agreementBody,
+      finalized_at: now,
+      finalized_by_profile_id: params.finalizedByProfileId,
+      tenant_acceptance_token_hash: params.tokenHash,
+      tenant_acceptance_token_expires_at: params.tokenExpiresAt,
+      manager_snapshot: params.managerSnapshot,
+      landlord_snapshot: params.landlordSnapshot,
+      tenant_snapshot: params.tenantSnapshot,
+      property_snapshot: params.propertySnapshot,
+      tenancy_snapshot: params.tenancySnapshot,
+      metadata: params.metadata,
+    })
+    .select(AGREEMENT_SELECT)
+    .single<ManagerTenantAgreementDocumentRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getManagerTenantAgreementByTokenHash(
+  supabase: SupabaseClient,
+  tokenHash: string,
+) {
+  const { data, error } = await supabase
+    .from("manager_tenant_agreement_documents")
+    .select(AGREEMENT_SELECT)
+    .eq("tenant_acceptance_token_hash", tokenHash)
+    .maybeSingle<ManagerTenantAgreementDocumentRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function acceptManagerTenantAgreement(
+  supabase: SupabaseClient,
+  params: {
+    agreementId: string;
+    ipAddress: string | null;
+    userAgent: string | null;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_tenant_agreement_documents")
+    .update({
+      document_status: "accepted",
+      tenant_accepted_at: new Date().toISOString(),
+      tenant_acceptance_ip: params.ipAddress,
+      tenant_acceptance_user_agent: params.userAgent,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", params.agreementId)
+    .eq("document_status", "sent_to_tenant")
+    .select(AGREEMENT_SELECT)
+    .single<ManagerTenantAgreementDocumentRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function markManagerOnboardingAgreementAccepted(
+  supabase: SupabaseClient,
+  params: {
+    requestId: string;
+  },
+) {
+  const { error } = await supabase
+    .from("manager_tenant_onboarding_requests")
+    .update({
+      status: "agreement_accepted",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", params.requestId)
+    .in("status", ["agreement_sent", "agreement_accepted"]);
+
+  if (error) {
+    throw error;
+  }
+}
+
+export async function markManagerOnboardingPaymentInitialized(
+  supabase: SupabaseClient,
+  params: {
+    requestId: string;
+    paymentRequestId: string;
+  },
+) {
+  const { error } = await supabase
+    .from("manager_tenant_onboarding_requests")
+    .update({
+      status: "payment_initialized",
+      updated_at: new Date().toISOString(),
+      metadata: {
+        payment_request_id: params.paymentRequestId,
+      },
+    })
+    .eq("id", params.requestId);
+
+  if (error) {
+    throw error;
+  }
+}
+
+export async function updateManagerUnitStatusDirect(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    unitId: string;
+    status: "vacant" | "reserved" | "occupied" | "inactive";
+  },
+) {
+  const { error } = await supabase
+    .from("manager_units")
+    .update({
+      status: params.status,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("organization_id", params.organizationId)
+    .eq("id", params.unitId);
+
+  if (error) {
+    throw error;
+  }
+}
+
+export async function updateManagerTenantOnboardingStatus(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    requestId: string;
+    status: ManagerTenantOnboardingStatus;
+    metadata: Record<string, unknown>;
+  },
+) {
+  const { error } = await supabase
+    .from("manager_tenant_onboarding_requests")
+    .update({
+      status: params.status,
+      metadata: params.metadata,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("organization_id", params.organizationId)
+    .eq("id", params.requestId);
+
+  if (error) {
+    throw error;
+  }
+}

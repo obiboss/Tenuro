@@ -67,7 +67,11 @@ function getFirstName(fullName: string) {
 
 function BoldverseManagerBrand() {
   return (
-    <Link href="/manager" className="flex min-w-0 items-center gap-3">
+    <Link
+      href="/manager/overview"
+      prefetch={false}
+      className="flex min-w-0 items-center gap-3"
+    >
       <div className="flex size-11 items-center justify-center rounded-2xl bg-primary text-2xl font-extrabold tracking-tight text-white shadow-soft">
         B
       </div>
@@ -110,6 +114,8 @@ export function ManagerShell({
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={false}
+                aria-current={active ? "page" : undefined}
                 className={cn(
                   "flex min-h-12 items-center rounded-button px-4 text-sm font-extrabold transition",
                   active
@@ -184,6 +190,8 @@ export function ManagerShell({
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={false}
+                aria-current={active ? "page" : undefined}
                 className={cn(
                   "flex min-w-24 items-center justify-center rounded-2xl px-3 py-3 text-xs font-bold transition",
                   active

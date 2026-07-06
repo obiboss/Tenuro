@@ -18,18 +18,24 @@ import type {
 type ManagerTenantFormProps = {
   properties: ManagerPropertyRow[];
   units: ManagerUnitRow[];
+  lockedPropertyId?: string;
+  lockedUnitId?: string;
 };
 
 export function ManagerTenantForm({
   properties,
   units,
+  lockedPropertyId,
+  lockedUnitId,
 }: ManagerTenantFormProps) {
   const activeProperties = properties.filter(
     (property) => property.status === "active",
   );
-  const [selectedPropertyId, setSelectedPropertyId] = useState(
-    activeProperties[0]?.id ?? "",
-  );
+
+  const initialPropertyId = lockedPropertyId ?? activeProperties[0]?.id ?? "";
+
+  const [selectedPropertyId, setSelectedPropertyId] =
+    useState(initialPropertyId);
 
   const vacantUnitsForProperty = useMemo(
     () =>
@@ -40,9 +46,9 @@ export function ManagerTenantForm({
     [selectedPropertyId, units],
   );
 
-  const [selectedUnitId, setSelectedUnitId] = useState(
-    vacantUnitsForProperty[0]?.id ?? "",
-  );
+  const initialUnitId = lockedUnitId ?? vacantUnitsForProperty[0]?.id ?? "";
+
+  const [selectedUnitId, setSelectedUnitId] = useState(initialUnitId);
 
   const selectedProperty = useMemo(
     () =>
@@ -60,6 +66,17 @@ export function ManagerTenantForm({
     createManagerTenantAction,
     initialManagerActionState,
   );
+
+  const isLockedToUnit = Boolean(lockedPropertyId && lockedUnitId);
+
+  const submitDisabledReason =
+    vacantUnitsForProperty.length === 0
+      ? "Choose a property with a vacant unit to continue."
+      : !selectedUnitId
+        ? "Choose a vacant unit to continue."
+        : null;
+
+  const submitReasonId = "manager-tenant-submit-reason";
 
   function handlePropertyChange(propertyId: string) {
     const firstVacantUnit = units.find(
@@ -87,6 +104,30 @@ export function ManagerTenantForm({
     );
   }
 
+  if (state.ok) {
+    return (
+      <Card>
+        <CardContent>
+          <div
+            role="alert"
+            className="rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
+          >
+            {state.message || "Tenant added successfully."}
+          </div>
+
+          <div className="rounded-card bg-surface p-4">
+            <h2 className="text-lg font-black tracking-tight text-text-strong">
+              Tenant saved
+            </h2>
+            <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+              The unit will now show as occupied on this property.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <form action={formAction}>
       <input
@@ -99,91 +140,117 @@ export function ManagerTenantForm({
         <CardContent>
           <div>
             <h2 className="text-lg font-black tracking-tight text-text-strong">
-              Add tenant
+              {isLockedToUnit ? "Add current occupant" : "Add tenant"}
             </h2>
             <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-              Assign the tenant to a vacant unit and enter the current rent
-              position.
+              {isLockedToUnit
+                ? "Capture the details of the person occupying this vacant unit."
+                : "Assign the tenant to a vacant unit and enter the current rent position."}
             </p>
           </div>
 
           {state.message ? (
             <div
               role="alert"
-              className={
-                state.ok
-                  ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
-                  : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
-              }
+              className="rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
             >
               {state.message}
             </div>
           ) : null}
 
-          <div className="space-y-2">
-            <label
-              htmlFor="manager-tenant-property"
-              className="text-sm font-bold text-text-strong"
-            >
-              Property
-            </label>
-            <select
-              id="manager-tenant-property"
-              name="propertyId"
-              value={selectedPropertyId}
-              onChange={(event) => handlePropertyChange(event.target.value)}
-              className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
-              required
-            >
-              {activeProperties.map((property) => (
-                <option key={property.id} value={property.id}>
-                  {property.property_name}
-                </option>
-              ))}
-            </select>
-            {state.fieldErrors?.propertyId?.[0] ? (
-              <p className="text-sm font-semibold text-danger">
-                {state.fieldErrors.propertyId[0]}
-              </p>
-            ) : null}
-          </div>
+          {isLockedToUnit ? (
+            <>
+              <input
+                type="hidden"
+                name="propertyId"
+                value={selectedPropertyId}
+              />
+              <input type="hidden" name="unitId" value={selectedUnitId} />
 
-          <div className="space-y-2">
-            <label
-              htmlFor="manager-tenant-unit"
-              className="text-sm font-bold text-text-strong"
-            >
-              Unit
-            </label>
-            <select
-              id="manager-tenant-unit"
-              name="unitId"
-              value={selectedUnitId}
-              onChange={(event) => setSelectedUnitId(event.target.value)}
-              className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
-              required
-            >
-              {vacantUnitsForProperty.length > 0 ? (
-                vacantUnitsForProperty.map((unit) => (
-                  <option key={unit.id} value={unit.id}>
-                    {unit.unit_label}
-                  </option>
-                ))
-              ) : (
-                <option value="">No vacant unit available</option>
-              )}
-            </select>
-            {state.fieldErrors?.unitId?.[0] ? (
-              <p className="text-sm font-semibold text-danger">
-                {state.fieldErrors.unitId[0]}
-              </p>
-            ) : null}
-            {state.fieldErrors?.landlordClientId?.[0] ? (
-              <p className="text-sm font-semibold text-danger">
-                {state.fieldErrors.landlordClientId[0]}
-              </p>
-            ) : null}
-          </div>
+              <div className="rounded-card bg-primary-soft p-4">
+                <p className="text-sm font-semibold leading-6 text-text-muted">
+                  Property:{" "}
+                  <span className="font-black text-text-strong">
+                    {selectedProperty?.property_name ?? "Property"}
+                  </span>
+                </p>
+                <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                  Unit:{" "}
+                  <span className="font-black text-text-strong">
+                    {selectedUnit?.unit_label ?? "Unit"}
+                  </span>
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <label
+                  htmlFor="manager-tenant-property"
+                  className="text-sm font-bold text-text-strong"
+                >
+                  Property
+                </label>
+                <select
+                  id="manager-tenant-property"
+                  name="propertyId"
+                  value={selectedPropertyId}
+                  onChange={(event) => handlePropertyChange(event.target.value)}
+                  className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
+                  required
+                >
+                  {activeProperties.map((property) => (
+                    <option key={property.id} value={property.id}>
+                      {property.property_name}
+                    </option>
+                  ))}
+                </select>
+                {state.fieldErrors?.propertyId?.[0] ? (
+                  <p className="text-sm font-semibold text-danger">
+                    {state.fieldErrors.propertyId[0]}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="space-y-2">
+                <label
+                  htmlFor="manager-tenant-unit"
+                  className="text-sm font-bold text-text-strong"
+                >
+                  Unit
+                </label>
+                <select
+                  id="manager-tenant-unit"
+                  name="unitId"
+                  value={selectedUnitId}
+                  onChange={(event) => setSelectedUnitId(event.target.value)}
+                  className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
+                  required
+                >
+                  {vacantUnitsForProperty.length > 0 ? (
+                    vacantUnitsForProperty.map((unit) => (
+                      <option key={unit.id} value={unit.id}>
+                        {unit.unit_label}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">No vacant unit available</option>
+                  )}
+                </select>
+                {state.fieldErrors?.unitId?.[0] ? (
+                  <p className="text-sm font-semibold text-danger">
+                    {state.fieldErrors.unitId[0]}
+                  </p>
+                ) : null}
+              </div>
+            </>
+          )}
+
+          {state.fieldErrors?.landlordClientId?.[0] ? (
+            <p className="text-sm font-semibold text-danger">
+              {state.fieldErrors.landlordClientId[0]}
+            </p>
+          ) : null}
 
           <Input
             label="Tenant name"
@@ -300,14 +367,28 @@ export function ManagerTenantForm({
         </CardContent>
 
         <CardFooter>
-          <Button
-            type="submit"
-            isLoading={isPending}
-            disabled={vacantUnitsForProperty.length === 0}
-            fullWidth
-          >
-            Add Tenant
-          </Button>
+          <div className="w-full space-y-3">
+            {submitDisabledReason ? (
+              <p
+                id={submitReasonId}
+                className="text-sm font-semibold text-danger"
+              >
+                {submitDisabledReason}
+              </p>
+            ) : null}
+
+            <Button
+              type="submit"
+              isLoading={isPending}
+              disabled={Boolean(submitDisabledReason)}
+              aria-describedby={
+                submitDisabledReason ? submitReasonId : undefined
+              }
+              fullWidth
+            >
+              Save tenant
+            </Button>
+          </div>
         </CardFooter>
       </Card>
     </form>
