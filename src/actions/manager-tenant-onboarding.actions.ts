@@ -9,6 +9,7 @@ import {
   approveManagerTenantOnboardingRequestForCurrentManager,
   createManagerTenantOnboardingRequestForCurrentManager,
   rejectManagerTenantOnboardingRequestForCurrentManager,
+  resendManagerFirstRentPaymentLinkForCurrentManager,
   submitManagerTenantOnboardingRequestByToken,
 } from "@/server/services/manager-tenant-onboarding.service";
 import { requireManagerWorkspacePermission } from "@/server/services/manager-staff-access.service";
@@ -17,6 +18,7 @@ import {
   approveManagerTenantOnboardingRequestSchema,
   createManagerTenantOnboardingRequestSchema,
   rejectManagerTenantOnboardingRequestSchema,
+  resendManagerFirstRentPaymentLinkSchema,
   submitManagerTenantOnboardingRequestSchema,
 } from "@/server/validators/manager-tenant-onboarding.schema";
 
@@ -92,8 +94,7 @@ export async function submitManagerTenantOnboardingRequestAction(
 
     return {
       ok: true,
-      message:
-        "Your details have been submitted. BOPA will calculate your rent due date automatically.",
+      message: "Your details have been submitted.",
     };
   } catch (error) {
     return toActionError(error);
@@ -126,7 +127,7 @@ export async function approveManagerTenantOnboardingRequestAction(
     return {
       ok: true,
       message: result.agreement
-        ? "Agreement prepared. Opening WhatsApp with the agreement link."
+        ? "Opening WhatsApp with the agreement link."
         : "Current occupant approved and added to the unit.",
       tenantId: result.tenant.id,
       agreementId: result.agreement?.id,
@@ -166,6 +167,40 @@ export async function rejectManagerTenantOnboardingRequestAction(
   }
 }
 
+export async function resendManagerFirstRentPaymentLinkAction(
+  _previousState: ManagerTenantOnboardingActionState,
+  formData: FormData,
+): Promise<ManagerTenantOnboardingActionState> {
+  try {
+    await requireManagerWorkspacePermission("property.manage");
+
+    const parsed = resendManagerFirstRentPaymentLinkSchema.parse({
+      requestId: formData.get("requestId"),
+    });
+
+    const result =
+      await resendManagerFirstRentPaymentLinkForCurrentManager(parsed);
+
+    revalidatePath("/manager");
+    revalidatePath("/manager/properties");
+    revalidatePath("/manager/tenants");
+    revalidatePath("/manager/payments");
+
+    return {
+      ok: true,
+      message: "Opening WhatsApp with the payment link.",
+      requestId: parsed.requestId,
+      paymentRequestId: result.paymentRequestId,
+      paymentUrl: result.paymentUrl,
+      paymentExpiresAt: result.paymentExpiresAt,
+      whatsappMessage: result.whatsappMessage,
+      tenantWhatsappNumber: result.tenantWhatsappNumber,
+    };
+  } catch (error) {
+    return toActionError(error);
+  }
+}
+
 export async function acceptManagerTenantAgreementAction(
   _previousState: ManagerTenantOnboardingActionState,
   formData: FormData,
@@ -186,7 +221,7 @@ export async function acceptManagerTenantAgreementAction(
 
     return {
       ok: true,
-      message: "Agreement accepted. Your rent payment link is ready.",
+      message: "Agreement accepted. Your rent payment button is ready.",
       agreementId: result.agreement.id,
       paymentUrl: result.paymentUrl ?? undefined,
       paymentExpiresAt: result.paymentExpiresAt ?? undefined,

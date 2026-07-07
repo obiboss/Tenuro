@@ -5,6 +5,7 @@ export type ManagerTenantOnboardingActionState = {
   requestId?: string;
   tenantId?: string;
   agreementId?: string;
+  paymentRequestId?: string;
   claimUrl?: string;
   agreementUrl?: string;
   paymentUrl?: string;

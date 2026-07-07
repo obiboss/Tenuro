@@ -48,6 +48,7 @@ import type {
   CreateManagerTenantOnboardingRequestInput,
   ManagerOnboardingPaymentFrequency,
   RejectManagerTenantOnboardingRequestInput,
+  ResendManagerFirstRentPaymentLinkInput,
   SubmitManagerTenantOnboardingRequestInput,
 } from "@/server/validators/manager-tenant-onboarding.schema";
 
@@ -58,6 +59,14 @@ type ManagerProfileRow = {
   phone_number: string | null;
   email: string | null;
   is_active: boolean;
+};
+
+type ManagerAcceptedAgreementPaymentRow = {
+  id: string;
+  document_status: "accepted";
+  finalized_by_profile_id: string | null;
+  tenant_snapshot: Record<string, unknown>;
+  tenancy_snapshot: Record<string, unknown>;
 };
 
 function createSecureToken() {
@@ -213,6 +222,26 @@ function calculateManagerOnboardingNextRentDueDate(params: {
   });
 }
 
+function formatNaira(amount: number) {
+  return new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency: "NGN",
+    maximumFractionDigits: 0,
+  }).format(Number.isFinite(Number(amount)) ? Number(amount) : 0);
+}
+
+function formatDateTimeForMessage(value: string | null) {
+  if (!value) {
+    return "within 24 hours";
+  }
+
+  return new Intl.DateTimeFormat("en-NG", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Africa/Lagos",
+  }).format(new Date(value));
+}
+
 function buildTenantDetailMessage(params: {
   tenantName: string;
   organizationName: string;
@@ -245,7 +274,28 @@ function buildAgreementMessage(params: {
     "Please review and accept it here:",
     params.agreementUrl,
     "",
-    "After acceptance, your secure rent payment link will be shown.",
+    "After acceptance, your first rent payment button will be shown.",
+  ].join("\n");
+}
+
+function buildFirstRentPaymentMessage(params: {
+  tenantName: string;
+  organizationName: string;
+  propertyName: string;
+  unitLabel: string;
+  amount: number;
+  paymentUrl: string;
+  expiresAt: string | null;
+}) {
+  return [
+    `Hello ${params.tenantName},`,
+    "",
+    `${params.organizationName} has prepared your first rent payment for ${params.unitLabel} at ${params.propertyName}.`,
+    "",
+    `Amount: ${formatNaira(params.amount)}`,
+    `Please pay before: ${formatDateTimeForMessage(params.expiresAt)}`,
+    "",
+    params.paymentUrl,
   ].join("\n");
 }
 
@@ -595,6 +645,38 @@ async function initializeFirstRentPayment(params: {
     paymentUrl: initializedRequest.authorization_url,
     paymentExpiresAt: initializedRequest.expires_at,
   };
+}
+
+async function getAcceptedAgreementForOnboardingRequest(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    requestId: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_tenant_agreement_documents")
+    .select(
+      `
+        id,
+        document_status,
+        finalized_by_profile_id,
+        tenant_snapshot,
+        tenancy_snapshot
+      `,
+    )
+    .eq("organization_id", params.organizationId)
+    .eq("onboarding_request_id", params.requestId)
+    .eq("document_status", "accepted")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<ManagerAcceptedAgreementPaymentRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
 }
 
 export async function createManagerTenantOnboardingRequestForCurrentManager(
@@ -994,6 +1076,139 @@ export async function rejectManagerTenantOnboardingRequestForCurrentManager(
       rejection_reason: input.reason,
     },
   });
+}
+
+export async function resendManagerFirstRentPaymentLinkForCurrentManager(
+  input: ResendManagerFirstRentPaymentLinkInput,
+) {
+  const { supabase, organization } = await requireManagerOrganization();
+  const adminSupabase = createSupabaseAdminClient();
+
+  const request = await getManagerTenantOnboardingRequestById(supabase, {
+    organizationId: organization.id,
+    requestId: input.requestId,
+  });
+
+  if (request.onboarding_type !== "new_incoming_tenant") {
+    throw new AppError(
+      "MANAGER_PAYMENT_LINK_NOT_ALLOWED",
+      "This tenant does not need a first rent payment link.",
+      400,
+    );
+  }
+
+  if (
+    request.status !== "agreement_accepted" &&
+    request.status !== "payment_expired"
+  ) {
+    throw new AppError(
+      "MANAGER_PAYMENT_LINK_NOT_READY",
+      "This tenant is not ready for a new payment link.",
+      400,
+    );
+  }
+
+  if (!request.approved_tenant_id || !request.approved_by_profile_id) {
+    throw new AppError(
+      "MANAGER_APPROVED_TENANT_MISSING",
+      "Approve this tenant before sending a payment link.",
+      400,
+    );
+  }
+
+  const agreement = await getAcceptedAgreementForOnboardingRequest(
+    adminSupabase,
+    {
+      organizationId: organization.id,
+      requestId: request.id,
+    },
+  );
+
+  if (!agreement) {
+    throw new AppError(
+      "MANAGER_ACCEPTED_AGREEMENT_REQUIRED",
+      "The tenant must accept the agreement before payment.",
+      400,
+    );
+  }
+
+  const rentAmount = Number(
+    request.manager_confirmed_rent_amount ?? request.tenant_claimed_rent_amount,
+  );
+
+  if (!Number.isFinite(rentAmount) || rentAmount <= 0) {
+    throw new AppError(
+      "MANAGER_RENT_AMOUNT_REQUIRED",
+      "Enter a valid rent amount before sending a payment link.",
+      400,
+    );
+  }
+
+  const tenantName =
+    request.tenant_full_name ?? request.invited_tenant_full_name ?? "Tenant";
+
+  const tenantPhone =
+    request.tenant_phone_number ?? request.invited_tenant_phone_number;
+
+  if (!tenantPhone) {
+    throw new AppError(
+      "MANAGER_TENANT_PHONE_REQUIRED",
+      "Enter the tenant phone number before sending a payment link.",
+      400,
+    );
+  }
+
+  const tenantEmail =
+    request.tenant_email ?? request.invited_tenant_email ?? null;
+
+  const propertyName =
+    request.manager_properties?.property_name ?? "the property";
+
+  const unitLabel = request.manager_units?.unit_label ?? "the unit";
+
+  const payment = await initializeFirstRentPayment({
+    supabase: adminSupabase,
+    organizationId: organization.id,
+    organizationEmail: organization.organization_email,
+    landlordClientId: request.landlord_client_id,
+    propertyId: request.property_id,
+    unitId: request.unit_id,
+    tenantId: request.approved_tenant_id,
+    agreementId: agreement.id,
+    onboardingRequestId: request.id,
+    tenantName,
+    tenantPhone,
+    tenantEmail,
+    rentAmount,
+    periodStart: request.manager_confirmed_move_in_date,
+    periodEnd: request.manager_confirmed_next_rent_due_date,
+    createdByProfileId:
+      agreement.finalized_by_profile_id ?? request.approved_by_profile_id,
+  });
+
+  await updateManagerUnitStatusDirect(adminSupabase, {
+    organizationId: organization.id,
+    unitId: request.unit_id,
+    status: "reserved",
+  });
+
+  const phone = normalisePhoneNumber(tenantPhone);
+
+  return {
+    paymentRequestId: payment.paymentRequestId,
+    paymentUrl: payment.paymentUrl,
+    paymentExpiresAt: payment.paymentExpiresAt,
+    tenantWhatsappNumber: phone.national,
+    whatsappMessage: buildFirstRentPaymentMessage({
+      tenantName,
+      organizationName: organization.organization_name,
+      propertyName,
+      unitLabel,
+      amount: rentAmount,
+      paymentUrl: payment.paymentUrl,
+      expiresAt: payment.paymentExpiresAt,
+    }),
+  };
 }
 
 function assertAgreementUsable(agreement: ManagerTenantAgreementDocumentRow) {

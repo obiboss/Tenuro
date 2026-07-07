@@ -115,6 +115,10 @@ export const acceptManagerTenantAgreementSchema = z.object({
   token: z.string().trim().min(20, "Invalid agreement link."),
 });
 
+export const resendManagerFirstRentPaymentLinkSchema = z.object({
+  requestId: uuidSchema,
+});
+
 export type ManagerOnboardingType = z.infer<typeof managerOnboardingTypeSchema>;
 
 export type ManagerOnboardingIdType = z.infer<
@@ -143,4 +147,8 @@ export type RejectManagerTenantOnboardingRequestInput = z.infer<
 
 export type AcceptManagerTenantAgreementInput = z.infer<
   typeof acceptManagerTenantAgreementSchema
+>;
+
+export type ResendManagerFirstRentPaymentLinkInput = z.infer<
+  typeof resendManagerFirstRentPaymentLinkSchema
 >;

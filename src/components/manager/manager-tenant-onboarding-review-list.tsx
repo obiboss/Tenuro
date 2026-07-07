@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import {
   approveManagerTenantOnboardingRequestAction,
   rejectManagerTenantOnboardingRequestAction,
+  resendManagerFirstRentPaymentLinkAction,
 } from "@/actions/manager-tenant-onboarding.actions";
 import { initialManagerTenantOnboardingActionState } from "@/actions/manager-tenant-onboarding.state";
 import { Button } from "@/components/ui/button";
@@ -112,6 +113,11 @@ function RequestReviewCard({
     initialManagerTenantOnboardingActionState,
   );
 
+  const [resendState, resendAction, isResending] = useActionState(
+    resendManagerFirstRentPaymentLinkAction,
+    initialManagerTenantOnboardingActionState,
+  );
+
   useEffect(() => {
     if (
       !approveState.ok ||
@@ -136,7 +142,36 @@ function RequestReviewCard({
     approveState.whatsappMessage,
   ]);
 
+  useEffect(() => {
+    if (
+      !resendState.ok ||
+      !resendState.whatsappMessage ||
+      !resendState.tenantWhatsappNumber ||
+      openedMessageRef.current === resendState.whatsappMessage
+    ) {
+      return;
+    }
+
+    openedMessageRef.current = resendState.whatsappMessage;
+
+    window.location.assign(
+      buildWaMeUrl({
+        phoneNumber: resendState.tenantWhatsappNumber,
+        message: resendState.whatsappMessage,
+      }),
+    );
+  }, [
+    resendState.ok,
+    resendState.tenantWhatsappNumber,
+    resendState.whatsappMessage,
+  ]);
+
   const canReview = request.status === "submitted";
+  const canSendPayment =
+    request.onboarding_type === "new_incoming_tenant" &&
+    (request.status === "agreement_accepted" ||
+      request.status === "payment_expired");
+
   const tenantName =
     request.tenant_full_name ?? request.invited_tenant_full_name ?? "Tenant";
   const tenantPhone =
@@ -213,6 +248,19 @@ function RequestReviewCard({
           }
         >
           {approveState.message}
+        </div>
+      ) : null}
+
+      {resendState.message ? (
+        <div
+          role="alert"
+          className={
+            resendState.ok
+              ? "mx-4 mt-4 rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
+              : "mx-4 mt-4 rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
+          }
+        >
+          {resendState.message}
         </div>
       ) : null}
 
@@ -360,6 +408,30 @@ function RequestReviewCard({
           </aside>
         </div>
       ) : null}
+
+      {canSendPayment ? (
+        <div className="grid gap-4 p-4 lg:grid-cols-[1fr_18rem]">
+          <div className="rounded-card bg-surface p-4">
+            <p className="text-sm font-black text-text-strong">
+              Tenant has accepted the agreement
+            </p>
+            <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+              Send a fresh first rent payment link when the tenant is ready to
+              pay.
+            </p>
+          </div>
+
+          <form action={resendAction}>
+            <input type="hidden" name="requestId" value={request.id} />
+
+            <Button type="submit" isLoading={isResending} fullWidth>
+              {request.status === "payment_expired"
+                ? "Send New Payment Link"
+                : "Send Payment Link"}
+            </Button>
+          </form>
+        </div>
+      ) : null}
     </article>
   );
 }
@@ -379,7 +451,7 @@ export function ManagerTenantOnboardingReviewList({
     <section className="space-y-3">
       <div>
         <h2 className="text-lg font-black tracking-tight text-text-strong">
-          Tenant onboarding
+          Tenant review
         </h2>
         <p className="text-sm font-semibold leading-6 text-text-muted">
           Review tenant submissions and approve the right tenant.
