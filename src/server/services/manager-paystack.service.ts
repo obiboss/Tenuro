@@ -13,12 +13,14 @@ import {
 } from "@/server/repositories/manager-paystack-accounts.repository";
 import {
   createPendingManagerPaystackPaymentRequest,
+  expireManagerNewTenantPaymentRequests,
   getManagerPaystackPaymentRequestByReference,
   getManagerRentPaymentByPaymentReference,
   getManagerTenantForPaystackRequest,
   markManagerPaystackPaymentRequestFailed,
   markManagerPaystackPaymentRequestInitialized,
   markManagerPaystackPaymentRequestPaid,
+  type ManagerRentPaymentRequestRow,
 } from "@/server/repositories/manager-paystack.repository";
 import {
   getManagerOrganizationForCurrentUser,
@@ -157,6 +159,55 @@ function isManagerPaymentNotFoundError(error: unknown) {
   );
 }
 
+function isManagerPaymentExpiredError(error: unknown) {
+  return isAppError(error) && error.code === "MANAGER_PAYSTACK_PAYMENT_EXPIRED";
+}
+
+function isFirstRentPaymentRequestExpired(
+  paymentRequest: ManagerRentPaymentRequestRow,
+) {
+  if (paymentRequest.payment_purpose !== "new_tenant_first_rent") {
+    return false;
+  }
+
+  if (!paymentRequest.expires_at) {
+    return false;
+  }
+
+  return new Date(paymentRequest.expires_at).getTime() <= Date.now();
+}
+
+function assertPaymentRequestStillPayable(
+  paymentRequest: ManagerRentPaymentRequestRow,
+) {
+  if (paymentRequest.status === "expired") {
+    throw new AppError(
+      "MANAGER_PAYSTACK_PAYMENT_EXPIRED",
+      "This payment link has expired. Please ask the property manager for a new link.",
+      410,
+    );
+  }
+
+  if (isFirstRentPaymentRequestExpired(paymentRequest)) {
+    throw new AppError(
+      "MANAGER_PAYSTACK_PAYMENT_EXPIRED",
+      "This payment link has expired. Please ask the property manager for a new link.",
+      410,
+    );
+  }
+
+  if (
+    paymentRequest.status !== "initialized" &&
+    paymentRequest.status !== "pending"
+  ) {
+    throw new AppError(
+      "MANAGER_PAYSTACK_PAYMENT_NOT_PAYABLE",
+      "This manager payment request can no longer be verified.",
+      400,
+    );
+  }
+}
+
 export function isManagerPaystackReference(reference: string) {
   const normalized = reference.trim().toUpperCase();
 
@@ -176,7 +227,8 @@ export function isManagerPaystackMetadata(
   return (
     metadata.product === "bopa_manager" ||
     metadata.payment_type === "manager_rent_payment" ||
-    metadata.source === "bopa_manager_paystack_request"
+    metadata.source === "bopa_manager_paystack_request" ||
+    metadata.source === "bopa_manager_new_tenant_agreement_acceptance"
   );
 }
 
@@ -426,6 +478,10 @@ async function initializeManagerPaymentSettlement(params: {
   };
 }
 
+export async function expireManagerNewTenantPaymentRequestsNow() {
+  await expireManagerNewTenantPaymentRequests(createSupabaseAdminClient());
+}
+
 export async function createManagerPaystackPaymentRequest(
   input: CreateManagerPaystackPaymentRequestInput,
 ) {
@@ -529,6 +585,7 @@ export async function createManagerPaystackPaymentRequest(
       tenantEmailSnapshot: tenant.email,
       createdByProfileId: profile.id,
       notes: nullableText(input.notes),
+      paymentPurpose: "rent",
       metadata: {
         product: "bopa_manager",
         payment_type: "manager_rent_payment",
@@ -593,7 +650,10 @@ export async function verifyAndPostManagerPaystackPaymentReference(params: {
   reference: string;
 }): Promise<ManagerPaystackVerificationResult> {
   const supabase = params.supabase ?? createSupabaseAdminClient();
-  const paymentRequest = await getManagerPaystackPaymentRequestByReference(
+
+  await expireManagerNewTenantPaymentRequests(supabase);
+
+  let paymentRequest = await getManagerPaystackPaymentRequestByReference(
     supabase,
     params.reference,
   );
@@ -616,16 +676,22 @@ export async function verifyAndPostManagerPaystackPaymentReference(params: {
     };
   }
 
-  if (
-    paymentRequest.status !== "initialized" &&
-    paymentRequest.status !== "pending"
-  ) {
+  assertPaymentRequestStillPayable(paymentRequest);
+
+  paymentRequest = await getManagerPaystackPaymentRequestByReference(
+    supabase,
+    params.reference,
+  );
+
+  if (!paymentRequest) {
     throw new AppError(
-      "MANAGER_PAYSTACK_PAYMENT_NOT_PAYABLE",
-      "This manager payment request can no longer be verified.",
-      400,
+      "MANAGER_PAYSTACK_PAYMENT_REQUEST_NOT_FOUND",
+      "Manager payment request was not found.",
+      404,
     );
   }
+
+  assertPaymentRequestStillPayable(paymentRequest);
 
   const verifiedTransaction = await verifyPaystackTransaction(params.reference);
   const verifiedPayload = toRecord(verifiedTransaction);
@@ -663,6 +729,8 @@ export async function verifyAndPostManagerPaystackPaymentReference(params: {
       400,
     );
   }
+
+  assertPaymentRequestStillPayable(paymentRequest);
 
   assertPaystackAmountMatchesExpected({
     paystackAmountInKobo: verifiedTransaction.amount,
@@ -735,6 +803,9 @@ export async function verifyAndPostManagerPaystackPaymentReference(params: {
     metadata: {
       source: "bopa_manager_paystack_webhook",
       payment_request_id: paymentRequest.id,
+      payment_purpose: paymentRequest.payment_purpose,
+      onboarding_request_id: paymentRequest.onboarding_request_id,
+      agreement_document_id: paymentRequest.agreement_document_id,
       paystack_reference: paymentRequest.reference,
       tenant_balance_before_payment: Number(tenant?.current_balance ?? 0),
       manager_commission: Number(paymentRequest.management_fee_amount),
@@ -791,6 +862,15 @@ export async function getManagerPaystackCallbackState(reference: string) {
         ok: false,
         status: "not_found" as const,
         message: "Payment request was not found.",
+      };
+    }
+
+    if (isManagerPaymentExpiredError(error)) {
+      return {
+        ok: false,
+        status: "expired" as const,
+        message:
+          "This payment link has expired. Please ask the property manager for a new link.",
       };
     }
 

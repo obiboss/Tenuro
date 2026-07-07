@@ -83,7 +83,6 @@ export async function submitManagerTenantOnboardingRequestAction(
       idType: formData.get("idType"),
       idNumber: formData.get("idNumber"),
       moveInDate: formData.get("moveInDate"),
-      statedRentDueDate: formData.get("statedRentDueDate"),
       claimedRentAmount: formData.get("claimedRentAmount"),
       paymentFrequency: formData.get("paymentFrequency"),
       tenantNotes: formData.get("tenantNotes"),
@@ -94,7 +93,7 @@ export async function submitManagerTenantOnboardingRequestAction(
     return {
       ok: true,
       message:
-        "Your details have been submitted. The property manager will review them shortly.",
+        "Your details have been submitted. BOPA will calculate your rent due date automatically.",
     };
   } catch (error) {
     return toActionError(error);
@@ -112,7 +111,6 @@ export async function approveManagerTenantOnboardingRequestAction(
       requestId: formData.get("requestId"),
       confirmedRentAmount: formData.get("confirmedRentAmount"),
       confirmedMoveInDate: formData.get("confirmedMoveInDate"),
-      confirmedNextRentDueDate: formData.get("confirmedNextRentDueDate"),
       openingBalance: formData.get("openingBalance"),
       reviewNotes: formData.get("reviewNotes"),
     });

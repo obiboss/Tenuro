@@ -93,7 +93,6 @@ export const submitManagerTenantOnboardingRequestSchema = z.object({
   idType: managerOnboardingIdTypeSchema,
   idNumber: z.string().trim().min(3, "Enter your ID number.").max(120),
   moveInDate: dateSchema,
-  statedRentDueDate: dateSchema,
   claimedRentAmount: positiveMoneySchema,
   paymentFrequency: managerOnboardingPaymentFrequencySchema.default("annual"),
   tenantNotes: optionalTextSchema(1000, "Note is too long."),
@@ -103,7 +102,6 @@ export const approveManagerTenantOnboardingRequestSchema = z.object({
   requestId: uuidSchema,
   confirmedRentAmount: positiveMoneySchema,
   confirmedMoveInDate: dateSchema,
-  confirmedNextRentDueDate: dateSchema,
   openingBalance: moneySchema.default(0),
   reviewNotes: optionalTextSchema(1000, "Review note is too long."),
 });

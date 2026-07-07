@@ -14,6 +14,7 @@ import {
   getManagerUnitById,
 } from "@/server/repositories/manager.repository";
 import {
+  acceptManagerTenantAgreement,
   createManagerTenantAgreementDocument,
   createManagerTenantOnboardingRequest,
   getManagerTenantAgreementByTokenHash,
@@ -31,6 +32,7 @@ import {
   getActiveManagerLandlordPaystackAccount,
   getActiveManagerPaystackAccount,
 } from "@/server/repositories/manager-paystack-accounts.repository";
+import { buildManagerTenancyAgreementTemplate } from "@/server/services/manager-tenancy-agreement-template.service";
 import {
   convertNairaToKobo,
   createAgentDealTransactionSplit,
@@ -44,6 +46,7 @@ import type {
   AcceptManagerTenantAgreementInput,
   ApproveManagerTenantOnboardingRequestInput,
   CreateManagerTenantOnboardingRequestInput,
+  ManagerOnboardingPaymentFrequency,
   RejectManagerTenantOnboardingRequestInput,
   SubmitManagerTenantOnboardingRequestInput,
 } from "@/server/validators/manager-tenant-onboarding.schema";
@@ -112,6 +115,102 @@ function generatePaystackReference() {
 
 function generatePaymentToken() {
   return crypto.randomBytes(24).toString("hex");
+}
+
+function getFrequencyMonths(frequency: ManagerOnboardingPaymentFrequency) {
+  const months: Record<ManagerOnboardingPaymentFrequency, number> = {
+    monthly: 1,
+    quarterly: 3,
+    biannual: 6,
+    annual: 12,
+  };
+
+  return months[frequency];
+}
+
+function formatDateOnly(date: Date) {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function todayDateOnly() {
+  const now = new Date();
+
+  return formatDateOnly(
+    new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())),
+  );
+}
+
+function compareDateOnly(first: string, second: string) {
+  return first.localeCompare(second);
+}
+
+function addMonthsToDateOnly(dateValue: string, monthsToAdd: number) {
+  const [yearValue, monthValue, dayValue] = dateValue.split("-").map(Number);
+
+  if (!yearValue || !monthValue || !dayValue) {
+    throw new AppError("INVALID_DATE", "Invalid move-in date.", 400);
+  }
+
+  const totalMonthIndex = monthValue - 1 + monthsToAdd;
+  const targetYear = yearValue + Math.floor(totalMonthIndex / 12);
+  const targetMonthIndex = ((totalMonthIndex % 12) + 12) % 12;
+  const lastDayOfTargetMonth = new Date(
+    Date.UTC(targetYear, targetMonthIndex + 1, 0),
+  ).getUTCDate();
+
+  const targetDay = Math.min(dayValue, lastDayOfTargetMonth);
+
+  return formatDateOnly(
+    new Date(Date.UTC(targetYear, targetMonthIndex, targetDay)),
+  );
+}
+
+function calculateFirstNextRentDueDate(params: {
+  moveInDate: string;
+  paymentFrequency: ManagerOnboardingPaymentFrequency;
+}) {
+  return addMonthsToDateOnly(
+    params.moveInDate,
+    getFrequencyMonths(params.paymentFrequency),
+  );
+}
+
+function calculateCurrentNextRentDueDate(params: {
+  moveInDate: string;
+  paymentFrequency: ManagerOnboardingPaymentFrequency;
+  referenceDate?: string;
+}) {
+  const frequencyMonths = getFrequencyMonths(params.paymentFrequency);
+  const referenceDate = params.referenceDate ?? todayDateOnly();
+  let dueDate = addMonthsToDateOnly(params.moveInDate, frequencyMonths);
+
+  while (compareDateOnly(dueDate, referenceDate) < 0) {
+    dueDate = addMonthsToDateOnly(dueDate, frequencyMonths);
+  }
+
+  return dueDate;
+}
+
+function calculateManagerOnboardingNextRentDueDate(params: {
+  onboardingType: ManagerTenantOnboardingRequestRow["onboarding_type"];
+  moveInDate: string;
+  paymentFrequency: ManagerOnboardingPaymentFrequency;
+}) {
+  if (params.onboardingType === "new_incoming_tenant") {
+    return calculateFirstNextRentDueDate({
+      moveInDate: params.moveInDate,
+      paymentFrequency: params.paymentFrequency,
+    });
+  }
+
+  return calculateCurrentNextRentDueDate({
+    moveInDate: params.moveInDate,
+    paymentFrequency: params.paymentFrequency,
+  });
 }
 
 function buildTenantDetailMessage(params: {
@@ -252,38 +351,6 @@ function assertPublicRequestUsable(request: ManagerTenantOnboardingRequestRow) {
       400,
     );
   }
-}
-
-function buildAgreementBody(params: {
-  organizationName: string;
-  landlordName: string;
-  tenantName: string;
-  propertyName: string;
-  propertyAddress: string;
-  unitLabel: string;
-  rentAmount: number;
-  moveInDate: string;
-  nextRentDueDate: string;
-}) {
-  return [
-    "TENANCY AGREEMENT",
-    "",
-    `This tenancy agreement is prepared by ${params.organizationName} on behalf of ${params.landlordName}.`,
-    "",
-    `Tenant: ${params.tenantName}`,
-    `Property: ${params.propertyName}`,
-    `Address: ${params.propertyAddress}`,
-    `Unit: ${params.unitLabel}`,
-    `Rent Amount: NGN ${params.rentAmount.toLocaleString("en-NG")}`,
-    `Move-in Date: ${params.moveInDate}`,
-    `Next Rent Due Date: ${params.nextRentDueDate}`,
-    "",
-    "The tenant agrees to occupy the property peacefully, pay rent as agreed, keep the unit in good condition, and comply with lawful property rules.",
-    "",
-    "The property manager will keep rent, payment, and tenancy records on BOPA Manager.",
-    "",
-    "Digital acceptance of this agreement confirms that the tenant has read and accepted the terms.",
-  ].join("\n");
 }
 
 async function initializeFirstRentPayment(params: {
@@ -630,6 +697,12 @@ export async function submitManagerTenantOnboardingRequestByToken(
   const request = await resolveManagerTenantOnboardingToken(input.token);
   const phone = normalisePhoneNumber(input.phoneNumber);
 
+  const nextRentDueDate = calculateManagerOnboardingNextRentDueDate({
+    onboardingType: request.onboarding_type,
+    moveInDate: input.moveInDate,
+    paymentFrequency: input.paymentFrequency,
+  });
+
   return submitManagerTenantOnboardingRequest(supabase, {
     requestId: request.id,
     fullName: input.fullName,
@@ -639,7 +712,7 @@ export async function submitManagerTenantOnboardingRequestByToken(
     idType: input.idType,
     idNumber: input.idNumber,
     moveInDate: input.moveInDate,
-    statedRentDueDate: input.statedRentDueDate,
+    statedRentDueDate: nextRentDueDate,
     claimedRentAmount: input.claimedRentAmount,
     paymentFrequency: input.paymentFrequency,
     tenantNotes: nullableText(input.tenantNotes),
@@ -679,6 +752,15 @@ export async function approveManagerTenantOnboardingRequestForCurrentManager(
     );
   }
 
+  const paymentFrequency = (request.tenant_payment_frequency ??
+    "annual") as ManagerOnboardingPaymentFrequency;
+
+  const nextRentDueDate = calculateManagerOnboardingNextRentDueDate({
+    onboardingType: request.onboarding_type,
+    moveInDate: input.confirmedMoveInDate,
+    paymentFrequency,
+  });
+
   const tenantStatus =
     request.onboarding_type === "new_incoming_tenant" ? "inactive" : "active";
 
@@ -694,7 +776,7 @@ export async function approveManagerTenantOnboardingRequestForCurrentManager(
     rentAmount: roundMoney(input.confirmedRentAmount),
     currentBalance: roundMoney(input.openingBalance),
     moveInDate: input.confirmedMoveInDate,
-    nextRentDueDate: input.confirmedNextRentDueDate,
+    nextRentDueDate,
     status: tenantStatus,
     notes: nullableText(input.reviewNotes),
   });
@@ -719,12 +801,14 @@ export async function approveManagerTenantOnboardingRequestForCurrentManager(
       approvedByProfileId: profile.id,
       confirmedRentAmount: input.confirmedRentAmount,
       confirmedMoveInDate: input.confirmedMoveInDate,
-      confirmedNextRentDueDate: input.confirmedNextRentDueDate,
+      confirmedNextRentDueDate: nextRentDueDate,
       openingBalance: input.openingBalance,
       reviewNotes: nullableText(input.reviewNotes),
       metadata: {
         ...request.metadata,
         approved_as: "current_occupant",
+        next_rent_due_date: nextRentDueDate,
+        payment_frequency: paymentFrequency,
       },
     });
 
@@ -754,16 +838,36 @@ export async function approveManagerTenantOnboardingRequestForCurrentManager(
   const landlordName =
     request.manager_landlord_clients?.landlord_name ?? "the landlord";
 
-  const agreementBody = buildAgreementBody({
-    organizationName: organization.organization_name,
-    landlordName,
-    tenantName: tenant.full_name,
-    propertyName,
-    propertyAddress,
-    unitLabel,
-    rentAmount: input.confirmedRentAmount,
-    moveInDate: input.confirmedMoveInDate,
-    nextRentDueDate: input.confirmedNextRentDueDate,
+  const agreementBody = buildManagerTenancyAgreementTemplate({
+    organization: {
+      name: organization.organization_name,
+      phone: organization.organization_phone,
+      email: organization.organization_email,
+    },
+    landlord: {
+      name: landlordName,
+      phone: request.manager_landlord_clients?.landlord_phone ?? null,
+      email: request.manager_landlord_clients?.landlord_email ?? null,
+      address: null,
+    },
+    tenant: {
+      fullName: tenant.full_name,
+      phoneNumber: tenant.phone_number,
+      email: tenant.email,
+    },
+    property: {
+      propertyName,
+      propertyAddress,
+      unitLabel,
+    },
+    tenancy: {
+      rentAmount: input.confirmedRentAmount,
+      currencyCode: "NGN",
+      moveInDate: input.confirmedMoveInDate,
+      nextRentDueDate,
+      paymentFrequency,
+      agreementNotes: nullableText(input.reviewNotes),
+    },
   });
 
   const agreement = await createManagerTenantAgreementDocument(adminSupabase, {
@@ -805,12 +909,15 @@ export async function approveManagerTenantOnboardingRequestForCurrentManager(
     tenancySnapshot: {
       rentAmount: input.confirmedRentAmount,
       moveInDate: input.confirmedMoveInDate,
-      nextRentDueDate: input.confirmedNextRentDueDate,
+      nextRentDueDate,
       openingBalance: input.openingBalance,
+      paymentFrequency,
     },
     metadata: {
       onboarding_request_id: request.id,
       source: "bopa_manager_new_incoming_tenant",
+      next_rent_due_date: nextRentDueDate,
+      payment_frequency: paymentFrequency,
     },
   });
 
@@ -822,13 +929,15 @@ export async function approveManagerTenantOnboardingRequestForCurrentManager(
     approvedByProfileId: profile.id,
     confirmedRentAmount: input.confirmedRentAmount,
     confirmedMoveInDate: input.confirmedMoveInDate,
-    confirmedNextRentDueDate: input.confirmedNextRentDueDate,
+    confirmedNextRentDueDate: nextRentDueDate,
     openingBalance: input.openingBalance,
     reviewNotes: nullableText(input.reviewNotes),
     metadata: {
       ...request.metadata,
       approved_as: "new_incoming_tenant",
       agreement_id: agreement.id,
+      next_rent_due_date: nextRentDueDate,
+      payment_frequency: paymentFrequency,
     },
   });
 
@@ -854,6 +963,7 @@ export async function rejectManagerTenantOnboardingRequestForCurrentManager(
 ) {
   const { supabase, profile, organization } =
     await requireManagerOrganization();
+
   const request = await getManagerTenantOnboardingRequestById(supabase, {
     organizationId: organization.id,
     requestId: input.requestId,
@@ -877,11 +987,11 @@ export async function rejectManagerTenantOnboardingRequestForCurrentManager(
     confirmedMoveInDate: null,
     confirmedNextRentDueDate: null,
     openingBalance: 0,
-    reviewNotes: null,
-    rejectionReason: input.reason,
+    reviewNotes: input.reason,
     metadata: {
       ...request.metadata,
       rejected_at: new Date().toISOString(),
+      rejection_reason: input.reason,
     },
   });
 }
@@ -936,9 +1046,7 @@ export async function acceptManagerTenantAgreementAndCreatePayment(
   const agreement = await resolveManagerTenantAgreementToken(input.token);
 
   if (agreement.document_status === "accepted") {
-    const requestId = agreement.onboarding_request_id;
-
-    if (!requestId) {
+    if (!agreement.onboarding_request_id) {
       throw new AppError(
         "MANAGER_ONBOARDING_REQUEST_MISSING",
         "The onboarding request is missing.",
@@ -1001,11 +1109,21 @@ export async function acceptManagerTenantAgreementAndCreatePayment(
     requestId: acceptedAgreement.onboarding_request_id,
   });
 
+  const createdByProfileId =
+    acceptedAgreement.finalized_by_profile_id ?? request.approved_by_profile_id;
+
+  if (!createdByProfileId) {
+    throw new AppError(
+      "MANAGER_PAYMENT_CREATOR_MISSING",
+      "The payment link could not be prepared.",
+      500,
+    );
+  }
+
   const payment = await initializeFirstRentPayment({
     supabase,
     organizationId: acceptedAgreement.organization_id,
-    organizationEmail:
-      request.manager_organizations?.organization_email ?? null,
+    organizationEmail: null,
     landlordClientId: acceptedAgreement.landlord_client_id,
     propertyId: acceptedAgreement.property_id,
     unitId: acceptedAgreement.unit_id,
@@ -1036,10 +1154,7 @@ export async function acceptManagerTenantAgreementAndCreatePayment(
       typeof acceptedAgreement.tenancy_snapshot.nextRentDueDate === "string"
         ? acceptedAgreement.tenancy_snapshot.nextRentDueDate
         : null,
-    createdByProfileId:
-      acceptedAgreement.finalized_by_profile_id ??
-      request.approved_by_profile_id ??
-      acceptedAgreement.tenant_id,
+    createdByProfileId,
   });
 
   return {

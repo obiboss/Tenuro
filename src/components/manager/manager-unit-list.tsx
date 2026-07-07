@@ -49,6 +49,39 @@ function getStatusClassName(status: string) {
   return "bg-surface text-text-muted";
 }
 
+function getTenantPriority(status: ManagerTenantRow["status"]) {
+  if (status === "active") {
+    return 1;
+  }
+
+  if (status === "inactive") {
+    return 2;
+  }
+
+  if (status === "eviction_notice") {
+    return 3;
+  }
+
+  return 4;
+}
+
+function buildTenantByUnitId(tenants: ManagerTenantRow[]) {
+  const sortedTenants = [...tenants].sort(
+    (first, second) =>
+      getTenantPriority(first.status) - getTenantPriority(second.status),
+  );
+
+  return new Map(sortedTenants.map((tenant) => [tenant.unit_id, tenant]));
+}
+
+function getReservedUnitMessage(tenant: ManagerTenantRow | undefined) {
+  if (!tenant) {
+    return "Awaiting first rent payment";
+  }
+
+  return `${tenant.full_name} · awaiting first rent payment`;
+}
+
 export function ManagerUnitList({
   properties,
   units,
@@ -59,11 +92,7 @@ export function ManagerUnitList({
     properties.map((property) => [property.id, property.property_name]),
   );
 
-  const activeTenantByUnitId = new Map(
-    tenants
-      .filter((tenant) => tenant.status === "active")
-      .map((tenant) => [tenant.unit_id, tenant]),
-  );
+  const tenantByUnitId = buildTenantByUnitId(tenants);
 
   return (
     <section
@@ -122,7 +151,11 @@ export function ManagerUnitList({
 
               <tbody className="divide-y divide-border-soft bg-white">
                 {units.map((unit) => {
-                  const tenant = activeTenantByUnitId.get(unit.id);
+                  const tenant = tenantByUnitId.get(unit.id);
+                  const tenantLabel =
+                    unit.status === "reserved"
+                      ? getReservedUnitMessage(tenant)
+                      : tenant?.full_name;
 
                   return (
                     <tr key={unit.id} className="align-top">
@@ -150,10 +183,14 @@ export function ManagerUnitList({
                             prefetch={false}
                             className="text-primary underline-offset-4 hover:underline"
                           >
-                            {tenant.full_name}
+                            {tenantLabel}
                           </Link>
                         ) : (
-                          <span className="text-text-muted">None</span>
+                          <span className="text-text-muted">
+                            {unit.status === "reserved"
+                              ? "Awaiting first rent payment"
+                              : "None"}
+                          </span>
                         )}
                       </td>
 
@@ -177,6 +214,10 @@ export function ManagerUnitList({
                             >
                               Add tenant
                             </Link>
+                          ) : unit.status === "reserved" ? (
+                            <span className="inline-flex min-h-10 items-center justify-center rounded-button bg-primary-soft px-4 text-sm font-extrabold text-primary">
+                              Awaiting payment
+                            </span>
                           ) : tenant ? (
                             <Link
                               href={`/manager/tenants#tenant-${tenant.id}`}
@@ -201,7 +242,11 @@ export function ManagerUnitList({
 
           <div className="divide-y divide-border-soft md:hidden">
             {units.map((unit) => {
-              const tenant = activeTenantByUnitId.get(unit.id);
+              const tenant = tenantByUnitId.get(unit.id);
+              const tenantLabel =
+                unit.status === "reserved"
+                  ? getReservedUnitMessage(tenant)
+                  : (tenant?.full_name ?? "None");
 
               return (
                 <article key={unit.id} className="p-4">
@@ -217,7 +262,7 @@ export function ManagerUnitList({
                       <p className="mt-1 text-sm font-semibold text-text-muted">
                         Tenant:{" "}
                         <span className="font-black text-text-strong">
-                          {tenant?.full_name ?? "None"}
+                          {tenantLabel}
                         </span>
                       </p>
                     </div>
@@ -241,6 +286,10 @@ export function ManagerUnitList({
                         >
                           Add tenant
                         </Link>
+                      ) : unit.status === "reserved" ? (
+                        <span className="inline-flex min-h-10 w-full items-center justify-center rounded-button bg-primary-soft px-4 text-sm font-extrabold text-primary">
+                          Awaiting first rent payment
+                        </span>
                       ) : tenant ? (
                         <Link
                           href={`/manager/tenants#tenant-${tenant.id}`}

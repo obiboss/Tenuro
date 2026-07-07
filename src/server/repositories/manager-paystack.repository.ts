@@ -15,6 +15,8 @@ export type ManagerRentPaymentRequestStatus =
   | "cancelled"
   | "expired";
 
+export type ManagerPaymentPurpose = "rent" | "new_tenant_first_rent";
+
 export type ManagerPaystackPaymentTenantRow = {
   id: string;
   organization_id: string;
@@ -67,6 +69,9 @@ export type ManagerRentPaymentRequestRow = {
   failure_reason: string | null;
   created_by_profile_id: string | null;
   notes: string | null;
+  onboarding_request_id: string | null;
+  agreement_document_id: string | null;
+  payment_purpose: ManagerPaymentPurpose;
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -124,10 +129,25 @@ const MANAGER_RENT_PAYMENT_REQUEST_SELECT = `
   failure_reason,
   created_by_profile_id,
   notes,
+  onboarding_request_id,
+  agreement_document_id,
+  payment_purpose,
   metadata,
   created_at,
   updated_at
 `;
+
+export async function expireManagerNewTenantPaymentRequests(
+  supabase: SupabaseClient,
+) {
+  const { error } = await supabase.rpc(
+    "expire_manager_new_tenant_payment_requests",
+  );
+
+  if (error) {
+    throw error;
+  }
+}
 
 export async function getManagerTenantForPaystackRequest(
   supabase: SupabaseClient,
@@ -176,6 +196,10 @@ export async function createPendingManagerPaystackPaymentRequest(
     tenantEmailSnapshot: string | null;
     createdByProfileId: string;
     notes: string | null;
+    expiresAt?: string | null;
+    onboardingRequestId?: string | null;
+    agreementDocumentId?: string | null;
+    paymentPurpose?: ManagerPaymentPurpose;
     metadata: Record<string, unknown>;
   },
 ) {
@@ -206,8 +230,12 @@ export async function createPendingManagerPaystackPaymentRequest(
       tenant_phone_snapshot: params.tenantPhoneSnapshot,
       tenant_email_snapshot: params.tenantEmailSnapshot,
       status: "pending",
+      expires_at: params.expiresAt ?? null,
       created_by_profile_id: params.createdByProfileId,
       notes: params.notes,
+      onboarding_request_id: params.onboardingRequestId ?? null,
+      agreement_document_id: params.agreementDocumentId ?? null,
+      payment_purpose: params.paymentPurpose ?? "rent",
       metadata: params.metadata,
     })
     .select(MANAGER_RENT_PAYMENT_REQUEST_SELECT)
@@ -236,6 +264,7 @@ export async function markManagerPaystackPaymentRequestInitialized(
       access_code: params.accessCode,
       status: "initialized",
       initialized_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     })
     .eq("organization_id", params.organizationId)
     .eq("reference", params.reference)
@@ -285,8 +314,10 @@ export async function markManagerPaystackPaymentRequestPaid(
       verified_payload: params.verifiedPayload,
       failure_reason: null,
       metadata: params.metadata,
+      updated_at: new Date().toISOString(),
     })
     .eq("id", params.requestId)
+    .neq("status", "expired")
     .select(MANAGER_RENT_PAYMENT_REQUEST_SELECT)
     .single<ManagerRentPaymentRequestRow>();
 
@@ -314,6 +345,7 @@ export async function markManagerPaystackPaymentRequestFailed(
       failure_reason: params.failureReason,
       verified_payload: params.verifiedPayload,
       metadata: params.metadata,
+      updated_at: new Date().toISOString(),
     })
     .eq("id", params.requestId)
     .select(MANAGER_RENT_PAYMENT_REQUEST_SELECT)
@@ -330,6 +362,8 @@ export async function listManagerPaystackPaymentRequests(
   supabase: SupabaseClient,
   organizationId: string,
 ) {
+  await expireManagerNewTenantPaymentRequests(supabase);
+
   const { data, error } = await supabase
     .from("manager_rent_payment_requests")
     .select(MANAGER_RENT_PAYMENT_REQUEST_SELECT)
