@@ -12,11 +12,13 @@ import {
   listManagerLandlordClients,
 } from "@/server/repositories/manager.repository";
 import { requireManager } from "@/server/services/auth.service";
+import { getPaystackBanksForManagerSetup } from "@/server/services/manager-bank.service";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 
 export default async function ManagerPayoutsPage() {
   const manager = await requireManager();
   const supabase = await createSupabaseServerClient();
+
   const organization = await getManagerOrganizationForCurrentUser(
     supabase,
     manager.id,
@@ -26,11 +28,12 @@ export default async function ManagerPayoutsPage() {
     redirect("/manager/onboarding");
   }
 
-  const [landlordClients, managerAccounts, landlordAccounts] =
+  const [landlordClients, managerAccounts, landlordAccounts, banks] =
     await Promise.all([
       listManagerLandlordClients(supabase, organization.id),
       listManagerPaystackAccounts(supabase, organization.id),
       listManagerLandlordPaystackAccounts(supabase, organization.id),
+      getPaystackBanksForManagerSetup(),
     ]);
 
   return (
@@ -42,7 +45,8 @@ export default async function ManagerPayoutsPage() {
 
       <section className="grid gap-6 lg:grid-cols-[440px_1fr]">
         <ManagerPaystackAccountForm
-          organizationName={organization.organization_name}
+          banks={banks}
+          defaultBusinessName={organization.organization_name}
         />
 
         <ManagerPaystackAccountList
@@ -59,18 +63,22 @@ export default async function ManagerPayoutsPage() {
           <h2 className="text-lg font-black tracking-tight text-text-strong">
             How BOPA uses this
           </h2>
+
           <div className="mt-4 space-y-3 text-sm font-semibold leading-6 text-text-muted">
             <p>
-              For automatic split, BOPA pays the landlord share to the landlord
-              account and the management fee to the manager account.
+              For the current BOPA Manager flow, tenant rent paid through
+              Paystack settles into the verified manager payout account.
             </p>
+
             <p>
-              For manager collects, online rent goes to the manager account and
-              BOPA tracks the amount due to the landlord.
+              BOPA records the rent paid, manager commission, landlord share,
+              Paystack charge, platform fee, and remittance balance
+              automatically.
             </p>
+
             <p>
-              For landlord direct, online rent goes to the landlord account and
-              BOPA keeps the records clear.
+              Landlord-direct payout and automatic split payout are not active
+              in this first manager version.
             </p>
           </div>
         </div>
