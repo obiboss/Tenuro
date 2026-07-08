@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { createManagerTenantOnboardingRequestAction } from "@/actions/manager-tenant-onboarding.actions";
 import { initialManagerTenantOnboardingActionState } from "@/actions/manager-tenant-onboarding.state";
 import { Button } from "@/components/ui/button";
@@ -43,7 +43,7 @@ export function ManagerTenantOnboardingForm({
   property,
   unit,
 }: ManagerTenantOnboardingFormProps) {
-  const openedMessageRef = useRef<string | null>(null);
+  const [isFormOpen, setIsFormOpen] = useState(false);
   const [onboardingType, setOnboardingType] =
     useState<TenantOnboardingType>("current_occupant");
 
@@ -59,35 +59,126 @@ export function ManagerTenantOnboardingForm({
     [onboardingType],
   );
 
-  useEffect(() => {
-    if (
-      !state.ok ||
-      !state.whatsappMessage ||
-      !state.tenantWhatsappNumber ||
-      openedMessageRef.current === state.whatsappMessage
-    ) {
-      return;
-    }
+  const whatsappUrl =
+    state.ok && state.whatsappMessage
+      ? buildWaMeUrl({
+          phoneNumber: state.tenantWhatsappNumber,
+          message: state.whatsappMessage,
+        })
+      : null;
 
-    openedMessageRef.current = state.whatsappMessage;
+  if (state.ok) {
+    return (
+      <section
+        id="tenant-onboarding"
+        className="rounded-card border border-border-soft bg-white shadow-sm"
+      >
+        <div className="border-b border-border-soft p-4">
+          <p className="w-fit rounded-full bg-success-soft px-3 py-1 text-xs font-black uppercase tracking-wide text-success">
+            Link ready
+          </p>
 
-    window.location.assign(
-      buildWaMeUrl({
-        phoneNumber: state.tenantWhatsappNumber,
-        message: state.whatsappMessage,
-      }),
+          <h2 className="mt-4 text-lg font-black tracking-tight text-text-strong">
+            Tenant detail link is ready
+          </h2>
+
+          <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+            Send it to the tenant on WhatsApp. When the tenant submits details,
+            the request will appear in the review table.
+          </p>
+        </div>
+
+        <div className="space-y-4 p-4">
+          <div className="rounded-card bg-surface p-4">
+            <p className="text-sm font-black text-text-strong">
+              {unit.unit_label} · {property.property_name}
+            </p>
+            <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+              Do not create another tenant request for this unit while this one
+              is in progress.
+            </p>
+          </div>
+
+          {whatsappUrl ? (
+            <>
+              <a
+                href={whatsappUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-12 w-full items-center justify-center rounded-button bg-primary px-5 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
+              >
+                Open WhatsApp
+              </a>
+
+              <a
+                href={whatsappUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-11 w-full items-center justify-center rounded-button border border-border-soft bg-white px-5 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+              >
+                Send again
+              </a>
+            </>
+          ) : null}
+
+          <a
+            href="#tenant-review"
+            className="inline-flex min-h-11 w-full items-center justify-center rounded-button border border-border-soft bg-white px-5 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+          >
+            Go to review table
+          </a>
+        </div>
+      </section>
     );
-  }, [state.ok, state.tenantWhatsappNumber, state.whatsappMessage]);
+  }
+
+  if (!isFormOpen) {
+    return (
+      <section
+        id="tenant-onboarding"
+        className="rounded-card border border-border-soft bg-white shadow-sm"
+      >
+        <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-lg font-black tracking-tight text-text-strong">
+              Add tenant to {unit.unit_label}
+            </p>
+            <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+              {property.property_name}. Open the form only when you are ready to
+              send a tenant detail link.
+            </p>
+          </div>
+
+          <Button type="button" onClick={() => setIsFormOpen(true)}>
+            Open tenant form
+          </Button>
+        </div>
+      </section>
+    );
+  }
 
   return (
-    <section className="rounded-card border border-border-soft bg-white shadow-sm">
-      <div className="border-b border-border-soft p-4">
-        <h2 className="text-lg font-black tracking-tight text-text-strong">
-          Add tenant
-        </h2>
-        <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-          {unit.unit_label} · {property.property_name}
-        </p>
+    <section
+      id="tenant-onboarding"
+      className="rounded-card border border-border-soft bg-white shadow-sm"
+    >
+      <div className="flex flex-col gap-3 border-b border-border-soft p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-lg font-black tracking-tight text-text-strong">
+            Add tenant
+          </h2>
+          <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+            {unit.unit_label} · {property.property_name}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setIsFormOpen(false)}
+          className="inline-flex min-h-10 items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+        >
+          Close form
+        </button>
       </div>
 
       <form action={formAction}>
@@ -105,11 +196,7 @@ export function ManagerTenantOnboardingForm({
             {state.message ? (
               <div
                 role="alert"
-                className={
-                  state.ok
-                    ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
-                    : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
-                }
+                className="rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
               >
                 {state.message}
               </div>
@@ -244,7 +331,7 @@ export function ManagerTenantOnboardingForm({
 
         <div className="border-t border-border-soft p-4">
           <Button type="submit" isLoading={isPending} fullWidth>
-            Send Tenant Detail Link
+            Create tenant detail link
           </Button>
         </div>
       </form>

@@ -1,0 +1,1137 @@
+====================================================================================================
+FILE: src/app/(platform-admin)/admin/payout-verifications/page.tsx
+====================================================================================================
+
+import { PageHeader } from "@/components/ui/page-header";
+import { PayoutVerificationQueue } from "@/components/platform-admin/payout-verification-queue";
+import { getPlatformAdminPayoutVerificationQueue } from "@/server/services/platform-admin-payout-verification.service";
+
+export default async function PlatformAdminPayoutVerificationsPage() {
+  const queue = await getPlatformAdminPayoutVerificationQueue();
+
+  return (
+    <div>
+      <PageHeader
+        eyebrow="Platform Operations"
+        title="Payout verifications"
+        description="Review landlord and agent Paystack payout accounts before split settlements are enabled."
+      />
+
+      <PayoutVerificationQueue queue={queue} />
+    </div>
+  );
+}
+
+
+====================================================================================================
+FILE: src/components/platform-admin/payout-verification-queue.tsx
+====================================================================================================
+
+import { CreditCard, ShieldCheck } from "lucide-react";
+import { PayoutVerificationActions } from "@/components/platform-admin/payout-verification-actions";
+import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import { SectionCard } from "@/components/ui/section-card";
+import { cn } from "@/lib/cn";
+import type {
+  PlatformAdminPayoutVerificationAccount,
+  PlatformAdminPayoutVerificationQueue,
+} from "@/server/services/platform-admin-payout-verification.service";
+import type { PaystackVerificationStatus } from "@/server/types/paystack.types";
+
+type PayoutVerificationQueueProps = {
+  queue: PlatformAdminPayoutVerificationQueue;
+};
+
+type QueueSectionProps = {
+  title: string;
+  description: string;
+  accounts: PlatformAdminPayoutVerificationAccount[];
+  emptyTitle: string;
+  emptyDescription: string;
+  highlightPending?: boolean;
+};
+
+const statusCopy: Record<
+  PaystackVerificationStatus,
+  {
+    label: string;
+    tone: "success" | "warning" | "danger";
+  }
+> = {
+  unverified: {
+    label: "Pending Verification",
+    tone: "warning",
+  },
+  verified: {
+    label: "Verified",
+    tone: "success",
+  },
+  failed: {
+    label: "Verification Failed",
+    tone: "danger",
+  },
+};
+
+function formatDateTime(value: string | null) {
+  if (!value) {
+    return "Not verified";
+  }
+
+  return new Intl.DateTimeFormat("en-NG", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function formatOwnerRole(
+  role: PlatformAdminPayoutVerificationAccount["ownerRole"],
+) {
+  if (role === "landlord") {
+    return "Landlord";
+  }
+
+  if (role === "agent") {
+    return "Agent";
+  }
+
+  return "Developer";
+}
+
+function StatusBadge({ status }: { status: PaystackVerificationStatus }) {
+  const copy = statusCopy[status];
+
+  return <Badge tone={copy.tone}>{copy.label}</Badge>;
+}
+
+function AccountDetail({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | null;
+}) {
+  return (
+    <div>
+      <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+        {label}
+      </p>
+      <p className="mt-1 text-sm font-extrabold wrap-break-word text-text-strong">
+        {value || "Not available"}
+      </p>
+    </div>
+  );
+}
+
+function AccountCard({
+  account,
+  highlightPending,
+}: {
+  account: PlatformAdminPayoutVerificationAccount;
+  highlightPending?: boolean;
+}) {
+  const showActions =
+    account.isActive &&
+    (account.verificationStatus === "unverified" ||
+      account.verificationStatus === "failed");
+
+  return (
+    <article
+      className={cn(
+        "rounded-card border border-border-soft bg-background p-4",
+        highlightPending && "border-warning/35 bg-warning-soft/30",
+      )}
+    >
+      <div
+        className={cn(
+          "flex flex-col gap-4",
+          showActions && "xl:flex-row xl:items-start xl:justify-between",
+        )}
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="font-black text-text-strong">
+                  {account.ownerName}
+                </h3>
+                <Badge tone="primary">
+                  {formatOwnerRole(account.ownerRole)}
+                </Badge>
+                <StatusBadge status={account.verificationStatus} />
+              </div>
+
+              <p className="mt-1 text-sm leading-6 text-text-muted">
+                {account.ownerEmail ??
+                  account.ownerPhoneNumber ??
+                  account.ownerId}
+              </p>
+            </div>
+
+            <div className="text-sm font-bold text-text-muted md:text-right">
+              <p>Created {formatDateTime(account.createdAt)}</p>
+              <p className="mt-1">
+                Verified {formatDateTime(account.verifiedAt)}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <AccountDetail label="Bank" value={account.bankName} />
+            <AccountDetail label="Account Name" value={account.accountName} />
+            <AccountDetail
+              label="Account Number"
+              value={account.maskedAccountNumber}
+            />
+            <AccountDetail
+              label="Subaccount"
+              value={account.paystackSubaccountCode}
+            />
+          </div>
+        </div>
+
+        {showActions ? (
+          <div className="w-full xl:w-64">
+            <PayoutVerificationActions
+              accountType={account.ownerRole}
+              accountId={account.id}
+              expectedUpdatedAt={account.updatedAt}
+              verificationStatus={account.verificationStatus}
+              isActive={account.isActive}
+            />
+          </div>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
+function QueueSection({
+  title,
+  description,
+  accounts,
+  emptyTitle,
+  emptyDescription,
+  highlightPending,
+}: QueueSectionProps) {
+  return (
+    <SectionCard
+      title={title}
+      description={description}
+      action={
+        <Badge tone={accounts.length > 0 ? "primary" : "neutral"}>
+          {accounts.length}
+        </Badge>
+      }
+      contentClassName="space-y-4"
+    >
+      {accounts.length === 0 ? (
+        <EmptyState
+          title={emptyTitle}
+          description={emptyDescription}
+          icon={<ShieldCheck aria-hidden="true" size={24} strokeWidth={2.6} />}
+          className="bg-background shadow-none"
+        />
+      ) : (
+        accounts.map((account) => (
+          <AccountCard
+            key={`${account.ownerRole}-${account.id}`}
+            account={account}
+            highlightPending={highlightPending}
+          />
+        ))
+      )}
+    </SectionCard>
+  );
+}
+
+export function PayoutVerificationQueue({
+  queue,
+}: PayoutVerificationQueueProps) {
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-card bg-warning-soft p-5 text-warning shadow-card">
+          <div className="flex items-start gap-4">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-white">
+              <CreditCard aria-hidden="true" size={22} strokeWidth={2.6} />
+            </div>
+            <div>
+              <p className="text-sm font-bold">Pending Verification</p>
+              <p className="mt-1 text-2xl font-black">{queue.totals.pending}</p>
+              <p className="mt-1 text-sm leading-6 text-text-normal">
+                Active payout accounts waiting for review.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-card bg-success-soft p-5 text-success shadow-card">
+          <div className="flex items-start gap-4">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-white">
+              <ShieldCheck aria-hidden="true" size={22} strokeWidth={2.6} />
+            </div>
+            <div>
+              <p className="text-sm font-bold">Verified</p>
+              <p className="mt-1 text-2xl font-black">
+                {queue.totals.verified}
+              </p>
+              <p className="mt-1 text-sm leading-6 text-text-normal">
+                Accounts currently marked safe for split payouts.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-card bg-danger-soft p-5 text-danger shadow-card">
+          <div className="flex items-start gap-4">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-white">
+              <CreditCard aria-hidden="true" size={22} strokeWidth={2.6} />
+            </div>
+            <div>
+              <p className="text-sm font-bold">Verification Failed</p>
+              <p className="mt-1 text-2xl font-black">{queue.totals.failed}</p>
+              <p className="mt-1 text-sm leading-6 text-text-normal">
+                Accounts blocked until corrected and reviewed again.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <QueueSection
+        title="Pending payout accounts"
+        description="Review active landlord, agent, and developer payout accounts before split settlements are enabled."
+        accounts={queue.pending}
+        emptyTitle="No pending payout accounts"
+        emptyDescription="New landlord, agent, and developer payout accounts will appear here for platform review."
+        highlightPending
+      />
+
+      <QueueSection
+        title="Verified payout accounts"
+        description="Accounts approved for Paystack split settlement flows."
+        accounts={queue.verified}
+        emptyTitle="No verified payout accounts"
+        emptyDescription="Verified payout accounts will appear here after admin approval."
+      />
+
+      <QueueSection
+        title="Failed payout accounts"
+        description="Accounts that failed platform review and cannot receive split settlements."
+        accounts={queue.failed}
+        emptyTitle="No failed payout accounts"
+        emptyDescription="Failed payout accounts will appear here if review cannot approve them."
+      />
+    </div>
+  );
+}
+
+
+====================================================================================================
+FILE: src/components/platform-admin/payout-verification-actions.tsx
+====================================================================================================
+
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useActionState } from "react";
+import {
+  failPayoutAccountAction,
+  type PlatformAdminPayoutVerificationActionState,
+  verifyPayoutAccountAction,
+} from "@/actions/platform-admin-payout-verification.actions";
+import { Button } from "@/components/ui/button";
+import type { PayoutVerificationAccountType } from "@/server/services/platform-admin-payout-verification.service";
+import type { PaystackVerificationStatus } from "@/server/types/paystack.types";
+
+type PayoutVerificationActionsProps = {
+  accountType: PayoutVerificationAccountType;
+  accountId: string;
+  expectedUpdatedAt: string;
+  verificationStatus: PaystackVerificationStatus;
+  isActive: boolean;
+};
+
+const initialState: PlatformAdminPayoutVerificationActionState = {
+  ok: false,
+  message: "",
+};
+
+function HiddenAccountFields({
+  accountType,
+  accountId,
+  expectedUpdatedAt,
+}: {
+  accountType: PayoutVerificationAccountType;
+  accountId: string;
+  expectedUpdatedAt: string;
+}) {
+  return (
+    <>
+      <input type="hidden" name="accountType" value={accountType} />
+      <input type="hidden" name="accountId" value={accountId} />
+      <input type="hidden" name="expectedUpdatedAt" value={expectedUpdatedAt} />
+    </>
+  );
+}
+
+function shouldShowPayoutVerificationActions(
+  verificationStatus: PaystackVerificationStatus,
+  isActive: boolean,
+) {
+  if (!isActive) {
+    return false;
+  }
+
+  return (
+    verificationStatus === "unverified" || verificationStatus === "failed"
+  );
+}
+
+export function PayoutVerificationActions({
+  accountType,
+  accountId,
+  expectedUpdatedAt,
+  verificationStatus,
+  isActive,
+}: PayoutVerificationActionsProps) {
+  const [verifyState, verifyFormAction, isVerifying] = useActionState(
+    verifyPayoutAccountAction,
+    initialState,
+  );
+  const [failState, failFormAction, isFailing] = useActionState(
+    failPayoutAccountAction,
+    initialState,
+  );
+
+  const isBusy = isVerifying || isFailing;
+  const showActions = shouldShowPayoutVerificationActions(
+    verificationStatus,
+    isActive,
+  );
+  const showFailAction = verificationStatus === "unverified";
+  const latestMessage = verifyState.message || failState.message;
+  const latestState = verifyState.message ? verifyState : failState;
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!latestState.ok || !latestState.message) {
+      return;
+    }
+
+    router.refresh();
+  }, [latestState.ok, latestState.message, router]);
+
+  if (!showActions) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-col gap-2 sm:flex-row lg:flex-col xl:flex-row">
+        <form action={verifyFormAction} className="min-w-0 flex-1">
+          <HiddenAccountFields
+            accountType={accountType}
+            accountId={accountId}
+            expectedUpdatedAt={expectedUpdatedAt}
+          />
+          <Button
+            type="submit"
+            size="sm"
+            fullWidth
+            disabled={isBusy}
+            isLoading={isVerifying}
+          >
+            Verify
+          </Button>
+        </form>
+
+        {showFailAction ? (
+          <form action={failFormAction} className="min-w-0 flex-1">
+            <HiddenAccountFields
+              accountType={accountType}
+              accountId={accountId}
+              expectedUpdatedAt={expectedUpdatedAt}
+            />
+            <Button
+              type="submit"
+              size="sm"
+              variant="danger"
+              fullWidth
+              disabled={isBusy}
+              isLoading={isFailing}
+            >
+              Mark Failed
+            </Button>
+          </form>
+        ) : null}
+      </div>
+
+      {latestMessage ? (
+        <p
+          className={
+            latestState.ok
+              ? "text-xs font-semibold leading-5 text-success"
+              : "text-xs font-semibold leading-5 text-danger"
+          }
+        >
+          {latestMessage}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+
+====================================================================================================
+FILE: src/actions/platform-admin-payout-verification.actions.ts
+====================================================================================================
+
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { AppError } from "@/server/errors/app-error";
+import { errorResult } from "@/server/errors/result";
+import {
+  failPlatformAdminPayoutAccount,
+  verifyPlatformAdminPayoutAccount,
+  type PayoutVerificationAccountType,
+} from "@/server/services/platform-admin-payout-verification.service";
+
+export type PlatformAdminPayoutVerificationActionState = {
+  ok: boolean;
+  message: string;
+};
+
+function parsePayoutVerificationFormData(formData: FormData) {
+  const accountType = String(formData.get("accountType") ?? "").trim();
+  const accountId = String(formData.get("accountId") ?? "").trim();
+  const expectedUpdatedAt = String(
+    formData.get("expectedUpdatedAt") ?? "",
+  ).trim();
+
+  if (
+    accountType !== "landlord" &&
+    accountType !== "agent" &&
+    accountType !== "developer"
+  ) {
+    throw new AppError(
+      "INVALID_PAYOUT_ACCOUNT_TYPE",
+      "The payout account type is invalid.",
+      400,
+    );
+  }
+
+  if (!accountId || !expectedUpdatedAt) {
+    throw new AppError(
+      "PAYOUT_ACCOUNT_REFERENCE_MISSING",
+      "Payout account reference is missing.",
+      400,
+    );
+  }
+
+  return {
+    accountType: accountType as PayoutVerificationAccountType,
+    accountId,
+    expectedUpdatedAt,
+  };
+}
+
+function revalidatePayoutVerificationSurfaces() {
+  revalidatePath("/admin");
+  revalidatePath("/admin/payout-verifications");
+  revalidatePath("/settings");
+  revalidatePath("/agent/overview");
+  revalidatePath("/developer/settings");
+  revalidatePath("/developer");
+}
+
+function toActionError(
+  error: unknown,
+): PlatformAdminPayoutVerificationActionState {
+  const result = errorResult(error);
+
+  return {
+    ok: false,
+    message: result.message,
+  };
+}
+
+export async function verifyPayoutAccountAction(
+  _previousState: PlatformAdminPayoutVerificationActionState,
+  formData: FormData,
+): Promise<PlatformAdminPayoutVerificationActionState> {
+  try {
+    const parsed = parsePayoutVerificationFormData(formData);
+
+    await verifyPlatformAdminPayoutAccount(parsed);
+
+    revalidatePayoutVerificationSurfaces();
+
+    return {
+      ok: true,
+      message: "Payout account verified successfully.",
+    };
+  } catch (error) {
+    return toActionError(error);
+  }
+}
+
+export async function failPayoutAccountAction(
+  _previousState: PlatformAdminPayoutVerificationActionState,
+  formData: FormData,
+): Promise<PlatformAdminPayoutVerificationActionState> {
+  try {
+    const parsed = parsePayoutVerificationFormData(formData);
+
+    await failPlatformAdminPayoutAccount(parsed);
+
+    revalidatePayoutVerificationSurfaces();
+
+    return {
+      ok: true,
+      message: "Payout account marked as failed.",
+    };
+  } catch (error) {
+    return toActionError(error);
+  }
+}
+
+
+====================================================================================================
+FILE: src/server/services/platform-admin-payout-verification.service.ts
+====================================================================================================
+
+import "server-only";
+
+import {
+  getAgentPaystackAccountById,
+  getAgentPaystackAccountsWithOwnersByVerificationStatus,
+  updateActiveAgentPaystackAccountVerificationStatus,
+  type AgentPaystackAccountWithOwner,
+} from "@/server/repositories/agent-paystack.repository";
+import {
+  getDeveloperPaystackAccountById,
+  getDeveloperPaystackAccountsWithOwnersByVerificationStatus,
+  updateActiveDeveloperPaystackAccountVerificationStatus,
+  type DeveloperPaystackAccountWithOwner,
+} from "@/server/repositories/developer-paystack-repository";
+import {
+  getLandlordPaystackAccountById,
+  getLandlordPaystackAccountsWithOwnersByVerificationStatus,
+  updateActiveLandlordPaystackAccountVerificationStatus,
+  type LandlordPaystackAccountWithOwner,
+} from "@/server/repositories/landlord-paystack.repository";
+import { AppError } from "@/server/errors/app-error";
+import { requirePlatformAdmin } from "@/server/services/platform-admin.service";
+import { createSupabaseAdminClient } from "@/server/supabase/admin";
+import type {
+  AgentPaystackAccount,
+  DeveloperPaystackAccount,
+  LandlordPaystackAccount,
+  PaystackVerificationStatus,
+} from "@/server/types/paystack.types";
+
+export type PayoutVerificationAccountType = "landlord" | "agent" | "developer";
+
+type VerifiablePayoutAccount =
+  | LandlordPaystackAccount
+  | AgentPaystackAccount
+  | DeveloperPaystackAccount;
+
+export type PlatformAdminPayoutVerificationAccount = {
+  id: string;
+  ownerId: string;
+  ownerName: string;
+  ownerEmail: string | null;
+  ownerPhoneNumber: string | null;
+  ownerRole: PayoutVerificationAccountType;
+  bankName: string;
+  accountName: string;
+  accountNumber: string;
+  maskedAccountNumber: string;
+  paystackSubaccountCode: string;
+  isActive: boolean;
+  verificationStatus: PaystackVerificationStatus;
+  verifiedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PlatformAdminPayoutVerificationQueue = {
+  pending: PlatformAdminPayoutVerificationAccount[];
+  verified: PlatformAdminPayoutVerificationAccount[];
+  failed: PlatformAdminPayoutVerificationAccount[];
+  totals: {
+    pending: number;
+    verified: number;
+    failed: number;
+  };
+};
+
+function maskAccountNumber(accountNumber: string) {
+  const trimmed = accountNumber.trim();
+
+  if (trimmed.length <= 4) {
+    return trimmed;
+  }
+
+  return `${"*".repeat(Math.max(trimmed.length - 4, 0))}${trimmed.slice(-4)}`;
+}
+
+function getOwnerName(owner: { full_name: string } | null) {
+  return owner?.full_name?.trim() || "Unknown owner";
+}
+
+function mapLandlordAccount(
+  account: LandlordPaystackAccountWithOwner,
+): PlatformAdminPayoutVerificationAccount {
+  return {
+    id: account.id,
+    ownerId: account.landlord_id,
+    ownerName: getOwnerName(account.landlord),
+    ownerEmail: account.landlord?.email ?? null,
+    ownerPhoneNumber: account.landlord?.phone_number ?? null,
+    ownerRole: "landlord",
+    bankName: account.bank_name,
+    accountName: account.account_name,
+    accountNumber: account.account_number,
+    maskedAccountNumber: maskAccountNumber(account.account_number),
+    paystackSubaccountCode: account.paystack_subaccount_code,
+    isActive: account.is_active,
+    verificationStatus: account.verification_status,
+    verifiedAt: account.verified_at,
+    createdAt: account.created_at,
+    updatedAt: account.updated_at,
+  };
+}
+
+function mapAgentAccount(
+  account: AgentPaystackAccountWithOwner,
+): PlatformAdminPayoutVerificationAccount {
+  return {
+    id: account.id,
+    ownerId: account.agent_id,
+    ownerName: getOwnerName(account.agent),
+    ownerEmail: account.agent?.email ?? null,
+    ownerPhoneNumber: account.agent?.phone_number ?? null,
+    ownerRole: "agent",
+    bankName: account.bank_name,
+    accountName: account.account_name,
+    accountNumber: account.account_number,
+    maskedAccountNumber: maskAccountNumber(account.account_number),
+    paystackSubaccountCode: account.paystack_subaccount_code,
+    isActive: account.is_active,
+    verificationStatus: account.verification_status,
+    verifiedAt: account.verified_at,
+    createdAt: account.created_at,
+    updatedAt: account.updated_at,
+  };
+}
+
+function mapDeveloperAccount(
+  account: DeveloperPaystackAccountWithOwner,
+): PlatformAdminPayoutVerificationAccount {
+  const ownerProfile = account.developer_account?.owner_profile ?? null;
+
+  return {
+    id: account.id,
+    ownerId: account.developer_account_id,
+    ownerName:
+      account.developer_account?.company_name?.trim() ||
+      ownerProfile?.full_name?.trim() ||
+      "Developer",
+    ownerEmail:
+      account.developer_account?.company_email ?? ownerProfile?.email ?? null,
+    ownerPhoneNumber:
+      account.developer_account?.company_phone ??
+      ownerProfile?.phone_number ??
+      null,
+    ownerRole: "developer",
+    bankName: account.bank_name,
+    accountName: account.account_name,
+    accountNumber: account.account_number,
+    maskedAccountNumber: maskAccountNumber(account.account_number),
+    paystackSubaccountCode: account.paystack_subaccount_code,
+    isActive: account.is_active,
+    verificationStatus: account.verification_status,
+    verifiedAt: account.verified_at,
+    createdAt: account.created_at,
+    updatedAt: account.updated_at,
+  };
+}
+
+function sortQueueAccounts(accounts: PlatformAdminPayoutVerificationAccount[]) {
+  return [...accounts].sort((left, right) => {
+    const leftTime = new Date(left.createdAt).getTime();
+    const rightTime = new Date(right.createdAt).getTime();
+
+    return rightTime - leftTime;
+  });
+}
+
+function assertActiveAccount(account: VerifiablePayoutAccount | null) {
+  if (!account) {
+    throw new AppError(
+      "PAYOUT_ACCOUNT_NOT_FOUND",
+      "The payout account could not be found.",
+      404,
+    );
+  }
+
+  if (!account.is_active) {
+    throw new AppError(
+      "PAYOUT_ACCOUNT_REPLACED",
+      "This payout account has been replaced and cannot be verified.",
+      409,
+    );
+  }
+
+  return account;
+}
+
+function assertFreshAccount(params: {
+  account: VerifiablePayoutAccount;
+  expectedUpdatedAt: string;
+  targetStatus: PaystackVerificationStatus;
+}) {
+  if (params.account.updated_at === params.expectedUpdatedAt) {
+    return;
+  }
+
+  if (params.account.verification_status === params.targetStatus) {
+    return;
+  }
+
+  throw new AppError(
+    "PAYOUT_ACCOUNT_STALE",
+    "This payout account was updated by another admin. Refresh and try again.",
+    409,
+  );
+}
+
+function isAlreadyVerified(account: VerifiablePayoutAccount) {
+  return (
+    account.verification_status === "verified" && Boolean(account.verified_at)
+  );
+}
+
+async function getCurrentAccount(params: {
+  accountType: PayoutVerificationAccountType;
+  accountId: string;
+}) {
+  const supabase = createSupabaseAdminClient();
+
+  if (params.accountType === "landlord") {
+    return getLandlordPaystackAccountById(supabase, params.accountId);
+  }
+
+  if (params.accountType === "agent") {
+    return getAgentPaystackAccountById(supabase, params.accountId);
+  }
+
+  return getDeveloperPaystackAccountById(supabase, params.accountId);
+}
+
+export async function getPlatformAdminPayoutVerificationQueue(): Promise<PlatformAdminPayoutVerificationQueue> {
+  await requirePlatformAdmin();
+
+  const supabase = createSupabaseAdminClient();
+
+  const [
+    pendingLandlords,
+    pendingAgents,
+    pendingDevelopers,
+    verifiedLandlords,
+    verifiedAgents,
+    verifiedDevelopers,
+    failedLandlords,
+    failedAgents,
+    failedDevelopers,
+  ] = await Promise.all([
+    getLandlordPaystackAccountsWithOwnersByVerificationStatus(
+      supabase,
+      "unverified",
+      { activeOnly: true },
+    ),
+    getAgentPaystackAccountsWithOwnersByVerificationStatus(
+      supabase,
+      "unverified",
+      { activeOnly: true },
+    ),
+    getDeveloperPaystackAccountsWithOwnersByVerificationStatus(
+      supabase,
+      "unverified",
+      { activeOnly: true },
+    ),
+    getLandlordPaystackAccountsWithOwnersByVerificationStatus(
+      supabase,
+      "verified",
+    ),
+    getAgentPaystackAccountsWithOwnersByVerificationStatus(
+      supabase,
+      "verified",
+    ),
+    getDeveloperPaystackAccountsWithOwnersByVerificationStatus(
+      supabase,
+      "verified",
+    ),
+    getLandlordPaystackAccountsWithOwnersByVerificationStatus(
+      supabase,
+      "failed",
+    ),
+    getAgentPaystackAccountsWithOwnersByVerificationStatus(supabase, "failed"),
+    getDeveloperPaystackAccountsWithOwnersByVerificationStatus(
+      supabase,
+      "failed",
+    ),
+  ]);
+
+  const pending = sortQueueAccounts([
+    ...pendingLandlords.map(mapLandlordAccount),
+    ...pendingAgents.map(mapAgentAccount),
+    ...pendingDevelopers.map(mapDeveloperAccount),
+  ]);
+  const verified = sortQueueAccounts([
+    ...verifiedLandlords.map(mapLandlordAccount),
+    ...verifiedAgents.map(mapAgentAccount),
+    ...verifiedDevelopers.map(mapDeveloperAccount),
+  ]);
+  const failed = sortQueueAccounts([
+    ...failedLandlords.map(mapLandlordAccount),
+    ...failedAgents.map(mapAgentAccount),
+    ...failedDevelopers.map(mapDeveloperAccount),
+  ]);
+
+  return {
+    pending,
+    verified,
+    failed,
+    totals: {
+      pending: pending.length,
+      verified: verified.length,
+      failed: failed.length,
+    },
+  };
+}
+
+export async function verifyPlatformAdminPayoutAccount(params: {
+  accountType: PayoutVerificationAccountType;
+  accountId: string;
+  expectedUpdatedAt: string;
+}) {
+  await requirePlatformAdmin();
+
+  const currentAccount = assertActiveAccount(await getCurrentAccount(params));
+
+  assertFreshAccount({
+    account: currentAccount,
+    expectedUpdatedAt: params.expectedUpdatedAt,
+    targetStatus: "verified",
+  });
+
+  if (isAlreadyVerified(currentAccount)) {
+    throw new AppError(
+      "PAYOUT_ACCOUNT_ALREADY_VERIFIED",
+      "This payout account is already verified.",
+      409,
+    );
+  }
+
+  const supabase = createSupabaseAdminClient();
+  const verifiedAt = new Date().toISOString();
+
+  let updatedAccount: VerifiablePayoutAccount | null = null;
+
+  if (params.accountType === "landlord") {
+    updatedAccount =
+      await updateActiveLandlordPaystackAccountVerificationStatus(supabase, {
+        accountId: params.accountId,
+        expectedUpdatedAt: params.expectedUpdatedAt,
+        verificationStatus: "verified",
+        verifiedAt,
+      });
+  }
+
+  if (params.accountType === "agent") {
+    updatedAccount = await updateActiveAgentPaystackAccountVerificationStatus(
+      supabase,
+      {
+        accountId: params.accountId,
+        expectedUpdatedAt: params.expectedUpdatedAt,
+        verificationStatus: "verified",
+        verifiedAt,
+      },
+    );
+  }
+
+  if (params.accountType === "developer") {
+    updatedAccount =
+      await updateActiveDeveloperPaystackAccountVerificationStatus(supabase, {
+        accountId: params.accountId,
+        expectedUpdatedAt: params.expectedUpdatedAt,
+        verificationStatus: "verified",
+        verifiedAt,
+      });
+  }
+
+  if (!updatedAccount) {
+    const latestAccount = assertActiveAccount(await getCurrentAccount(params));
+
+    if (isAlreadyVerified(latestAccount)) {
+      throw new AppError(
+        "PAYOUT_ACCOUNT_ALREADY_VERIFIED",
+        "This payout account is already verified.",
+        409,
+      );
+    }
+
+    throw new AppError(
+      "PAYOUT_ACCOUNT_STALE",
+      "This payout account was updated by another admin. Refresh and try again.",
+      409,
+    );
+  }
+
+  return updatedAccount;
+}
+
+export async function failPlatformAdminPayoutAccount(params: {
+  accountType: PayoutVerificationAccountType;
+  accountId: string;
+  expectedUpdatedAt: string;
+}) {
+  await requirePlatformAdmin();
+
+  const currentAccount = assertActiveAccount(await getCurrentAccount(params));
+
+  assertFreshAccount({
+    account: currentAccount,
+    expectedUpdatedAt: params.expectedUpdatedAt,
+    targetStatus: "failed",
+  });
+
+  if (currentAccount.verification_status === "verified") {
+    throw new AppError(
+      "PAYOUT_ACCOUNT_ALREADY_VERIFIED",
+      "Verified payout accounts cannot be marked as failed.",
+      409,
+    );
+  }
+
+  if (currentAccount.verification_status === "failed") {
+    return currentAccount;
+  }
+
+  const supabase = createSupabaseAdminClient();
+
+  let updatedAccount: VerifiablePayoutAccount | null = null;
+
+  if (params.accountType === "landlord") {
+    updatedAccount =
+      await updateActiveLandlordPaystackAccountVerificationStatus(supabase, {
+        accountId: params.accountId,
+        expectedUpdatedAt: params.expectedUpdatedAt,
+        verificationStatus: "failed",
+        verifiedAt: null,
+      });
+  }
+
+  if (params.accountType === "agent") {
+    updatedAccount = await updateActiveAgentPaystackAccountVerificationStatus(
+      supabase,
+      {
+        accountId: params.accountId,
+        expectedUpdatedAt: params.expectedUpdatedAt,
+        verificationStatus: "failed",
+        verifiedAt: null,
+      },
+    );
+  }
+
+  if (params.accountType === "developer") {
+    updatedAccount =
+      await updateActiveDeveloperPaystackAccountVerificationStatus(supabase, {
+        accountId: params.accountId,
+        expectedUpdatedAt: params.expectedUpdatedAt,
+        verificationStatus: "failed",
+        verifiedAt: null,
+      });
+  }
+
+  if (!updatedAccount) {
+    const latestAccount = assertActiveAccount(await getCurrentAccount(params));
+
+    if (latestAccount.verification_status === "verified") {
+      throw new AppError(
+        "PAYOUT_ACCOUNT_ALREADY_VERIFIED",
+        "Verified payout accounts cannot be marked as failed.",
+        409,
+      );
+    }
+
+    if (latestAccount.verification_status === "failed") {
+      return latestAccount;
+    }
+
+    throw new AppError(
+      "PAYOUT_ACCOUNT_STALE",
+      "This payout account was updated by another admin. Refresh and try again.",
+      409,
+    );
+  }
+
+  return updatedAccount;
+}
+
+
+====================================================================================================
+FILE: src/server/services/platform-admin.service.ts
+====================================================================================================
+
+import "server-only";
+
+import { notFound } from "next/navigation";
+import { AppError, isAppError } from "@/server/errors/app-error";
+import { requireUser } from "@/server/services/auth.service";
+import type { ServerSessionUser } from "@/server/types/auth.types";
+
+export type PlatformAdminSessionUser = ServerSessionUser & {
+  role: "platform_admin";
+};
+
+export function assertPlatformAdmin(
+  user: ServerSessionUser,
+): asserts user is PlatformAdminSessionUser {
+  if (user.role !== "platform_admin") {
+    throw new AppError(
+      "PLATFORM_ADMIN_REQUIRED",
+      "You do not have permission to access platform admin tools.",
+      403,
+    );
+  }
+}
+
+export async function requirePlatformAdmin(): Promise<PlatformAdminSessionUser> {
+  const user = await requireUser();
+
+  assertPlatformAdmin(user);
+
+  return user;
+}
+
+export async function requirePlatformAdminPage() {
+  try {
+    return await requirePlatformAdmin();
+  } catch (error) {
+    if (isAppError(error) && error.code === "PLATFORM_ADMIN_REQUIRED") {
+      notFound();
+    }
+
+    throw error;
+  }
+}
+
+

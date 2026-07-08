@@ -318,6 +318,7 @@ export async function markManagerPaystackPaymentRequestPaid(
     })
     .eq("id", params.requestId)
     .neq("status", "expired")
+    .neq("status", "cancelled")
     .select(MANAGER_RENT_PAYMENT_REQUEST_SELECT)
     .single<ManagerRentPaymentRequestRow>();
 
@@ -348,6 +349,9 @@ export async function markManagerPaystackPaymentRequestFailed(
       updated_at: new Date().toISOString(),
     })
     .eq("id", params.requestId)
+    .neq("status", "paid")
+    .neq("status", "expired")
+    .neq("status", "cancelled")
     .select(MANAGER_RENT_PAYMENT_REQUEST_SELECT)
     .single<ManagerRentPaymentRequestRow>();
 
@@ -394,4 +398,32 @@ export async function getManagerRentPaymentByPaymentReference(
   }
 
   return data;
+}
+
+export async function expireManagerFirstRentPaymentRequestsForAgreement(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    onboardingRequestId: string;
+    agreementDocumentId: string;
+    reason: string;
+  },
+) {
+  const { error } = await supabase
+    .from("manager_rent_payment_requests")
+    .update({
+      status: "expired",
+      failure_reason: params.reason,
+      cancelled_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("organization_id", params.organizationId)
+    .eq("onboarding_request_id", params.onboardingRequestId)
+    .eq("agreement_document_id", params.agreementDocumentId)
+    .eq("payment_purpose", "new_tenant_first_rent")
+    .in("status", ["pending", "initialized"]);
+
+  if (error) {
+    throw error;
+  }
 }

@@ -24,7 +24,8 @@ function parsePayoutVerificationFormData(formData: FormData) {
   if (
     accountType !== "landlord" &&
     accountType !== "agent" &&
-    accountType !== "developer"
+    accountType !== "developer" &&
+    accountType !== "manager"
   ) {
     throw new AppError(
       "INVALID_PAYOUT_ACCOUNT_TYPE",
@@ -55,6 +56,12 @@ function revalidatePayoutVerificationSurfaces() {
   revalidatePath("/agent/overview");
   revalidatePath("/developer/settings");
   revalidatePath("/developer");
+  revalidatePath("/manager");
+  revalidatePath("/manager/overview");
+  revalidatePath("/manager/settings");
+  revalidatePath("/manager/properties");
+  revalidatePath("/manager/payments");
+  revalidatePath("/manager/payouts");
 }
 
 function toActionError(

@@ -59,6 +59,10 @@ const navItems = [
     label: "Staff",
     href: "/manager/staff",
   },
+  {
+    label: "Settings",
+    href: "/manager/settings",
+  },
 ] as const;
 
 function getFirstName(fullName: string) {

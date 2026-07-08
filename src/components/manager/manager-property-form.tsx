@@ -1,16 +1,10 @@
 "use client";
 
-import { useMemo, useState, useActionState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import Link from "next/link";
 import { createManagerPropertyAction } from "@/actions/manager.actions";
 import { initialManagerActionState } from "@/actions/manager.state";
-import {
-  MANAGER_PAYSTACK_CHARGE_BEARERS,
-  type ManagerCollectionMode,
-  type ManagerManagementFeeType,
-  type ManagerPaystackChargeBearer,
-  type ManagerPaymentReceiver,
-} from "@/constants/manager";
+import type { ManagerManagementFeeType } from "@/constants/manager";
 import { Button } from "@/components/ui/button";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Input } from "@/components/ui/input";
@@ -26,56 +20,6 @@ type ManagerPropertyFormProps = {
 
 type OwnerMode = "existing" | "new";
 type FormStep = "details" | "rent";
-
-const COLLECTION_MODE_OPTIONS: Array<{
-  value: ManagerCollectionMode;
-  title: string;
-  description: string;
-}> = [
-  {
-    value: "manager_collects",
-    title: "Manager collects",
-    description: "Tenant pays the manager. Manager remits landlord balance.",
-  },
-  {
-    value: "landlord_direct",
-    title: "Landlord receives directly",
-    description: "Tenant pays landlord. Manager records and tracks the rent.",
-  },
-  {
-    value: "automatic_split",
-    title: "BOPA automatic split",
-    description: "Tenant pays once. BOPA shares the money automatically.",
-  },
-];
-
-const CHARGE_BEARER_LABELS: Record<ManagerPaystackChargeBearer, string> = {
-  tenant: "Tenant",
-  landlord: "Landlord",
-  manager: "Manager",
-  bopa: "BOPA",
-};
-
-function getPaymentReceiver(
-  collectionMode: ManagerCollectionMode,
-): ManagerPaymentReceiver {
-  if (collectionMode === "manager_collects") {
-    return "manager";
-  }
-
-  if (collectionMode === "landlord_direct") {
-    return "landlord";
-  }
-
-  return "bopa_verified";
-}
-
-function getCollectionLabel(collectionMode: ManagerCollectionMode) {
-  return (
-    COLLECTION_MODE_OPTIONS.find((option) => option.value === collectionMode)
-      ?.title ?? "Not selected"
-  );
-}
 
 function normaliseRequiredText(value: string) {
   return value.trim().length > 0;
@@ -170,21 +114,16 @@ export function ManagerPropertyForm({
   const [lga, setLga] = useState("");
   const [city, setCity] = useState("");
 
-  const lgaOptions = useMemo(
-    () => getNigeriaLgaOptions(stateName),
-    [stateName],
-  );
-
-  const [collectionMode, setCollectionMode] =
-    useState<ManagerCollectionMode>("manager_collects");
-
   const [hasManagementFee, setHasManagementFee] = useState(true);
   const [feeType, setFeeType] =
     useState<ManagerManagementFeeType>("percentage");
   const [managementFeeValue, setManagementFeeValue] = useState("10");
-  const [paystackChargeBearer, setPaystackChargeBearer] =
-    useState<ManagerPaystackChargeBearer>("tenant");
   const [notes, setNotes] = useState("");
+
+  const lgaOptions = useMemo(
+    () => getNigeriaLgaOptions(stateName),
+    [stateName],
+  );
 
   const useExistingLandlord =
     ownerMode === "existing" && landlordClients.length > 0;
@@ -195,9 +134,6 @@ export function ManagerPropertyForm({
       null,
     [landlordClients, selectedLandlordId],
   );
-
-  const paymentReceiver = getPaymentReceiver(collectionMode);
-  const shouldShowPaystackCharges = collectionMode === "automatic_split";
 
   const landlordSummary = useExistingLandlord
     ? (selectedLandlord?.landlord_name ?? "Select landlord")
@@ -263,13 +199,9 @@ export function ManagerPropertyForm({
       <input type="hidden" name="lga" value={lga} />
       <input type="hidden" name="city" value={city} />
 
-      <input type="hidden" name="collectionMode" value={collectionMode} />
-      <input type="hidden" name="paymentReceiver" value={paymentReceiver} />
-      <input
-        type="hidden"
-        name="paystackChargeBearer"
-        value={paystackChargeBearer}
-      />
+      <input type="hidden" name="collectionMode" value="manager_collects" />
+      <input type="hidden" name="paymentReceiver" value="manager" />
+      <input type="hidden" name="paystackChargeBearer" value="tenant" />
       <input type="hidden" name="managementFeeType" value={feeType} />
       <input
         type="hidden"
@@ -290,7 +222,7 @@ export function ManagerPropertyForm({
               <StepButton
                 active={step === "rent"}
                 label="2. Rent setup"
-                description="Collection method and management fee."
+                description="Manager collection and management fee."
               />
             </div>
           </div>
@@ -384,189 +316,169 @@ export function ManagerPropertyForm({
                           </option>
                         ))}
                       </select>
-                      {state.fieldErrors?.landlordClientId?.[0] ? (
-                        <p className="text-sm font-semibold text-danger">
-                          {state.fieldErrors.landlordClientId[0]}
-                        </p>
-                      ) : null}
                     </div>
                   ) : (
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <Input
-                        label="Landlord name"
-                        name="newLandlordNameVisible"
-                        placeholder="Example: Mrs Ada Chukwu"
-                        value={newLandlordName}
-                        onChange={(event) =>
-                          setNewLandlordName(event.target.value)
-                        }
-                        error={state.fieldErrors?.landlordName?.[0]}
-                        required
-                      />
-
-                      <Input
-                        label="Landlord phone"
-                        name="newLandlordPhoneVisible"
-                        placeholder="Example: 08012345678"
-                        value={newLandlordPhone}
-                        onChange={(event) =>
-                          setNewLandlordPhone(event.target.value)
-                        }
-                        error={state.fieldErrors?.landlordPhone?.[0]}
-                        required
-                      />
-
-                      <div className="sm:col-span-2">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setShowMoreLandlordDetails((current) => !current)
+                    <div className="space-y-4">
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <Input
+                          id="newLandlordNameVisible"
+                          label="Landlord name"
+                          value={newLandlordName}
+                          onChange={(event) =>
+                            setNewLandlordName(event.target.value)
                           }
-                          className="text-sm font-black text-primary"
-                        >
-                          {showMoreLandlordDetails
-                            ? "Hide extra landlord details"
-                            : "+ add email or address"}
-                        </button>
+                          placeholder="Example: Mr Chukwuma Okeke"
+                          required
+                        />
+
+                        <Input
+                          id="newLandlordPhoneVisible"
+                          label="Landlord phone"
+                          value={newLandlordPhone}
+                          onChange={(event) =>
+                            setNewLandlordPhone(event.target.value)
+                          }
+                          placeholder="Example: 08012345678"
+                          required
+                        />
                       </div>
 
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowMoreLandlordDetails((current) => !current)
+                        }
+                        className="text-sm font-black text-primary underline-offset-4 hover:underline"
+                      >
+                        {showMoreLandlordDetails
+                          ? "Hide optional landlord details"
+                          : "Add optional landlord details"}
+                      </button>
+
                       {showMoreLandlordDetails ? (
-                        <>
+                        <div className="grid gap-4 sm:grid-cols-2">
                           <Input
+                            id="newLandlordEmailVisible"
                             label="Landlord email"
-                            name="newLandlordEmailVisible"
                             type="email"
-                            placeholder="Optional"
                             value={newLandlordEmail}
                             onChange={(event) =>
                               setNewLandlordEmail(event.target.value)
                             }
-                            error={state.fieldErrors?.landlordEmail?.[0]}
+                            placeholder="Optional"
                           />
 
                           <Input
+                            id="newLandlordAddressVisible"
                             label="Landlord address"
-                            name="newLandlordAddressVisible"
-                            placeholder="Optional"
                             value={newLandlordAddress}
                             onChange={(event) =>
                               setNewLandlordAddress(event.target.value)
                             }
-                            error={state.fieldErrors?.landlordAddress?.[0]}
+                            placeholder="Optional"
                           />
-                        </>
+                        </div>
                       ) : null}
                     </div>
                   )}
                 </section>
 
-                <section className="border-t border-border-soft pt-5">
+                <section className="space-y-4">
                   <div>
                     <h2 className="text-lg font-black tracking-tight text-text-strong">
-                      Property details
+                      Property
                     </h2>
                     <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-                      This is what will appear on unit records, receipts, and
-                      statements.
+                      Add the property address and location.
                     </p>
                   </div>
 
-                  <div className="mt-4 space-y-4">
-                    <Input
-                      label="Property name"
-                      name="propertyNameVisible"
-                      placeholder="Example: Asuquo House"
-                      value={propertyName}
-                      onChange={(event) => setPropertyName(event.target.value)}
-                      error={state.fieldErrors?.propertyName?.[0]}
-                      required
-                    />
+                  <Input
+                    id="propertyNameVisible"
+                    label="Property name"
+                    value={propertyName}
+                    onChange={(event) => setPropertyName(event.target.value)}
+                    placeholder="Example: Dominion Heights"
+                    required
+                  />
 
-                    <Input
-                      label="Property address"
-                      name="propertyAddressVisible"
-                      placeholder="Example: 12 Fatai Atere Way"
-                      value={propertyAddress}
-                      onChange={(event) =>
-                        setPropertyAddress(event.target.value)
-                      }
-                      error={state.fieldErrors?.propertyAddress?.[0]}
-                      required
-                    />
+                  <Input
+                    id="propertyAddressVisible"
+                    label="Property address"
+                    value={propertyAddress}
+                    onChange={(event) => setPropertyAddress(event.target.value)}
+                    placeholder="Example: 12 Admiralty Way"
+                    required
+                  />
 
-                    <div className="grid gap-4 sm:grid-cols-3">
-                      <div className="space-y-2">
-                        <label
-                          htmlFor="manager-property-state"
-                          className="text-sm font-bold text-text-strong"
-                        >
-                          State
-                        </label>
-                        <select
-                          id="manager-property-state"
-                          value={stateName}
-                          onChange={(event) =>
-                            handleStateChange(event.target.value)
-                          }
-                          className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
-                          required
-                        >
-                          <option value="">Select state</option>
-                          {stateOptions.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                        {state.fieldErrors?.state?.[0] ? (
-                          <p className="text-sm font-semibold text-danger">
-                            {state.fieldErrors.state[0]}
-                          </p>
-                        ) : null}
-                      </div>
-
-                      <div className="space-y-2">
-                        <label
-                          htmlFor="manager-property-lga"
-                          className="text-sm font-bold text-text-strong"
-                        >
-                          LGA
-                        </label>
-                        <select
-                          id="manager-property-lga"
-                          value={lga}
-                          onChange={(event) => setLga(event.target.value)}
-                          disabled={!stateName}
-                          className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary disabled:cursor-not-allowed disabled:bg-surface disabled:text-text-muted"
-                          required
-                        >
-                          <option value="">
-                            {stateName ? "Select LGA" : "Select state first"}
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="manager-property-state"
+                        className="text-sm font-bold text-text-strong"
+                      >
+                        State
+                      </label>
+                      <select
+                        id="manager-property-state"
+                        value={stateName}
+                        onChange={(event) =>
+                          handleStateChange(event.target.value)
+                        }
+                        className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
+                        required
+                      >
+                        <option value="">Select state</option>
+                        {stateOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
                           </option>
-                          {lgaOptions.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                        {state.fieldErrors?.lga?.[0] ? (
-                          <p className="text-sm font-semibold text-danger">
-                            {state.fieldErrors.lga[0]}
-                          </p>
-                        ) : null}
-                      </div>
-
-                      <Input
-                        label="City/Area"
-                        name="cityVisible"
-                        placeholder="Lekki"
-                        value={city}
-                        onChange={(event) => setCity(event.target.value)}
-                        error={state.fieldErrors?.city?.[0]}
-                      />
+                        ))}
+                      </select>
                     </div>
+
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="manager-property-lga"
+                        className="text-sm font-bold text-text-strong"
+                      >
+                        LGA
+                      </label>
+                      <select
+                        id="manager-property-lga"
+                        value={lga}
+                        onChange={(event) => setLga(event.target.value)}
+                        className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
+                        required
+                      >
+                        <option value="">Select LGA</option>
+                        {lgaOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <Input
+                      id="cityVisible"
+                      label="City / area"
+                      value={city}
+                      onChange={(event) => setCity(event.target.value)}
+                      placeholder="Optional"
+                    />
                   </div>
                 </section>
+
+                <div className="flex justify-end border-t border-border-soft pt-4">
+                  <Button
+                    type="button"
+                    onClick={() => setStep("rent")}
+                    disabled={!canContinueFromDetails}
+                  >
+                    Continue
+                  </Button>
+                </div>
               </>
             ) : (
               <>
@@ -576,51 +488,44 @@ export function ManagerPropertyForm({
                       Rent collection
                     </h2>
                     <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-                      Choose how rent is actually received for this property.
+                      BOPA Manager currently uses one simple collection model.
                     </p>
                   </div>
 
-                  <div className="grid gap-3">
-                    {COLLECTION_MODE_OPTIONS.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => setCollectionMode(option.value)}
-                        className={`rounded-card border p-4 text-left transition ${
-                          collectionMode === option.value
-                            ? "border-primary bg-primary-soft"
-                            : "border-border-soft bg-white hover:border-primary/40"
-                        }`}
-                      >
-                        <p className="font-black text-text-strong">
-                          {option.title}
-                        </p>
-                        <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-                          {option.description}
-                        </p>
-                      </button>
-                    ))}
+                  <div className="rounded-card border border-primary/20 bg-primary-soft p-4">
+                    <p className="text-base font-black text-text-strong">
+                      Manager collects rent
+                    </p>
+                    <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
+                      Tenant pays through BOPA/Paystack. The payment settles to
+                      the manager’s verified payout account. BOPA calculates the
+                      manager fee and landlord balance automatically.
+                    </p>
                   </div>
 
-                  {state.fieldErrors?.collectionMode?.[0] ? (
-                    <p className="text-sm font-semibold text-danger">
-                      {state.fieldErrors.collectionMode[0]}
+                  <div className="rounded-card border border-warning/20 bg-warning-soft p-4">
+                    <p className="text-sm font-black text-text-strong">
+                      Payout account required
                     </p>
-                  ) : null}
+                    <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                      Rent payment links will only work after the manager payout
+                      account has been verified on Paystack.
+                    </p>
+                  </div>
                 </section>
 
-                <section className="border-t border-border-soft pt-5">
+                <section className="space-y-4">
                   <div>
                     <h2 className="text-lg font-black tracking-tight text-text-strong">
                       Management fee
                     </h2>
                     <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-                      BOPA uses this to calculate manager share and landlord
-                      balance automatically.
+                      BOPA uses this to calculate the manager commission and
+                      landlord balance.
                     </p>
                   </div>
 
-                  <div className="mt-4 inline-flex rounded-button border border-border-soft bg-surface p-1">
+                  <div className="inline-flex rounded-button border border-border-soft bg-surface p-1">
                     <button
                       type="button"
                       onClick={() => setHasManagementFee(true)}
@@ -647,7 +552,7 @@ export function ManagerPropertyForm({
                   </div>
 
                   {hasManagementFee ? (
-                    <div className="mt-4 grid gap-4 sm:grid-cols-[220px_1fr]">
+                    <div className="grid gap-4 sm:grid-cols-2">
                       <div className="space-y-2">
                         <label
                           htmlFor="manager-fee-type"
@@ -666,24 +571,14 @@ export function ManagerPropertyForm({
                           className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
                         >
                           <option value="percentage">Percentage</option>
-                          <option value="flat">Fixed amount</option>
+                          <option value="flat">Flat amount</option>
                         </select>
                       </div>
 
-                      {feeType === "flat" ? (
-                        <CurrencyInput
-                          label="Fee amount"
-                          name="managementFeeValueVisible"
-                          value={managementFeeValue}
-                          onValueChange={setManagementFeeValue}
-                          placeholder="0.00"
-                          error={state.fieldErrors?.managementFeeValue?.[0]}
-                          required
-                        />
-                      ) : (
+                      {feeType === "percentage" ? (
                         <Input
+                          id="managementFeeValueVisible"
                           label="Fee percentage"
-                          name="managementFeeValueVisible"
                           type="number"
                           min="0"
                           step="0.01"
@@ -695,160 +590,91 @@ export function ManagerPropertyForm({
                           error={state.fieldErrors?.managementFeeValue?.[0]}
                           required
                         />
+                      ) : (
+                        <CurrencyInput
+                          label="Flat fee"
+                          name="managementFeeValueVisible"
+                          value={managementFeeValue}
+                          onValueChange={setManagementFeeValue}
+                          placeholder="0.00"
+                          error={state.fieldErrors?.managementFeeValue?.[0]}
+                          required
+                        />
                       )}
                     </div>
                   ) : null}
                 </section>
 
-                {shouldShowPaystackCharges ? (
-                  <section className="border-t border-border-soft pt-5">
-                    <div>
-                      <h2 className="text-lg font-black tracking-tight text-text-strong">
-                        Online payment charge
-                      </h2>
-                      <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-                        Choose who bears Paystack charges when BOPA splits rent.
-                      </p>
-                    </div>
-
-                    <div className="mt-4 grid gap-2 sm:grid-cols-4">
-                      {MANAGER_PAYSTACK_CHARGE_BEARERS.map((bearer) => (
-                        <button
-                          key={bearer}
-                          type="button"
-                          onClick={() => setPaystackChargeBearer(bearer)}
-                          className={`min-h-11 rounded-button border px-4 text-sm font-black transition ${
-                            paystackChargeBearer === bearer
-                              ? "border-primary bg-primary-soft text-primary"
-                              : "border-border-soft bg-white text-text-strong hover:border-primary/40"
-                          }`}
-                        >
-                          {CHARGE_BEARER_LABELS[bearer]}
-                        </button>
-                      ))}
-                    </div>
-
-                    {state.fieldErrors?.paystackChargeBearer?.[0] ? (
-                      <p className="mt-2 text-sm font-semibold text-danger">
-                        {state.fieldErrors.paystackChargeBearer[0]}
-                      </p>
-                    ) : null}
-                  </section>
-                ) : null}
-
-                <section className="border-t border-border-soft pt-5">
+                <section className="space-y-3">
                   <button
                     type="button"
                     onClick={() => setShowNote((current) => !current)}
-                    className="text-sm font-black text-primary"
+                    className="text-sm font-black text-primary underline-offset-4 hover:underline"
                   >
-                    {showNote ? "Hide note" : "+ add internal note"}
+                    {showNote ? "Hide note" : "Add internal note"}
                   </button>
 
                   {showNote ? (
-                    <div className="mt-3 space-y-2">
+                    <div className="space-y-2">
                       <label
-                        htmlFor="manager-property-notes"
+                        htmlFor="manager-property-note"
                         className="text-sm font-bold text-text-strong"
                       >
                         Internal note
                       </label>
                       <textarea
-                        id="manager-property-notes"
-                        rows={3}
-                        placeholder="Optional"
+                        id="manager-property-note"
                         value={notes}
                         onChange={(event) => setNotes(event.target.value)}
+                        rows={3}
+                        placeholder="Optional"
                         className="w-full rounded-button border border-border-soft bg-white px-4 py-3 text-sm font-semibold text-text-strong outline-none transition placeholder:text-text-muted focus:border-primary"
                       />
-                      {state.fieldErrors?.notes?.[0] ? (
-                        <p className="text-sm font-semibold text-danger">
-                          {state.fieldErrors.notes[0]}
-                        </p>
-                      ) : null}
                     </div>
                   ) : null}
                 </section>
+
+                <div className="flex flex-col gap-3 border-t border-border-soft pt-4 sm:flex-row sm:items-center sm:justify-between">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setStep("details")}
+                  >
+                    Back
+                  </Button>
+
+                  <Button type="submit" isLoading={isPending}>
+                    Save property
+                  </Button>
+                </div>
               </>
-            )}
-          </div>
-
-          <div className="border-t border-border-soft p-4">
-            {step === "details" ? (
-              <Button
-                type="button"
-                disabled={!canContinueFromDetails}
-                fullWidth
-                onClick={() => setStep("rent")}
-              >
-                Continue
-              </Button>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-[auto_1fr]">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={isPending}
-                  onClick={() => setStep("details")}
-                >
-                  Back
-                </Button>
-
-                <Button type="submit" isLoading={isPending} fullWidth>
-                  Save property
-                </Button>
-              </div>
             )}
           </div>
         </section>
 
-        <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-          <section className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
-            <h2 className="text-lg font-black tracking-tight text-text-strong">
-              Property summary
-            </h2>
-            <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-              Check the setup before saving.
-            </p>
+        <aside className="rounded-card border border-border-soft bg-white p-4 shadow-sm lg:self-start">
+          <h2 className="text-lg font-black tracking-tight text-text-strong">
+            Summary
+          </h2>
 
-            <div className="mt-4">
-              <SummaryItem label="Landlord" value={landlordSummary} />
-              <SummaryItem
-                label="Property"
-                value={propertyName.trim() || "Property name"}
-              />
-              <SummaryItem
-                label="Address"
-                value={propertyAddress.trim() || "Property address"}
-              />
-              <SummaryItem
-                label="Location"
-                value={locationSummary || "Not set"}
-              />
-              <SummaryItem
-                label="Collection"
-                value={getCollectionLabel(collectionMode)}
-              />
-              <SummaryItem
-                label="Management fee"
-                value={managementFeeSummary}
-              />
-              <SummaryItem
-                label="Paystack charge"
-                value={CHARGE_BEARER_LABELS[paystackChargeBearer]}
-              />
-            </div>
-          </section>
-
-          <section className="rounded-card border border-primary/20 bg-primary-soft p-4">
-            <p className="text-sm font-black text-text-strong">
-              What happens next
-            </p>
-            <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
-              After saving, open this property to add units, then add tenants to
-              each vacant unit.
-            </p>
-          </section>
+          <div className="mt-4">
+            <SummaryItem label="Landlord" value={landlordSummary} />
+            <SummaryItem
+              label="Property"
+              value={propertyName.trim() || "Not set"}
+            />
+            <SummaryItem
+              label="Location"
+              value={locationSummary || "Not set"}
+            />
+            <SummaryItem label="Rent collection" value="Manager collects" />
+            <SummaryItem
+              label="Payment receiver"
+              value="Manager verified Paystack account"
+            />
+            <SummaryItem label="Paystack charge" value="Tenant pays" />
+            <SummaryItem label="Management fee" value={managementFeeSummary} />
+          </div>
         </aside>
       </div>
     </form>

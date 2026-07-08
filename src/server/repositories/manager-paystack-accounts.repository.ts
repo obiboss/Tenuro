@@ -23,6 +23,16 @@ export type ManagerPaystackAccountRow = {
   updated_at: string;
 };
 
+export type ManagerPaystackAccountWithOwner = ManagerPaystackAccountRow & {
+  manager_organizations: {
+    id: string;
+    owner_profile_id: string;
+    organization_name: string;
+    organization_email: string | null;
+    organization_phone: string | null;
+  } | null;
+};
+
 export type ManagerLandlordPaystackAccountRow = {
   id: string;
   organization_id: string;
@@ -68,6 +78,17 @@ const MANAGER_PAYSTACK_ACCOUNT_SELECT = `
   updated_at
 `;
 
+const MANAGER_PAYSTACK_ACCOUNT_WITH_OWNER_SELECT = `
+  ${MANAGER_PAYSTACK_ACCOUNT_SELECT},
+  manager_organizations (
+    id,
+    owner_profile_id,
+    organization_name,
+    organization_email,
+    organization_phone
+  )
+`;
+
 const MANAGER_LANDLORD_PAYSTACK_ACCOUNT_SELECT = `
   id,
   organization_id,
@@ -91,6 +112,21 @@ const MANAGER_LANDLORD_PAYSTACK_ACCOUNT_SELECT = `
   updated_at
 `;
 
+function buildVerificationStatusUpdate(params: {
+  verificationStatus: PaystackVerificationStatus;
+  verifiedAt?: string | null;
+}) {
+  const isVerified = params.verificationStatus === "verified";
+
+  return {
+    verification_status: params.verificationStatus,
+    verified_at: isVerified
+      ? (params.verifiedAt ?? new Date().toISOString())
+      : null,
+    updated_at: new Date().toISOString(),
+  };
+}
+
 export async function getActiveManagerPaystackAccount(
   supabase: SupabaseClient,
   organizationId: string,
@@ -100,6 +136,23 @@ export async function getActiveManagerPaystackAccount(
     .select(MANAGER_PAYSTACK_ACCOUNT_SELECT)
     .eq("organization_id", organizationId)
     .eq("is_active", true)
+    .maybeSingle<ManagerPaystackAccountRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getManagerPaystackAccountById(
+  supabase: SupabaseClient,
+  accountId: string,
+) {
+  const { data, error } = await supabase
+    .from("manager_paystack_accounts")
+    .select(MANAGER_PAYSTACK_ACCOUNT_SELECT)
+    .eq("id", accountId)
     .maybeSingle<ManagerPaystackAccountRow>();
 
   if (error) {
@@ -119,6 +172,89 @@ export async function listManagerPaystackAccounts(
     .eq("organization_id", organizationId)
     .order("created_at", { ascending: false })
     .returns<ManagerPaystackAccountRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getManagerPaystackAccountsByVerificationStatus(
+  supabase: SupabaseClient,
+  verificationStatus: PaystackVerificationStatus,
+  params: {
+    activeOnly?: boolean;
+  } = {},
+) {
+  let query = supabase
+    .from("manager_paystack_accounts")
+    .select(MANAGER_PAYSTACK_ACCOUNT_SELECT)
+    .eq("verification_status", verificationStatus)
+    .order("created_at", { ascending: false });
+
+  if (params.activeOnly) {
+    query = query.eq("is_active", true);
+  }
+
+  const { data, error } = await query.returns<ManagerPaystackAccountRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getManagerPaystackAccountsWithOwnersByVerificationStatus(
+  supabase: SupabaseClient,
+  verificationStatus: PaystackVerificationStatus,
+  params: {
+    activeOnly?: boolean;
+  } = {},
+) {
+  let query = supabase
+    .from("manager_paystack_accounts")
+    .select(MANAGER_PAYSTACK_ACCOUNT_WITH_OWNER_SELECT)
+    .eq("verification_status", verificationStatus)
+    .order("created_at", { ascending: false });
+
+  if (params.activeOnly) {
+    query = query.eq("is_active", true);
+  }
+
+  const { data, error } =
+    await query.returns<ManagerPaystackAccountWithOwner[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function updateActiveManagerPaystackAccountVerificationStatus(
+  supabase: SupabaseClient,
+  params: {
+    accountId: string;
+    expectedUpdatedAt: string;
+    verificationStatus: PaystackVerificationStatus;
+    verifiedAt?: string | null;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_paystack_accounts")
+    .update(
+      buildVerificationStatusUpdate({
+        verificationStatus: params.verificationStatus,
+        verifiedAt: params.verifiedAt,
+      }),
+    )
+    .eq("id", params.accountId)
+    .eq("is_active", true)
+    .eq("updated_at", params.expectedUpdatedAt)
+    .select(MANAGER_PAYSTACK_ACCOUNT_SELECT)
+    .maybeSingle<ManagerPaystackAccountRow>();
 
   if (error) {
     throw error;
@@ -173,8 +309,8 @@ export async function createManagerPaystackAccount(
       paystack_subaccount_id: params.paystackSubaccountId,
       currency_code: "NGN",
       is_active: true,
-      verification_status: "verified",
-      verified_at: new Date().toISOString(),
+      verification_status: "unverified",
+      verified_at: null,
       metadata: params.metadata,
     })
     .select(MANAGER_PAYSTACK_ACCOUNT_SELECT)
@@ -276,8 +412,8 @@ export async function createManagerLandlordPaystackAccount(
       paystack_subaccount_id: params.paystackSubaccountId,
       currency_code: "NGN",
       is_active: true,
-      verification_status: "verified",
-      verified_at: new Date().toISOString(),
+      verification_status: "unverified",
+      verified_at: null,
       metadata: params.metadata,
     })
     .select(MANAGER_LANDLORD_PAYSTACK_ACCOUNT_SELECT)

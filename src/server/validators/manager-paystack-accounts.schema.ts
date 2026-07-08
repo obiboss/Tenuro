@@ -24,7 +24,22 @@ const optionalEmailSchema = z.preprocess(
   z.string().trim().email("Enter a valid email address.").optional(),
 );
 
-export const saveManagerOrganizationPaystackAccountSchema = z.object({
+export const setupManagerBankAccountSchema = z.object({
+  bankCode: z.string().trim().min(2, "Select the bank."),
+  bankName: z.string().trim().min(2, "Select the bank."),
+  accountNumber: accountNumberSchema,
+  businessName: z
+    .string()
+    .trim()
+    .min(2, "Enter the business name.")
+    .max(120, "Business name is too long."),
+});
+
+export const saveManagerOrganizationPaystackAccountSchema =
+  setupManagerBankAccountSchema;
+
+export const saveManagerLandlordPaystackAccountSchema = z.object({
+  landlordClientId: z.string().trim().uuid("Select a valid landlord client."),
   businessName: z
     .string()
     .trim()
@@ -46,10 +61,9 @@ export const saveManagerOrganizationPaystackAccountSchema = z.object({
   accountNumber: accountNumberSchema,
 });
 
-export const saveManagerLandlordPaystackAccountSchema =
-  saveManagerOrganizationPaystackAccountSchema.extend({
-    landlordClientId: z.string().trim().uuid("Select a valid landlord client."),
-  });
+export type SetupManagerBankAccountInput = z.infer<
+  typeof setupManagerBankAccountSchema
+>;
 
 export type SaveManagerOrganizationPaystackAccountInput = z.infer<
   typeof saveManagerOrganizationPaystackAccountSchema

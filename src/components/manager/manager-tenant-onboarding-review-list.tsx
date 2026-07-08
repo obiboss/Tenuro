@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import {
   approveManagerTenantOnboardingRequestAction,
   rejectManagerTenantOnboardingRequestAction,
@@ -9,7 +9,7 @@ import {
 import { initialManagerTenantOnboardingActionState } from "@/actions/manager-tenant-onboarding.state";
 import { Button } from "@/components/ui/button";
 import { CurrencyInput } from "@/components/ui/currency-input";
-import { Input } from "@/components/ui/input";
+import { Toast, type ToastItem } from "@/components/ui/toast";
 import { buildWaMeUrl } from "@/lib/whatsapp";
 import type { ManagerTenantOnboardingRequestRow } from "@/server/repositories/manager-tenant-onboarding.repository";
 
@@ -17,7 +17,9 @@ type ManagerTenantOnboardingReviewListProps = {
   requests: ManagerTenantOnboardingRequestRow[];
 };
 
-const ACTIVE_REVIEW_STATUSES = new Set([
+const ACTIVE_REVIEW_STATUSES = new Set<
+  ManagerTenantOnboardingRequestRow["status"]
+>([
   "pending",
   "submitted",
   "agreement_sent",
@@ -26,17 +28,34 @@ const ACTIVE_REVIEW_STATUSES = new Set([
   "payment_expired",
 ]);
 
-function formatNaira(amount: number | null) {
+function getTodayDateValue() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function formatNaira(amount: number | null | undefined) {
+  if (
+    amount === null ||
+    amount === undefined ||
+    !Number.isFinite(Number(amount))
+  ) {
+    return "Not set";
+  }
+
   return new Intl.NumberFormat("en-NG", {
     style: "currency",
     currency: "NGN",
     maximumFractionDigits: 0,
-  }).format(Number.isFinite(Number(amount)) ? Number(amount) : 0);
+  }).format(Number(amount));
 }
 
 function formatDate(date: string | null) {
   if (!date) {
-    return "After approval";
+    return "Not set";
   }
 
   return new Intl.DateTimeFormat("en-NG", {
@@ -46,19 +65,31 @@ function formatDate(date: string | null) {
   }).format(new Date(`${date}T00:00:00`));
 }
 
+function formatDateTime(date: string | null) {
+  if (!date) {
+    return "Not submitted yet";
+  }
+
+  return new Intl.DateTimeFormat("en-NG", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Africa/Lagos",
+  }).format(new Date(date));
+}
+
 function getStatusLabel(status: ManagerTenantOnboardingRequestRow["status"]) {
   const labels: Record<ManagerTenantOnboardingRequestRow["status"], string> = {
-    pending: "Link sent",
-    submitted: "Needs review",
+    pending: "Waiting for details",
+    submitted: "Submitted for review",
     approved: "Approved",
     rejected: "Rejected",
-    cancelled: "Cancelled",
+    cancelled: "Agreement declined",
     expired: "Expired",
     agreement_sent: "Agreement sent",
     agreement_accepted: "Agreement accepted",
-    payment_initialized: "Payment link sent",
+    payment_initialized: "Payment link active",
     payment_paid: "Paid",
-    payment_expired: "Payment link expired",
+    payment_expired: "Payment expired",
   };
 
   return labels[status];
@@ -71,7 +102,12 @@ function getStatusClassName(
     return "bg-warning-soft text-warning";
   }
 
-  if (status === "payment_paid" || status === "approved") {
+  if (
+    status === "payment_paid" ||
+    status === "approved" ||
+    status === "agreement_accepted" ||
+    status === "payment_initialized"
+  ) {
     return "bg-success-soft text-success";
   }
 
@@ -95,13 +131,106 @@ function getTenantTypeLabel(
     : "New incoming tenant";
 }
 
-function RequestReviewCard({
+function getIdTypeLabel(value: string | null) {
+  const labels: Record<string, string> = {
+    nin: "NIN",
+    passport: "International Passport",
+    drivers_license: "Driver's License",
+    voters_card: "Voter's Card",
+  };
+
+  if (!value) {
+    return "Not provided";
+  }
+
+  return labels[value] ?? value;
+}
+
+function buildToastId(params: {
+  requestId: string;
+  action: string;
+  ok: boolean;
+  message: string;
+}) {
+  return `${params.requestId}-${params.action}-${params.ok ? "success" : "error"}-${params.message}`;
+}
+
+function DetailItem({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | null | undefined;
+}) {
+  return (
+    <div className="rounded-card bg-surface p-3">
+      <p className="text-xs font-black uppercase tracking-wide text-text-muted">
+        {label}
+      </p>
+      <p className="mt-1 wrap-break-word text-sm font-black text-text-strong">
+        {value?.trim() || "Not provided"}
+      </p>
+    </div>
+  );
+}
+
+function WhatsAppActionCard({
+  title,
+  description,
+  phoneNumber,
+  message,
+}: {
+  title: string;
+  description: string;
+  phoneNumber?: string;
+  message?: string;
+}) {
+  const whatsappUrl = message
+    ? buildWaMeUrl({
+        phoneNumber,
+        message,
+      })
+    : null;
+
+  if (!whatsappUrl) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-card border border-border-soft bg-success-soft p-4">
+      <p className="text-sm font-black text-text-strong">{title}</p>
+      <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+        {description}
+      </p>
+
+      <a
+        href={whatsappUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-button bg-primary px-5 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
+      >
+        Open WhatsApp
+      </a>
+
+      <a
+        href={whatsappUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-3 inline-flex min-h-10 w-full items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+      >
+        Send again
+      </a>
+    </div>
+  );
+}
+
+function RequestDetailPanel({
   request,
 }: {
   request: ManagerTenantOnboardingRequestRow;
 }) {
-  const openedMessageRef = useRef<string | null>(null);
   const [showReject, setShowReject] = useState(false);
+  const [dismissedToastIds, setDismissedToastIds] = useState<string[]>([]);
 
   const [approveState, approveAction, isApproving] = useActionState(
     approveManagerTenantOnboardingRequestAction,
@@ -118,58 +247,88 @@ function RequestReviewCard({
     initialManagerTenantOnboardingActionState,
   );
 
-  useEffect(() => {
-    if (
-      !approveState.ok ||
-      !approveState.whatsappMessage ||
-      !approveState.tenantWhatsappNumber ||
-      openedMessageRef.current === approveState.whatsappMessage
-    ) {
-      return;
+  const toasts = useMemo<ToastItem[]>(() => {
+    const nextToasts: ToastItem[] = [];
+
+    if (approveState.message) {
+      const id = buildToastId({
+        requestId: request.id,
+        action: "approve",
+        ok: approveState.ok,
+        message: approveState.message,
+      });
+
+      if (!dismissedToastIds.includes(id)) {
+        nextToasts.push({
+          id,
+          tone: approveState.ok ? "success" : "error",
+          title: approveState.ok ? "Approved" : "Could not approve",
+          description: approveState.message,
+        });
+      }
     }
 
-    openedMessageRef.current = approveState.whatsappMessage;
+    if (rejectState.message) {
+      const id = buildToastId({
+        requestId: request.id,
+        action: "reject",
+        ok: rejectState.ok,
+        message: rejectState.message,
+      });
 
-    window.location.assign(
-      buildWaMeUrl({
-        phoneNumber: approveState.tenantWhatsappNumber,
-        message: approveState.whatsappMessage,
-      }),
-    );
+      if (!dismissedToastIds.includes(id)) {
+        nextToasts.push({
+          id,
+          tone: rejectState.ok ? "success" : "error",
+          title: rejectState.ok ? "Rejected" : "Could not reject",
+          description: rejectState.message,
+        });
+      }
+    }
+
+    if (resendState.message) {
+      const id = buildToastId({
+        requestId: request.id,
+        action: "payment",
+        ok: resendState.ok,
+        message: resendState.message,
+      });
+
+      if (!dismissedToastIds.includes(id)) {
+        nextToasts.push({
+          id,
+          tone: resendState.ok ? "success" : "error",
+          title: resendState.ok
+            ? "Payment link ready"
+            : "Could not prepare payment link",
+          description: resendState.message,
+        });
+      }
+    }
+
+    return nextToasts;
   }, [
+    approveState.message,
     approveState.ok,
-    approveState.tenantWhatsappNumber,
-    approveState.whatsappMessage,
-  ]);
-
-  useEffect(() => {
-    if (
-      !resendState.ok ||
-      !resendState.whatsappMessage ||
-      !resendState.tenantWhatsappNumber ||
-      openedMessageRef.current === resendState.whatsappMessage
-    ) {
-      return;
-    }
-
-    openedMessageRef.current = resendState.whatsappMessage;
-
-    window.location.assign(
-      buildWaMeUrl({
-        phoneNumber: resendState.tenantWhatsappNumber,
-        message: resendState.whatsappMessage,
-      }),
-    );
-  }, [
+    dismissedToastIds,
+    rejectState.message,
+    rejectState.ok,
+    request.id,
+    resendState.message,
     resendState.ok,
-    resendState.tenantWhatsappNumber,
-    resendState.whatsappMessage,
   ]);
+
+  function dismissToast(id: string) {
+    setDismissedToastIds((current) =>
+      current.includes(id) ? current : [...current, id],
+    );
+  }
 
   const canReview = request.status === "submitted";
-  const canSendPayment =
+  const canResendPayment =
     request.onboarding_type === "new_incoming_tenant" &&
     (request.status === "agreement_accepted" ||
+      request.status === "payment_initialized" ||
       request.status === "payment_expired");
 
   const tenantName =
@@ -178,261 +337,280 @@ function RequestReviewCard({
     request.tenant_phone_number ?? request.invited_tenant_phone_number ?? "";
   const propertyName = request.manager_properties?.property_name ?? "Property";
   const unitLabel = request.manager_units?.unit_label ?? "Unit";
+  const unitRentAmount =
+    request.manager_units?.rent_amount ??
+    request.manager_confirmed_rent_amount ??
+    0;
+  const today = getTodayDateValue();
+  const defaultMoveInDate =
+    request.onboarding_type === "new_incoming_tenant"
+      ? today
+      : (request.tenant_move_in_date ?? "");
+  const minMoveInDate =
+    request.onboarding_type === "new_incoming_tenant" ? today : undefined;
 
   return (
-    <article className="rounded-card border border-border-soft bg-white shadow-sm">
-      <div className="border-b border-border-soft p-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="font-black text-text-strong">{tenantName}</p>
-              <span
-                className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${getStatusClassName(
-                  request.status,
-                )}`}
-              >
-                {getStatusLabel(request.status)}
-              </span>
-            </div>
-
-            <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-              {unitLabel} · {propertyName} ·{" "}
-              {getTenantTypeLabel(request.onboarding_type)}
-            </p>
-
-            {tenantPhone ? (
-              <p className="mt-1 text-sm font-semibold text-text-muted">
-                {tenantPhone}
-              </p>
-            ) : null}
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:min-w-96">
-            <div className="rounded-card bg-surface p-3">
-              <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-                Rent
-              </p>
-              <p className="mt-1 text-sm font-black text-text-strong">
-                {formatNaira(request.tenant_claimed_rent_amount)}
-              </p>
-            </div>
-
-            <div className="rounded-card bg-surface p-3">
-              <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-                Move-in
-              </p>
-              <p className="mt-1 text-sm font-black text-text-strong">
-                {formatDate(request.tenant_move_in_date)}
-              </p>
-            </div>
-
-            <div className="rounded-card bg-primary-soft p-3">
-              <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-                Next rent due
-              </p>
-              <p className="mt-1 text-sm font-black text-text-strong">
-                {formatDate(request.tenant_claimed_next_rent_due_date)}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {approveState.message ? (
-        <div
-          role="alert"
-          className={
-            approveState.ok
-              ? "mx-4 mt-4 rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
-              : "mx-4 mt-4 rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
-          }
-        >
-          {approveState.message}
+    <>
+      {toasts.length > 0 ? (
+        <div className="fixed left-1/2 top-4 z-50 grid w-[calc(100%-2rem)] max-w-md -translate-x-1/2 gap-3">
+          {toasts.map((toast) => (
+            <Toast key={toast.id} toast={toast} onDismiss={dismissToast} />
+          ))}
         </div>
       ) : null}
 
-      {resendState.message ? (
-        <div
-          role="alert"
-          className={
-            resendState.ok
-              ? "mx-4 mt-4 rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
-              : "mx-4 mt-4 rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
-          }
-        >
-          {resendState.message}
-        </div>
-      ) : null}
-
-      {rejectState.message ? (
-        <div
-          role="alert"
-          className={
-            rejectState.ok
-              ? "mx-4 mt-4 rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
-              : "mx-4 mt-4 rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
-          }
-        >
-          {rejectState.message}
-        </div>
-      ) : null}
-
-      {canReview ? (
-        <div className="grid gap-4 p-4 lg:grid-cols-[1fr_18rem]">
-          <form action={approveAction} className="space-y-4">
-            <input type="hidden" name="requestId" value={request.id} />
-
-            <div className="rounded-card bg-primary-soft p-4">
-              <p className="text-sm font-black text-text-strong">
-                Review tenant details
+      <section className="rounded-card border border-border-soft bg-white shadow-sm">
+        <div className="border-b border-border-soft p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-lg font-black text-text-strong">
+                {tenantName}
               </p>
               <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-                Confirm the rent amount and move-in date before approving this
-                tenant.
+                {unitLabel} · {propertyName} ·{" "}
+                {getTenantTypeLabel(request.onboarding_type)}
               </p>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <CurrencyInput
-                label="Rent amount"
-                name="confirmedRentAmount"
-                defaultValue={String(request.tenant_claimed_rent_amount ?? "")}
-                placeholder="0.00"
-                error={approveState.fieldErrors?.confirmedRentAmount?.[0]}
-                required
-              />
-
-              <Input
-                label="Move-in date"
-                name="confirmedMoveInDate"
-                type="date"
-                defaultValue={request.tenant_move_in_date ?? ""}
-                error={approveState.fieldErrors?.confirmedMoveInDate?.[0]}
-                required
-              />
-            </div>
-
-            <CurrencyInput
-              label="Opening balance"
-              name="openingBalance"
-              defaultValue="0"
-              placeholder="0.00"
-              error={approveState.fieldErrors?.openingBalance?.[0]}
-              required
-            />
-
-            <details className="rounded-card border border-border-soft bg-white p-4">
-              <summary className="cursor-pointer text-sm font-black text-primary">
-                Add review note
-              </summary>
-
-              <div className="mt-3 space-y-2">
-                <label
-                  htmlFor={`review-${request.id}`}
-                  className="text-sm font-bold text-text-strong"
-                >
-                  Review note
-                </label>
-                <textarea
-                  id={`review-${request.id}`}
-                  name="reviewNotes"
-                  rows={3}
-                  placeholder="Optional"
-                  className="w-full rounded-button border border-border-soft bg-white px-4 py-3 text-sm font-semibold text-text-strong outline-none transition placeholder:text-text-muted focus:border-primary"
-                />
-              </div>
-            </details>
-
-            <Button type="submit" isLoading={isApproving} fullWidth>
-              {request.onboarding_type === "new_incoming_tenant"
-                ? "Approve and Send Agreement"
-                : "Approve Current Occupant"}
-            </Button>
-          </form>
-
-          <aside className="space-y-4">
-            <div className="rounded-card border border-border-soft bg-surface p-4">
-              <p className="text-sm font-black text-text-strong">
-                After approval
-              </p>
-              <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
-                {request.onboarding_type === "new_incoming_tenant"
-                  ? "The tenant receives the agreement. After accepting it, the first rent payment button appears immediately."
-                  : "The tenant record becomes active and the unit becomes occupied."}
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setShowReject((current) => !current)}
-              className="inline-flex min-h-10 w-full items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+            <span
+              className={`w-fit rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${getStatusClassName(
+                request.status,
+              )}`}
             >
-              {showReject ? "Hide rejection" : "Reject details"}
-            </button>
+              {getStatusLabel(request.status)}
+            </span>
+          </div>
+        </div>
 
-            {showReject ? (
-              <form action={rejectAction} className="space-y-3">
+        <div className="space-y-4 p-4">
+          {approveState.ok ? (
+            <WhatsAppActionCard
+              title="Agreement link ready"
+              description="Open WhatsApp to send the agreement link to the tenant."
+              phoneNumber={approveState.tenantWhatsappNumber}
+              message={approveState.whatsappMessage}
+            />
+          ) : null}
+
+          {resendState.ok ? (
+            <WhatsAppActionCard
+              title="Payment link ready"
+              description="Open WhatsApp to send the payment link to the tenant."
+              phoneNumber={resendState.tenantWhatsappNumber}
+              message={resendState.whatsappMessage}
+            />
+          ) : null}
+
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <DetailItem label="Full name" value={request.tenant_full_name} />
+            <DetailItem label="Phone" value={request.tenant_phone_number} />
+            <DetailItem label="Email" value={request.tenant_email} />
+            <DetailItem label="Occupation" value={request.tenant_occupation} />
+            <DetailItem
+              label="Means of ID"
+              value={getIdTypeLabel(request.tenant_id_type)}
+            />
+            <DetailItem label="ID number" value={request.tenant_id_number} />
+            <DetailItem label="Unit rent" value={formatNaira(unitRentAmount)} />
+            <DetailItem
+              label="Move-in date"
+              value={formatDate(request.tenant_move_in_date)}
+            />
+            <DetailItem
+              label="Submitted"
+              value={formatDateTime(request.submitted_at)}
+            />
+          </div>
+
+          {request.tenant_notes ? (
+            <div className="rounded-card bg-surface p-3">
+              <p className="text-xs font-black uppercase tracking-wide text-text-muted">
+                Tenant note
+              </p>
+              <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                {request.tenant_notes}
+              </p>
+            </div>
+          ) : null}
+
+          {request.status === "pending" ? (
+            <div className="rounded-card bg-primary-soft p-4">
+              <p className="text-sm font-black text-text-strong">
+                Waiting for tenant details
+              </p>
+              <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                The tenant has not submitted their details yet.
+              </p>
+            </div>
+          ) : null}
+
+          {request.status === "agreement_sent" ? (
+            <div className="rounded-card bg-primary-soft p-4">
+              <p className="text-sm font-black text-text-strong">
+                Agreement sent
+              </p>
+              <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                The tenant can accept or reject the agreement from their link.
+              </p>
+            </div>
+          ) : null}
+
+          {canReview ? (
+            <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
+              <form action={approveAction} className="space-y-4">
                 <input type="hidden" name="requestId" value={request.id} />
+                <input
+                  type="hidden"
+                  name="confirmedRentAmount"
+                  value={String(unitRentAmount)}
+                />
 
-                <div className="space-y-2">
+                <div>
                   <label
-                    htmlFor={`reject-${request.id}`}
+                    htmlFor={`move-in-${request.id}`}
                     className="text-sm font-bold text-text-strong"
                   >
-                    Rejection reason
+                    Move-in date
                   </label>
-                  <textarea
-                    id={`reject-${request.id}`}
-                    name="reason"
-                    rows={4}
-                    placeholder="Explain why this was rejected"
-                    className="w-full rounded-button border border-border-soft bg-white px-4 py-3 text-sm font-semibold text-text-strong outline-none transition placeholder:text-text-muted focus:border-primary"
+
+                  <input
+                    id={`move-in-${request.id}`}
+                    name="confirmedMoveInDate"
+                    type="date"
+                    defaultValue={defaultMoveInDate}
+                    min={minMoveInDate}
+                    className="mt-2 min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-bold text-text-strong outline-none transition focus:border-primary"
+                    required
                   />
-                  {rejectState.fieldErrors?.reason?.[0] ? (
-                    <p className="text-sm font-semibold text-danger">
-                      {rejectState.fieldErrors.reason[0]}
+
+                  {approveState.fieldErrors?.confirmedMoveInDate?.[0] ? (
+                    <p className="mt-2 text-sm font-semibold text-danger">
+                      {approveState.fieldErrors.confirmedMoveInDate[0]}
                     </p>
                   ) : null}
                 </div>
 
-                <Button
-                  type="submit"
-                  variant="secondary"
-                  isLoading={isRejecting}
-                  fullWidth
-                >
-                  Reject
+                <CurrencyInput
+                  label="Opening balance"
+                  name="openingBalance"
+                  defaultValue="0"
+                  placeholder="0.00"
+                  error={approveState.fieldErrors?.openingBalance?.[0]}
+                  required
+                />
+
+                <details className="rounded-card border border-border-soft bg-white p-4">
+                  <summary className="cursor-pointer text-sm font-black text-primary">
+                    Add review note
+                  </summary>
+
+                  <div className="mt-3 space-y-2">
+                    <label
+                      htmlFor={`review-${request.id}`}
+                      className="text-sm font-bold text-text-strong"
+                    >
+                      Review note
+                    </label>
+                    <textarea
+                      id={`review-${request.id}`}
+                      name="reviewNotes"
+                      rows={3}
+                      placeholder="Optional"
+                      className="w-full rounded-button border border-border-soft bg-white px-4 py-3 text-sm font-semibold text-text-strong outline-none transition placeholder:text-text-muted focus:border-primary"
+                    />
+                  </div>
+                </details>
+
+                <Button type="submit" isLoading={isApproving} fullWidth>
+                  {request.onboarding_type === "new_incoming_tenant"
+                    ? "Approve and Create Agreement Link"
+                    : "Approve Current Occupant"}
                 </Button>
               </form>
-            ) : null}
-          </aside>
+
+              <aside className="space-y-4">
+                <div className="rounded-card bg-surface p-4">
+                  <p className="text-sm font-black text-text-strong">
+                    After approval
+                  </p>
+                  <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
+                    {request.onboarding_type === "new_incoming_tenant"
+                      ? "The agreement link will be created immediately. Send it to the tenant on WhatsApp."
+                      : "The tenant record becomes active and this unit becomes occupied."}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowReject((current) => !current)}
+                  className="inline-flex min-h-10 w-full items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+                >
+                  {showReject ? "Hide rejection" : "Reject details"}
+                </button>
+
+                {showReject ? (
+                  <form action={rejectAction} className="space-y-3">
+                    <input type="hidden" name="requestId" value={request.id} />
+
+                    <div className="space-y-2">
+                      <label
+                        htmlFor={`reject-${request.id}`}
+                        className="text-sm font-bold text-text-strong"
+                      >
+                        Rejection reason
+                      </label>
+                      <textarea
+                        id={`reject-${request.id}`}
+                        name="reason"
+                        rows={4}
+                        placeholder="Explain why this was rejected"
+                        className="w-full rounded-button border border-border-soft bg-white px-4 py-3 text-sm font-semibold text-text-strong outline-none transition placeholder:text-text-muted focus:border-primary"
+                      />
+                      {rejectState.fieldErrors?.reason?.[0] ? (
+                        <p className="text-sm font-semibold text-danger">
+                          {rejectState.fieldErrors.reason[0]}
+                        </p>
+                      ) : null}
+                    </div>
+
+                    <Button
+                      type="submit"
+                      variant="secondary"
+                      isLoading={isRejecting}
+                      fullWidth
+                    >
+                      Reject
+                    </Button>
+                  </form>
+                ) : null}
+              </aside>
+            </div>
+          ) : null}
+
+          {canResendPayment ? (
+            <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
+              <div className="rounded-card bg-surface p-4">
+                <p className="text-sm font-black text-text-strong">
+                  Agreement accepted
+                </p>
+                <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                  The payment link is available to the tenant. Resend only if
+                  the tenant cannot access it.
+                </p>
+              </div>
+
+              <form action={resendAction}>
+                <input type="hidden" name="requestId" value={request.id} />
+
+                <Button type="submit" isLoading={isResending} fullWidth>
+                  Resend Payment Link
+                </Button>
+              </form>
+            </div>
+          ) : null}
         </div>
-      ) : null}
-
-      {canSendPayment ? (
-        <div className="grid gap-4 p-4 lg:grid-cols-[1fr_18rem]">
-          <div className="rounded-card bg-surface p-4">
-            <p className="text-sm font-black text-text-strong">
-              Tenant has accepted the agreement
-            </p>
-            <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-              Send a fresh first rent payment link when the tenant is ready to
-              pay.
-            </p>
-          </div>
-
-          <form action={resendAction}>
-            <input type="hidden" name="requestId" value={request.id} />
-
-            <Button type="submit" isLoading={isResending} fullWidth>
-              {request.status === "payment_expired"
-                ? "Send New Payment Link"
-                : "Send Payment Link"}
-            </Button>
-          </form>
-        </div>
-      ) : null}
-    </article>
+      </section>
+    </>
   );
 }
 
@@ -443,26 +621,166 @@ export function ManagerTenantOnboardingReviewList({
     ACTIVE_REVIEW_STATUSES.has(request.status),
   );
 
+  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(
+    null,
+  );
+
+  const submittedCount = activeRequests.filter(
+    (request) => request.status === "submitted",
+  ).length;
+
+  const selectedRequest =
+    activeRequests.find((request) => request.id === selectedRequestId) ?? null;
+
   if (activeRequests.length === 0) {
     return null;
   }
 
   return (
-    <section className="space-y-3">
-      <div>
-        <h2 className="text-lg font-black tracking-tight text-text-strong">
-          Tenant review
-        </h2>
-        <p className="text-sm font-semibold leading-6 text-text-muted">
-          Review tenant submissions and approve the right tenant.
-        </p>
+    <section id="tenant-review" className="scroll-mt-24 space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-lg font-black tracking-tight text-text-strong">
+            Tenant review
+          </h2>
+          <p className="text-sm font-semibold leading-6 text-text-muted">
+            View submitted tenant details before approval.
+          </p>
+        </div>
+
+        {submittedCount > 0 ? (
+          <span className="w-fit rounded-full bg-warning-soft px-3 py-1 text-xs font-black uppercase tracking-wide text-warning">
+            {submittedCount} waiting
+          </span>
+        ) : null}
       </div>
 
-      <div className="grid gap-3">
-        {activeRequests.map((request) => (
-          <RequestReviewCard key={request.id} request={request} />
-        ))}
+      <div className="overflow-hidden rounded-card border border-border-soft bg-white shadow-sm">
+        <div className="hidden overflow-x-auto md:block">
+          <table className="min-w-full divide-y divide-border-soft text-left">
+            <thead className="bg-surface">
+              <tr>
+                <th className="px-4 py-3 text-xs font-black uppercase tracking-wide text-text-muted">
+                  Tenant
+                </th>
+                <th className="px-4 py-3 text-xs font-black uppercase tracking-wide text-text-muted">
+                  Property / unit
+                </th>
+                <th className="px-4 py-3 text-xs font-black uppercase tracking-wide text-text-muted">
+                  Type
+                </th>
+                <th className="px-4 py-3 text-xs font-black uppercase tracking-wide text-text-muted">
+                  Status
+                </th>
+                <th className="px-4 py-3 text-right text-xs font-black uppercase tracking-wide text-text-muted">
+                  Action
+                </th>
+              </tr>
+            </thead>
+
+            <tbody className="divide-y divide-border-soft bg-white">
+              {activeRequests.map((request) => {
+                const tenantName =
+                  request.tenant_full_name ??
+                  request.invited_tenant_full_name ??
+                  "Tenant";
+
+                return (
+                  <tr key={request.id}>
+                    <td className="px-4 py-4">
+                      <p className="text-sm font-black text-text-strong">
+                        {tenantName}
+                      </p>
+                      <p className="mt-1 text-xs font-semibold text-text-muted">
+                        {request.tenant_phone_number ??
+                          request.invited_tenant_phone_number ??
+                          "No phone"}
+                      </p>
+                    </td>
+
+                    <td className="px-4 py-4">
+                      <p className="text-sm font-bold text-text-strong">
+                        {request.manager_properties?.property_name ??
+                          "Property"}
+                      </p>
+                      <p className="mt-1 text-xs font-semibold text-text-muted">
+                        {request.manager_units?.unit_label ?? "Unit"}
+                      </p>
+                    </td>
+
+                    <td className="px-4 py-4 text-sm font-bold text-text-strong">
+                      {getTenantTypeLabel(request.onboarding_type)}
+                    </td>
+
+                    <td className="px-4 py-4">
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${getStatusClassName(
+                          request.status,
+                        )}`}
+                      >
+                        {getStatusLabel(request.status)}
+                      </span>
+                    </td>
+
+                    <td className="px-4 py-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedRequestId(request.id)}
+                        className="inline-flex min-h-10 items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
+                      >
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="divide-y divide-border-soft md:hidden">
+          {activeRequests.map((request) => {
+            const tenantName =
+              request.tenant_full_name ??
+              request.invited_tenant_full_name ??
+              "Tenant";
+
+            return (
+              <article key={request.id} className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-black text-text-strong">{tenantName}</p>
+                    <p className="mt-1 text-sm font-semibold text-text-muted">
+                      {request.manager_units?.unit_label ?? "Unit"} ·{" "}
+                      {getTenantTypeLabel(request.onboarding_type)}
+                    </p>
+                  </div>
+
+                  <span
+                    className={`shrink-0 rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${getStatusClassName(
+                      request.status,
+                    )}`}
+                  >
+                    {getStatusLabel(request.status)}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedRequestId(request.id)}
+                  className="mt-4 inline-flex min-h-10 w-full items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
+                >
+                  View
+                </button>
+              </article>
+            );
+          })}
+        </div>
       </div>
+
+      {selectedRequest ? (
+        <RequestDetailPanel request={selectedRequest} />
+      ) : null}
     </section>
   );
 }

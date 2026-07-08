@@ -1,0 +1,2971 @@
+====================================================================================================
+FILE: src/components/manager/public-manager-tenant-onboarding-form.tsx
+====================================================================================================
+
+"use client";
+
+import { useActionState, useMemo, useState } from "react";
+import { submitManagerTenantOnboardingRequestAction } from "@/actions/manager-tenant-onboarding.actions";
+import { initialManagerTenantOnboardingActionState } from "@/actions/manager-tenant-onboarding.state";
+import { Button } from "@/components/ui/button";
+import { CurrencyInput } from "@/components/ui/currency-input";
+import { Input } from "@/components/ui/input";
+import { Toast, type ToastItem } from "@/components/ui/toast";
+import type { ManagerTenantOnboardingRequestRow } from "@/server/repositories/manager-tenant-onboarding.repository";
+
+type PublicManagerTenantOnboardingFormProps = {
+  token: string;
+  request: ManagerTenantOnboardingRequestRow;
+};
+
+const idTypeOptions = [
+  ["nin", "NIN"],
+  ["passport", "International Passport"],
+  ["drivers_license", "Driver's License"],
+  ["voters_card", "Voter's Card"],
+] as const;
+
+const frequencyOptions = [
+  ["annual", "Annual rent"],
+  ["monthly", "Monthly rent"],
+  ["quarterly", "Quarterly rent"],
+  ["biannual", "Biannual rent"],
+] as const;
+
+const successMessage =
+  "Your information is being reviewed. Once approved, you will receive the tenancy agreement through WhatsApp or email within 24 to 48 hours. If you do not receive it after 48 hours, please contact the property manager.";
+
+function buildToastId(params: { ok: boolean; message: string }) {
+  return `${params.ok ? "success" : "error"}-${params.message}`;
+}
+
+export function PublicManagerTenantOnboardingForm({
+  token,
+  request,
+}: PublicManagerTenantOnboardingFormProps) {
+  const [dismissedToastId, setDismissedToastId] = useState<string | null>(null);
+
+  const [state, formAction, isPending] = useActionState(
+    submitManagerTenantOnboardingRequestAction,
+    initialManagerTenantOnboardingActionState,
+  );
+
+  const isCurrentOccupant = request.onboarding_type === "current_occupant";
+
+  const toast = useMemo<ToastItem | null>(() => {
+    if (!state.message) {
+      return null;
+    }
+
+    const id = buildToastId({
+      ok: state.ok,
+      message: state.message,
+    });
+
+    if (dismissedToastId === id) {
+      return null;
+    }
+
+    return {
+      id,
+      tone: state.ok ? "success" : "error",
+      title: state.ok ? "Details submitted" : "Could not submit details",
+      description: state.ok ? successMessage : state.message,
+    };
+  }, [dismissedToastId, state.message, state.ok]);
+
+  return (
+    <>
+      {toast ? (
+        <div className="fixed left-1/2 top-4 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2">
+          <Toast toast={toast} onDismiss={setDismissedToastId} />
+        </div>
+      ) : null}
+
+      {state.ok ? (
+        <div className="rounded-card border border-border-soft bg-white p-5 shadow-sm">
+          <div className="w-fit rounded-full bg-success-soft px-3 py-1 text-xs font-black uppercase tracking-wide text-success">
+            Submitted
+          </div>
+
+          <h1 className="mt-4 text-xl font-black tracking-tight text-text-strong">
+            Details submitted
+          </h1>
+
+          <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
+            Your information is being reviewed.
+          </p>
+
+          <p className="mt-3 text-sm font-semibold leading-6 text-text-muted">
+            Once approved, you will receive the tenancy agreement through
+            WhatsApp or email within 24 to 48 hours.
+          </p>
+
+          <p className="mt-3 text-sm font-semibold leading-6 text-text-muted">
+            If you do not receive it after 48 hours, please contact the property
+            manager.
+          </p>
+        </div>
+      ) : (
+        <form
+          action={formAction}
+          className="rounded-card border border-border-soft bg-white shadow-sm"
+        >
+          <input type="hidden" name="token" value={token} />
+
+          <div className="border-b border-border-soft p-5">
+            <p className="w-fit rounded-full bg-primary-soft px-3 py-1 text-xs font-black uppercase tracking-wide text-primary">
+              Tenant details
+            </p>
+
+            <h1 className="mt-4 text-xl font-black tracking-tight text-text-strong">
+              Confirm your details
+            </h1>
+
+            <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
+              {request.manager_units?.unit_label ?? "Unit"} ·{" "}
+              {request.manager_properties?.property_name ?? "Property"}
+            </p>
+          </div>
+
+          <div className="space-y-5 p-5">
+            <section className="space-y-4">
+              <div>
+                <h2 className="text-base font-black tracking-tight text-text-strong">
+                  Personal details
+                </h2>
+                <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                  These details will appear on your tenant record.
+                </p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Input
+                  label="Full name"
+                  name="fullName"
+                  defaultValue={request.invited_tenant_full_name ?? ""}
+                  error={state.fieldErrors?.fullName?.[0]}
+                  required
+                />
+
+                <Input
+                  label="Phone number"
+                  name="phoneNumber"
+                  defaultValue={request.invited_tenant_phone_number ?? ""}
+                  error={state.fieldErrors?.phoneNumber?.[0]}
+                  required
+                />
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Input
+                  label="Email"
+                  name="email"
+                  type="email"
+                  defaultValue={request.invited_tenant_email ?? ""}
+                  placeholder="Optional"
+                  error={state.fieldErrors?.email?.[0]}
+                />
+
+                <Input
+                  label="Occupation"
+                  name="occupation"
+                  placeholder="Optional"
+                  error={state.fieldErrors?.occupation?.[0]}
+                />
+              </div>
+            </section>
+
+            <section className="border-t border-border-soft pt-5">
+              <div>
+                <h2 className="text-base font-black tracking-tight text-text-strong">
+                  Identification
+                </h2>
+                <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                  Provide one valid identification record.
+                </p>
+              </div>
+
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <label
+                    className="text-sm font-bold text-text-strong"
+                    htmlFor="idType"
+                  >
+                    Means of ID
+                  </label>
+
+                  <select
+                    id="idType"
+                    name="idType"
+                    className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
+                    required
+                  >
+                    {idTypeOptions.map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+
+                  {state.fieldErrors?.idType?.[0] ? (
+                    <p className="text-sm font-semibold text-danger">
+                      {state.fieldErrors.idType[0]}
+                    </p>
+                  ) : null}
+                </div>
+
+                <Input
+                  label="ID number"
+                  name="idNumber"
+                  error={state.fieldErrors?.idNumber?.[0]}
+                  required
+                />
+              </div>
+            </section>
+
+            {isCurrentOccupant ? (
+              <section className="border-t border-border-soft pt-5">
+                <div>
+                  <h2 className="text-base font-black tracking-tight text-text-strong">
+                    Rent details
+                  </h2>
+                  <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                    Enter the current rent details for this existing tenant.
+                  </p>
+                </div>
+
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <Input
+                    label="Move-in date"
+                    name="moveInDate"
+                    type="date"
+                    error={state.fieldErrors?.moveInDate?.[0]}
+                    required
+                  />
+
+                  <div className="space-y-2">
+                    <label
+                      className="text-sm font-bold text-text-strong"
+                      htmlFor="paymentFrequency"
+                    >
+                      Rent frequency
+                    </label>
+
+                    <select
+                      id="paymentFrequency"
+                      name="paymentFrequency"
+                      defaultValue="annual"
+                      className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
+                      required
+                    >
+                      {frequencyOptions.map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <CurrencyInput
+                    label="Rent amount"
+                    name="claimedRentAmount"
+                    placeholder="0.00"
+                    defaultValue={String(
+                      request.manager_units?.rent_amount ?? "",
+                    )}
+                    error={state.fieldErrors?.claimedRentAmount?.[0]}
+                    required
+                  />
+                </div>
+              </section>
+            ) : null}
+
+            <details className="rounded-card border border-border-soft bg-white p-4">
+              <summary className="cursor-pointer text-sm font-black text-primary">
+                Add note
+              </summary>
+
+              <div className="mt-3 space-y-2">
+                <label
+                  htmlFor="tenantNotes"
+                  className="text-sm font-bold text-text-strong"
+                >
+                  Note
+                </label>
+
+                <textarea
+                  id="tenantNotes"
+                  name="tenantNotes"
+                  rows={3}
+                  placeholder="Optional"
+                  className="w-full rounded-button border border-border-soft bg-white px-4 py-3 text-sm font-semibold text-text-strong outline-none transition placeholder:text-text-muted focus:border-primary"
+                />
+              </div>
+            </details>
+          </div>
+
+          <div className="border-t border-border-soft p-5">
+            <Button type="submit" isLoading={isPending} fullWidth>
+              Submit Details
+            </Button>
+          </div>
+        </form>
+      )}
+    </>
+  );
+}
+
+
+====================================================================================================
+FILE: src/components/manager/public-manager-agreement-acceptance-form.tsx
+====================================================================================================
+
+"use client";
+
+import { useActionState } from "react";
+import {
+  acceptManagerTenantAgreementAction,
+  declineManagerTenantAgreementAction,
+} from "@/actions/manager-tenant-onboarding.actions";
+import { initialManagerTenantOnboardingActionState } from "@/actions/manager-tenant-onboarding.state";
+import { Button } from "@/components/ui/button";
+import type { ManagerTenantAgreementDocumentRow } from "@/server/repositories/manager-tenant-onboarding.repository";
+
+type PublicManagerAgreementAcceptanceFormProps = {
+  token: string;
+  agreement: ManagerTenantAgreementDocumentRow;
+  pdfDownloadUrl: string;
+};
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) {
+    return "available for 24 hours";
+  }
+
+  return new Intl.DateTimeFormat("en-NG", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Africa/Lagos",
+  }).format(new Date(value));
+}
+
+function getTenantSafeMessage(message: string | undefined) {
+  if (!message) {
+    return null;
+  }
+
+  if (
+    message.toLowerCase().includes("payout account") ||
+    message.toLowerCase().includes("subaccount") ||
+    message.toLowerCase().includes("paystack")
+  ) {
+    return "Payment is not ready yet. Please contact the property manager.";
+  }
+
+  return message;
+}
+
+export function PublicManagerAgreementAcceptanceForm({
+  token,
+  agreement,
+  pdfDownloadUrl,
+}: PublicManagerAgreementAcceptanceFormProps) {
+  const [acceptState, acceptAction, isAccepting] = useActionState(
+    acceptManagerTenantAgreementAction,
+    initialManagerTenantOnboardingActionState,
+  );
+
+  const [declineState, declineAction, isDeclining] = useActionState(
+    declineManagerTenantAgreementAction,
+    initialManagerTenantOnboardingActionState,
+  );
+
+  const accepted = agreement.document_status === "accepted" || acceptState.ok;
+  const declined =
+    agreement.document_status === "voided" || declineState.agreementDeclined;
+
+  const safeAcceptMessage = getTenantSafeMessage(acceptState.message);
+  const safeDeclineMessage = getTenantSafeMessage(declineState.message);
+
+  return (
+    <section className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
+      <div>
+        <p className="w-fit rounded-full bg-primary-soft px-3 py-1 text-xs font-black uppercase tracking-wide text-primary">
+          Agreement
+        </p>
+
+        <h2 className="mt-4 text-lg font-black tracking-tight text-text-strong">
+          Review and accept
+        </h2>
+
+        <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
+          Download the agreement, review it, then accept to continue to payment.
+        </p>
+      </div>
+
+      <div className="mt-4 space-y-3">
+        <a
+          href={pdfDownloadUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex min-h-11 w-full items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+        >
+          Download Agreement PDF
+        </a>
+
+        {safeAcceptMessage ? (
+          <div
+            role="alert"
+            className={
+              acceptState.ok
+                ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
+                : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
+            }
+          >
+            {safeAcceptMessage}
+          </div>
+        ) : null}
+
+        {safeDeclineMessage ? (
+          <div
+            role="alert"
+            className={
+              declineState.ok
+                ? "rounded-button bg-warning-soft px-4 py-3 text-sm font-semibold text-warning"
+                : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
+            }
+          >
+            {safeDeclineMessage}
+          </div>
+        ) : null}
+
+        {declined ? (
+          <div className="rounded-button bg-warning-soft p-4">
+            <p className="font-black text-text-strong">Agreement declined</p>
+            <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+              The property manager has been notified. This unit is no longer
+              reserved for you.
+            </p>
+          </div>
+        ) : null}
+
+        {!declined && accepted ? (
+          <div className="rounded-button bg-success-soft p-4">
+            <p className="font-black text-text-strong">Agreement accepted</p>
+            <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+              Your rent payment button is ready. Please complete payment before{" "}
+              {formatDateTime(acceptState.paymentExpiresAt)}.
+            </p>
+
+            {acceptState.paymentUrl ? (
+              <a
+                href={acceptState.paymentUrl}
+                className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-button bg-primary px-5 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
+              >
+                Pay First Rent
+              </a>
+            ) : (
+              <form action={acceptAction} className="mt-4">
+                <input type="hidden" name="token" value={token} />
+
+                <Button type="submit" isLoading={isAccepting} fullWidth>
+                  Show Payment Button
+                </Button>
+              </form>
+            )}
+          </div>
+        ) : !declined ? (
+          <form action={acceptAction}>
+            <input type="hidden" name="token" value={token} />
+
+            <Button type="submit" isLoading={isAccepting} fullWidth>
+              Accept Agreement
+            </Button>
+          </form>
+        ) : null}
+
+        {!accepted && !declined ? (
+          <details className="rounded-card border border-border-soft bg-white p-4">
+            <summary className="cursor-pointer text-sm font-black text-danger">
+              Decline agreement
+            </summary>
+
+            <form action={declineAction} className="mt-4 space-y-3">
+              <input type="hidden" name="token" value={token} />
+
+              <div className="space-y-2">
+                <label
+                  htmlFor="decline-reason"
+                  className="text-sm font-bold text-text-strong"
+                >
+                  Reason
+                </label>
+                <textarea
+                  id="decline-reason"
+                  name="reason"
+                  rows={3}
+                  placeholder="Optional"
+                  className="w-full rounded-button border border-border-soft bg-white px-4 py-3 text-sm font-semibold text-text-strong outline-none transition placeholder:text-text-muted focus:border-primary"
+                />
+              </div>
+
+              <Button
+                type="submit"
+                variant="secondary"
+                isLoading={isDeclining}
+                fullWidth
+              >
+                Decline Agreement
+              </Button>
+            </form>
+          </details>
+        ) : null}
+
+        {!accepted && !declined ? (
+          <div className="rounded-card bg-warning-soft p-4">
+            <p className="text-sm font-black text-text-strong">
+              Payment follows acceptance
+            </p>
+            <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+              After acceptance, the first rent payment button will appear on
+              this page.
+            </p>
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+
+====================================================================================================
+MISSING FILE: src/app/m/tenant-onboarding/[token]/page.tsx
+====================================================================================================
+
+====================================================================================================
+MISSING FILE: src/app/m/agreement/[token]/page.tsx
+====================================================================================================
+
+====================================================================================================
+FILE: src/actions/manager-tenant-onboarding.actions.ts
+====================================================================================================
+
+"use server";
+
+import { headers } from "next/headers";
+import { revalidatePath } from "next/cache";
+import type { ManagerTenantOnboardingActionState } from "@/actions/manager-tenant-onboarding.state";
+import { errorResult } from "@/server/errors/result";
+import {
+  acceptManagerTenantAgreementAndCreatePayment,
+  approveManagerTenantOnboardingRequestForCurrentManager,
+  createManagerTenantOnboardingRequestForCurrentManager,
+  declineManagerTenantAgreementAndCancel,
+  rejectManagerTenantOnboardingRequestForCurrentManager,
+  resendManagerFirstRentPaymentLinkForCurrentManager,
+  submitManagerTenantOnboardingRequestByToken,
+} from "@/server/services/manager-tenant-onboarding.service";
+import { requireManagerWorkspacePermission } from "@/server/services/manager-staff-access.service";
+import {
+  acceptManagerTenantAgreementSchema,
+  approveManagerTenantOnboardingRequestSchema,
+  createManagerTenantOnboardingRequestSchema,
+  declineManagerTenantAgreementSchema,
+  rejectManagerTenantOnboardingRequestSchema,
+  resendManagerFirstRentPaymentLinkSchema,
+  submitManagerTenantOnboardingRequestSchema,
+} from "@/server/validators/manager-tenant-onboarding.schema";
+
+function toActionError(error: unknown): ManagerTenantOnboardingActionState {
+  const result = errorResult(error);
+
+  return {
+    ok: false,
+    message: result.message,
+    fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
+  };
+}
+
+export async function createManagerTenantOnboardingRequestAction(
+  _previousState: ManagerTenantOnboardingActionState,
+  formData: FormData,
+): Promise<ManagerTenantOnboardingActionState> {
+  try {
+    await requireManagerWorkspacePermission("property.manage");
+
+    const parsed = createManagerTenantOnboardingRequestSchema.parse({
+      landlordClientId: formData.get("landlordClientId"),
+      propertyId: formData.get("propertyId"),
+      unitId: formData.get("unitId"),
+      onboardingType: formData.get("onboardingType"),
+      fullName: formData.get("fullName"),
+      phoneNumber: formData.get("phoneNumber"),
+      email: formData.get("email"),
+      note: formData.get("note"),
+    });
+
+    const result =
+      await createManagerTenantOnboardingRequestForCurrentManager(parsed);
+
+    revalidatePath("/manager");
+    revalidatePath("/manager/properties");
+    revalidatePath(`/manager/properties/${parsed.propertyId}`);
+    revalidatePath("/manager/tenants");
+
+    return {
+      ok: true,
+      message: "Tenant detail link is ready.",
+      requestId: result.request.id,
+      claimUrl: result.claimUrl,
+      whatsappMessage: result.whatsappMessage,
+      tenantWhatsappNumber: result.tenantWhatsappNumber,
+    };
+  } catch (error) {
+    return toActionError(error);
+  }
+}
+
+export async function submitManagerTenantOnboardingRequestAction(
+  _previousState: ManagerTenantOnboardingActionState,
+  formData: FormData,
+): Promise<ManagerTenantOnboardingActionState> {
+  try {
+    const parsed = submitManagerTenantOnboardingRequestSchema.parse({
+      token: formData.get("token"),
+      fullName: formData.get("fullName"),
+      phoneNumber: formData.get("phoneNumber"),
+      email: formData.get("email"),
+      occupation: formData.get("occupation"),
+      idType: formData.get("idType"),
+      idNumber: formData.get("idNumber"),
+      moveInDate: formData.get("moveInDate"),
+      claimedRentAmount: formData.get("claimedRentAmount"),
+      paymentFrequency: formData.get("paymentFrequency"),
+      tenantNotes: formData.get("tenantNotes"),
+    });
+
+    await submitManagerTenantOnboardingRequestByToken(parsed);
+
+    return {
+      ok: true,
+      message: "Your details have been submitted.",
+    };
+  } catch (error) {
+    return toActionError(error);
+  }
+}
+
+export async function approveManagerTenantOnboardingRequestAction(
+  _previousState: ManagerTenantOnboardingActionState,
+  formData: FormData,
+): Promise<ManagerTenantOnboardingActionState> {
+  try {
+    await requireManagerWorkspacePermission("property.manage");
+
+    const parsed = approveManagerTenantOnboardingRequestSchema.parse({
+      requestId: formData.get("requestId"),
+      confirmedRentAmount: formData.get("confirmedRentAmount"),
+      confirmedMoveInDate: formData.get("confirmedMoveInDate"),
+      openingBalance: formData.get("openingBalance"),
+      reviewNotes: formData.get("reviewNotes"),
+    });
+
+    const result =
+      await approveManagerTenantOnboardingRequestForCurrentManager(parsed);
+
+    revalidatePath("/manager");
+    revalidatePath("/manager/properties");
+    revalidatePath("/manager/tenants");
+    revalidatePath("/manager/payments");
+
+    return {
+      ok: true,
+      message: result.agreement
+        ? "Agreement link is ready."
+        : "Current occupant approved and added to the unit.",
+      tenantId: result.tenant.id,
+      agreementId: result.agreement?.id,
+      agreementUrl: result.agreementUrl ?? undefined,
+      whatsappMessage: result.whatsappMessage ?? undefined,
+      tenantWhatsappNumber: result.tenantWhatsappNumber ?? undefined,
+    };
+  } catch (error) {
+    return toActionError(error);
+  }
+}
+
+export async function rejectManagerTenantOnboardingRequestAction(
+  _previousState: ManagerTenantOnboardingActionState,
+  formData: FormData,
+): Promise<ManagerTenantOnboardingActionState> {
+  try {
+    await requireManagerWorkspacePermission("property.manage");
+
+    const parsed = rejectManagerTenantOnboardingRequestSchema.parse({
+      requestId: formData.get("requestId"),
+      reason: formData.get("reason"),
+    });
+
+    await rejectManagerTenantOnboardingRequestForCurrentManager(parsed);
+
+    revalidatePath("/manager");
+    revalidatePath("/manager/properties");
+    revalidatePath("/manager/tenants");
+
+    return {
+      ok: true,
+      message: "Tenant details rejected.",
+    };
+  } catch (error) {
+    return toActionError(error);
+  }
+}
+
+export async function resendManagerFirstRentPaymentLinkAction(
+  _previousState: ManagerTenantOnboardingActionState,
+  formData: FormData,
+): Promise<ManagerTenantOnboardingActionState> {
+  try {
+    await requireManagerWorkspacePermission("property.manage");
+
+    const parsed = resendManagerFirstRentPaymentLinkSchema.parse({
+      requestId: formData.get("requestId"),
+    });
+
+    const result =
+      await resendManagerFirstRentPaymentLinkForCurrentManager(parsed);
+
+    revalidatePath("/manager");
+    revalidatePath("/manager/properties");
+    revalidatePath("/manager/tenants");
+    revalidatePath("/manager/payments");
+
+    return {
+      ok: true,
+      message: "Payment link is ready.",
+      requestId: parsed.requestId,
+      paymentRequestId: result.paymentRequestId,
+      paymentUrl: result.paymentUrl,
+      paymentExpiresAt: result.paymentExpiresAt,
+      whatsappMessage: result.whatsappMessage,
+      tenantWhatsappNumber: result.tenantWhatsappNumber,
+    };
+  } catch (error) {
+    return toActionError(error);
+  }
+}
+
+export async function acceptManagerTenantAgreementAction(
+  _previousState: ManagerTenantOnboardingActionState,
+  formData: FormData,
+): Promise<ManagerTenantOnboardingActionState> {
+  try {
+    const parsed = acceptManagerTenantAgreementSchema.parse({
+      token: formData.get("token"),
+    });
+
+    const requestHeaders = await headers();
+
+    const result = await acceptManagerTenantAgreementAndCreatePayment({
+      ...parsed,
+      ipAddress:
+        requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+      userAgent: requestHeaders.get("user-agent"),
+    });
+
+    revalidatePath("/manager");
+    revalidatePath("/manager/properties");
+    revalidatePath(`/manager/properties/${result.agreement.property_id}`);
+    revalidatePath("/manager/tenants");
+    revalidatePath("/manager/payments");
+
+    return {
+      ok: true,
+      message: "Agreement accepted. Your rent payment button is ready.",
+      agreementId: result.agreement.id,
+      paymentUrl: result.paymentUrl ?? undefined,
+      paymentExpiresAt: result.paymentExpiresAt ?? undefined,
+    };
+  } catch (error) {
+    return toActionError(error);
+  }
+}
+
+export async function declineManagerTenantAgreementAction(
+  _previousState: ManagerTenantOnboardingActionState,
+  formData: FormData,
+): Promise<ManagerTenantOnboardingActionState> {
+  try {
+    const parsed = declineManagerTenantAgreementSchema.parse({
+      token: formData.get("token"),
+      reason: formData.get("reason"),
+    });
+
+    const requestHeaders = await headers();
+
+    const result = await declineManagerTenantAgreementAndCancel({
+      ...parsed,
+      ipAddress:
+        requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+      userAgent: requestHeaders.get("user-agent"),
+    });
+
+    revalidatePath("/manager");
+    revalidatePath("/manager/properties");
+    revalidatePath(`/manager/properties/${result.agreement.property_id}`);
+    revalidatePath("/manager/tenants");
+    revalidatePath("/manager/payments");
+
+    return {
+      ok: true,
+      message: "Agreement declined. The property manager has been notified.",
+      agreementId: result.agreement.id,
+      agreementDeclined: true,
+    };
+  } catch (error) {
+    return toActionError(error);
+  }
+}
+
+
+====================================================================================================
+FILE: src/server/validators/manager-tenant-onboarding.schema.ts
+====================================================================================================
+
+import { z } from "zod";
+
+function blankToUndefined(value: unknown) {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value === "string" && value.trim().length === 0) {
+    return undefined;
+  }
+
+  return value;
+}
+
+function moneyValue(value: unknown) {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value === "string") {
+    const cleaned = value.replace(/,/g, "").trim();
+
+    return cleaned.length > 0 ? cleaned : undefined;
+  }
+
+  return value;
+}
+
+const uuidSchema = z.string().trim().uuid("Invalid record selected.");
+
+const optionalEmailSchema = z.preprocess(
+  blankToUndefined,
+  z.string().trim().email("Enter a valid email address.").optional(),
+);
+
+const optionalTextSchema = (max: number, message: string) =>
+  z.preprocess(
+    blankToUndefined,
+    z.string().trim().max(max, message).optional(),
+  );
+
+const dateSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid date.");
+
+const optionalDateSchema = z.preprocess(
+  blankToUndefined,
+  dateSchema.optional(),
+);
+
+const moneySchema = z.preprocess(
+  moneyValue,
+  z.coerce
+    .number()
+    .finite("Enter a valid amount.")
+    .min(0, "Amount cannot be negative."),
+);
+
+const positiveMoneySchema = z.preprocess(
+  moneyValue,
+  z.coerce
+    .number()
+    .finite("Enter a valid amount.")
+    .positive("Amount must be greater than zero."),
+);
+
+const optionalPositiveMoneySchema = z.preprocess(
+  moneyValue,
+  z.coerce
+    .number()
+    .finite("Enter a valid amount.")
+    .positive("Amount must be greater than zero.")
+    .optional(),
+);
+
+const optionalPaymentFrequencySchema = z.preprocess(
+  blankToUndefined,
+  z
+    .enum(["annual", "monthly", "quarterly", "biannual"])
+    .optional()
+    .default("annual"),
+);
+
+export const managerOnboardingTypeSchema = z.enum([
+  "current_occupant",
+  "new_incoming_tenant",
+]);
+
+export const managerOnboardingIdTypeSchema = z.enum([
+  "nin",
+  "passport",
+  "drivers_license",
+  "voters_card",
+]);
+
+export const managerOnboardingPaymentFrequencySchema = z.enum([
+  "annual",
+  "monthly",
+  "quarterly",
+  "biannual",
+]);
+
+export const createManagerTenantOnboardingRequestSchema = z.object({
+  landlordClientId: uuidSchema,
+  propertyId: uuidSchema,
+  unitId: uuidSchema,
+  onboardingType: managerOnboardingTypeSchema,
+  fullName: z.string().trim().min(2, "Enter the tenant name.").max(180),
+  phoneNumber: z
+    .string()
+    .trim()
+    .min(7, "Enter the tenant phone number.")
+    .max(30),
+  email: optionalEmailSchema,
+  note: optionalTextSchema(600, "Note is too long."),
+});
+
+export const submitManagerTenantOnboardingRequestSchema = z.object({
+  token: z.string().trim().min(20, "Invalid tenant link."),
+  fullName: z.string().trim().min(2, "Enter your full name.").max(180),
+  phoneNumber: z.string().trim().min(7, "Enter your phone number.").max(30),
+  email: optionalEmailSchema,
+  occupation: optionalTextSchema(120, "Occupation is too long."),
+  idType: managerOnboardingIdTypeSchema,
+  idNumber: z.string().trim().min(3, "Enter your ID number.").max(120),
+  moveInDate: optionalDateSchema,
+  claimedRentAmount: optionalPositiveMoneySchema,
+  paymentFrequency: optionalPaymentFrequencySchema,
+  tenantNotes: optionalTextSchema(1000, "Note is too long."),
+});
+
+export const approveManagerTenantOnboardingRequestSchema = z.object({
+  requestId: uuidSchema,
+  confirmedRentAmount: positiveMoneySchema,
+  confirmedMoveInDate: dateSchema,
+  openingBalance: moneySchema.default(0),
+  reviewNotes: optionalTextSchema(1000, "Review note is too long."),
+});
+
+export const rejectManagerTenantOnboardingRequestSchema = z.object({
+  requestId: uuidSchema,
+  reason: z.string().trim().min(3, "Enter the reason.").max(500),
+});
+
+export const acceptManagerTenantAgreementSchema = z.object({
+  token: z.string().trim().min(20, "Invalid agreement link."),
+});
+
+export const declineManagerTenantAgreementSchema = z.object({
+  token: z.string().trim().min(20, "Invalid agreement link."),
+  reason: optionalTextSchema(500, "Reason is too long."),
+});
+
+export const resendManagerFirstRentPaymentLinkSchema = z.object({
+  requestId: uuidSchema,
+});
+
+export type ManagerOnboardingType = z.infer<typeof managerOnboardingTypeSchema>;
+
+export type ManagerOnboardingIdType = z.infer<
+  typeof managerOnboardingIdTypeSchema
+>;
+
+export type ManagerOnboardingPaymentFrequency = z.infer<
+  typeof managerOnboardingPaymentFrequencySchema
+>;
+
+export type CreateManagerTenantOnboardingRequestInput = z.infer<
+  typeof createManagerTenantOnboardingRequestSchema
+>;
+
+export type SubmitManagerTenantOnboardingRequestInput = z.infer<
+  typeof submitManagerTenantOnboardingRequestSchema
+>;
+
+export type ApproveManagerTenantOnboardingRequestInput = z.infer<
+  typeof approveManagerTenantOnboardingRequestSchema
+>;
+
+export type RejectManagerTenantOnboardingRequestInput = z.infer<
+  typeof rejectManagerTenantOnboardingRequestSchema
+>;
+
+export type AcceptManagerTenantAgreementInput = z.infer<
+  typeof acceptManagerTenantAgreementSchema
+>;
+
+export type DeclineManagerTenantAgreementInput = z.infer<
+  typeof declineManagerTenantAgreementSchema
+>;
+
+export type ResendManagerFirstRentPaymentLinkInput = z.infer<
+  typeof resendManagerFirstRentPaymentLinkSchema
+>;
+
+
+====================================================================================================
+FILE: src/server/repositories/manager.repository.ts
+====================================================================================================
+
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type {
+  ManagerCollectionMode,
+  ManagerManagementFeeType,
+  ManagerPaymentMethod,
+  ManagerPaymentReceiver,
+  ManagerPaystackChargeBearer,
+  ManagerRemittancePaymentMethod,
+  ManagerRemittanceStatus,
+  ManagerRentPaymentStatus,
+  ManagerTenantStatus,
+  ManagerUnitStatus,
+} from "@/constants/manager";
+import {
+  getActiveManagerStaffMemberForProfile,
+  type ManagerWorkspaceRole,
+} from "@/server/repositories/manager-staff.repository";
+
+export type ManagerOrganizationStatus = "active" | "suspended" | "inactive";
+export type ManagerClientStatus = "active" | "inactive" | "archived";
+export type ManagerPropertyStatus = "active" | "inactive" | "archived";
+
+export type ManagerOrganizationRow = {
+  id: string;
+  owner_profile_id: string;
+  organization_name: string;
+  organization_phone: string | null;
+  organization_email: string | null;
+  rc_number: string | null;
+  office_address: string | null;
+  country_code: "NG";
+  currency_code: "NGN";
+  status: ManagerOrganizationStatus;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ManagerOrganizationAccess = {
+  organization: ManagerOrganizationRow;
+  staffRole: ManagerWorkspaceRole;
+  isOwner: boolean;
+  staffMemberId: string | null;
+};
+
+export type ManagerLandlordClientRow = {
+  id: string;
+  organization_id: string;
+  landlord_profile_id: string | null;
+  landlord_name: string;
+  landlord_phone: string | null;
+  landlord_email: string | null;
+  landlord_address: string | null;
+  notes: string | null;
+  status: ManagerClientStatus;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ManagerLandlordPayoutProfileRow = {
+  id: string;
+  organization_id: string;
+  landlord_client_id: string;
+  payment_receiver: ManagerPaymentReceiver;
+  receiver_name: string;
+  receiver_phone: string | null;
+  bank_name: string | null;
+  bank_code: string | null;
+  account_number: string | null;
+  account_name: string | null;
+  payout_note: string | null;
+  is_default: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ManagerLandlordRemittanceRow = {
+  id: string;
+  organization_id: string;
+  landlord_client_id: string;
+  payout_profile_id: string | null;
+  amount_remitted: number;
+  currency_code: "NGN";
+  remittance_date: string;
+  period_start: string | null;
+  period_end: string | null;
+  payment_method: ManagerRemittancePaymentMethod;
+  payment_reference: string | null;
+  proof_url: string | null;
+  status: ManagerRemittanceStatus;
+  recorded_by_profile_id: string | null;
+  confirmed_by_profile_id: string | null;
+  confirmed_at: string | null;
+  rejected_at: string | null;
+  reversed_at: string | null;
+  rejection_reason: string | null;
+  notes: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ManagerPropertyRow = {
+  id: string;
+  organization_id: string;
+  landlord_client_id: string;
+  property_name: string;
+  property_address: string;
+  city: string | null;
+  state: string | null;
+  lga: string | null;
+  collection_mode: ManagerCollectionMode;
+  management_fee_type: ManagerManagementFeeType;
+  management_fee_value: number;
+  paystack_charge_bearer: ManagerPaystackChargeBearer;
+  payment_receiver: ManagerPaymentReceiver;
+  notes: string | null;
+  status: ManagerPropertyStatus;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ManagerUnitRow = {
+  id: string;
+  organization_id: string;
+  landlord_client_id: string;
+  property_id: string;
+  unit_label: string;
+  unit_type: string | null;
+  rent_amount: number;
+  status: ManagerUnitStatus;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ManagerTenantRow = {
+  id: string;
+  organization_id: string;
+  landlord_client_id: string;
+  property_id: string;
+  unit_id: string;
+  full_name: string;
+  phone_number: string;
+  email: string | null;
+  occupation: string | null;
+  rent_amount: number;
+  current_balance: number;
+  move_in_date: string | null;
+  next_rent_due_date: string | null;
+  move_out_date: string | null;
+  status: ManagerTenantStatus;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ManagerRentPaymentRow = {
+  id: string;
+  organization_id: string;
+  landlord_client_id: string;
+  property_id: string;
+  unit_id: string;
+  tenant_id: string;
+  collection_mode: ManagerCollectionMode;
+  payment_receiver: ManagerPaymentReceiver;
+  paystack_charge_bearer: ManagerPaystackChargeBearer;
+  amount_paid: number;
+  currency_code: "NGN";
+  payment_method: ManagerPaymentMethod;
+  payment_reference: string | null;
+  payment_date: string;
+  period_start: string | null;
+  period_end: string | null;
+  management_fee_type: ManagerManagementFeeType;
+  management_fee_value: number;
+  management_fee_amount: number;
+  landlord_net_amount: number;
+  status: ManagerRentPaymentStatus;
+  recorded_by_profile_id: string | null;
+  confirmed_by_profile_id: string | null;
+  verified_at: string | null;
+  rejected_at: string | null;
+  reversed_at: string | null;
+  rejection_reason: string | null;
+  notes: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ManagerOverviewRecentPayment = {
+  id: string;
+  amountPaid: number;
+  status: ManagerRentPaymentStatus;
+  paymentDate: string;
+  tenantName: string;
+  propertyName: string;
+  unitLabel: string;
+};
+
+export type ManagerOverview = {
+  organization: ManagerOrganizationRow;
+  totals: {
+    landlordClients: number;
+    totalProperties: number;
+    activeProperties: number;
+    totalUnits: number;
+    vacantUnits: number;
+    occupiedUnits: number;
+    totalTenants: number;
+    activeTenants: number;
+    totalRecordedPayments: number;
+    totalVerifiedPayments: number;
+    totalManagerCommission: number;
+    totalLandlordShare: number;
+  };
+  recentPayments: ManagerOverviewRecentPayment[];
+};
+
+export type ManagerLandlordRemittanceSummary = {
+  landlordClientId: string;
+  landlordName: string;
+  amountDueToLandlord: number;
+  amountRemitted: number;
+  pendingBalance: number;
+};
+
+const MANAGER_ORGANIZATION_SELECT = `
+  id,
+  owner_profile_id,
+  organization_name,
+  organization_phone,
+  organization_email,
+  rc_number,
+  office_address,
+  country_code,
+  currency_code,
+  status,
+  created_at,
+  updated_at
+`;
+
+const MANAGER_LANDLORD_CLIENT_SELECT = `
+  id,
+  organization_id,
+  landlord_profile_id,
+  landlord_name,
+  landlord_phone,
+  landlord_email,
+  landlord_address,
+  notes,
+  status,
+  created_at,
+  updated_at
+`;
+
+const MANAGER_LANDLORD_PAYOUT_PROFILE_SELECT = `
+  id,
+  organization_id,
+  landlord_client_id,
+  payment_receiver,
+  receiver_name,
+  receiver_phone,
+  bank_name,
+  bank_code,
+  account_number,
+  account_name,
+  payout_note,
+  is_default,
+  is_active,
+  created_at,
+  updated_at
+`;
+
+const MANAGER_LANDLORD_REMITTANCE_SELECT = `
+  id,
+  organization_id,
+  landlord_client_id,
+  payout_profile_id,
+  amount_remitted,
+  currency_code,
+  remittance_date,
+  period_start,
+  period_end,
+  payment_method,
+  payment_reference,
+  proof_url,
+  status,
+  recorded_by_profile_id,
+  confirmed_by_profile_id,
+  confirmed_at,
+  rejected_at,
+  reversed_at,
+  rejection_reason,
+  notes,
+  metadata,
+  created_at,
+  updated_at
+`;
+
+const MANAGER_PROPERTY_SELECT = `
+  id,
+  organization_id,
+  landlord_client_id,
+  property_name,
+  property_address,
+  city,
+  state,
+  lga,
+  collection_mode,
+  management_fee_type,
+  management_fee_value,
+  paystack_charge_bearer,
+  payment_receiver,
+  notes,
+  status,
+  created_at,
+  updated_at
+`;
+
+const MANAGER_UNIT_SELECT = `
+  id,
+  organization_id,
+  landlord_client_id,
+  property_id,
+  unit_label,
+  unit_type,
+  rent_amount,
+  status,
+  notes,
+  created_at,
+  updated_at
+`;
+
+const MANAGER_TENANT_SELECT = `
+  id,
+  organization_id,
+  landlord_client_id,
+  property_id,
+  unit_id,
+  full_name,
+  phone_number,
+  email,
+  occupation,
+  rent_amount,
+  current_balance,
+  move_in_date,
+  next_rent_due_date,
+  move_out_date,
+  status,
+  notes,
+  created_at,
+  updated_at
+`;
+
+const MANAGER_RENT_PAYMENT_SELECT = `
+  id,
+  organization_id,
+  landlord_client_id,
+  property_id,
+  unit_id,
+  tenant_id,
+  collection_mode,
+  payment_receiver,
+  paystack_charge_bearer,
+  amount_paid,
+  currency_code,
+  payment_method,
+  payment_reference,
+  payment_date,
+  period_start,
+  period_end,
+  management_fee_type,
+  management_fee_value,
+  management_fee_amount,
+  landlord_net_amount,
+  status,
+  recorded_by_profile_id,
+  confirmed_by_profile_id,
+  verified_at,
+  rejected_at,
+  reversed_at,
+  rejection_reason,
+  notes,
+  metadata,
+  created_at,
+  updated_at
+`;
+
+export async function getManagerOrganizationAccessForCurrentUser(
+  supabase: SupabaseClient,
+  profileId: string,
+): Promise<ManagerOrganizationAccess | null> {
+  const { data: ownedOrganization, error: ownedOrganizationError } =
+    await supabase
+      .from("manager_organizations")
+      .select(MANAGER_ORGANIZATION_SELECT)
+      .eq("owner_profile_id", profileId)
+      .maybeSingle<ManagerOrganizationRow>();
+
+  if (ownedOrganizationError) {
+    throw ownedOrganizationError;
+  }
+
+  if (ownedOrganization) {
+    return {
+      organization: ownedOrganization,
+      staffRole: "owner",
+      isOwner: true,
+      staffMemberId: null,
+    };
+  }
+
+  const staffMember = await getActiveManagerStaffMemberForProfile(
+    supabase,
+    profileId,
+  );
+
+  if (!staffMember) {
+    return null;
+  }
+
+  const { data: staffOrganization, error: staffOrganizationError } =
+    await supabase
+      .from("manager_organizations")
+      .select(MANAGER_ORGANIZATION_SELECT)
+      .eq("id", staffMember.organization_id)
+      .maybeSingle<ManagerOrganizationRow>();
+
+  if (staffOrganizationError) {
+    throw staffOrganizationError;
+  }
+
+  if (!staffOrganization) {
+    return null;
+  }
+
+  return {
+    organization: staffOrganization,
+    staffRole: staffMember.staff_role,
+    isOwner: false,
+    staffMemberId: staffMember.id,
+  };
+}
+
+export async function getManagerOrganizationForCurrentUser(
+  supabase: SupabaseClient,
+  ownerProfileId: string,
+) {
+  const access = await getManagerOrganizationAccessForCurrentUser(
+    supabase,
+    ownerProfileId,
+  );
+
+  return access?.organization ?? null;
+}
+
+export async function createManagerOrganization(
+  supabase: SupabaseClient,
+  params: {
+    ownerProfileId: string;
+    organizationName: string;
+    organizationPhone: string | null;
+    organizationEmail: string | null;
+    rcNumber: string | null;
+    officeAddress: string | null;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_organizations")
+    .insert({
+      owner_profile_id: params.ownerProfileId,
+      organization_name: params.organizationName,
+      organization_phone: params.organizationPhone,
+      organization_email: params.organizationEmail,
+      rc_number: params.rcNumber,
+      office_address: params.officeAddress,
+      country_code: "NG",
+      currency_code: "NGN",
+      status: "active",
+    })
+    .select(MANAGER_ORGANIZATION_SELECT)
+    .single<ManagerOrganizationRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function listManagerLandlordClients(
+  supabase: SupabaseClient,
+  organizationId: string,
+) {
+  const { data, error } = await supabase
+    .from("manager_landlord_clients")
+    .select(MANAGER_LANDLORD_CLIENT_SELECT)
+    .eq("organization_id", organizationId)
+    .neq("status", "archived")
+    .order("created_at", { ascending: false })
+    .returns<ManagerLandlordClientRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function createManagerLandlordClient(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    landlordName: string;
+    landlordPhone: string | null;
+    landlordEmail: string | null;
+    landlordAddress: string | null;
+    notes: string | null;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_landlord_clients")
+    .insert({
+      organization_id: params.organizationId,
+      landlord_name: params.landlordName,
+      landlord_phone: params.landlordPhone,
+      landlord_email: params.landlordEmail,
+      landlord_address: params.landlordAddress,
+      notes: params.notes,
+      status: "active",
+    })
+    .select(MANAGER_LANDLORD_CLIENT_SELECT)
+    .single<ManagerLandlordClientRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function listLandlordPayoutProfiles(
+  supabase: SupabaseClient,
+  organizationId: string,
+) {
+  const { data, error } = await supabase
+    .from("manager_landlord_payout_profiles")
+    .select(MANAGER_LANDLORD_PAYOUT_PROFILE_SELECT)
+    .eq("organization_id", organizationId)
+    .eq("is_active", true)
+    .order("created_at", { ascending: false })
+    .returns<ManagerLandlordPayoutProfileRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function upsertLandlordPayoutProfile(
+  supabase: SupabaseClient,
+  params: {
+    id: string | null;
+    organizationId: string;
+    landlordClientId: string;
+    paymentReceiver: ManagerPaymentReceiver;
+    receiverName: string;
+    receiverPhone: string | null;
+    bankName: string | null;
+    bankCode: string | null;
+    accountNumber: string | null;
+    accountName: string | null;
+    payoutNote: string | null;
+    isDefault: boolean;
+  },
+) {
+  if (params.isDefault) {
+    let query = supabase
+      .from("manager_landlord_payout_profiles")
+      .update({ is_default: false })
+      .eq("organization_id", params.organizationId)
+      .eq("landlord_client_id", params.landlordClientId)
+      .eq("is_active", true);
+
+    if (params.id) {
+      query = query.neq("id", params.id);
+    }
+
+    const { error: defaultError } = await query;
+
+    if (defaultError) {
+      throw defaultError;
+    }
+  }
+
+  const payload = {
+    organization_id: params.organizationId,
+    landlord_client_id: params.landlordClientId,
+    payment_receiver: params.paymentReceiver,
+    receiver_name: params.receiverName,
+    receiver_phone: params.receiverPhone,
+    bank_name: params.bankName,
+    bank_code: params.bankCode,
+    account_number: params.accountNumber,
+    account_name: params.accountName,
+    payout_note: params.payoutNote,
+    is_default: params.isDefault,
+    is_active: true,
+  };
+
+  if (params.id) {
+    const { data, error } = await supabase
+      .from("manager_landlord_payout_profiles")
+      .update(payload)
+      .eq("id", params.id)
+      .eq("organization_id", params.organizationId)
+      .select(MANAGER_LANDLORD_PAYOUT_PROFILE_SELECT)
+      .single<ManagerLandlordPayoutProfileRow>();
+
+    if (error) {
+      throw error;
+    }
+
+    return data;
+  }
+
+  const { data, error } = await supabase
+    .from("manager_landlord_payout_profiles")
+    .insert(payload)
+    .select(MANAGER_LANDLORD_PAYOUT_PROFILE_SELECT)
+    .single<ManagerLandlordPayoutProfileRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function listManagerProperties(
+  supabase: SupabaseClient,
+  organizationId: string,
+) {
+  const { data, error } = await supabase
+    .from("manager_properties")
+    .select(MANAGER_PROPERTY_SELECT)
+    .eq("organization_id", organizationId)
+    .neq("status", "archived")
+    .order("created_at", { ascending: false })
+    .returns<ManagerPropertyRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getManagerPropertyById(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    landlordClientId: string;
+    propertyId: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_properties")
+    .select(MANAGER_PROPERTY_SELECT)
+    .eq("organization_id", params.organizationId)
+    .eq("landlord_client_id", params.landlordClientId)
+    .eq("id", params.propertyId)
+    .maybeSingle<ManagerPropertyRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function createManagerProperty(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    landlordClientId: string;
+    propertyName: string;
+    propertyAddress: string;
+    city: string | null;
+    state: string | null;
+    lga: string | null;
+    collectionMode: ManagerCollectionMode;
+    managementFeeType: ManagerManagementFeeType;
+    managementFeeValue: number;
+    paystackChargeBearer: ManagerPaystackChargeBearer;
+    paymentReceiver: ManagerPaymentReceiver;
+    notes: string | null;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_properties")
+    .insert({
+      organization_id: params.organizationId,
+      landlord_client_id: params.landlordClientId,
+      property_name: params.propertyName,
+      property_address: params.propertyAddress,
+      city: params.city,
+      state: params.state,
+      lga: params.lga,
+      collection_mode: params.collectionMode,
+      management_fee_type: params.managementFeeType,
+      management_fee_value: params.managementFeeValue,
+      paystack_charge_bearer: params.paystackChargeBearer,
+      payment_receiver: params.paymentReceiver,
+      notes: params.notes,
+      status: "active",
+    })
+    .select(MANAGER_PROPERTY_SELECT)
+    .single<ManagerPropertyRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function listManagerUnits(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    propertyId?: string;
+  },
+) {
+  let query = supabase
+    .from("manager_units")
+    .select(MANAGER_UNIT_SELECT)
+    .eq("organization_id", params.organizationId);
+
+  if (params.propertyId) {
+    query = query.eq("property_id", params.propertyId);
+  }
+
+  const { data, error } = await query
+    .order("created_at", { ascending: false })
+    .returns<ManagerUnitRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getManagerUnitById(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    landlordClientId: string;
+    propertyId: string;
+    unitId: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_units")
+    .select(MANAGER_UNIT_SELECT)
+    .eq("organization_id", params.organizationId)
+    .eq("landlord_client_id", params.landlordClientId)
+    .eq("property_id", params.propertyId)
+    .eq("id", params.unitId)
+    .maybeSingle<ManagerUnitRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function createManagerUnit(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    landlordClientId: string;
+    propertyId: string;
+    unitLabel: string;
+    unitType: string | null;
+    rentAmount: number;
+    status: ManagerUnitStatus;
+    notes: string | null;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_units")
+    .insert({
+      organization_id: params.organizationId,
+      landlord_client_id: params.landlordClientId,
+      property_id: params.propertyId,
+      unit_label: params.unitLabel,
+      unit_type: params.unitType,
+      rent_amount: params.rentAmount,
+      status: params.status,
+      notes: params.notes,
+    })
+    .select(MANAGER_UNIT_SELECT)
+    .single<ManagerUnitRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function updateManagerUnitStatus(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    unitId: string;
+    status: ManagerUnitStatus;
+  },
+) {
+  const { error } = await supabase
+    .from("manager_units")
+    .update({ status: params.status })
+    .eq("organization_id", params.organizationId)
+    .eq("id", params.unitId);
+
+  if (error) {
+    throw error;
+  }
+}
+
+export async function listManagerTenants(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    propertyId?: string;
+    unitId?: string;
+  },
+) {
+  let query = supabase
+    .from("manager_tenants")
+    .select(MANAGER_TENANT_SELECT)
+    .eq("organization_id", params.organizationId);
+
+  if (params.propertyId) {
+    query = query.eq("property_id", params.propertyId);
+  }
+
+  if (params.unitId) {
+    query = query.eq("unit_id", params.unitId);
+  }
+
+  const { data, error } = await query
+    .order("created_at", { ascending: false })
+    .returns<ManagerTenantRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getManagerTenantById(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    landlordClientId: string;
+    propertyId: string;
+    unitId: string;
+    tenantId: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_tenants")
+    .select(MANAGER_TENANT_SELECT)
+    .eq("organization_id", params.organizationId)
+    .eq("landlord_client_id", params.landlordClientId)
+    .eq("property_id", params.propertyId)
+    .eq("unit_id", params.unitId)
+    .eq("id", params.tenantId)
+    .maybeSingle<ManagerTenantRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function createManagerTenant(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    landlordClientId: string;
+    propertyId: string;
+    unitId: string;
+    fullName: string;
+    phoneNumber: string;
+    email: string | null;
+    occupation: string | null;
+    rentAmount: number;
+    currentBalance: number;
+    moveInDate: string | null;
+    nextRentDueDate: string | null;
+    status: ManagerTenantStatus;
+    notes: string | null;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_tenants")
+    .insert({
+      organization_id: params.organizationId,
+      landlord_client_id: params.landlordClientId,
+      property_id: params.propertyId,
+      unit_id: params.unitId,
+      full_name: params.fullName,
+      phone_number: params.phoneNumber,
+      email: params.email,
+      occupation: params.occupation,
+      rent_amount: params.rentAmount,
+      current_balance: params.currentBalance,
+      move_in_date: params.moveInDate,
+      next_rent_due_date: params.nextRentDueDate,
+      status: params.status,
+      notes: params.notes,
+    })
+    .select(MANAGER_TENANT_SELECT)
+    .single<ManagerTenantRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function recordManagerRentPayment(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    landlordClientId: string;
+    propertyId: string;
+    unitId: string;
+    tenantId: string;
+    collectionMode: ManagerCollectionMode;
+    paymentReceiver: ManagerPaymentReceiver;
+    paystackChargeBearer: ManagerPaystackChargeBearer;
+    amountPaid: number;
+    paymentMethod: ManagerPaymentMethod;
+    paymentReference: string | null;
+    paymentDate: string;
+    periodStart: string | null;
+    periodEnd: string | null;
+    managementFeeType: ManagerManagementFeeType;
+    managementFeeValue: number;
+    managementFeeAmount: number;
+    landlordNetAmount: number;
+    status: ManagerRentPaymentStatus;
+    recordedByProfileId: string;
+    notes: string | null;
+    metadata: Record<string, unknown>;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_rent_payments")
+    .insert({
+      organization_id: params.organizationId,
+      landlord_client_id: params.landlordClientId,
+      property_id: params.propertyId,
+      unit_id: params.unitId,
+      tenant_id: params.tenantId,
+      collection_mode: params.collectionMode,
+      payment_receiver: params.paymentReceiver,
+      paystack_charge_bearer: params.paystackChargeBearer,
+      amount_paid: params.amountPaid,
+      currency_code: "NGN",
+      payment_method: params.paymentMethod,
+      payment_reference: params.paymentReference,
+      payment_date: params.paymentDate,
+      period_start: params.periodStart,
+      period_end: params.periodEnd,
+      management_fee_type: params.managementFeeType,
+      management_fee_value: params.managementFeeValue,
+      management_fee_amount: params.managementFeeAmount,
+      landlord_net_amount: params.landlordNetAmount,
+      status: params.status,
+      recorded_by_profile_id: params.recordedByProfileId,
+      notes: params.notes,
+      metadata: params.metadata,
+    })
+    .select(MANAGER_RENT_PAYMENT_SELECT)
+    .single<ManagerRentPaymentRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function listManagerRentPayments(
+  supabase: SupabaseClient,
+  organizationId: string,
+) {
+  const { data, error } = await supabase
+    .from("manager_rent_payments")
+    .select(MANAGER_RENT_PAYMENT_SELECT)
+    .eq("organization_id", organizationId)
+    .order("payment_date", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(50)
+    .returns<ManagerRentPaymentRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function recordManagerLandlordRemittance(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    landlordClientId: string;
+    payoutProfileId: string | null;
+    amountRemitted: number;
+    remittanceDate: string;
+    periodStart: string | null;
+    periodEnd: string | null;
+    paymentMethod: ManagerRemittancePaymentMethod;
+    paymentReference: string | null;
+    proofUrl: string | null;
+    status: ManagerRemittanceStatus;
+    recordedByProfileId: string;
+    notes: string | null;
+    metadata: Record<string, unknown>;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_landlord_remittances")
+    .insert({
+      organization_id: params.organizationId,
+      landlord_client_id: params.landlordClientId,
+      payout_profile_id: params.payoutProfileId,
+      amount_remitted: params.amountRemitted,
+      currency_code: "NGN",
+      remittance_date: params.remittanceDate,
+      period_start: params.periodStart,
+      period_end: params.periodEnd,
+      payment_method: params.paymentMethod,
+      payment_reference: params.paymentReference,
+      proof_url: params.proofUrl,
+      status: params.status,
+      recorded_by_profile_id: params.recordedByProfileId,
+      notes: params.notes,
+      metadata: params.metadata,
+    })
+    .select(MANAGER_LANDLORD_REMITTANCE_SELECT)
+    .single<ManagerLandlordRemittanceRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function listManagerLandlordRemittances(
+  supabase: SupabaseClient,
+  organizationId: string,
+) {
+  const { data, error } = await supabase
+    .from("manager_landlord_remittances")
+    .select(MANAGER_LANDLORD_REMITTANCE_SELECT)
+    .eq("organization_id", organizationId)
+    .order("remittance_date", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(50)
+    .returns<ManagerLandlordRemittanceRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export function getManagerLandlordRemittanceSummaries(params: {
+  landlordClients: ManagerLandlordClientRow[];
+  payments: ManagerRentPaymentRow[];
+  remittances: ManagerLandlordRemittanceRow[];
+}): ManagerLandlordRemittanceSummary[] {
+  return params.landlordClients
+    .filter((client) => client.status === "active")
+    .map((client) => {
+      const amountDueToLandlord = params.payments
+        .filter(
+          (payment) =>
+            payment.landlord_client_id === client.id &&
+            (payment.status === "recorded" || payment.status === "verified"),
+        )
+        .reduce(
+          (total, payment) => total + Number(payment.landlord_net_amount),
+          0,
+        );
+
+      const amountRemitted = params.remittances
+        .filter(
+          (remittance) =>
+            remittance.landlord_client_id === client.id &&
+            (remittance.status === "recorded" ||
+              remittance.status === "confirmed"),
+        )
+        .reduce(
+          (total, remittance) => total + Number(remittance.amount_remitted),
+          0,
+        );
+
+      return {
+        landlordClientId: client.id,
+        landlordName: client.landlord_name,
+        amountDueToLandlord,
+        amountRemitted,
+        pendingBalance: Math.max(0, amountDueToLandlord - amountRemitted),
+      };
+    });
+}
+
+export async function getManagerOverview(
+  supabase: SupabaseClient,
+  organizationId: string,
+): Promise<ManagerOverview | null> {
+  const { data: organization, error: organizationError } = await supabase
+    .from("manager_organizations")
+    .select(MANAGER_ORGANIZATION_SELECT)
+    .eq("id", organizationId)
+    .maybeSingle<ManagerOrganizationRow>();
+
+  if (organizationError) {
+    throw organizationError;
+  }
+
+  if (!organization) {
+    return null;
+  }
+
+  const [clients, properties, units, tenants, payments] = await Promise.all([
+    listManagerLandlordClients(supabase, organizationId),
+    listManagerProperties(supabase, organizationId),
+    listManagerUnits(supabase, { organizationId }),
+    listManagerTenants(supabase, { organizationId }),
+    listManagerRentPayments(supabase, organizationId),
+  ]);
+
+  return {
+    organization,
+    totals: {
+      landlordClients: clients.filter((client) => client.status === "active")
+        .length,
+      totalProperties: properties.length,
+      activeProperties: properties.filter(
+        (property) => property.status === "active",
+      ).length,
+      totalUnits: units.length,
+      vacantUnits: units.filter((unit) => unit.status === "vacant").length,
+      occupiedUnits: units.filter((unit) => unit.status === "occupied").length,
+      totalTenants: tenants.length,
+      activeTenants: tenants.filter((tenant) => tenant.status === "active")
+        .length,
+      totalRecordedPayments: payments.reduce(
+        (total, payment) => total + Number(payment.amount_paid),
+        0,
+      ),
+      totalVerifiedPayments: payments
+        .filter((payment) => payment.status === "verified")
+        .reduce((total, payment) => total + Number(payment.amount_paid), 0),
+      totalManagerCommission: payments.reduce(
+        (total, payment) => total + Number(payment.management_fee_amount),
+        0,
+      ),
+      totalLandlordShare: payments.reduce(
+        (total, payment) => total + Number(payment.landlord_net_amount),
+        0,
+      ),
+    },
+    recentPayments: payments.slice(0, 6).map((payment) => {
+      const tenant = tenants.find((item) => item.id === payment.tenant_id);
+      const property = properties.find(
+        (item) => item.id === payment.property_id,
+      );
+      const unit = units.find((item) => item.id === payment.unit_id);
+
+      return {
+        id: payment.id,
+        amountPaid: Number(payment.amount_paid),
+        status: payment.status,
+        paymentDate: payment.payment_date,
+        tenantName: tenant?.full_name ?? "Tenant",
+        propertyName: property?.property_name ?? "Property",
+        unitLabel: unit?.unit_label ?? "Unit",
+      };
+    }),
+  };
+}
+
+
+====================================================================================================
+FILE: src/server/repositories/manager-tenant-onboarding.repository.ts
+====================================================================================================
+
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+export type ManagerTenantOnboardingType =
+  | "current_occupant"
+  | "new_incoming_tenant";
+
+export type ManagerTenantOnboardingStatus =
+  | "pending"
+  | "submitted"
+  | "approved"
+  | "rejected"
+  | "cancelled"
+  | "expired"
+  | "agreement_sent"
+  | "agreement_accepted"
+  | "payment_initialized"
+  | "payment_paid"
+  | "payment_expired";
+
+export type ManagerTenantAgreementStatus =
+  | "draft"
+  | "sent_to_tenant"
+  | "accepted"
+  | "voided";
+
+export type ManagerTenantOnboardingRequestRow = {
+  id: string;
+  organization_id: string;
+  landlord_client_id: string;
+  property_id: string;
+  unit_id: string;
+  onboarding_type: ManagerTenantOnboardingType;
+  status: ManagerTenantOnboardingStatus;
+  token_hash: string;
+  token_expires_at: string;
+  token_used_at: string | null;
+  invited_tenant_full_name: string | null;
+  invited_tenant_phone_number: string | null;
+  invited_tenant_email: string | null;
+  tenant_full_name: string | null;
+  tenant_phone_number: string | null;
+  tenant_email: string | null;
+  tenant_occupation: string | null;
+  tenant_id_type: string | null;
+  tenant_id_number: string | null;
+  tenant_move_in_date: string | null;
+  tenant_claimed_next_rent_due_date: string | null;
+  tenant_claimed_rent_amount: number | null;
+  tenant_payment_frequency: "annual" | "monthly" | "quarterly" | "biannual";
+  tenant_notes: string | null;
+  manager_confirmed_rent_amount: number | null;
+  manager_confirmed_move_in_date: string | null;
+  manager_confirmed_next_rent_due_date: string | null;
+  opening_balance: number;
+  manager_review_notes: string | null;
+  approved_tenant_id: string | null;
+  approved_by_profile_id: string | null;
+  rejection_reason: string | null;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  cancelled_at: string | null;
+  expired_at: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  manager_properties: {
+    id: string;
+    property_name: string;
+    property_address: string;
+    collection_mode: "automatic_split" | "manager_collects" | "landlord_direct";
+    management_fee_type: "percentage" | "flat";
+    management_fee_value: number;
+    paystack_charge_bearer: "tenant" | "landlord" | "manager" | "bopa";
+  } | null;
+  manager_units: {
+    id: string;
+    unit_label: string;
+    unit_type: string | null;
+    rent_amount: number;
+    status: string;
+  } | null;
+  manager_landlord_clients: {
+    id: string;
+    landlord_name: string;
+    landlord_phone: string | null;
+    landlord_email: string | null;
+  } | null;
+  manager_organizations: {
+    id: string;
+    organization_name: string;
+    organization_phone: string | null;
+    organization_email: string | null;
+  } | null;
+};
+
+export type ManagerTenantAgreementDocumentRow = {
+  id: string;
+  organization_id: string;
+  landlord_client_id: string;
+  property_id: string;
+  unit_id: string;
+  tenant_id: string;
+  onboarding_request_id: string | null;
+  document_status: ManagerTenantAgreementStatus;
+  title: string;
+  manager_snapshot: Record<string, unknown>;
+  landlord_snapshot: Record<string, unknown>;
+  tenant_snapshot: Record<string, unknown>;
+  property_snapshot: Record<string, unknown>;
+  tenancy_snapshot: Record<string, unknown>;
+  agreement_body: string;
+  finalized_body: string | null;
+  finalized_at: string | null;
+  finalized_by_profile_id: string | null;
+  tenant_acceptance_token_hash: string | null;
+  tenant_acceptance_token_expires_at: string | null;
+  tenant_accepted_at: string | null;
+  tenant_acceptance_ip: string | null;
+  tenant_acceptance_user_agent: string | null;
+  pdf_bucket: string;
+  pdf_path: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+const REQUEST_SELECT = `
+  id,
+  organization_id,
+  landlord_client_id,
+  property_id,
+  unit_id,
+  onboarding_type,
+  status,
+  token_hash,
+  token_expires_at,
+  token_used_at,
+  invited_tenant_full_name,
+  invited_tenant_phone_number,
+  invited_tenant_email,
+  tenant_full_name,
+  tenant_phone_number,
+  tenant_email,
+  tenant_occupation,
+  tenant_id_type,
+  tenant_id_number,
+  tenant_move_in_date,
+  tenant_claimed_next_rent_due_date,
+  tenant_claimed_rent_amount,
+  tenant_payment_frequency,
+  tenant_notes,
+  manager_confirmed_rent_amount,
+  manager_confirmed_move_in_date,
+  manager_confirmed_next_rent_due_date,
+  opening_balance,
+  manager_review_notes,
+  approved_tenant_id,
+  approved_by_profile_id,
+  rejection_reason,
+  submitted_at,
+  reviewed_at,
+  cancelled_at,
+  expired_at,
+  metadata,
+  created_at,
+  updated_at,
+  manager_properties (
+    id,
+    property_name,
+    property_address,
+    collection_mode,
+    management_fee_type,
+    management_fee_value,
+    paystack_charge_bearer
+  ),
+  manager_units (
+    id,
+    unit_label,
+    unit_type,
+    rent_amount,
+    status
+  ),
+  manager_landlord_clients (
+    id,
+    landlord_name,
+    landlord_phone,
+    landlord_email
+  ),
+  manager_organizations (
+    id,
+    organization_name,
+    organization_phone,
+    organization_email
+  )
+`;
+
+const AGREEMENT_SELECT = `
+  id,
+  organization_id,
+  landlord_client_id,
+  property_id,
+  unit_id,
+  tenant_id,
+  onboarding_request_id,
+  document_status,
+  title,
+  manager_snapshot,
+  landlord_snapshot,
+  tenant_snapshot,
+  property_snapshot,
+  tenancy_snapshot,
+  agreement_body,
+  finalized_body,
+  finalized_at,
+  finalized_by_profile_id,
+  tenant_acceptance_token_hash,
+  tenant_acceptance_token_expires_at,
+  tenant_accepted_at,
+  tenant_acceptance_ip,
+  tenant_acceptance_user_agent,
+  pdf_bucket,
+  pdf_path,
+  metadata,
+  created_at,
+  updated_at
+`;
+
+export async function createManagerTenantOnboardingRequest(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    landlordClientId: string;
+    propertyId: string;
+    unitId: string;
+    onboardingType: ManagerTenantOnboardingType;
+    tokenHash: string;
+    tokenExpiresAt: string;
+    invitedTenantFullName: string;
+    invitedTenantPhoneNumber: string;
+    invitedTenantEmail: string | null;
+    note: string | null;
+    metadata: Record<string, unknown>;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_tenant_onboarding_requests")
+    .insert({
+      organization_id: params.organizationId,
+      landlord_client_id: params.landlordClientId,
+      property_id: params.propertyId,
+      unit_id: params.unitId,
+      onboarding_type: params.onboardingType,
+      token_hash: params.tokenHash,
+      token_expires_at: params.tokenExpiresAt,
+      invited_tenant_full_name: params.invitedTenantFullName,
+      invited_tenant_phone_number: params.invitedTenantPhoneNumber,
+      invited_tenant_email: params.invitedTenantEmail,
+      manager_review_notes: params.note,
+      status: "pending",
+      metadata: params.metadata,
+    })
+    .select(REQUEST_SELECT)
+    .single<ManagerTenantOnboardingRequestRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getManagerTenantOnboardingRequestByTokenHash(
+  supabase: SupabaseClient,
+  tokenHash: string,
+) {
+  const { data, error } = await supabase
+    .from("manager_tenant_onboarding_requests")
+    .select(REQUEST_SELECT)
+    .eq("token_hash", tokenHash)
+    .maybeSingle<ManagerTenantOnboardingRequestRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function listManagerTenantOnboardingRequests(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    propertyId?: string;
+  },
+) {
+  let query = supabase
+    .from("manager_tenant_onboarding_requests")
+    .select(REQUEST_SELECT)
+    .eq("organization_id", params.organizationId);
+
+  if (params.propertyId) {
+    query = query.eq("property_id", params.propertyId);
+  }
+
+  const { data, error } = await query
+    .order("created_at", { ascending: false })
+    .limit(50)
+    .returns<ManagerTenantOnboardingRequestRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getManagerTenantOnboardingRequestById(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    requestId: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_tenant_onboarding_requests")
+    .select(REQUEST_SELECT)
+    .eq("organization_id", params.organizationId)
+    .eq("id", params.requestId)
+    .single<ManagerTenantOnboardingRequestRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function submitManagerTenantOnboardingRequest(
+  supabase: SupabaseClient,
+  params: {
+    requestId: string;
+    fullName: string;
+    phoneNumber: string;
+    email: string | null;
+    occupation: string | null;
+    idType: string;
+    idNumber: string;
+    moveInDate: string | null;
+    statedRentDueDate: string | null;
+    claimedRentAmount: number | null;
+    paymentFrequency: "annual" | "monthly" | "quarterly" | "biannual";
+    tenantNotes: string | null;
+  },
+) {
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("manager_tenant_onboarding_requests")
+    .update({
+      tenant_full_name: params.fullName,
+      tenant_phone_number: params.phoneNumber,
+      tenant_email: params.email,
+      tenant_occupation: params.occupation,
+      tenant_id_type: params.idType,
+      tenant_id_number: params.idNumber,
+      tenant_move_in_date: params.moveInDate,
+      tenant_claimed_next_rent_due_date: params.statedRentDueDate,
+      tenant_claimed_rent_amount: params.claimedRentAmount,
+      tenant_payment_frequency: params.paymentFrequency,
+      tenant_notes: params.tenantNotes,
+      status: "submitted",
+      token_used_at: now,
+      submitted_at: now,
+      updated_at: now,
+    })
+    .eq("id", params.requestId)
+    .eq("status", "pending")
+    .select(REQUEST_SELECT)
+    .single<ManagerTenantOnboardingRequestRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function updateManagerTenantOnboardingRequestReviewed(
+  supabase: SupabaseClient,
+  params: {
+    requestId: string;
+    organizationId: string;
+    status: ManagerTenantOnboardingStatus;
+    approvedTenantId: string | null;
+    approvedByProfileId: string;
+    confirmedRentAmount: number | null;
+    confirmedMoveInDate: string | null;
+    confirmedNextRentDueDate: string | null;
+    openingBalance: number;
+    reviewNotes: string | null;
+    rejectionReason?: string | null;
+    metadata: Record<string, unknown>;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_tenant_onboarding_requests")
+    .update({
+      status: params.status,
+      approved_tenant_id: params.approvedTenantId,
+      approved_by_profile_id: params.approvedByProfileId,
+      manager_confirmed_rent_amount: params.confirmedRentAmount,
+      manager_confirmed_move_in_date: params.confirmedMoveInDate,
+      manager_confirmed_next_rent_due_date: params.confirmedNextRentDueDate,
+      opening_balance: params.openingBalance,
+      manager_review_notes: params.reviewNotes,
+      rejection_reason: params.rejectionReason ?? null,
+      reviewed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      metadata: params.metadata,
+    })
+    .eq("id", params.requestId)
+    .eq("organization_id", params.organizationId)
+    .eq("status", "submitted")
+    .select(REQUEST_SELECT)
+    .single<ManagerTenantOnboardingRequestRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function createManagerTenantAgreementDocument(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    landlordClientId: string;
+    propertyId: string;
+    unitId: string;
+    tenantId: string;
+    onboardingRequestId: string;
+    agreementBody: string;
+    tokenHash: string;
+    tokenExpiresAt: string;
+    finalizedByProfileId: string;
+    managerSnapshot: Record<string, unknown>;
+    landlordSnapshot: Record<string, unknown>;
+    tenantSnapshot: Record<string, unknown>;
+    propertySnapshot: Record<string, unknown>;
+    tenancySnapshot: Record<string, unknown>;
+    metadata: Record<string, unknown>;
+  },
+) {
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("manager_tenant_agreement_documents")
+    .insert({
+      organization_id: params.organizationId,
+      landlord_client_id: params.landlordClientId,
+      property_id: params.propertyId,
+      unit_id: params.unitId,
+      tenant_id: params.tenantId,
+      onboarding_request_id: params.onboardingRequestId,
+      document_status: "sent_to_tenant",
+      title: "Tenancy Agreement",
+      agreement_body: params.agreementBody,
+      finalized_body: params.agreementBody,
+      finalized_at: now,
+      finalized_by_profile_id: params.finalizedByProfileId,
+      tenant_acceptance_token_hash: params.tokenHash,
+      tenant_acceptance_token_expires_at: params.tokenExpiresAt,
+      manager_snapshot: params.managerSnapshot,
+      landlord_snapshot: params.landlordSnapshot,
+      tenant_snapshot: params.tenantSnapshot,
+      property_snapshot: params.propertySnapshot,
+      tenancy_snapshot: params.tenancySnapshot,
+      metadata: params.metadata,
+    })
+    .select(AGREEMENT_SELECT)
+    .single<ManagerTenantAgreementDocumentRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getManagerTenantAgreementByTokenHash(
+  supabase: SupabaseClient,
+  tokenHash: string,
+) {
+  const { data, error } = await supabase
+    .from("manager_tenant_agreement_documents")
+    .select(AGREEMENT_SELECT)
+    .eq("tenant_acceptance_token_hash", tokenHash)
+    .maybeSingle<ManagerTenantAgreementDocumentRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function acceptManagerTenantAgreement(
+  supabase: SupabaseClient,
+  params: {
+    agreementId: string;
+    ipAddress: string | null;
+    userAgent: string | null;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_tenant_agreement_documents")
+    .update({
+      document_status: "accepted",
+      tenant_accepted_at: new Date().toISOString(),
+      tenant_acceptance_ip: params.ipAddress,
+      tenant_acceptance_user_agent: params.userAgent,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", params.agreementId)
+    .eq("document_status", "sent_to_tenant")
+    .select(AGREEMENT_SELECT)
+    .single<ManagerTenantAgreementDocumentRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function voidManagerTenantAgreement(
+  supabase: SupabaseClient,
+  params: {
+    agreementId: string;
+    ipAddress: string | null;
+    userAgent: string | null;
+    metadata: Record<string, unknown>;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_tenant_agreement_documents")
+    .update({
+      document_status: "voided",
+      tenant_acceptance_ip: params.ipAddress,
+      tenant_acceptance_user_agent: params.userAgent,
+      metadata: params.metadata,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", params.agreementId)
+    .in("document_status", ["sent_to_tenant", "accepted"])
+    .select(AGREEMENT_SELECT)
+    .single<ManagerTenantAgreementDocumentRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function markManagerOnboardingAgreementAccepted(
+  supabase: SupabaseClient,
+  params: {
+    requestId: string;
+  },
+) {
+  const { error } = await supabase
+    .from("manager_tenant_onboarding_requests")
+    .update({
+      status: "agreement_accepted",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", params.requestId)
+    .in("status", ["agreement_sent", "agreement_accepted"]);
+
+  if (error) {
+    throw error;
+  }
+}
+
+export async function markManagerOnboardingPaymentInitialized(
+  supabase: SupabaseClient,
+  params: {
+    requestId: string;
+    paymentRequestId: string;
+    metadata?: Record<string, unknown>;
+  },
+) {
+  const { error } = await supabase
+    .from("manager_tenant_onboarding_requests")
+    .update({
+      status: "payment_initialized",
+      updated_at: new Date().toISOString(),
+      metadata: {
+        ...(params.metadata ?? {}),
+        payment_request_id: params.paymentRequestId,
+      },
+    })
+    .eq("id", params.requestId)
+    .in("status", [
+      "agreement_accepted",
+      "payment_initialized",
+      "payment_expired",
+    ]);
+
+  if (error) {
+    throw error;
+  }
+}
+
+export async function cancelManagerOnboardingAfterAgreementDecline(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    requestId: string;
+    metadata: Record<string, unknown>;
+  },
+) {
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("manager_tenant_onboarding_requests")
+    .update({
+      status: "cancelled",
+      cancelled_at: now,
+      updated_at: now,
+      metadata: params.metadata,
+    })
+    .eq("organization_id", params.organizationId)
+    .eq("id", params.requestId)
+    .neq("status", "payment_paid")
+    .select(REQUEST_SELECT)
+    .single<ManagerTenantOnboardingRequestRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function updateManagerUnitStatusDirect(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    unitId: string;
+    status: "vacant" | "reserved" | "occupied" | "inactive";
+  },
+) {
+  const { error } = await supabase
+    .from("manager_units")
+    .update({
+      status: params.status,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("organization_id", params.organizationId)
+    .eq("id", params.unitId);
+
+  if (error) {
+    throw error;
+  }
+}
+
+export async function updateManagerTenantOnboardingStatus(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    requestId: string;
+    status: ManagerTenantOnboardingStatus;
+    metadata: Record<string, unknown>;
+  },
+) {
+  const { error } = await supabase
+    .from("manager_tenant_onboarding_requests")
+    .update({
+      status: params.status,
+      metadata: params.metadata,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("organization_id", params.organizationId)
+    .eq("id", params.requestId);
+
+  if (error) {
+    throw error;
+  }
+}
+
+export async function deactivateManagerProspectiveTenant(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    tenantId: string;
+  },
+) {
+  const { error } = await supabase
+    .from("manager_tenants")
+    .update({
+      status: "inactive",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("organization_id", params.organizationId)
+    .eq("id", params.tenantId)
+    .eq("status", "inactive");
+
+  if (error) {
+    throw error;
+  }
+}
+
+

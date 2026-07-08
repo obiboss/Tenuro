@@ -12,6 +12,11 @@ import type {
 import { AppError } from "@/server/errors/app-error";
 import { getActiveAgentPaystackAccount } from "@/server/repositories/agent-paystack.repository";
 import { getActiveLandlordPaystackAccount } from "@/server/repositories/landlord-paystack.repository";
+import {
+  getActiveManagerPaystackAccount,
+  type ManagerPaystackAccountRow,
+} from "@/server/repositories/manager-paystack-accounts.repository";
+import { getManagerOrganizationForCurrentUser } from "@/server/repositories/manager.repository";
 import { getSessionUser } from "@/server/services/auth.service";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import type {
@@ -22,11 +27,15 @@ import type {
 
 export type { LandlordPaymentGateUiState };
 
-export type { PaystackPayoutVerificationState, PayoutVerificationStatusPayload };
+export type {
+  PaystackPayoutVerificationState,
+  PayoutVerificationStatusPayload,
+};
 
 export type PaystackPayoutVerificationAudience =
   | "landlord"
   | "agent"
+  | "manager"
   | "tenant";
 
 export type PaystackPayoutVerificationUiState = {
@@ -63,19 +72,46 @@ export function buildPayoutVerificationStatusPayload(
 export async function getCurrentPayoutVerificationStatus(): Promise<PayoutVerificationStatusPayload> {
   const user = await getSessionUser();
 
-  if (!user || (user.role !== "landlord" && user.role !== "agent")) {
+  if (
+    !user ||
+    (user.role !== "landlord" &&
+      user.role !== "agent" &&
+      user.role !== "manager")
+  ) {
     throw new AppError(
       "UNAUTHORIZED",
-      "You must be signed in as a landlord or agent to check payout verification status.",
+      "You must be signed in to check payout verification status.",
       401,
     );
   }
 
   const supabase = await createSupabaseServerClient();
-  const account =
-    user.role === "agent"
-      ? await getActiveAgentPaystackAccount(supabase, user.id)
-      : await getActiveLandlordPaystackAccount(supabase, user.id);
+
+  if (user.role === "agent") {
+    const account = await getActiveAgentPaystackAccount(supabase, user.id);
+
+    return buildPayoutVerificationStatusPayload(account);
+  }
+
+  if (user.role === "manager") {
+    const organization = await getManagerOrganizationForCurrentUser(
+      supabase,
+      user.id,
+    );
+
+    if (!organization) {
+      return buildPayoutVerificationStatusPayload(null);
+    }
+
+    const account = await getActiveManagerPaystackAccount(
+      supabase,
+      organization.id,
+    );
+
+    return buildPayoutVerificationStatusPayload(account);
+  }
+
+  const account = await getActiveLandlordPaystackAccount(supabase, user.id);
 
   return buildPayoutVerificationStatusPayload(account);
 }
@@ -119,7 +155,9 @@ export function getPaystackPayoutVerificationUiState(
       guidance:
         audience === "agent"
           ? "Split payouts are enabled."
-          : "Online rent collection is enabled.",
+          : audience === "manager"
+            ? "Manager rent collection is enabled."
+            : "Online rent collection is enabled.",
     };
   }
 
@@ -134,7 +172,9 @@ export function getPaystackPayoutVerificationUiState(
           ? "Online payment is temporarily unavailable. Please contact your landlord."
           : audience === "agent"
             ? "Your payout account verification failed. Please update your payout details."
-            : "Verification failed. Please update your payout details or contact support.",
+            : audience === "manager"
+              ? "Manager payout account verification failed. Please update your payout details or contact support."
+              : "Verification failed. Please update your payout details or contact support.",
     };
   }
 
@@ -149,7 +189,9 @@ export function getPaystackPayoutVerificationUiState(
           ? "Online payment is temporarily unavailable. Please contact your landlord."
           : audience === "agent"
             ? "Connect your payout account before split payouts can be enabled."
-            : "Connect your payout account before online rent payments can be enabled.",
+            : audience === "manager"
+              ? "Connect the manager payout account before rent payment links can be enabled."
+              : "Connect your payout account before online rent payments can be enabled.",
     };
   }
 
@@ -163,7 +205,9 @@ export function getPaystackPayoutVerificationUiState(
         ? "Online payment is temporarily unavailable. Please contact your landlord."
         : audience === "agent"
           ? "Split payouts are disabled until verification is completed."
-          : "Online rent payments are disabled until payout verification is approved.",
+          : audience === "manager"
+            ? "Manager rent payment links are disabled until payout verification is approved. This may take up to 24 hours."
+            : "Online rent payments are disabled until payout verification is approved.",
   };
 }
 
@@ -184,6 +228,18 @@ export function getFriendlyPayoutVerificationErrorMessage(code: string) {
 
   if (code === "AGENT_PAYOUT_ACCOUNT_VERIFICATION_FAILED") {
     return "The agent payout account verification failed. Split payout actions are unavailable until the payout details are updated.";
+  }
+
+  if (code === "MANAGER_PAYOUT_ACCOUNT_REQUIRED") {
+    return "The manager payout account is not ready yet. Add and verify the manager bank account before creating rent payment links.";
+  }
+
+  if (code === "MANAGER_PAYOUT_ACCOUNT_PENDING_VERIFICATION") {
+    return "The manager payout account is pending verification. Rent payment links will work once verification is approved.";
+  }
+
+  if (code === "MANAGER_PAYOUT_ACCOUNT_VERIFICATION_FAILED") {
+    return "The manager payout account verification failed. Update the payout details before creating rent payment links.";
   }
 
   return null;
@@ -253,6 +309,32 @@ function createAgentPayoutVerificationError(
   );
 }
 
+function createManagerPayoutVerificationError(
+  state: Exclude<PaystackPayoutVerificationState, "verified">,
+) {
+  if (state === "missing") {
+    return new AppError(
+      "MANAGER_PAYOUT_ACCOUNT_REQUIRED",
+      "The manager payout account is not ready for rent collection.",
+      400,
+    );
+  }
+
+  if (state === "failed") {
+    return new AppError(
+      "MANAGER_PAYOUT_ACCOUNT_VERIFICATION_FAILED",
+      "Manager payout account verification failed. Rent payment links are unavailable until the account is reviewed.",
+      400,
+    );
+  }
+
+  return new AppError(
+    "MANAGER_PAYOUT_ACCOUNT_PENDING_VERIFICATION",
+    "Manager payout account pending verification. Rent payment links will be available once verified.",
+    400,
+  );
+}
+
 export function assertLandlordPayoutVerified(
   account: LandlordPaystackAccount | null,
 ): LandlordPaystackAccount {
@@ -280,6 +362,22 @@ export function assertAgentPayoutVerified(
 
   if (!account) {
     throw createAgentPayoutVerificationError("missing");
+  }
+
+  return account;
+}
+
+export function assertManagerPayoutVerified(
+  account: ManagerPaystackAccountRow | null,
+): ManagerPaystackAccountRow {
+  const state = getPaystackPayoutVerificationState(account);
+
+  if (state !== "verified") {
+    throw createManagerPayoutVerificationError(state);
+  }
+
+  if (!account) {
+    throw createManagerPayoutVerificationError("missing");
   }
 
   return account;

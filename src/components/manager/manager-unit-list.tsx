@@ -4,11 +4,13 @@ import type {
   ManagerTenantRow,
   ManagerUnitRow,
 } from "@/server/repositories/manager.repository";
+import type { ManagerTenantOnboardingRequestRow } from "@/server/repositories/manager-tenant-onboarding.repository";
 
 type ManagerUnitListProps = {
   properties: ManagerPropertyRow[];
   units: ManagerUnitRow[];
   tenants?: ManagerTenantRow[];
+  onboardingRequests?: ManagerTenantOnboardingRequestRow[];
   showTenantActions?: boolean;
 };
 
@@ -20,6 +22,16 @@ const UNIT_STATUS_LABELS: Record<UnitStatus, string> = {
   occupied: "Occupied",
   inactive: "Inactive",
 };
+
+const OPEN_REQUEST_STATUSES = new Set<
+  ManagerTenantOnboardingRequestRow["status"]
+>([
+  "pending",
+  "submitted",
+  "agreement_sent",
+  "agreement_accepted",
+  "payment_initialized",
+]);
 
 function formatNaira(amount: number) {
   return new Intl.NumberFormat("en-NG", {
@@ -54,15 +66,37 @@ function getTenantPriority(status: ManagerTenantRow["status"]) {
     return 1;
   }
 
-  if (status === "inactive") {
+  if (status === "eviction_notice") {
     return 2;
   }
 
-  if (status === "eviction_notice") {
+  if (status === "inactive") {
     return 3;
   }
 
   return 4;
+}
+
+function getRequestPriority(
+  status: ManagerTenantOnboardingRequestRow["status"],
+) {
+  if (status === "submitted") {
+    return 1;
+  }
+
+  if (status === "agreement_accepted") {
+    return 2;
+  }
+
+  if (status === "payment_initialized") {
+    return 3;
+  }
+
+  if (status === "agreement_sent") {
+    return 4;
+  }
+
+  return 5;
 }
 
 function buildTenantByUnitId(tenants: ManagerTenantRow[]) {
@@ -74,6 +108,58 @@ function buildTenantByUnitId(tenants: ManagerTenantRow[]) {
   return new Map(sortedTenants.map((tenant) => [tenant.unit_id, tenant]));
 }
 
+function buildOpenRequestByUnitId(
+  requests: ManagerTenantOnboardingRequestRow[],
+) {
+  const sortedRequests = requests
+    .filter((request) => OPEN_REQUEST_STATUSES.has(request.status))
+    .sort(
+      (first, second) =>
+        getRequestPriority(first.status) - getRequestPriority(second.status),
+    );
+
+  return new Map(sortedRequests.map((request) => [request.unit_id, request]));
+}
+
+function getRequestLabel(request: ManagerTenantOnboardingRequestRow) {
+  if (request.status === "pending") {
+    return "Waiting for tenant details";
+  }
+
+  if (request.status === "submitted") {
+    return "Submitted for review";
+  }
+
+  if (request.status === "agreement_sent") {
+    return "Agreement sent";
+  }
+
+  if (request.status === "agreement_accepted") {
+    return "Agreement accepted";
+  }
+
+  if (request.status === "payment_initialized") {
+    return "Awaiting payment";
+  }
+
+  return "In progress";
+}
+
+function getRequestActionLabel(request: ManagerTenantOnboardingRequestRow) {
+  if (request.status === "submitted") {
+    return "Review";
+  }
+
+  if (
+    request.status === "agreement_accepted" ||
+    request.status === "payment_initialized"
+  ) {
+    return "View payment";
+  }
+
+  return "View update";
+}
+
 function getReservedUnitMessage(tenant: ManagerTenantRow | undefined) {
   if (!tenant) {
     return "Awaiting first rent payment";
@@ -82,10 +168,22 @@ function getReservedUnitMessage(tenant: ManagerTenantRow | undefined) {
   return `${tenant.full_name} · awaiting first rent payment`;
 }
 
+function getVisibleTenantForUnit(params: {
+  unit: ManagerUnitRow;
+  tenant: ManagerTenantRow | undefined;
+}) {
+  if (params.unit.status === "vacant") {
+    return undefined;
+  }
+
+  return params.tenant;
+}
+
 export function ManagerUnitList({
   properties,
   units,
   tenants = [],
+  onboardingRequests = [],
   showTenantActions = false,
 }: ManagerUnitListProps) {
   const propertyNameById = new Map(
@@ -93,6 +191,7 @@ export function ManagerUnitList({
   );
 
   const tenantByUnitId = buildTenantByUnitId(tenants);
+  const openRequestByUnitId = buildOpenRequestByUnitId(onboardingRequests);
 
   return (
     <section
@@ -136,7 +235,7 @@ export function ManagerUnitList({
                     Rent
                   </th>
                   <th className="px-4 py-3 text-xs font-black uppercase tracking-wide text-text-muted">
-                    Tenant
+                    Tenant / request
                   </th>
                   <th className="px-4 py-3 text-xs font-black uppercase tracking-wide text-text-muted">
                     Status
@@ -151,7 +250,11 @@ export function ManagerUnitList({
 
               <tbody className="divide-y divide-border-soft bg-white">
                 {units.map((unit) => {
-                  const tenant = tenantByUnitId.get(unit.id);
+                  const tenant = getVisibleTenantForUnit({
+                    unit,
+                    tenant: tenantByUnitId.get(unit.id),
+                  });
+                  const request = openRequestByUnitId.get(unit.id);
                   const tenantLabel =
                     unit.status === "reserved"
                       ? getReservedUnitMessage(tenant)
@@ -177,7 +280,11 @@ export function ManagerUnitList({
                       </td>
 
                       <td className="px-4 py-4 text-sm font-bold text-text-strong">
-                        {tenant ? (
+                        {request ? (
+                          <span className="text-primary">
+                            {getRequestLabel(request)}
+                          </span>
+                        ) : tenant ? (
                           <Link
                             href={`/manager/tenants#tenant-${tenant.id}`}
                             prefetch={false}
@@ -206,7 +313,15 @@ export function ManagerUnitList({
 
                       {showTenantActions ? (
                         <td className="px-4 py-4 text-right">
-                          {unit.status === "vacant" ? (
+                          {request ? (
+                            <Link
+                              href="#tenant-review"
+                              prefetch={false}
+                              className="inline-flex min-h-10 items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+                            >
+                              {getRequestActionLabel(request)}
+                            </Link>
+                          ) : unit.status === "vacant" ? (
                             <Link
                               href={`/manager/properties/${unit.property_id}?onboardUnit=${unit.id}#tenant-onboarding`}
                               prefetch={false}
@@ -242,7 +357,11 @@ export function ManagerUnitList({
 
           <div className="divide-y divide-border-soft md:hidden">
             {units.map((unit) => {
-              const tenant = tenantByUnitId.get(unit.id);
+              const tenant = getVisibleTenantForUnit({
+                unit,
+                tenant: tenantByUnitId.get(unit.id),
+              });
+              const request = openRequestByUnitId.get(unit.id);
               const tenantLabel =
                 unit.status === "reserved"
                   ? getReservedUnitMessage(tenant)
@@ -260,9 +379,9 @@ export function ManagerUnitList({
                         {formatNaira(unit.rent_amount)}
                       </p>
                       <p className="mt-1 text-sm font-semibold text-text-muted">
-                        Tenant:{" "}
+                        Tenant/request:{" "}
                         <span className="font-black text-text-strong">
-                          {tenantLabel}
+                          {request ? getRequestLabel(request) : tenantLabel}
                         </span>
                       </p>
                     </div>
@@ -278,7 +397,15 @@ export function ManagerUnitList({
 
                   {showTenantActions ? (
                     <div className="mt-4">
-                      {unit.status === "vacant" ? (
+                      {request ? (
+                        <Link
+                          href="#tenant-review"
+                          prefetch={false}
+                          className="inline-flex min-h-10 w-full items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+                        >
+                          {getRequestActionLabel(request)}
+                        </Link>
+                      ) : unit.status === "vacant" ? (
                         <Link
                           href={`/manager/properties/${unit.property_id}?onboardUnit=${unit.id}#tenant-onboarding`}
                           prefetch={false}

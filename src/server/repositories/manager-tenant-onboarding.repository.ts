@@ -345,9 +345,9 @@ export async function submitManagerTenantOnboardingRequest(
     occupation: string | null;
     idType: string;
     idNumber: string;
-    moveInDate: string;
-    statedRentDueDate: string;
-    claimedRentAmount: number;
+    moveInDate: string | null;
+    statedRentDueDate: string | null;
+    claimedRentAmount: number | null;
     paymentFrequency: "annual" | "monthly" | "quarterly" | "biannual";
     tenantNotes: string | null;
   },
@@ -534,6 +534,36 @@ export async function acceptManagerTenantAgreement(
   return data;
 }
 
+export async function voidManagerTenantAgreement(
+  supabase: SupabaseClient,
+  params: {
+    agreementId: string;
+    ipAddress: string | null;
+    userAgent: string | null;
+    metadata: Record<string, unknown>;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_tenant_agreement_documents")
+    .update({
+      document_status: "voided",
+      tenant_acceptance_ip: params.ipAddress,
+      tenant_acceptance_user_agent: params.userAgent,
+      metadata: params.metadata,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", params.agreementId)
+    .in("document_status", ["sent_to_tenant", "accepted"])
+    .select(AGREEMENT_SELECT)
+    .single<ManagerTenantAgreementDocumentRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 export async function markManagerOnboardingAgreementAccepted(
   supabase: SupabaseClient,
   params: {
@@ -559,6 +589,7 @@ export async function markManagerOnboardingPaymentInitialized(
   params: {
     requestId: string;
     paymentRequestId: string;
+    metadata?: Record<string, unknown>;
   },
 ) {
   const { error } = await supabase
@@ -567,14 +598,51 @@ export async function markManagerOnboardingPaymentInitialized(
       status: "payment_initialized",
       updated_at: new Date().toISOString(),
       metadata: {
+        ...(params.metadata ?? {}),
         payment_request_id: params.paymentRequestId,
       },
     })
-    .eq("id", params.requestId);
+    .eq("id", params.requestId)
+    .in("status", [
+      "agreement_accepted",
+      "payment_initialized",
+      "payment_expired",
+    ]);
 
   if (error) {
     throw error;
   }
+}
+
+export async function cancelManagerOnboardingAfterAgreementDecline(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    requestId: string;
+    metadata: Record<string, unknown>;
+  },
+) {
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("manager_tenant_onboarding_requests")
+    .update({
+      status: "cancelled",
+      cancelled_at: now,
+      updated_at: now,
+      metadata: params.metadata,
+    })
+    .eq("organization_id", params.organizationId)
+    .eq("id", params.requestId)
+    .neq("status", "payment_paid")
+    .select(REQUEST_SELECT)
+    .single<ManagerTenantOnboardingRequestRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
 }
 
 export async function updateManagerUnitStatusDirect(
@@ -617,6 +685,28 @@ export async function updateManagerTenantOnboardingStatus(
     })
     .eq("organization_id", params.organizationId)
     .eq("id", params.requestId);
+
+  if (error) {
+    throw error;
+  }
+}
+
+export async function deactivateManagerProspectiveTenant(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    tenantId: string;
+  },
+) {
+  const { error } = await supabase
+    .from("manager_tenants")
+    .update({
+      status: "inactive",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("organization_id", params.organizationId)
+    .eq("id", params.tenantId)
+    .eq("status", "inactive");
 
   if (error) {
     throw error;

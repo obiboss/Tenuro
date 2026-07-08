@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { AlertTriangle, CheckCircle2, Info, X, XCircle } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -15,6 +16,7 @@ export type ToastItem = {
 type ToastProps = {
   toast: ToastItem;
   onDismiss: (id: string) => void;
+  durationMs?: number;
 };
 
 const toneStyles: Record<
@@ -47,8 +49,22 @@ const toneStyles: Record<
   },
 };
 
-export function Toast({ toast, onDismiss }: ToastProps) {
+export function Toast({ toast, onDismiss, durationMs = 4200 }: ToastProps) {
   const styles = toneStyles[toast.tone];
+
+  useEffect(() => {
+    if (durationMs <= 0) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      onDismiss(toast.id);
+    }, durationMs);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [durationMs, onDismiss, toast.id]);
 
   return (
     <div

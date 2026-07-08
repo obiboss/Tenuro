@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { ManagerBankAccountGate } from "@/components/manager/manager-bank-account-gate";
 import { ManagerTenantOnboardingForm } from "@/components/manager/manager-tenant-onboarding-form";
 import { ManagerTenantOnboardingReviewList } from "@/components/manager/manager-tenant-onboarding-review-list";
 import { ManagerUnitForm } from "@/components/manager/manager-unit-form";
 import { ManagerUnitList } from "@/components/manager/manager-unit-list";
+import { getActiveManagerPaystackAccount } from "@/server/repositories/manager-paystack-accounts.repository";
+import { expireManagerNewTenantPaymentRequests } from "@/server/repositories/manager-paystack.repository";
 import {
   getManagerOrganizationForCurrentUser,
   listManagerLandlordClients,
@@ -11,7 +14,10 @@ import {
   listManagerTenants,
   listManagerUnits,
 } from "@/server/repositories/manager.repository";
-import { listManagerTenantOnboardingRequests } from "@/server/repositories/manager-tenant-onboarding.repository";
+import {
+  listManagerTenantOnboardingRequests,
+  type ManagerTenantOnboardingRequestRow,
+} from "@/server/repositories/manager-tenant-onboarding.repository";
 import { requireManager } from "@/server/services/auth.service";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 
@@ -24,6 +30,16 @@ type ManagerPropertyDetailPageProps = {
     onboardUnit?: string;
   }>;
 };
+
+const OPEN_TENANT_REQUEST_STATUSES = new Set<
+  ManagerTenantOnboardingRequestRow["status"]
+>([
+  "pending",
+  "submitted",
+  "agreement_sent",
+  "agreement_accepted",
+  "payment_initialized",
+]);
 
 function formatFee(params: {
   management_fee_type: "percentage" | "flat";
@@ -55,7 +71,7 @@ function getCollectionSummary(collectionMode: string) {
     return "Landlord direct";
   }
 
-  return "BOPA automatic split";
+  return "Automatic split";
 }
 
 function getUnitSummary(units: Awaited<ReturnType<typeof listManagerUnits>>) {
@@ -86,6 +102,17 @@ function getUnitSummary(units: Awaited<ReturnType<typeof listManagerUnits>>) {
   );
 }
 
+function hasOpenTenantRequestForUnit(params: {
+  requests: ManagerTenantOnboardingRequestRow[];
+  unitId: string;
+}) {
+  return params.requests.some(
+    (request) =>
+      request.unit_id === params.unitId &&
+      OPEN_TENANT_REQUEST_STATUSES.has(request.status),
+  );
+}
+
 export default async function ManagerPropertyDetailPage({
   params,
   searchParams,
@@ -105,17 +132,29 @@ export default async function ManagerPropertyDetailPage({
     redirect("/manager/onboarding");
   }
 
-  const [landlordClients, properties, units, tenants, onboardingRequests] =
-    await Promise.all([
-      listManagerLandlordClients(supabase, organization.id),
-      listManagerProperties(supabase, organization.id),
-      listManagerUnits(supabase, { organizationId: organization.id }),
-      listManagerTenants(supabase, { organizationId: organization.id }),
-      listManagerTenantOnboardingRequests(supabase, {
-        organizationId: organization.id,
-        propertyId,
-      }),
-    ]);
+  await expireManagerNewTenantPaymentRequests(supabase);
+
+  const [
+    landlordClients,
+    properties,
+    units,
+    tenants,
+    onboardingRequests,
+    managerPaystackAccount,
+  ] = await Promise.all([
+    listManagerLandlordClients(supabase, organization.id),
+    listManagerProperties(supabase, organization.id),
+    listManagerUnits(supabase, { organizationId: organization.id }),
+    listManagerTenants(supabase, {
+      organizationId: organization.id,
+      propertyId,
+    }),
+    listManagerTenantOnboardingRequests(supabase, {
+      organizationId: organization.id,
+      propertyId,
+    }),
+    getActiveManagerPaystackAccount(supabase, organization.id),
+  ]);
 
   const property = properties.find((item) => item.id === propertyId);
 
@@ -131,181 +170,215 @@ export default async function ManagerPropertyDetailPage({
     (unit) => unit.property_id === property.id,
   );
 
-  const propertyTenants = tenants.filter(
-    (tenant) => tenant.property_id === property.id,
-  );
-
   const unitSummary = getUnitSummary(propertyUnits);
 
-  const selectedVacantUnit = propertyUnits.find(
-    (unit) =>
-      unit.id === resolvedSearchParams?.onboardUnit && unit.status === "vacant",
+  const submittedRequests = onboardingRequests.filter(
+    (request) => request.status === "submitted",
   );
 
-  const showAddUnitForm =
+  const selectedUnit = resolvedSearchParams?.onboardUnit
+    ? propertyUnits.find((unit) => unit.id === resolvedSearchParams.onboardUnit)
+    : null;
+
+  const selectedUnitHasOpenRequest = selectedUnit
+    ? hasOpenTenantRequestForUnit({
+        requests: onboardingRequests,
+        unitId: selectedUnit.id,
+      })
+    : false;
+
+  const canShowTenantForm = Boolean(
+    selectedUnit &&
+    selectedUnit.status === "vacant" &&
+    !selectedUnitHasOpenRequest,
+  );
+
+  const shouldShowAddUnitForm =
     resolvedSearchParams?.addUnit === "1" || propertyUnits.length === 0;
 
-  const location = [property.city, property.lga, property.state]
-    .map((value) => value?.trim())
-    .filter(Boolean)
-    .join(", ");
-
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
-      <Link
-        href="/manager/properties"
-        prefetch={false}
-        className="inline-flex text-sm font-black text-primary"
-      >
-        ← Back to properties
-      </Link>
+    <div className="mx-auto max-w-6xl space-y-6">
+      <ManagerBankAccountGate
+        verificationStatus={managerPaystackAccount?.verification_status ?? null}
+      />
 
-      <section className="rounded-card border border-border-soft bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="truncate text-2xl font-black tracking-tight text-text-strong">
-                {property.property_name}
-              </h1>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <Link
+            href="/manager/properties"
+            prefetch={false}
+            className="text-sm font-extrabold text-primary underline-offset-4 hover:underline"
+          >
+            ← Properties
+          </Link>
 
-              <span className="rounded-full bg-success-soft px-3 py-1 text-xs font-black uppercase tracking-wide text-success">
-                {property.status}
+          <h1 className="mt-3 text-2xl font-black tracking-tight text-text-strong">
+            {property.property_name}
+          </h1>
+
+          <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+            {property.property_address}
+          </p>
+
+          {landlord ? (
+            <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+              Landlord:{" "}
+              <span className="font-black text-text-strong">
+                {landlord.landlord_name}
               </span>
-            </div>
-
-            <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-text-muted">
-              {property.property_address}
             </p>
-
-            {location ? (
-              <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-                {location}
-              </p>
-            ) : null}
-          </div>
-
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Link
-              href={`/manager/properties/${property.id}?addUnit=1#add-unit`}
-              prefetch={false}
-              className="inline-flex min-h-11 items-center justify-center rounded-button bg-primary px-5 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
-            >
-              Add unit
-            </Link>
-
-            <Link
-              href="/manager/properties"
-              prefetch={false}
-              className="inline-flex min-h-11 items-center justify-center rounded-button border border-border-soft bg-white px-5 text-sm font-extrabold text-text-strong transition hover:bg-surface"
-            >
-              All properties
-            </Link>
-          </div>
+          ) : null}
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-card bg-surface p-3">
-            <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-              Landlord
-            </p>
-            <p className="mt-1 truncate text-sm font-black text-text-strong">
-              {landlord?.landlord_name ?? "Landlord"}
-            </p>
-          </div>
-
-          <div className="rounded-card bg-surface p-3">
-            <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-              Rent collection
-            </p>
-            <p className="mt-1 text-sm font-black text-text-strong">
-              {getCollectionSummary(property.collection_mode)}
-            </p>
-          </div>
-
-          <div className="rounded-card bg-surface p-3">
-            <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-              Management fee
-            </p>
-            <p className="mt-1 text-sm font-black text-text-strong">
-              {formatFee(property)}
-            </p>
-          </div>
-
-          <div className="rounded-card bg-surface p-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:min-w-[32rem]">
+          <div className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
             <p className="text-xs font-black uppercase tracking-wide text-text-muted">
               Units
             </p>
-            <p className="mt-1 text-sm font-black text-text-strong">
-              {unitSummary.total.toLocaleString("en-NG")}
+            <p className="mt-1 text-xl font-black text-text-strong">
+              {unitSummary.total}
+            </p>
+          </div>
+
+          <div className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
+            <p className="text-xs font-black uppercase tracking-wide text-text-muted">
+              Vacant
+            </p>
+            <p className="mt-1 text-xl font-black text-warning">
+              {unitSummary.vacant}
+            </p>
+          </div>
+
+          <div className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
+            <p className="text-xs font-black uppercase tracking-wide text-text-muted">
+              Occupied
+            </p>
+            <p className="mt-1 text-xl font-black text-success">
+              {unitSummary.occupied}
+            </p>
+          </div>
+
+          <div className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
+            <p className="text-xs font-black uppercase tracking-wide text-text-muted">
+              Reserved
+            </p>
+            <p className="mt-1 text-xl font-black text-primary">
+              {unitSummary.reserved}
             </p>
           </div>
         </div>
-      </section>
+      </div>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-3 md:grid-cols-3">
         <div className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
           <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-            Total units
+            Rent collection
           </p>
-          <p className="mt-2 text-2xl font-black text-text-strong">
-            {unitSummary.total.toLocaleString("en-NG")}
+          <p className="mt-1 text-sm font-black text-text-strong">
+            {getCollectionSummary(property.collection_mode)}
           </p>
         </div>
 
         <div className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
           <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-            Occupied
+            Management fee
           </p>
-          <p className="mt-2 text-2xl font-black text-text-strong">
-            {unitSummary.occupied.toLocaleString("en-NG")}
-          </p>
-        </div>
-
-        <div className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
-          <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-            Vacant
-          </p>
-          <p className="mt-2 text-2xl font-black text-text-strong">
-            {unitSummary.vacant.toLocaleString("en-NG")}
+          <p className="mt-1 text-sm font-black text-text-strong">
+            {formatFee(property)}
           </p>
         </div>
 
         <div className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
           <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-            Reserved
+            Paystack charge
           </p>
-          <p className="mt-2 text-2xl font-black text-text-strong">
-            {unitSummary.reserved.toLocaleString("en-NG")}
+          <p className="mt-1 text-sm font-black text-text-strong">
+            {property.paystack_charge_bearer}
           </p>
         </div>
       </section>
 
-      {selectedVacantUnit ? (
-        <section id="tenant-onboarding" className="scroll-mt-24">
-          <ManagerTenantOnboardingForm
-            property={property}
-            unit={selectedVacantUnit}
-          />
+      {submittedRequests.length > 0 ? (
+        <section className="rounded-card border border-warning/20 bg-warning-soft p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-black text-text-strong">
+                {submittedRequests.length} tenant{" "}
+                {submittedRequests.length === 1 ? "submission" : "submissions"}{" "}
+                waiting for review
+              </p>
+              <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                Open the review table to approve or reject submitted tenant
+                details.
+              </p>
+            </div>
+
+            <Link
+              href="#tenant-review"
+              prefetch={false}
+              className="inline-flex min-h-10 items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
+            >
+              Review now
+            </Link>
+          </div>
+        </section>
+      ) : null}
+
+      <ManagerUnitList
+        properties={[property]}
+        units={propertyUnits}
+        tenants={tenants}
+        onboardingRequests={onboardingRequests}
+        showTenantActions
+      />
+
+      {canShowTenantForm && selectedUnit ? (
+        <ManagerTenantOnboardingForm property={property} unit={selectedUnit} />
+      ) : resolvedSearchParams?.onboardUnit ? (
+        <section
+          id="tenant-onboarding"
+          className="rounded-card border border-border-soft bg-white p-4 shadow-sm"
+        >
+          <p className="font-black text-text-strong">Tenant form unavailable</p>
+          <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+            This unit is no longer available for a new tenant request. It may
+            already have a tenant request in progress.
+          </p>
         </section>
       ) : null}
 
       <ManagerTenantOnboardingReviewList requests={onboardingRequests} />
 
-      <ManagerUnitList
-        properties={[property]}
-        units={propertyUnits}
-        tenants={propertyTenants}
-        showTenantActions
-      />
-
-      {showAddUnitForm ? (
-        <section id="add-unit" className="scroll-mt-24">
+      {shouldShowAddUnitForm ? (
+        <section id="add-unit">
           <ManagerUnitForm
             properties={[property]}
             lockedPropertyId={property.id}
           />
         </section>
-      ) : null}
+      ) : (
+        <section
+          id="add-unit"
+          className="rounded-card border border-border-soft bg-white p-4 shadow-sm"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-black text-text-strong">Add another unit</p>
+              <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                Keep unit creation separate from tenant onboarding.
+              </p>
+            </div>
+
+            <Link
+              href={`/manager/properties/${property.id}?addUnit=1#add-unit`}
+              prefetch={false}
+              className="inline-flex min-h-10 items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+            >
+              Add unit
+            </Link>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

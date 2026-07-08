@@ -3,14 +3,12 @@
 import { revalidatePath } from "next/cache";
 import type { ManagerActionState } from "@/actions/manager.state";
 import { errorResult } from "@/server/errors/result";
-import {
-  saveManagerLandlordPaystackAccount,
-  saveManagerOrganizationPaystackAccount,
-} from "@/server/services/manager-paystack-accounts.service";
+import { setupManagerBankAccount } from "@/server/services/manager-bank.service";
+import { saveManagerLandlordPaystackAccount } from "@/server/services/manager-paystack-accounts.service";
 import { requireManagerWorkspacePermission } from "@/server/services/manager-staff-access.service";
 import {
   saveManagerLandlordPaystackAccountSchema,
-  saveManagerOrganizationPaystackAccountSchema,
+  setupManagerBankAccountSchema,
 } from "@/server/validators/manager-paystack-accounts.schema";
 
 function toActionError(error: unknown): ManagerActionState {
@@ -30,25 +28,26 @@ export async function saveManagerOrganizationPaystackAccountAction(
   try {
     await requireManagerWorkspacePermission("payout.manage");
 
-    const parsed = saveManagerOrganizationPaystackAccountSchema.parse({
+    const parsed = setupManagerBankAccountSchema.parse({
       businessName: formData.get("businessName"),
-      contactName: formData.get("contactName"),
-      contactPhone: formData.get("contactPhone"),
-      contactEmail: formData.get("contactEmail"),
       bankCode: formData.get("bankCode"),
       bankName: formData.get("bankName"),
       accountNumber: formData.get("accountNumber"),
     });
 
-    await saveManagerOrganizationPaystackAccount(parsed);
+    await setupManagerBankAccount(parsed);
 
     revalidatePath("/manager");
+    revalidatePath("/manager/overview");
+    revalidatePath("/manager/settings");
+    revalidatePath("/manager/properties");
     revalidatePath("/manager/payouts");
     revalidatePath("/manager/payments");
 
     return {
       ok: true,
-      message: "Manager payout account saved successfully.",
+      message:
+        "Bank account submitted successfully. Paystack verification may take up to 24 hours before rent payment links can work.",
     };
   } catch (error) {
     return toActionError(error);

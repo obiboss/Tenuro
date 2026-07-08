@@ -8,6 +8,7 @@ import {
   acceptManagerTenantAgreementAndCreatePayment,
   approveManagerTenantOnboardingRequestForCurrentManager,
   createManagerTenantOnboardingRequestForCurrentManager,
+  declineManagerTenantAgreementAndCancel,
   rejectManagerTenantOnboardingRequestForCurrentManager,
   resendManagerFirstRentPaymentLinkForCurrentManager,
   submitManagerTenantOnboardingRequestByToken,
@@ -17,6 +18,7 @@ import {
   acceptManagerTenantAgreementSchema,
   approveManagerTenantOnboardingRequestSchema,
   createManagerTenantOnboardingRequestSchema,
+  declineManagerTenantAgreementSchema,
   rejectManagerTenantOnboardingRequestSchema,
   resendManagerFirstRentPaymentLinkSchema,
   submitManagerTenantOnboardingRequestSchema,
@@ -60,7 +62,7 @@ export async function createManagerTenantOnboardingRequestAction(
 
     return {
       ok: true,
-      message: "Opening WhatsApp with the tenant detail link.",
+      message: "Tenant detail link is ready.",
       requestId: result.request.id,
       claimUrl: result.claimUrl,
       whatsappMessage: result.whatsappMessage,
@@ -127,7 +129,7 @@ export async function approveManagerTenantOnboardingRequestAction(
     return {
       ok: true,
       message: result.agreement
-        ? "Opening WhatsApp with the agreement link."
+        ? "Agreement link is ready."
         : "Current occupant approved and added to the unit.",
       tenantId: result.tenant.id,
       agreementId: result.agreement?.id,
@@ -188,11 +190,12 @@ export async function resendManagerFirstRentPaymentLinkAction(
 
     return {
       ok: true,
-      message: "Opening WhatsApp with the payment link.",
+      message: "Payment link is ready.",
       requestId: parsed.requestId,
       paymentRequestId: result.paymentRequestId,
       paymentUrl: result.paymentUrl,
       paymentExpiresAt: result.paymentExpiresAt,
+      paymentBreakdown: result.paymentBreakdown,
       whatsappMessage: result.whatsappMessage,
       tenantWhatsappNumber: result.tenantWhatsappNumber,
     };
@@ -219,12 +222,56 @@ export async function acceptManagerTenantAgreementAction(
       userAgent: requestHeaders.get("user-agent"),
     });
 
+    revalidatePath("/manager");
+    revalidatePath("/manager/properties");
+    revalidatePath(`/manager/properties/${result.agreement.property_id}`);
+    revalidatePath("/manager/tenants");
+    revalidatePath("/manager/payments");
+
     return {
       ok: true,
-      message: "Agreement accepted. Your rent payment button is ready.",
+      message: "Agreement accepted. Review the payment summary to continue.",
       agreementId: result.agreement.id,
+      paymentRequestId: result.paymentRequestId ?? undefined,
       paymentUrl: result.paymentUrl ?? undefined,
       paymentExpiresAt: result.paymentExpiresAt ?? undefined,
+      paymentBreakdown: result.paymentBreakdown ?? null,
+    };
+  } catch (error) {
+    return toActionError(error);
+  }
+}
+
+export async function declineManagerTenantAgreementAction(
+  _previousState: ManagerTenantOnboardingActionState,
+  formData: FormData,
+): Promise<ManagerTenantOnboardingActionState> {
+  try {
+    const parsed = declineManagerTenantAgreementSchema.parse({
+      token: formData.get("token"),
+      reason: formData.get("reason"),
+    });
+
+    const requestHeaders = await headers();
+
+    const result = await declineManagerTenantAgreementAndCancel({
+      ...parsed,
+      ipAddress:
+        requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+      userAgent: requestHeaders.get("user-agent"),
+    });
+
+    revalidatePath("/manager");
+    revalidatePath("/manager/properties");
+    revalidatePath(`/manager/properties/${result.agreement.property_id}`);
+    revalidatePath("/manager/tenants");
+    revalidatePath("/manager/payments");
+
+    return {
+      ok: true,
+      message: "Agreement declined. The property manager has been notified.",
+      agreementId: result.agreement.id,
+      agreementDeclined: true,
     };
   } catch (error) {
     return toActionError(error);

@@ -1,0 +1,649 @@
+====================================================================================================
+FILE: src/components/payment/bank-setup-form.tsx
+====================================================================================================
+
+"use client";
+
+import { useActionState, useMemo, useState } from "react";
+import { setupLandlordBankAccountAction } from "@/actions/payments.actions";
+import { initialPaymentActionState } from "@/actions/payment.state";
+import { ActionResultToast } from "@/components/ui/action-result-toast";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { TrustNotice } from "@/components/ui/trust-notice";
+
+type BankOption = {
+  label: string;
+  value: string;
+};
+
+type BankSetupFormProps = {
+  banks: BankOption[];
+};
+
+export function BankSetupForm({ banks }: BankSetupFormProps) {
+  const [selectedBankCode, setSelectedBankCode] = useState("");
+
+  const [state, formAction, isPending] = useActionState(
+    setupLandlordBankAccountAction,
+    initialPaymentActionState,
+  );
+
+  const selectedBankName = useMemo(() => {
+    return banks.find((bank) => bank.value === selectedBankCode)?.label ?? "";
+  }, [banks, selectedBankCode]);
+
+  return (
+    <form action={formAction}>
+      <ActionResultToast
+        ok={state.ok}
+        message={state.message}
+        successTitle="Bank account connected"
+        errorTitle="Bank setup failed"
+      />
+
+      <Card>
+        <CardContent>
+          <TrustNotice
+            title="Bank details are verified before saving"
+            description="BOPA confirms the bank account with Paystack before saving it. Online rent payments become available after payout verification is approved."
+          />
+
+          {state.message ? (
+            <div
+              role="alert"
+              className={
+                state.ok
+                  ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
+                  : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
+              }
+            >
+              {state.message}
+            </div>
+          ) : null}
+
+          <Input
+            label="Business name"
+            name="businessName"
+            placeholder="Example: Akachukwu Properties"
+            error={state.fieldErrors?.businessName?.[0]}
+            required
+          />
+
+          <Select
+            label="Bank"
+            name="bankCode"
+            placeholder="Select bank"
+            options={banks}
+            value={selectedBankCode}
+            onChange={(event) => setSelectedBankCode(event.target.value)}
+            error={state.fieldErrors?.bankCode?.[0]}
+            required
+          />
+
+          <input type="hidden" name="bankName" value={selectedBankName} />
+
+          <Input
+            label="Account number"
+            name="accountNumber"
+            inputMode="numeric"
+            maxLength={10}
+            placeholder="10-digit account number"
+            error={state.fieldErrors?.accountNumber?.[0]}
+            required
+          />
+
+          <div className="rounded-button bg-warning-soft p-4 text-sm leading-6 text-text-normal">
+            Manual bank transfer payments will still be free to record. BOPA
+            only earns revenue when tenants pay through the gateway.
+          </div>
+        </CardContent>
+
+        <CardFooter>
+          <Button type="submit" isLoading={isPending} fullWidth>
+            Verify and Save Bank Account
+          </Button>
+        </CardFooter>
+      </Card>
+    </form>
+  );
+}
+
+
+====================================================================================================
+FILE: src/server/services/landlord-bank.service.ts
+====================================================================================================
+
+import "server-only";
+
+import {
+  AUDIT_ACTOR_ROLES,
+  AUDIT_ENTITY_TYPES,
+  AUDIT_EVENT_TYPES,
+} from "@/server/constants/audit-events";
+import { AppError } from "@/server/errors/app-error";
+import {
+  createLandlordPaystackAccount,
+  deactivateLandlordPaystackAccounts,
+  getActiveLandlordPaystackAccount,
+} from "@/server/repositories/landlord-paystack.repository";
+import { writeAuditLog } from "@/server/services/audit-log.service";
+import { createSupabaseServerClient } from "@/server/supabase/server";
+import type { SetupLandlordBankAccountInput } from "@/server/validators/payment.schema";
+import { requireLandlord } from "./auth.service";
+import {
+  createLandlordSubaccount,
+  getSupportedBanks,
+  verifyBankAccount,
+} from "./paystack.service";
+
+function buildPayoutVerificationAuditMetadata(params: {
+  accountId: string;
+  accountOwnerRole: "landlord";
+  bankName: string;
+  accountName: string;
+  accountNumber: string;
+  paystackSubaccountCode: string;
+  verificationStatus: string;
+}) {
+  return {
+    account_owner_role: params.accountOwnerRole,
+    payout_account_id: params.accountId,
+    bank_name: params.bankName,
+    account_name: params.accountName,
+    account_number_last4: params.accountNumber.slice(-4),
+    paystack_subaccount_code: params.paystackSubaccountCode,
+    verification_status: params.verificationStatus,
+    awaiting_paystack_verification: true,
+    internal_notification: {
+      type: "paystack_payout_verification_required",
+      status: "pending",
+      channel: "audit_log",
+    },
+  };
+}
+
+export async function getCurrentLandlordBankSetup() {
+  const landlord = await requireLandlord();
+  const supabase = await createSupabaseServerClient();
+
+  return getActiveLandlordPaystackAccount(supabase, landlord.id);
+}
+
+export async function getPaystackBanksForSetup() {
+  await requireLandlord();
+
+  const banks = await getSupportedBanks();
+
+  return banks
+    .filter((bank) => bank.active && bank.country === "Nigeria")
+    .map((bank) => ({
+      label: bank.name,
+      value: bank.code,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+export async function setupLandlordBankAccount(
+  input: SetupLandlordBankAccountInput,
+) {
+  const landlord = await requireLandlord();
+  const supabase = await createSupabaseServerClient();
+
+  const resolvedAccount = await verifyBankAccount({
+    accountNumber: input.accountNumber,
+    bankCode: input.bankCode,
+  });
+
+  if (resolvedAccount.account_number !== input.accountNumber) {
+    throw new AppError(
+      "BANK_ACCOUNT_MISMATCH",
+      "The bank account number could not be confirmed.",
+      400,
+    );
+  }
+
+  const subaccount = await createLandlordSubaccount({
+    businessName: input.businessName,
+    bankCode: input.bankCode,
+    accountNumber: input.accountNumber,
+    landlordName: landlord.fullName,
+    landlordPhoneNumber: landlord.phoneNumber ?? "",
+    landlordEmail: landlord.email,
+  });
+
+  await deactivateLandlordPaystackAccounts(supabase, landlord.id);
+
+  const paystackAccount = await createLandlordPaystackAccount(supabase, {
+    landlordId: landlord.id,
+    businessName: input.businessName,
+    bankCode: input.bankCode,
+    bankName: input.bankName,
+    accountNumber: input.accountNumber,
+    accountName: resolvedAccount.account_name,
+    paystackSubaccountCode: subaccount.subaccount_code,
+    paystackSubaccountId: subaccount.id,
+    paystackSplitCode: null,
+    paystackSplitId: null,
+    currencyCode: "NGN",
+  });
+
+  const auditMetadata = buildPayoutVerificationAuditMetadata({
+    accountId: paystackAccount.id,
+    accountOwnerRole: "landlord",
+    bankName: paystackAccount.bank_name,
+    accountName: paystackAccount.account_name,
+    accountNumber: paystackAccount.account_number,
+    paystackSubaccountCode: paystackAccount.paystack_subaccount_code,
+    verificationStatus: paystackAccount.verification_status,
+  });
+
+  await writeAuditLog({
+    landlordId: landlord.id,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.payoutAccountCreated,
+    entityType: AUDIT_ENTITY_TYPES.bankAccount,
+    entityId: paystackAccount.id,
+    description: `Landlord payout account created: ${paystackAccount.bank_name}`,
+    metadata: auditMetadata,
+  });
+
+  await writeAuditLog({
+    landlordId: landlord.id,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.payoutVerificationPending,
+    entityType: AUDIT_ENTITY_TYPES.bankAccount,
+    entityId: paystackAccount.id,
+    description:
+      "Landlord payout account is awaiting manual Paystack verification.",
+    metadata: auditMetadata,
+  });
+
+  return paystackAccount;
+}
+
+
+====================================================================================================
+FILE: src/server/services/paystack-verification.service.ts
+====================================================================================================
+
+import "server-only";
+
+import {
+  buildLandlordPaymentGateUiState,
+  getLandlordPaymentGateUiStateFromErrorCode,
+  type LandlordPaymentGateUiState,
+} from "@/lib/landlord-payment-gate";
+import type {
+  PaystackPayoutVerificationState,
+  PayoutVerificationStatusPayload,
+} from "@/lib/payout-verification";
+import { AppError } from "@/server/errors/app-error";
+import { getActiveAgentPaystackAccount } from "@/server/repositories/agent-paystack.repository";
+import { getActiveLandlordPaystackAccount } from "@/server/repositories/landlord-paystack.repository";
+import { getSessionUser } from "@/server/services/auth.service";
+import { createSupabaseServerClient } from "@/server/supabase/server";
+import type {
+  AgentPaystackAccount,
+  LandlordPaystackAccount,
+  PaystackVerificationStatus,
+} from "@/server/types/paystack.types";
+
+export type { LandlordPaymentGateUiState };
+
+export type { PaystackPayoutVerificationState, PayoutVerificationStatusPayload };
+
+export type PaystackPayoutVerificationAudience =
+  | "landlord"
+  | "agent"
+  | "tenant";
+
+export type PaystackPayoutVerificationUiState = {
+  state: PaystackPayoutVerificationState;
+  isVerified: boolean;
+  badgeLabel:
+    | "Not Connected"
+    | "Pending Verification"
+    | "Verified"
+    | "Verification Failed";
+  badgeTone: "success" | "warning" | "danger" | "neutral";
+  guidance: string;
+};
+
+type PaystackPayoutAccountVerificationFields = {
+  verification_status: PaystackVerificationStatus;
+  verified_at: string | null;
+};
+
+export function buildPayoutVerificationStatusPayload(
+  account:
+    | (PaystackPayoutAccountVerificationFields & {
+        updated_at?: string | null;
+      })
+    | null,
+): PayoutVerificationStatusPayload {
+  return {
+    state: getPaystackPayoutVerificationState(account),
+    verifiedAt: account?.verified_at ?? null,
+    updatedAt: account?.updated_at ?? null,
+  };
+}
+
+export async function getCurrentPayoutVerificationStatus(): Promise<PayoutVerificationStatusPayload> {
+  const user = await getSessionUser();
+
+  if (!user || (user.role !== "landlord" && user.role !== "agent")) {
+    throw new AppError(
+      "UNAUTHORIZED",
+      "You must be signed in as a landlord or agent to check payout verification status.",
+      401,
+    );
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const account =
+    user.role === "agent"
+      ? await getActiveAgentPaystackAccount(supabase, user.id)
+      : await getActiveLandlordPaystackAccount(supabase, user.id);
+
+  return buildPayoutVerificationStatusPayload(account);
+}
+
+export function getPaystackPayoutVerificationState(
+  account: PaystackPayoutAccountVerificationFields | null,
+): PaystackPayoutVerificationState {
+  if (!account) {
+    return "missing";
+  }
+
+  if (account.verification_status === "failed") {
+    return "failed";
+  }
+
+  if (account.verification_status === "verified" && account.verified_at) {
+    return "verified";
+  }
+
+  return "unverified";
+}
+
+export function isPaystackPayoutVerified(
+  account: PaystackPayoutAccountVerificationFields | null,
+) {
+  return getPaystackPayoutVerificationState(account) === "verified";
+}
+
+export function getPaystackPayoutVerificationUiState(
+  account: PaystackPayoutAccountVerificationFields | null,
+  audience: PaystackPayoutVerificationAudience,
+): PaystackPayoutVerificationUiState {
+  const state = getPaystackPayoutVerificationState(account);
+
+  if (state === "verified") {
+    return {
+      state,
+      isVerified: true,
+      badgeLabel: "Verified",
+      badgeTone: "success",
+      guidance:
+        audience === "agent"
+          ? "Split payouts are enabled."
+          : "Online rent collection is enabled.",
+    };
+  }
+
+  if (state === "failed") {
+    return {
+      state,
+      isVerified: false,
+      badgeLabel: "Verification Failed",
+      badgeTone: "danger",
+      guidance:
+        audience === "tenant"
+          ? "Online payment is temporarily unavailable. Please contact your landlord."
+          : audience === "agent"
+            ? "Your payout account verification failed. Please update your payout details."
+            : "Verification failed. Please update your payout details or contact support.",
+    };
+  }
+
+  if (state === "missing") {
+    return {
+      state,
+      isVerified: false,
+      badgeLabel: "Not Connected",
+      badgeTone: "neutral",
+      guidance:
+        audience === "tenant"
+          ? "Online payment is temporarily unavailable. Please contact your landlord."
+          : audience === "agent"
+            ? "Connect your payout account before split payouts can be enabled."
+            : "Connect your payout account before online rent payments can be enabled.",
+    };
+  }
+
+  return {
+    state,
+    isVerified: false,
+    badgeLabel: "Pending Verification",
+    badgeTone: "warning",
+    guidance:
+      audience === "tenant"
+        ? "Online payment is temporarily unavailable. Please contact your landlord."
+        : audience === "agent"
+          ? "Split payouts are disabled until verification is completed."
+          : "Online rent payments are disabled until payout verification is approved.",
+  };
+}
+
+export function getFriendlyPayoutVerificationErrorMessage(code: string) {
+  const gate = getLandlordPaymentGateUiStateFromErrorCode(code);
+
+  if (gate) {
+    return gate.description;
+  }
+
+  if (code === "AGENT_BANK_ACCOUNT_REQUIRED") {
+    return "The agent payout account is not ready yet. Split payout actions are unavailable until the agent connects a payout account.";
+  }
+
+  if (code === "AGENT_PAYOUT_ACCOUNT_PENDING_VERIFICATION") {
+    return "The agent payout account is pending verification. Split payout actions will be available once verification is approved.";
+  }
+
+  if (code === "AGENT_PAYOUT_ACCOUNT_VERIFICATION_FAILED") {
+    return "The agent payout account verification failed. Split payout actions are unavailable until the payout details are updated.";
+  }
+
+  return null;
+}
+
+export function getLandlordPaymentGateUiState(
+  account: PaystackPayoutAccountVerificationFields | null,
+): LandlordPaymentGateUiState | null {
+  const state = getPaystackPayoutVerificationState(account);
+
+  if (state === "verified") {
+    return null;
+  }
+
+  return buildLandlordPaymentGateUiState(state);
+}
+
+function createLandlordPayoutVerificationError(
+  state: Exclude<PaystackPayoutVerificationState, "verified">,
+) {
+  if (state === "missing") {
+    return new AppError(
+      "BANK_ACCOUNT_REQUIRED",
+      "The landlord payout account is not ready for online rent payment.",
+      400,
+    );
+  }
+
+  if (state === "failed") {
+    return new AppError(
+      "PAYOUT_ACCOUNT_VERIFICATION_FAILED",
+      "Payout account verification failed. Online rent payments are unavailable until the account is reviewed.",
+      400,
+    );
+  }
+
+  return new AppError(
+    "PAYOUT_ACCOUNT_PENDING_VERIFICATION",
+    "Payout account pending verification. Online rent payments will be available once verified.",
+    400,
+  );
+}
+
+function createAgentPayoutVerificationError(
+  state: Exclude<PaystackPayoutVerificationState, "verified">,
+) {
+  if (state === "missing") {
+    return new AppError(
+      "AGENT_BANK_ACCOUNT_REQUIRED",
+      "The agent payout account is not ready for commission split.",
+      400,
+    );
+  }
+
+  if (state === "failed") {
+    return new AppError(
+      "AGENT_PAYOUT_ACCOUNT_VERIFICATION_FAILED",
+      "Agent payout account verification failed. Commission payments are unavailable until the account is reviewed.",
+      400,
+    );
+  }
+
+  return new AppError(
+    "AGENT_PAYOUT_ACCOUNT_PENDING_VERIFICATION",
+    "Agent payout account pending verification. Commission payments are unavailable until verified.",
+    400,
+  );
+}
+
+export function assertLandlordPayoutVerified(
+  account: LandlordPaystackAccount | null,
+): LandlordPaystackAccount {
+  const state = getPaystackPayoutVerificationState(account);
+
+  if (state !== "verified") {
+    throw createLandlordPayoutVerificationError(state);
+  }
+
+  if (!account) {
+    throw createLandlordPayoutVerificationError("missing");
+  }
+
+  return account;
+}
+
+export function assertAgentPayoutVerified(
+  account: AgentPaystackAccount | null,
+): AgentPaystackAccount {
+  const state = getPaystackPayoutVerificationState(account);
+
+  if (state !== "verified") {
+    throw createAgentPayoutVerificationError(state);
+  }
+
+  if (!account) {
+    throw createAgentPayoutVerificationError("missing");
+  }
+
+  return account;
+}
+
+
+====================================================================================================
+FILE: src/components/payment/payout-verification-auto-refresh.tsx
+====================================================================================================
+
+"use client";
+
+import { useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+import type { PayoutVerificationStatusPayload } from "@/lib/payout-verification";
+
+type PayoutVerificationAutoRefreshProps = {
+  enabled: boolean;
+  pollIntervalMs?: number;
+  timeoutMs?: number;
+};
+
+const DEFAULT_POLL_INTERVAL_MS = 25_000;
+const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
+const PAYOUT_VERIFICATION_STATUS_URL = "/api/payout-verification/status";
+
+export function PayoutVerificationAutoRefresh({
+  enabled,
+  pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+}: PayoutVerificationAutoRefreshProps) {
+  const router = useRouter();
+  const hasRefreshedRef = useRef(false);
+
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
+    const startedAt = Date.now();
+    let isActive = true;
+
+    async function pollStatus(intervalId: number) {
+      if (!isActive) {
+        return;
+      }
+
+      if (Date.now() - startedAt >= timeoutMs) {
+        window.clearInterval(intervalId);
+        return;
+      }
+
+      try {
+        const response = await fetch(PAYOUT_VERIFICATION_STATUS_URL, {
+          cache: "no-store",
+        });
+
+        if (!response.ok || !isActive) {
+          return;
+        }
+
+        const status = (await response.json()) as PayoutVerificationStatusPayload;
+
+        if (status.state === "verified" && !hasRefreshedRef.current) {
+          hasRefreshedRef.current = true;
+          window.clearInterval(intervalId);
+          router.refresh();
+          return;
+        }
+
+        if (status.state !== "unverified") {
+          window.clearInterval(intervalId);
+        }
+      } catch {
+        // Keep polling until timeout when transient network errors occur.
+      }
+    }
+
+    const intervalId = window.setInterval(() => {
+      void pollStatus(intervalId);
+    }, pollIntervalMs);
+
+    void pollStatus(intervalId);
+
+    return () => {
+      isActive = false;
+      window.clearInterval(intervalId);
+    };
+  }, [enabled, pollIntervalMs, timeoutMs, router]);
+
+  return null;
+}
+
+

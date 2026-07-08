@@ -29,6 +29,12 @@ import {
   recordManagerRentPayment as recordManagerRentPaymentRecord,
 } from "@/server/repositories/manager.repository";
 import {
+  getManagerTenantOnboardingRequestById,
+  updateManagerTenantOnboardingStatus,
+  updateManagerUnitStatusDirect,
+  type ManagerTenantOnboardingRequestRow,
+} from "@/server/repositories/manager-tenant-onboarding.repository";
+import {
   assertPaystackAmountMatchesExpected,
   convertNairaToKobo,
   createAgentDealTransactionSplit,
@@ -54,6 +60,14 @@ type ManagerSettlementInitialization = {
   accessCode: string;
   reference: string;
   settlementMetadata: Record<string, unknown>;
+};
+
+type FirstRentAgreementGuardRow = {
+  id: string;
+  organization_id: string;
+  onboarding_request_id: string | null;
+  tenant_id: string;
+  document_status: "draft" | "sent_to_tenant" | "accepted" | "voided";
 };
 
 export type ManagerPaystackVerificationResult = {
@@ -188,6 +202,14 @@ function assertPaymentRequestStillPayable(
     );
   }
 
+  if (paymentRequest.status === "cancelled") {
+    throw new AppError(
+      "MANAGER_PAYSTACK_PAYMENT_CANCELLED",
+      "This payment link is no longer available.",
+      410,
+    );
+  }
+
   if (isFirstRentPaymentRequestExpired(paymentRequest)) {
     throw new AppError(
       "MANAGER_PAYSTACK_PAYMENT_EXPIRED",
@@ -311,6 +333,187 @@ async function requireManagerOrganization() {
     profile,
     organization,
   };
+}
+
+async function getFirstRentAgreementForPaymentRequest(
+  supabase: SupabaseClient,
+  paymentRequest: ManagerRentPaymentRequestRow,
+) {
+  if (!paymentRequest.agreement_document_id) {
+    throw new AppError(
+      "MANAGER_FIRST_RENT_AGREEMENT_MISSING",
+      "The agreement for this payment could not be found.",
+      500,
+    );
+  }
+
+  const { data, error } = await supabase
+    .from("manager_tenant_agreement_documents")
+    .select(
+      "id, organization_id, onboarding_request_id, tenant_id, document_status",
+    )
+    .eq("organization_id", paymentRequest.organization_id)
+    .eq("id", paymentRequest.agreement_document_id)
+    .maybeSingle<FirstRentAgreementGuardRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    throw new AppError(
+      "MANAGER_FIRST_RENT_AGREEMENT_NOT_FOUND",
+      "The agreement for this payment could not be found.",
+      404,
+    );
+  }
+
+  return data;
+}
+
+async function assertFirstRentPaymentStillValid(
+  supabase: SupabaseClient,
+  paymentRequest: ManagerRentPaymentRequestRow,
+) {
+  if (paymentRequest.payment_purpose !== "new_tenant_first_rent") {
+    return null;
+  }
+
+  if (!paymentRequest.onboarding_request_id) {
+    throw new AppError(
+      "MANAGER_FIRST_RENT_REQUEST_MISSING",
+      "The tenant request for this payment could not be found.",
+      500,
+    );
+  }
+
+  const agreement = await getFirstRentAgreementForPaymentRequest(
+    supabase,
+    paymentRequest,
+  );
+
+  if (agreement.document_status === "voided") {
+    throw new AppError(
+      "MANAGER_AGREEMENT_DECLINED",
+      "This agreement was declined. The payment link is no longer available.",
+      410,
+    );
+  }
+
+  if (agreement.document_status !== "accepted") {
+    throw new AppError(
+      "MANAGER_AGREEMENT_NOT_ACCEPTED",
+      "The agreement must be accepted before payment.",
+      400,
+    );
+  }
+
+  const request = await getManagerTenantOnboardingRequestById(supabase, {
+    organizationId: paymentRequest.organization_id,
+    requestId: paymentRequest.onboarding_request_id,
+  });
+
+  if (
+    request.status === "cancelled" ||
+    request.status === "rejected" ||
+    request.status === "expired"
+  ) {
+    throw new AppError(
+      "MANAGER_TENANT_REQUEST_CANCELLED",
+      "This tenant request is no longer available.",
+      410,
+    );
+  }
+
+  if (request.status === "payment_expired") {
+    throw new AppError(
+      "MANAGER_PAYSTACK_PAYMENT_EXPIRED",
+      "This payment link has expired. Please ask the property manager for a new link.",
+      410,
+    );
+  }
+
+  if (
+    request.status !== "agreement_accepted" &&
+    request.status !== "payment_initialized" &&
+    request.status !== "payment_paid"
+  ) {
+    throw new AppError(
+      "MANAGER_FIRST_RENT_NOT_READY",
+      "This first rent payment is not ready.",
+      400,
+    );
+  }
+
+  return request;
+}
+
+async function activateManagerTenantAfterFirstRent(
+  supabase: SupabaseClient,
+  paymentRequest: ManagerRentPaymentRequestRow,
+) {
+  const { error } = await supabase
+    .from("manager_tenants")
+    .update({
+      status: "active",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("organization_id", paymentRequest.organization_id)
+    .eq("id", paymentRequest.tenant_id)
+    .in("status", ["inactive", "active"]);
+
+  if (error) {
+    throw error;
+  }
+}
+
+async function finalizeFirstRentPayment(
+  supabase: SupabaseClient,
+  params: {
+    paymentRequest: ManagerRentPaymentRequestRow;
+    paymentId: string;
+    verifiedPayload: Record<string, unknown>;
+    paidAt: string;
+  },
+) {
+  if (params.paymentRequest.payment_purpose !== "new_tenant_first_rent") {
+    return;
+  }
+
+  if (!params.paymentRequest.onboarding_request_id) {
+    throw new AppError(
+      "MANAGER_FIRST_RENT_REQUEST_MISSING",
+      "The tenant request for this payment could not be found.",
+      500,
+    );
+  }
+
+  const request = await getManagerTenantOnboardingRequestById(supabase, {
+    organizationId: params.paymentRequest.organization_id,
+    requestId: params.paymentRequest.onboarding_request_id,
+  });
+
+  await activateManagerTenantAfterFirstRent(supabase, params.paymentRequest);
+
+  await updateManagerUnitStatusDirect(supabase, {
+    organizationId: params.paymentRequest.organization_id,
+    unitId: params.paymentRequest.unit_id,
+    status: "occupied",
+  });
+
+  await updateManagerTenantOnboardingStatus(supabase, {
+    organizationId: params.paymentRequest.organization_id,
+    requestId: params.paymentRequest.onboarding_request_id,
+    status: "payment_paid",
+    metadata: {
+      ...request.metadata,
+      payment_paid_at: params.paidAt,
+      payment_request_id: params.paymentRequest.id,
+      processed_payment_id: params.paymentId,
+      paystack_reference: params.paymentRequest.reference,
+      verified_payload: params.verifiedPayload,
+    },
+  });
 }
 
 async function initializeManagerPaymentSettlement(params: {
@@ -667,6 +870,13 @@ export async function verifyAndPostManagerPaystackPaymentReference(params: {
   }
 
   if (paymentRequest.status === "paid" && paymentRequest.processed_payment_id) {
+    await finalizeFirstRentPayment(supabase, {
+      paymentRequest,
+      paymentId: paymentRequest.processed_payment_id,
+      verifiedPayload: paymentRequest.verified_payload ?? {},
+      paidAt: paymentRequest.paid_at ?? new Date().toISOString(),
+    });
+
     return {
       status: "duplicate",
       message: "Manager rent payment already recorded.",
@@ -677,6 +887,7 @@ export async function verifyAndPostManagerPaystackPaymentReference(params: {
   }
 
   assertPaymentRequestStillPayable(paymentRequest);
+  await assertFirstRentPaymentStillValid(supabase, paymentRequest);
 
   paymentRequest = await getManagerPaystackPaymentRequestByReference(
     supabase,
@@ -692,9 +903,43 @@ export async function verifyAndPostManagerPaystackPaymentReference(params: {
   }
 
   assertPaymentRequestStillPayable(paymentRequest);
+  await assertFirstRentPaymentStillValid(supabase, paymentRequest);
 
   const verifiedTransaction = await verifyPaystackTransaction(params.reference);
   const verifiedPayload = toRecord(verifiedTransaction);
+
+  paymentRequest = await getManagerPaystackPaymentRequestByReference(
+    supabase,
+    params.reference,
+  );
+
+  if (!paymentRequest) {
+    throw new AppError(
+      "MANAGER_PAYSTACK_PAYMENT_REQUEST_NOT_FOUND",
+      "Manager payment request was not found.",
+      404,
+    );
+  }
+
+  if (paymentRequest.status === "paid" && paymentRequest.processed_payment_id) {
+    await finalizeFirstRentPayment(supabase, {
+      paymentRequest,
+      paymentId: paymentRequest.processed_payment_id,
+      verifiedPayload: paymentRequest.verified_payload ?? verifiedPayload,
+      paidAt: paymentRequest.paid_at ?? new Date().toISOString(),
+    });
+
+    return {
+      status: "duplicate",
+      message: "Manager rent payment already recorded.",
+      paymentRequestId: paymentRequest.id,
+      paymentId: paymentRequest.processed_payment_id,
+      verifiedPayload,
+    };
+  }
+
+  assertPaymentRequestStillPayable(paymentRequest);
+  await assertFirstRentPaymentStillValid(supabase, paymentRequest);
 
   if (verifiedTransaction.reference !== paymentRequest.reference) {
     throw new AppError(
@@ -731,6 +976,7 @@ export async function verifyAndPostManagerPaystackPaymentReference(params: {
   }
 
   assertPaymentRequestStillPayable(paymentRequest);
+  await assertFirstRentPaymentStillValid(supabase, paymentRequest);
 
   assertPaystackAmountMatchesExpected({
     paystackAmountInKobo: verifiedTransaction.amount,
@@ -752,6 +998,13 @@ export async function verifyAndPostManagerPaystackPaymentReference(params: {
         ...paymentRequest.metadata,
         duplicate_payment_detected: true,
       },
+    });
+
+    await finalizeFirstRentPayment(supabase, {
+      paymentRequest,
+      paymentId: existingPayment.id,
+      verifiedPayload,
+      paidAt: verifiedTransaction.paid_at ?? new Date().toISOString(),
     });
 
     return {
@@ -833,6 +1086,13 @@ export async function verifyAndPostManagerPaystackPaymentReference(params: {
       processed_payment_id: rentPayment.id,
       paid_via: "central_paystack_payment_confirmation",
     },
+  });
+
+  await finalizeFirstRentPayment(supabase, {
+    paymentRequest,
+    paymentId: rentPayment.id,
+    verifiedPayload,
+    paidAt: verifiedTransaction.paid_at ?? new Date().toISOString(),
   });
 
   return {

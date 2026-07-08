@@ -66,6 +66,10 @@ function formatOwnerRole(
     return "Agent";
   }
 
+  if (role === "manager") {
+    return "Manager";
+  }
+
   return "Developer";
 }
 
@@ -248,7 +252,7 @@ export function PayoutVerificationQueue({
                 {queue.totals.verified}
               </p>
               <p className="mt-1 text-sm leading-6 text-text-normal">
-                Accounts currently marked safe for split payouts.
+                Accounts currently marked safe for Paystack payouts.
               </p>
             </div>
           </div>
@@ -272,16 +276,16 @@ export function PayoutVerificationQueue({
 
       <QueueSection
         title="Pending payout accounts"
-        description="Review active landlord, agent, and developer payout accounts before split settlements are enabled."
+        description="Review active landlord, agent, developer, and manager payout accounts before payout flows are enabled."
         accounts={queue.pending}
         emptyTitle="No pending payout accounts"
-        emptyDescription="New landlord, agent, and developer payout accounts will appear here for platform review."
+        emptyDescription="New landlord, agent, developer, and manager payout accounts will appear here for platform review."
         highlightPending
       />
 
       <QueueSection
         title="Verified payout accounts"
-        description="Accounts approved for Paystack split settlement flows."
+        description="Accounts approved for Paystack payout flows."
         accounts={queue.verified}
         emptyTitle="No verified payout accounts"
         emptyDescription="Verified payout accounts will appear here after admin approval."
@@ -289,7 +293,7 @@ export function PayoutVerificationQueue({
 
       <QueueSection
         title="Failed payout accounts"
-        description="Accounts that failed platform review and cannot receive split settlements."
+        description="Accounts that failed platform review and cannot receive payouts."
         accounts={queue.failed}
         emptyTitle="No failed payout accounts"
         emptyDescription="Failed payout accounts will appear here if review cannot approve them."

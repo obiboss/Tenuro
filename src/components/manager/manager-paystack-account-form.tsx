@@ -1,45 +1,55 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { saveManagerOrganizationPaystackAccountAction } from "@/actions/manager-paystack-accounts.actions";
 import { initialManagerActionState } from "@/actions/manager.state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { TrustNotice } from "@/components/ui/trust-notice";
+
+type BankOption = {
+  label: string;
+  value: string;
+};
 
 type ManagerPaystackAccountFormProps = {
-  organizationName: string;
+  banks: BankOption[];
+  defaultBusinessName: string;
 };
 
 export function ManagerPaystackAccountForm({
-  organizationName,
+  banks,
+  defaultBusinessName,
 }: ManagerPaystackAccountFormProps) {
+  const [selectedBankCode, setSelectedBankCode] = useState("");
+
   const [state, formAction, isPending] = useActionState(
     saveManagerOrganizationPaystackAccountAction,
     initialManagerActionState,
   );
 
+  const selectedBankName = useMemo(() => {
+    return banks.find((bank) => bank.value === selectedBankCode)?.label ?? "";
+  }, [banks, selectedBankCode]);
+
   return (
-    <form action={formAction}>
+    <form id="manager-payout-account" action={formAction}>
       <Card>
         <CardContent>
-          <div>
-            <h2 className="text-lg font-black tracking-tight text-text-strong">
-              Manager payout account
-            </h2>
-            <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-              This is the account used when the manager receives rent or
-              management fees online.
-            </p>
-          </div>
+          <TrustNotice
+            title="Bank details are verified before saving"
+            description="BOPA confirms the bank account with Paystack before saving it. Rent payment links become available after payout verification is approved."
+          />
 
           {state.message ? (
             <div
               role="alert"
               className={
                 state.ok
-                  ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
-                  : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
+                  ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold leading-6 text-success"
+                  : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold leading-6 text-danger"
               }
             >
               {state.message}
@@ -49,67 +59,45 @@ export function ManagerPaystackAccountForm({
           <Input
             label="Business name"
             name="businessName"
-            defaultValue={organizationName}
+            defaultValue={defaultBusinessName}
+            placeholder="Example: Akachukwu Properties"
             error={state.fieldErrors?.businessName?.[0]}
             required
           />
 
-          <Input
-            label="Contact name"
-            name="contactName"
-            placeholder="Person responsible for this account"
-            error={state.fieldErrors?.contactName?.[0]}
+          <Select
+            label="Bank"
+            name="bankCode"
+            placeholder="Select bank"
+            options={banks}
+            value={selectedBankCode}
+            onChange={(event) => setSelectedBankCode(event.target.value)}
+            error={state.fieldErrors?.bankCode?.[0]}
             required
           />
 
-          <Input
-            label="Contact phone"
-            name="contactPhone"
-            placeholder="080..."
-            error={state.fieldErrors?.contactPhone?.[0]}
-            required
-          />
-
-          <Input
-            label="Contact email"
-            name="contactEmail"
-            type="email"
-            placeholder="Optional"
-            error={state.fieldErrors?.contactEmail?.[0]}
-          />
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Input
-              label="Bank name"
-              name="bankName"
-              placeholder="Example: GTBank"
-              error={state.fieldErrors?.bankName?.[0]}
-              required
-            />
-
-            <Input
-              label="Bank code"
-              name="bankCode"
-              placeholder="Example: 058"
-              error={state.fieldErrors?.bankCode?.[0]}
-              required
-            />
-          </div>
+          <input type="hidden" name="bankName" value={selectedBankName} />
 
           <Input
             label="Account number"
             name="accountNumber"
             inputMode="numeric"
             maxLength={10}
-            placeholder="10 digit account number"
+            placeholder="10-digit account number"
             error={state.fieldErrors?.accountNumber?.[0]}
             required
           />
+
+          <div className="rounded-button bg-warning-soft p-4 text-sm font-semibold leading-6 text-text-normal">
+            After submitting your bank details, Paystack verification may take
+            up to 24 hours. Rent payment links will only work after this account
+            is verified.
+          </div>
         </CardContent>
 
         <CardFooter>
           <Button type="submit" isLoading={isPending} fullWidth>
-            Save Manager Account
+            Verify and Save Bank Account
           </Button>
         </CardFooter>
       </Card>

@@ -180,10 +180,12 @@ export async function createManagerPropertyAction(
       landlordClientId = createdLandlord.id;
     }
 
-    await createManagerProperty({
+    const createdProperty = (await createManagerProperty({
       ...propertyDraft,
       landlordClientId,
-    });
+    })) as { id?: string } | null | undefined;
+
+    const propertyId = createdProperty?.id;
 
     revalidatePath("/manager");
     revalidatePath("/manager/overview");
@@ -191,9 +193,18 @@ export async function createManagerPropertyAction(
     revalidatePath("/manager/properties");
     revalidatePath("/manager/remittances");
 
+    if (propertyId) {
+      revalidatePath(`/manager/properties/${propertyId}`);
+    }
+
     return {
       ok: true,
-      message: "Property added successfully.",
+      message: "Property added. Add units next.",
+      propertyId,
+      landlordClientId,
+      nextHref: propertyId
+        ? `/manager/properties/${propertyId}#add-unit`
+        : "/manager/properties",
     };
   } catch (error) {
     return toActionError(error);
@@ -217,15 +228,24 @@ export async function createManagerUnitAction(
       notes: formData.get("notes"),
     });
 
-    await createManagerUnit(parsed);
+    const createdUnit = (await createManagerUnit(parsed)) as
+      | { id?: string }
+      | null
+      | undefined;
 
     revalidatePath("/manager");
     revalidatePath("/manager/overview");
     revalidatePath("/manager/properties");
+    revalidatePath(`/manager/properties/${parsed.propertyId}`);
 
     return {
       ok: true,
-      message: "Unit created successfully.",
+      message: "Unit added. You can add another unit.",
+      propertyId: parsed.propertyId,
+      landlordClientId: parsed.landlordClientId,
+      unitId: createdUnit?.id,
+      nextHref: `/manager/properties/${parsed.propertyId}#units`,
+      submissionId: `${Date.now()}`,
     };
   } catch (error) {
     return toActionError(error);
