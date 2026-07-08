@@ -12,6 +12,7 @@ type ManagerUnitListProps = {
   tenants?: ManagerTenantRow[];
   onboardingRequests?: ManagerTenantOnboardingRequestRow[];
   showTenantActions?: boolean;
+  addUnitHref?: string;
 };
 
 type UnitStatus = "vacant" | "reserved" | "occupied" | "inactive";
@@ -31,6 +32,7 @@ const OPEN_REQUEST_STATUSES = new Set<
   "agreement_sent",
   "agreement_accepted",
   "payment_initialized",
+  "payment_expired",
 ]);
 
 function formatNaira(amount: number) {
@@ -92,11 +94,15 @@ function getRequestPriority(
     return 3;
   }
 
-  if (status === "agreement_sent") {
+  if (status === "payment_expired") {
     return 4;
   }
 
-  return 5;
+  if (status === "agreement_sent") {
+    return 5;
+  }
+
+  return 6;
 }
 
 function buildTenantByUnitId(tenants: ManagerTenantRow[]) {
@@ -146,18 +152,31 @@ function getRequestLabel(request: ManagerTenantOnboardingRequestRow) {
 }
 
 function getRequestActionLabel(request: ManagerTenantOnboardingRequestRow) {
+  if (request.status === "pending") {
+    return "Send link";
+  }
+
   if (request.status === "submitted") {
     return "Review";
   }
 
+  if (request.status === "agreement_sent") {
+    return "View agreement";
+  }
+
   if (
     request.status === "agreement_accepted" ||
-    request.status === "payment_initialized"
+    request.status === "payment_initialized" ||
+    request.status === "payment_expired"
   ) {
     return "View payment";
   }
 
-  return "View update";
+  return "View request";
+}
+
+function getRequestDetailHref(request: ManagerTenantOnboardingRequestRow) {
+  return `/manager/properties/${request.property_id}?tenantRequest=${request.id}#tenant-review-detail`;
 }
 
 function getReservedUnitMessage(tenant: ManagerTenantRow | undefined) {
@@ -185,6 +204,7 @@ export function ManagerUnitList({
   tenants = [],
   onboardingRequests = [],
   showTenantActions = false,
+  addUnitHref = "#add-unit",
 }: ManagerUnitListProps) {
   const propertyNameById = new Map(
     properties.map((property) => [property.id, property.property_name]),
@@ -210,7 +230,7 @@ export function ManagerUnitList({
 
         {showTenantActions ? (
           <Link
-            href="#add-unit"
+            href={addUnitHref}
             prefetch={false}
             className="inline-flex min-h-10 items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
           >
@@ -315,7 +335,7 @@ export function ManagerUnitList({
                         <td className="px-4 py-4 text-right">
                           {request ? (
                             <Link
-                              href="#tenant-review"
+                              href={getRequestDetailHref(request)}
                               prefetch={false}
                               className="inline-flex min-h-10 items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
                             >
@@ -399,7 +419,7 @@ export function ManagerUnitList({
                     <div className="mt-4">
                       {request ? (
                         <Link
-                          href="#tenant-review"
+                          href={getRequestDetailHref(request)}
                           prefetch={false}
                           className="inline-flex min-h-10 w-full items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
                         >
@@ -443,7 +463,7 @@ export function ManagerUnitList({
 
             {showTenantActions ? (
               <Link
-                href="#add-unit"
+                href={addUnitHref}
                 prefetch={false}
                 className="mt-3 inline-flex min-h-10 items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
               >

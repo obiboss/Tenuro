@@ -2,7 +2,6 @@
 
 import { MessageCircle } from "lucide-react";
 import { buildWaMeUrl, resolveWhatsAppShareTarget } from "@/lib/whatsapp";
-import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 
 type WhatsAppSendButtonProps = {
@@ -28,8 +27,7 @@ export function WhatsAppSendButton({
     event.preventDefault();
     showToast({
       title: "Invalid phone number",
-      description:
-        "Add a valid phone number before sending on WhatsApp.",
+      description: "Add a valid phone number before sending on WhatsApp.",
       tone: "error",
     });
   }
@@ -38,14 +36,12 @@ export function WhatsAppSendButton({
     <a
       href={whatsappUrl}
       target="_blank"
-      rel="noreferrer"
-      className="block"
+      rel="noopener noreferrer"
+      className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-button bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-soft transition duration-200 hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
       onClick={handleClick}
     >
-      <Button type="button" fullWidth>
-        <MessageCircle aria-hidden="true" size={18} strokeWidth={2.6} />
-        {label}
-      </Button>
+      <MessageCircle aria-hidden="true" size={18} strokeWidth={2.6} />
+      <span>{label}</span>
     </a>
   );
 }

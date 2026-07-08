@@ -3,7 +3,29 @@ import { tryNormalisePhoneNumber } from "@/lib/phone";
 export type WhatsAppShareTarget =
   | { mode: "generic" }
   | { mode: "invalid" }
-  | { mode: "direct"; national: string };
+  | { mode: "direct"; phoneDigits: string };
+
+function toWhatsAppPhoneDigits(phoneNumber: string) {
+  const digits = phoneNumber.replace(/\D/g, "");
+
+  if (!digits) {
+    return null;
+  }
+
+  if (digits.startsWith("234") && digits.length >= 13) {
+    return digits;
+  }
+
+  if (digits.startsWith("0") && digits.length === 11) {
+    return `234${digits.slice(1)}`;
+  }
+
+  if (digits.length === 10 && /^[789]/.test(digits)) {
+    return `234${digits}`;
+  }
+
+  return digits.length >= 11 ? digits : null;
+}
 
 export function resolveWhatsAppShareTarget(
   phoneNumber?: string | null,
@@ -17,12 +39,22 @@ export function resolveWhatsAppShareTarget(
   const recipient = tryNormalisePhoneNumber(trimmed);
 
   if (!recipient) {
+    const fallbackPhoneDigits = toWhatsAppPhoneDigits(trimmed);
+
+    return fallbackPhoneDigits
+      ? { mode: "direct", phoneDigits: fallbackPhoneDigits }
+      : { mode: "invalid" };
+  }
+
+  const phoneDigits = toWhatsAppPhoneDigits(recipient.national);
+
+  if (!phoneDigits) {
     return { mode: "invalid" };
   }
 
   return {
     mode: "direct",
-    national: recipient.national,
+    phoneDigits,
   };
 }
 
@@ -34,7 +66,7 @@ export function buildWaMeUrl(params: {
   const target = resolveWhatsAppShareTarget(params.phoneNumber);
 
   if (target.mode === "direct") {
-    return `https://wa.me/${target.national}?text=${encodedMessage}`;
+    return `https://wa.me/${target.phoneDigits}?text=${encodedMessage}`;
   }
 
   return `https://wa.me/?text=${encodedMessage}`;

@@ -1,20 +1,22 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import {
   approveManagerTenantOnboardingRequestAction,
   rejectManagerTenantOnboardingRequestAction,
   resendManagerFirstRentPaymentLinkAction,
+  resendManagerTenantOnboardingLinkAction,
 } from "@/actions/manager-tenant-onboarding.actions";
 import { initialManagerTenantOnboardingActionState } from "@/actions/manager-tenant-onboarding.state";
 import { Button } from "@/components/ui/button";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Toast, type ToastItem } from "@/components/ui/toast";
-import { buildWaMeUrl } from "@/lib/whatsapp";
+import { WhatsAppShareActions } from "@/components/ui/whatsapp-share-actions";
 import type { ManagerTenantOnboardingRequestRow } from "@/server/repositories/manager-tenant-onboarding.repository";
 
 type ManagerTenantOnboardingReviewListProps = {
   requests: ManagerTenantOnboardingRequestRow[];
+  initialSelectedRequestId?: string | null;
 };
 
 const ACTIVE_REVIEW_STATUSES = new Set<
@@ -179,20 +181,19 @@ function WhatsAppActionCard({
   description,
   phoneNumber,
   message,
+  copyText,
+  whatsappLabel = "Open WhatsApp",
+  copyLabel = "Copy message",
 }: {
   title: string;
   description: string;
-  phoneNumber?: string;
+  phoneNumber?: string | null;
   message?: string;
+  copyText?: string;
+  whatsappLabel?: string;
+  copyLabel?: string;
 }) {
-  const whatsappUrl = message
-    ? buildWaMeUrl({
-        phoneNumber,
-        message,
-      })
-    : null;
-
-  if (!whatsappUrl) {
+  if (!message) {
     return null;
   }
 
@@ -203,23 +204,14 @@ function WhatsAppActionCard({
         {description}
       </p>
 
-      <a
-        href={whatsappUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-button bg-primary px-5 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
-      >
-        Open WhatsApp
-      </a>
-
-      <a
-        href={whatsappUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="mt-3 inline-flex min-h-10 w-full items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
-      >
-        Send again
-      </a>
+      <WhatsAppShareActions
+        phoneNumber={phoneNumber}
+        message={message}
+        copyText={copyText ?? message}
+        whatsappLabel={whatsappLabel}
+        copyLabel={copyLabel}
+        className="mt-4"
+      />
     </div>
   );
 }
@@ -242,7 +234,13 @@ function RequestDetailPanel({
     initialManagerTenantOnboardingActionState,
   );
 
-  const [resendState, resendAction, isResending] = useActionState(
+  const [tenantLinkState, tenantLinkAction, isResendingTenantLink] =
+    useActionState(
+      resendManagerTenantOnboardingLinkAction,
+      initialManagerTenantOnboardingActionState,
+    );
+
+  const [resendState, resendAction, isResendingPayment] = useActionState(
     resendManagerFirstRentPaymentLinkAction,
     initialManagerTenantOnboardingActionState,
   );
@@ -306,6 +304,26 @@ function RequestDetailPanel({
       }
     }
 
+    if (tenantLinkState.message) {
+      const id = buildToastId({
+        requestId: request.id,
+        action: "tenant-link",
+        ok: tenantLinkState.ok,
+        message: tenantLinkState.message,
+      });
+
+      if (!dismissedToastIds.includes(id)) {
+        nextToasts.push({
+          id,
+          tone: tenantLinkState.ok ? "success" : "error",
+          title: tenantLinkState.ok
+            ? "Tenant link ready"
+            : "Could not prepare tenant link",
+          description: tenantLinkState.message,
+        });
+      }
+    }
+
     return nextToasts;
   }, [
     approveState.message,
@@ -316,6 +334,8 @@ function RequestDetailPanel({
     request.id,
     resendState.message,
     resendState.ok,
+    tenantLinkState.message,
+    tenantLinkState.ok,
   ]);
 
   function dismissToast(id: string) {
@@ -325,6 +345,7 @@ function RequestDetailPanel({
   }
 
   const canReview = request.status === "submitted";
+  const canResendTenantLink = request.status === "pending";
   const canResendPayment =
     request.onboarding_type === "new_incoming_tenant" &&
     (request.status === "agreement_accepted" ||
@@ -392,7 +413,21 @@ function RequestDetailPanel({
             />
           ) : null}
 
-          {resendState.ok ? (
+          {tenantLinkState.ok && tenantLinkState.requestId === request.id ? (
+            <WhatsAppActionCard
+              title="Tenant link ready"
+              description="Open WhatsApp to send the fresh tenant details link."
+              phoneNumber={tenantLinkState.tenantWhatsappNumber}
+              message={tenantLinkState.whatsappMessage}
+              copyText={
+                tenantLinkState.claimUrl ?? tenantLinkState.whatsappMessage
+              }
+              whatsappLabel="Send via WhatsApp"
+              copyLabel="Copy tenant link"
+            />
+          ) : null}
+
+          {resendState.ok && resendState.requestId === request.id ? (
             <WhatsAppActionCard
               title="Payment link ready"
               description="Open WhatsApp to send the payment link to the tenant."
@@ -433,14 +468,29 @@ function RequestDetailPanel({
             </div>
           ) : null}
 
-          {request.status === "pending" ? (
-            <div className="rounded-card bg-primary-soft p-4">
-              <p className="text-sm font-black text-text-strong">
-                Waiting for tenant details
-              </p>
-              <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-                The tenant has not submitted their details yet.
-              </p>
+          {canResendTenantLink ? (
+            <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
+              <div className="rounded-card bg-primary-soft p-4">
+                <p className="text-sm font-black text-text-strong">
+                  Waiting for tenant details
+                </p>
+                <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                  Generate a fresh link if the tenant did not receive the first
+                  one or the previous link has expired.
+                </p>
+              </div>
+
+              <form action={tenantLinkAction}>
+                <input type="hidden" name="requestId" value={request.id} />
+
+                <Button
+                  type="submit"
+                  isLoading={isResendingTenantLink}
+                  fullWidth
+                >
+                  Regenerate Tenant Link
+                </Button>
+              </form>
             </div>
           ) : null}
 
@@ -602,7 +652,7 @@ function RequestDetailPanel({
               <form action={resendAction}>
                 <input type="hidden" name="requestId" value={request.id} />
 
-                <Button type="submit" isLoading={isResending} fullWidth>
+                <Button type="submit" isLoading={isResendingPayment} fullWidth>
                   Resend Payment Link
                 </Button>
               </form>
@@ -616,14 +666,41 @@ function RequestDetailPanel({
 
 export function ManagerTenantOnboardingReviewList({
   requests,
+  initialSelectedRequestId = null,
 }: ManagerTenantOnboardingReviewListProps) {
   const activeRequests = requests.filter((request) =>
     ACTIVE_REVIEW_STATUSES.has(request.status),
   );
 
+  const initialSelectedActiveRequestId =
+    initialSelectedRequestId &&
+    activeRequests.some((request) => request.id === initialSelectedRequestId)
+      ? initialSelectedRequestId
+      : null;
+
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(
-    null,
+    initialSelectedActiveRequestId,
   );
+  const detailRef = useRef<HTMLDivElement | null>(null);
+  const shouldScrollToDetailRef = useRef(false);
+
+  useEffect(() => {
+    if (initialSelectedActiveRequestId) {
+      setSelectedRequestId(initialSelectedActiveRequestId);
+    }
+  }, [initialSelectedActiveRequestId]);
+
+  useEffect(() => {
+    if (!selectedRequestId || !shouldScrollToDetailRef.current) {
+      return;
+    }
+
+    shouldScrollToDetailRef.current = false;
+    detailRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }, [selectedRequestId]);
 
   const submittedCount = activeRequests.filter(
     (request) => request.status === "submitted",
@@ -631,6 +708,20 @@ export function ManagerTenantOnboardingReviewList({
 
   const selectedRequest =
     activeRequests.find((request) => request.id === selectedRequestId) ?? null;
+
+  function handleViewRequest(requestId: string) {
+    if (requestId === selectedRequestId) {
+      detailRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+
+      return;
+    }
+
+    shouldScrollToDetailRef.current = true;
+    setSelectedRequestId(requestId);
+  }
 
   if (activeRequests.length === 0) {
     return null;
@@ -684,9 +775,13 @@ export function ManagerTenantOnboardingReviewList({
                   request.tenant_full_name ??
                   request.invited_tenant_full_name ??
                   "Tenant";
+                const isSelected = request.id === selectedRequestId;
 
                 return (
-                  <tr key={request.id}>
+                  <tr
+                    key={request.id}
+                    className={isSelected ? "bg-primary-soft" : undefined}
+                  >
                     <td className="px-4 py-4">
                       <p className="text-sm font-black text-text-strong">
                         {tenantName}
@@ -725,10 +820,14 @@ export function ManagerTenantOnboardingReviewList({
                     <td className="px-4 py-4 text-right">
                       <button
                         type="button"
-                        onClick={() => setSelectedRequestId(request.id)}
-                        className="inline-flex min-h-10 items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
+                        onClick={() => handleViewRequest(request.id)}
+                        className={
+                          isSelected
+                            ? "inline-flex min-h-10 items-center justify-center rounded-button bg-primary-soft px-4 text-sm font-extrabold text-primary transition hover:bg-primary-soft"
+                            : "inline-flex min-h-10 items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
+                        }
                       >
-                        View
+                        {isSelected ? "Viewing" : "View"}
                       </button>
                     </td>
                   </tr>
@@ -744,9 +843,13 @@ export function ManagerTenantOnboardingReviewList({
               request.tenant_full_name ??
               request.invited_tenant_full_name ??
               "Tenant";
+            const isSelected = request.id === selectedRequestId;
 
             return (
-              <article key={request.id} className="p-4">
+              <article
+                key={request.id}
+                className={isSelected ? "bg-primary-soft p-4" : "p-4"}
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="font-black text-text-strong">{tenantName}</p>
@@ -767,10 +870,14 @@ export function ManagerTenantOnboardingReviewList({
 
                 <button
                   type="button"
-                  onClick={() => setSelectedRequestId(request.id)}
-                  className="mt-4 inline-flex min-h-10 w-full items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
+                  onClick={() => handleViewRequest(request.id)}
+                  className={
+                    isSelected
+                      ? "mt-4 inline-flex min-h-10 w-full items-center justify-center rounded-button bg-primary-soft px-4 text-sm font-extrabold text-primary transition hover:bg-primary-soft"
+                      : "mt-4 inline-flex min-h-10 w-full items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
+                  }
                 >
-                  View
+                  {isSelected ? "Viewing" : "View"}
                 </button>
               </article>
             );
@@ -779,7 +886,12 @@ export function ManagerTenantOnboardingReviewList({
       </div>
 
       {selectedRequest ? (
-        <RequestDetailPanel request={selectedRequest} />
+        <div id="tenant-review-detail" ref={detailRef} className="scroll-mt-24">
+          <RequestDetailPanel
+            key={selectedRequest.id}
+            request={selectedRequest}
+          />
+        </div>
       ) : null}
     </section>
   );

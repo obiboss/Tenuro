@@ -11,6 +11,7 @@ import {
   declineManagerTenantAgreementAndCancel,
   rejectManagerTenantOnboardingRequestForCurrentManager,
   resendManagerFirstRentPaymentLinkForCurrentManager,
+  resendManagerTenantOnboardingLinkForCurrentManager,
   submitManagerTenantOnboardingRequestByToken,
 } from "@/server/services/manager-tenant-onboarding.service";
 import { requireManagerWorkspacePermission } from "@/server/services/manager-staff-access.service";
@@ -21,6 +22,7 @@ import {
   declineManagerTenantAgreementSchema,
   rejectManagerTenantOnboardingRequestSchema,
   resendManagerFirstRentPaymentLinkSchema,
+  resendManagerTenantOnboardingLinkSchema,
   submitManagerTenantOnboardingRequestSchema,
 } from "@/server/validators/manager-tenant-onboarding.schema";
 
@@ -57,7 +59,6 @@ export async function createManagerTenantOnboardingRequestAction(
 
     revalidatePath("/manager");
     revalidatePath("/manager/properties");
-    revalidatePath(`/manager/properties/${parsed.propertyId}`);
     revalidatePath("/manager/tenants");
 
     return {
@@ -163,6 +164,37 @@ export async function rejectManagerTenantOnboardingRequestAction(
     return {
       ok: true,
       message: "Tenant details rejected.",
+    };
+  } catch (error) {
+    return toActionError(error);
+  }
+}
+
+export async function resendManagerTenantOnboardingLinkAction(
+  _previousState: ManagerTenantOnboardingActionState,
+  formData: FormData,
+): Promise<ManagerTenantOnboardingActionState> {
+  try {
+    await requireManagerWorkspacePermission("property.manage");
+
+    const parsed = resendManagerTenantOnboardingLinkSchema.parse({
+      requestId: formData.get("requestId"),
+    });
+
+    const result =
+      await resendManagerTenantOnboardingLinkForCurrentManager(parsed);
+
+    revalidatePath("/manager");
+    revalidatePath("/manager/properties");
+    revalidatePath("/manager/tenants");
+
+    return {
+      ok: true,
+      message: "Tenant detail link is ready.",
+      requestId: parsed.requestId,
+      claimUrl: result.claimUrl,
+      whatsappMessage: result.whatsappMessage,
+      tenantWhatsappNumber: result.tenantWhatsappNumber,
     };
   } catch (error) {
     return toActionError(error);

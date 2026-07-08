@@ -152,6 +152,10 @@ export const declineManagerTenantAgreementSchema = z.object({
   reason: optionalTextSchema(500, "Reason is too long."),
 });
 
+export const resendManagerTenantOnboardingLinkSchema = z.object({
+  requestId: uuidSchema,
+});
+
 export const resendManagerFirstRentPaymentLinkSchema = z.object({
   requestId: uuidSchema,
 });
@@ -188,6 +192,10 @@ export type AcceptManagerTenantAgreementInput = z.infer<
 
 export type DeclineManagerTenantAgreementInput = z.infer<
   typeof declineManagerTenantAgreementSchema
+>;
+
+export type ResendManagerTenantOnboardingLinkInput = z.infer<
+  typeof resendManagerTenantOnboardingLinkSchema
 >;
 
 export type ResendManagerFirstRentPaymentLinkInput = z.infer<

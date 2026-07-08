@@ -19,6 +19,7 @@ import {
   type ManagerTenantOnboardingRequestRow,
 } from "@/server/repositories/manager-tenant-onboarding.repository";
 import { requireManager } from "@/server/services/auth.service";
+import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 
 type ManagerPropertyDetailPageProps = {
@@ -28,6 +29,7 @@ type ManagerPropertyDetailPageProps = {
   searchParams?: Promise<{
     addUnit?: string;
     onboardUnit?: string;
+    tenantRequest?: string;
   }>;
 };
 
@@ -122,6 +124,7 @@ export default async function ManagerPropertyDetailPage({
 
   const manager = await requireManager();
   const supabase = await createSupabaseServerClient();
+  const adminSupabase = createSupabaseAdminClient();
 
   const organization = await getManagerOrganizationForCurrentUser(
     supabase,
@@ -132,7 +135,7 @@ export default async function ManagerPropertyDetailPage({
     redirect("/manager/onboarding");
   }
 
-  await expireManagerNewTenantPaymentRequests(supabase);
+  await expireManagerNewTenantPaymentRequests(adminSupabase);
 
   const [
     landlordClients,
@@ -153,7 +156,7 @@ export default async function ManagerPropertyDetailPage({
       organizationId: organization.id,
       propertyId,
     }),
-    getActiveManagerPaystackAccount(supabase, organization.id),
+    getActiveManagerPaystackAccount(adminSupabase, organization.id),
   ]);
 
   const property = properties.find((item) => item.id === propertyId);
@@ -193,14 +196,20 @@ export default async function ManagerPropertyDetailPage({
     !selectedUnitHasOpenRequest,
   );
 
+  const managerPayoutStatus =
+    managerPaystackAccount?.verification_status ?? null;
+
+  const isManagerPayoutVerified = Boolean(
+    managerPaystackAccount?.verification_status === "verified" &&
+    managerPaystackAccount.verified_at,
+  );
+
   const shouldShowAddUnitForm =
     resolvedSearchParams?.addUnit === "1" || propertyUnits.length === 0;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <ManagerBankAccountGate
-        verificationStatus={managerPaystackAccount?.verification_status ?? null}
-      />
+      <ManagerBankAccountGate verificationStatus={managerPayoutStatus} />
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
@@ -330,10 +339,16 @@ export default async function ManagerPropertyDetailPage({
         tenants={tenants}
         onboardingRequests={onboardingRequests}
         showTenantActions
+        addUnitHref={`/manager/properties/${property.id}?addUnit=1#add-unit`}
       />
 
       {canShowTenantForm && selectedUnit ? (
-        <ManagerTenantOnboardingForm property={property} unit={selectedUnit} />
+        <ManagerTenantOnboardingForm
+          property={property}
+          unit={selectedUnit}
+          isManagerPayoutVerified={isManagerPayoutVerified}
+          managerPayoutStatus={managerPayoutStatus}
+        />
       ) : resolvedSearchParams?.onboardUnit ? (
         <section
           id="tenant-onboarding"
@@ -347,7 +362,10 @@ export default async function ManagerPropertyDetailPage({
         </section>
       ) : null}
 
-      <ManagerTenantOnboardingReviewList requests={onboardingRequests} />
+      <ManagerTenantOnboardingReviewList
+        requests={onboardingRequests}
+        initialSelectedRequestId={resolvedSearchParams?.tenantRequest ?? null}
+      />
 
       {shouldShowAddUnitForm ? (
         <section id="add-unit">
@@ -356,29 +374,7 @@ export default async function ManagerPropertyDetailPage({
             lockedPropertyId={property.id}
           />
         </section>
-      ) : (
-        <section
-          id="add-unit"
-          className="rounded-card border border-border-soft bg-white p-4 shadow-sm"
-        >
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="font-black text-text-strong">Add another unit</p>
-              <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-                Keep unit creation separate from tenant onboarding.
-              </p>
-            </div>
-
-            <Link
-              href={`/manager/properties/${property.id}?addUnit=1#add-unit`}
-              prefetch={false}
-              className="inline-flex min-h-10 items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
-            >
-              Add unit
-            </Link>
-          </div>
-        </section>
-      )}
+      ) : null}
     </div>
   );
 }

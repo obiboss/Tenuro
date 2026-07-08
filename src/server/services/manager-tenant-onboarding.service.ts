@@ -26,6 +26,7 @@ import {
   markManagerOnboardingPaymentInitialized,
   submitManagerTenantOnboardingRequest,
   updateManagerTenantOnboardingRequestReviewed,
+  updateManagerTenantOnboardingRequestToken,
   updateManagerUnitStatusDirect,
   voidManagerTenantAgreement,
   type ManagerTenantAgreementDocumentRow,
@@ -52,6 +53,7 @@ import type {
   ManagerOnboardingPaymentFrequency,
   RejectManagerTenantOnboardingRequestInput,
   ResendManagerFirstRentPaymentLinkInput,
+  ResendManagerTenantOnboardingLinkInput,
   SubmitManagerTenantOnboardingRequestInput,
 } from "@/server/validators/manager-tenant-onboarding.schema";
 
@@ -991,6 +993,82 @@ export async function createManagerTenantOnboardingRequestForCurrentManager(
       organizationName: organization.organization_name,
       propertyName: property.property_name,
       unitLabel: unit.unit_label,
+      claimUrl,
+    }),
+    expiresAt,
+  };
+}
+
+export async function resendManagerTenantOnboardingLinkForCurrentManager(
+  input: ResendManagerTenantOnboardingLinkInput,
+) {
+  const { supabase, organization } = await requireManagerOrganization();
+
+  const request = await getManagerTenantOnboardingRequestById(supabase, {
+    organizationId: organization.id,
+    requestId: input.requestId,
+  });
+
+  if (request.status !== "pending") {
+    throw new AppError(
+      "MANAGER_TENANT_LINK_NOT_PENDING",
+      "This tenant request has already moved past the details step.",
+      400,
+    );
+  }
+
+  const tenantPhone =
+    request.invited_tenant_phone_number ?? request.tenant_phone_number;
+
+  if (!tenantPhone) {
+    throw new AppError(
+      "MANAGER_TENANT_PHONE_REQUIRED",
+      "Enter the tenant phone number before sending a tenant link.",
+      400,
+    );
+  }
+
+  const rawToken = createSecureToken();
+  const tokenHash = hashToken(rawToken);
+  const expiresAt = getExpiryDateFromHours(168);
+  const requestMetadata = request.metadata ?? {};
+  const regeneratedCount =
+    typeof requestMetadata.tenant_detail_link_regenerated_count === "number"
+      ? requestMetadata.tenant_detail_link_regenerated_count + 1
+      : 1;
+
+  const updatedRequest = await updateManagerTenantOnboardingRequestToken(
+    supabase,
+    {
+      organizationId: organization.id,
+      requestId: request.id,
+      tokenHash,
+      tokenExpiresAt: expiresAt,
+      metadata: {
+        ...requestMetadata,
+        tenant_detail_link_regenerated_at: new Date().toISOString(),
+        tenant_detail_link_regenerated_count: regeneratedCount,
+      },
+    },
+  );
+
+  const claimUrl = getManagerTenantOnboardingUrl(rawToken);
+  const phone = normalisePhoneNumber(tenantPhone);
+  const tenantName =
+    updatedRequest.invited_tenant_full_name ??
+    updatedRequest.tenant_full_name ??
+    "Tenant";
+
+  return {
+    request: updatedRequest,
+    claimUrl,
+    tenantWhatsappNumber: phone.national,
+    whatsappMessage: buildTenantDetailMessage({
+      tenantName,
+      organizationName: organization.organization_name,
+      propertyName:
+        updatedRequest.manager_properties?.property_name ?? "the property",
+      unitLabel: updatedRequest.manager_units?.unit_label ?? "the unit",
       claimUrl,
     }),
     expiresAt,

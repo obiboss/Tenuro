@@ -38,8 +38,7 @@ export function WhatsAppShareActions({
     event.preventDefault();
     showToast({
       title: "Invalid phone number",
-      description:
-        "Add a valid phone number before sending on WhatsApp.",
+      description: "Add a valid phone number before sending on WhatsApp.",
       tone: "error",
     });
   }
@@ -71,14 +70,15 @@ export function WhatsAppShareActions({
       <a
         href={whatsappUrl}
         target="_blank"
-        rel="noreferrer"
+        rel="noopener noreferrer"
         onClick={handleWhatsAppClick}
-        className={cn(compact ? "inline-flex" : "block")}
+        className={cn(
+          "inline-flex min-h-11 items-center justify-center gap-2 rounded-button bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-soft transition duration-200 hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+          compact ? "w-auto" : "w-full",
+        )}
       >
-        <Button type="button" fullWidth={!compact}>
-          <MessageCircle aria-hidden="true" size={16} strokeWidth={2.6} />
-          {whatsappLabel}
-        </Button>
+        <MessageCircle aria-hidden="true" size={16} strokeWidth={2.6} />
+        <span>{whatsappLabel}</span>
       </a>
 
       <Button

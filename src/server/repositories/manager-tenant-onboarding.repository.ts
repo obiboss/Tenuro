@@ -335,6 +335,40 @@ export async function getManagerTenantOnboardingRequestById(
   return data;
 }
 
+export async function updateManagerTenantOnboardingRequestToken(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    requestId: string;
+    tokenHash: string;
+    tokenExpiresAt: string;
+    metadata: Record<string, unknown>;
+  },
+) {
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("manager_tenant_onboarding_requests")
+    .update({
+      token_hash: params.tokenHash,
+      token_expires_at: params.tokenExpiresAt,
+      token_used_at: null,
+      metadata: params.metadata,
+      updated_at: now,
+    })
+    .eq("organization_id", params.organizationId)
+    .eq("id", params.requestId)
+    .eq("status", "pending")
+    .select(REQUEST_SELECT)
+    .single<ManagerTenantOnboardingRequestRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 export async function submitManagerTenantOnboardingRequest(
   supabase: SupabaseClient,
   params: {

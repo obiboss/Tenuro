@@ -5,7 +5,7 @@ import { createManagerTenantOnboardingRequestAction } from "@/actions/manager-te
 import { initialManagerTenantOnboardingActionState } from "@/actions/manager-tenant-onboarding.state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { buildWaMeUrl } from "@/lib/whatsapp";
+import { WhatsAppShareActions } from "@/components/ui/whatsapp-share-actions";
 import type {
   ManagerPropertyRow,
   ManagerUnitRow,
@@ -14,6 +14,8 @@ import type {
 type ManagerTenantOnboardingFormProps = {
   property: ManagerPropertyRow;
   unit: ManagerUnitRow;
+  isManagerPayoutVerified: boolean;
+  managerPayoutStatus: string | null;
 };
 
 type TenantOnboardingType = "current_occupant" | "new_incoming_tenant";
@@ -39,9 +41,31 @@ const ONBOARDING_OPTIONS: Array<{
   },
 ];
 
+function getPayoutStatusLabel(status: string | null | undefined) {
+  if (!status) {
+    return "Bank account not added";
+  }
+
+  if (status === "verified") {
+    return "Bank account verified";
+  }
+
+  if (status === "unverified" || status === "pending") {
+    return "Bank verification pending";
+  }
+
+  if (status === "failed") {
+    return "Bank verification failed";
+  }
+
+  return "Bank account not ready";
+}
+
 export function ManagerTenantOnboardingForm({
   property,
   unit,
+  isManagerPayoutVerified,
+  managerPayoutStatus,
 }: ManagerTenantOnboardingFormProps) {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [onboardingType, setOnboardingType] =
@@ -52,20 +76,18 @@ export function ManagerTenantOnboardingForm({
     initialManagerTenantOnboardingActionState,
   );
 
+  const effectiveOnboardingType =
+    !isManagerPayoutVerified && onboardingType === "new_incoming_tenant"
+      ? "current_occupant"
+      : onboardingType;
+
   const selectedOption = useMemo(
     () =>
-      ONBOARDING_OPTIONS.find((option) => option.value === onboardingType) ??
-      ONBOARDING_OPTIONS[0],
-    [onboardingType],
+      ONBOARDING_OPTIONS.find(
+        (option) => option.value === effectiveOnboardingType,
+      ) ?? ONBOARDING_OPTIONS[0],
+    [effectiveOnboardingType],
   );
-
-  const whatsappUrl =
-    state.ok && state.whatsappMessage
-      ? buildWaMeUrl({
-          phoneNumber: state.tenantWhatsappNumber,
-          message: state.whatsappMessage,
-        })
-      : null;
 
   if (state.ok) {
     return (
@@ -75,11 +97,11 @@ export function ManagerTenantOnboardingForm({
       >
         <div className="border-b border-border-soft p-4">
           <p className="w-fit rounded-full bg-success-soft px-3 py-1 text-xs font-black uppercase tracking-wide text-success">
-            Link ready
+            Link saved
           </p>
 
           <h2 className="mt-4 text-lg font-black tracking-tight text-text-strong">
-            Tenant detail link is ready
+            Tenant link is ready
           </h2>
 
           <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
@@ -99,27 +121,20 @@ export function ManagerTenantOnboardingForm({
             </p>
           </div>
 
-          {whatsappUrl ? (
-            <>
-              <a
-                href={whatsappUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex min-h-12 w-full items-center justify-center rounded-button bg-primary px-5 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
-              >
-                Open WhatsApp
-              </a>
-
-              <a
-                href={whatsappUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex min-h-11 w-full items-center justify-center rounded-button border border-border-soft bg-white px-5 text-sm font-extrabold text-text-strong transition hover:bg-surface"
-              >
-                Send again
-              </a>
-            </>
-          ) : null}
+          {state.whatsappMessage ? (
+            <WhatsAppShareActions
+              phoneNumber={state.tenantWhatsappNumber}
+              message={state.whatsappMessage}
+              copyText={state.claimUrl ?? state.whatsappMessage}
+              whatsappLabel="Send via WhatsApp"
+              copyLabel="Copy tenant link"
+            />
+          ) : (
+            <div className="rounded-button bg-warning-soft px-4 py-3 text-sm font-semibold leading-6 text-warning">
+              WhatsApp message could not be prepared. Copy the tenant link and
+              send it manually.
+            </div>
+          )}
 
           <a
             href="#tenant-review"
@@ -189,7 +204,11 @@ export function ManagerTenantOnboardingForm({
         />
         <input type="hidden" name="propertyId" value={property.id} />
         <input type="hidden" name="unitId" value={unit.id} />
-        <input type="hidden" name="onboardingType" value={onboardingType} />
+        <input
+          type="hidden"
+          name="onboardingType"
+          value={effectiveOnboardingType}
+        />
 
         <div className="grid gap-5 p-4 lg:grid-cols-[1fr_18rem]">
           <div className="space-y-5">
@@ -202,32 +221,66 @@ export function ManagerTenantOnboardingForm({
               </div>
             ) : null}
 
+            {!isManagerPayoutVerified ? (
+              <div className="rounded-card border border-warning/20 bg-warning-soft p-4">
+                <p className="text-sm font-black text-text-strong">
+                  New incoming tenant is disabled
+                </p>
+                <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                  {getPayoutStatusLabel(managerPayoutStatus)}. You can add a
+                  current occupant, but a new incoming tenant needs a verified
+                  manager bank account because first rent payment will go
+                  through Paystack.
+                </p>
+              </div>
+            ) : null}
+
             <div>
               <p className="text-sm font-black text-text-strong">
                 What type of tenant is this?
               </p>
 
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                {ONBOARDING_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    aria-pressed={onboardingType === option.value}
-                    onClick={() => setOnboardingType(option.value)}
-                    className={`rounded-card border p-4 text-left transition ${
-                      onboardingType === option.value
-                        ? "border-primary bg-primary-soft"
-                        : "border-border-soft bg-white hover:border-primary/40"
-                    }`}
-                  >
-                    <p className="font-black text-text-strong">
-                      {option.title}
-                    </p>
-                    <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-                      {option.description}
-                    </p>
-                  </button>
-                ))}
+                {ONBOARDING_OPTIONS.map((option) => {
+                  const isDisabled =
+                    option.value === "new_incoming_tenant" &&
+                    !isManagerPayoutVerified;
+
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      aria-pressed={effectiveOnboardingType === option.value}
+                      disabled={isDisabled}
+                      onClick={() => {
+                        if (!isDisabled) {
+                          setOnboardingType(option.value);
+                        }
+                      }}
+                      className={`rounded-card border p-4 text-left transition ${
+                        effectiveOnboardingType === option.value
+                          ? "border-primary bg-primary-soft"
+                          : "border-border-soft bg-white hover:border-primary/40"
+                      } ${
+                        isDisabled
+                          ? "cursor-not-allowed opacity-50 hover:border-border-soft"
+                          : ""
+                      }`}
+                    >
+                      <p className="font-black text-text-strong">
+                        {option.title}
+                      </p>
+                      <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                        {option.description}
+                      </p>
+                      {isDisabled ? (
+                        <p className="mt-2 text-xs font-black uppercase tracking-wide text-warning">
+                          Requires verified bank account
+                        </p>
+                      ) : null}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -236,8 +289,8 @@ export function ManagerTenantOnboardingForm({
                 Send tenant detail link
               </p>
               <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-                Enter the tenant name and phone number. The tenant will complete
-                the remaining details from WhatsApp.
+                Enter the tenant name and phone number. BOPA will prepare a
+                WhatsApp message with the tenant detail link.
               </p>
             </div>
 
@@ -331,7 +384,7 @@ export function ManagerTenantOnboardingForm({
 
         <div className="border-t border-border-soft p-4">
           <Button type="submit" isLoading={isPending} fullWidth>
-            Create tenant detail link
+            Save tenant link
           </Button>
         </div>
       </form>
