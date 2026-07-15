@@ -59,16 +59,7 @@ export const MANAGER_UNIT_STATUSES = [
   "inactive",
 ] as const;
 
-export const MANAGER_CREATABLE_UNIT_STATUSES = [
-  "vacant",
-  "occupied",
-  "inactive",
-] as const;
-
 export type ManagerUnitStatus = (typeof MANAGER_UNIT_STATUSES)[number];
-
-export type ManagerCreatableUnitStatus =
-  (typeof MANAGER_CREATABLE_UNIT_STATUSES)[number];
 
 export const MANAGER_TENANT_STATUSES = [
   "active",
@@ -276,12 +267,4 @@ export function isManagerPaymentReceiver(
 
 export function isManagerUnitStatus(value: string): value is ManagerUnitStatus {
   return MANAGER_UNIT_STATUSES.includes(value as ManagerUnitStatus);
-}
-
-export function isManagerCreatableUnitStatus(
-  value: string,
-): value is ManagerCreatableUnitStatus {
-  return MANAGER_CREATABLE_UNIT_STATUSES.includes(
-    value as ManagerCreatableUnitStatus,
-  );
 }

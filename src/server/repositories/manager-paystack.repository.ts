@@ -140,14 +140,16 @@ const MANAGER_RENT_PAYMENT_REQUEST_SELECT = `
 
 export async function expireManagerNewTenantPaymentRequests(
   supabase: SupabaseClient,
-) {
-  const { error } = await supabase.rpc(
+): Promise<number> {
+  const { data, error } = await supabase.rpc(
     "expire_manager_new_tenant_payment_requests",
   );
 
   if (error) {
     throw error;
   }
+
+  return typeof data === "number" ? data : 0;
 }
 
 export async function getManagerTenantForPaystackRequest(

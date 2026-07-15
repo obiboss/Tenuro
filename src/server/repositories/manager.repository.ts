@@ -18,7 +18,6 @@ import {
   type ManagerWorkspaceRole,
 } from "@/server/repositories/manager-staff.repository";
 import {
-  MANAGER_RENT_DUE_SOON_DAYS,
   getManagerTenantCurrentEligibility,
   getManagerTenantRentStatus,
 } from "@/lib/manager-rent-status";
@@ -130,6 +129,9 @@ export type ManagerPropertyRow = {
   paystack_charge_bearer: ManagerPaystackChargeBearer;
   payment_receiver: ManagerPaymentReceiver;
   notes: string | null;
+  existing_tenant_setup_required: boolean;
+  existing_tenant_setup_completed_at: string | null;
+  existing_tenant_setup_completed_by_profile_id: string | null;
   status: ManagerPropertyStatus;
   created_at: string;
   updated_at: string;
@@ -282,9 +284,18 @@ export type ManagerOverviewPropertySummary = {
   href: string;
 };
 
+export type ManagerOccupancySnapshot = {
+  currentTenants: ManagerTenantRow[];
+  currentTenantByUnitId: Map<string, ManagerTenantRow>;
+  occupiedUnitIds: Set<string>;
+  vacantUnitIds: Set<string>;
+  reservedUnitIds: Set<string>;
+  inactiveUnitIds: Set<string>;
+};
+
 export type ManagerOverview = {
   organization: ManagerOrganizationRow;
-  primaryAction: ManagerOverviewAction;
+  primaryAction: ManagerOverviewAction | null;
   totals: {
     landlordClients: number;
     totalProperties: number;
@@ -403,6 +414,9 @@ const MANAGER_PROPERTY_SELECT = `
   paystack_charge_bearer,
   payment_receiver,
   notes,
+  existing_tenant_setup_required,
+  existing_tenant_setup_completed_at,
+  existing_tenant_setup_completed_by_profile_id,
   status,
   created_at,
   updated_at
@@ -786,6 +800,7 @@ export async function createManagerProperty(
     managementFeeValue: number;
     paystackChargeBearer: ManagerPaystackChargeBearer;
     paymentReceiver: ManagerPaymentReceiver;
+    hasExistingTenants: boolean;
     notes: string | null;
   },
 ) {
@@ -804,9 +819,41 @@ export async function createManagerProperty(
       management_fee_value: params.managementFeeValue,
       paystack_charge_bearer: params.paystackChargeBearer,
       payment_receiver: params.paymentReceiver,
+      existing_tenant_setup_required: params.hasExistingTenants,
+      existing_tenant_setup_completed_at: null,
+      existing_tenant_setup_completed_by_profile_id: null,
       notes: params.notes,
       status: "active",
     })
+    .select(MANAGER_PROPERTY_SELECT)
+    .single<ManagerPropertyRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function markManagerPropertyExistingTenantSetupCompleted(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    propertyId: string;
+    completedByProfileId: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_properties")
+    .update({
+      existing_tenant_setup_required: false,
+      existing_tenant_setup_completed_at: new Date().toISOString(),
+      existing_tenant_setup_completed_by_profile_id: params.completedByProfileId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("organization_id", params.organizationId)
+    .eq("id", params.propertyId)
+    .eq("status", "active")
     .select(MANAGER_PROPERTY_SELECT)
     .single<ManagerPropertyRow>();
 
@@ -1352,80 +1399,70 @@ function getTenantOverviewAction(
   };
 }
 
-function getUnitOverviewAction(unit: ManagerUnitRow): ManagerOverviewAction {
+export function buildManagerOccupancySnapshot(params: {
+  units: ManagerUnitRow[];
+  tenants: ManagerTenantRow[];
+}): ManagerOccupancySnapshot {
+  const unitById = new Map(params.units.map((unit) => [unit.id, unit]));
+  const currentTenants = params.tenants.filter(
+    (tenant) =>
+      isCurrentManagerTenantStatus(tenant.status) &&
+      unitById.get(tenant.unit_id)?.status !== "inactive",
+  );
+  const currentTenantByUnitId = new Map<string, ManagerTenantRow>();
+  const occupiedUnitIds = new Set<string>();
+
+  for (const tenant of currentTenants) {
+    if (!currentTenantByUnitId.has(tenant.unit_id)) {
+      currentTenantByUnitId.set(tenant.unit_id, tenant);
+    }
+
+    occupiedUnitIds.add(tenant.unit_id);
+  }
+
+  const vacantUnitIds = new Set<string>();
+  const reservedUnitIds = new Set<string>();
+  const inactiveUnitIds = new Set<string>();
+
+  for (const unit of params.units) {
+    if (unit.status === "inactive") {
+      inactiveUnitIds.add(unit.id);
+      continue;
+    }
+
+    if (occupiedUnitIds.has(unit.id)) {
+      continue;
+    }
+
+    if (unit.status === "reserved") {
+      reservedUnitIds.add(unit.id);
+      continue;
+    }
+
+    if (unit.status === "vacant" && !occupiedUnitIds.has(unit.id)) {
+      vacantUnitIds.add(unit.id);
+    }
+  }
+
   return {
-    label: "Review unit",
-    href: `/manager/properties/${unit.property_id}`,
+    currentTenants,
+    currentTenantByUnitId,
+    occupiedUnitIds,
+    vacantUnitIds,
+    reservedUnitIds,
+    inactiveUnitIds,
   };
 }
 
 function buildPrimaryAction(params: {
-  properties: ManagerPropertyRow[];
-  units: ManagerUnitRow[];
-  tenants: ManagerTenantRow[];
-  payments: ManagerRentPaymentRow[];
   attentionItems: ManagerOverviewAttentionItem[];
-}): ManagerOverviewAction {
-  const primaryAttentionAction = params.attentionItems.find(
-    (item) => item.category !== "property_setup",
-  )?.action;
-
-  if (primaryAttentionAction) {
-    return primaryAttentionAction;
-  }
-
-  const visibleProperties = params.properties.filter(
-    (property) => property.status !== "archived",
-  );
-
-  if (visibleProperties.length === 0) {
-    return {
-      label: "Add property",
-      href: "/manager/properties/new",
-    };
-  }
-
-  const currentTenants = params.tenants.filter((tenant) =>
-    isCurrentManagerTenantStatus(tenant.status),
-  );
-
-  const activeUnits = params.units.filter((unit) => unit.status !== "inactive");
-
-  if (activeUnits.length > 0 && currentTenants.length === 0) {
-    return {
-      label: "Add tenant",
-      href: "/manager/tenants",
-    };
-  }
-
-  if (currentTenants.length > 0 && params.payments.length === 0) {
-    return {
-      label: "Record payment",
-      href: "/manager/payments",
-    };
-  }
-
-  if (currentTenants.length === 0) {
-    return {
-      label: "Open properties",
-      href: "/manager/properties",
-    };
-  }
-
-  return {
-    label: "Record payment",
-    href: "/manager/payments",
-  };
+}): ManagerOverviewAction | null {
+  return params.attentionItems[0]?.action ?? null;
 }
 
 type ManagerOverviewRentStatus = ReturnType<typeof getManagerTenantRentStatus>;
 
-type ManagerCurrentTenantAssignment = {
-  tenant: ManagerTenantRow;
-  rentStatus: ManagerOverviewRentStatus;
-};
-
-function buildAttentionItems(params: {
+export function buildManagerOverviewAttentionItems(params: {
   landlordClients: ManagerLandlordClientRow[];
   properties: ManagerPropertyRow[];
   units: ManagerUnitRow[];
@@ -1438,15 +1475,8 @@ function buildAttentionItems(params: {
   const propertyById = new Map(
     params.properties.map((property) => [property.id, property]),
   );
-  const landlordNameById = new Map(
-    params.landlordClients.map((client) => [client.id, client.landlord_name]),
-  );
   const unitById = new Map(params.units.map((unit) => [unit.id, unit]));
   const rentStatusByTenantId = new Map<string, ManagerOverviewRentStatus>();
-  const currentTenantAssignmentsByUnitId = new Map<
-    string,
-    ManagerCurrentTenantAssignment[]
-  >();
 
   for (const tenant of params.tenants) {
     const unit = unitById.get(tenant.unit_id);
@@ -1456,16 +1486,6 @@ function buildAttentionItems(params: {
     });
 
     rentStatusByTenantId.set(tenant.id, rentStatus);
-
-    if (isCurrentManagerTenantStatus(tenant.status)) {
-      const unitAssignments =
-        currentTenantAssignmentsByUnitId.get(tenant.unit_id) ?? [];
-      unitAssignments.push({
-        tenant,
-        rentStatus,
-      });
-      currentTenantAssignmentsByUnitId.set(tenant.unit_id, unitAssignments);
-    }
   }
 
   const attentionItems: ManagerOverviewAttentionItem[] = [];
@@ -1473,28 +1493,22 @@ function buildAttentionItems(params: {
   for (const tenant of params.tenants) {
     const rentStatus = rentStatusByTenantId.get(tenant.id);
 
-    if (
-      !rentStatus ||
-      (rentStatus.kind !== "owing" && rentStatus.kind !== "due_soon")
-    ) {
+    if (!rentStatus || rentStatus.kind !== "owing") {
       continue;
     }
 
     const property = propertyById.get(tenant.property_id);
     const unit = unitById.get(tenant.unit_id);
     const daysFromToday = rentStatus.daysFromToday ?? 0;
-    const isOwing = rentStatus.kind === "owing";
     const isOverdue = daysFromToday < 0;
 
     attentionItems.push({
       id: `tenant-rent-${tenant.id}`,
       propertyId: tenant.property_id,
       category: "rent",
-      title: isOwing
-        ? isOverdue
-          ? "Overdue rent"
-          : "Rent balance outstanding"
-        : "Rent due soon",
+      title: isOverdue
+        ? "Rent follow-up overdue"
+        : "Rent balance needs follow-up",
       subject: formatDisplayName(tenant.full_name, "Tenant"),
       detail: `${property?.property_name ?? "Property"} - ${
         unit?.unit_label ?? "Unit"
@@ -1502,10 +1516,8 @@ function buildAttentionItems(params: {
         tenant.next_rent_due_date,
       )} - ${rentStatus.label}`,
       action: getTenantOverviewAction(tenant),
-      tone: isOwing ? "danger" : "warning",
-      priority: isOwing
-        ? 980_000 + Math.max(0, Math.abs(daysFromToday))
-        : 950_000 - Math.min(MANAGER_RENT_DUE_SOON_DAYS, daysFromToday),
+      tone: isOverdue ? "danger" : "warning",
+      priority: 700_000 + Math.max(0, Math.abs(daysFromToday)),
     });
   }
 
@@ -1529,16 +1541,21 @@ function buildAttentionItems(params: {
         href: "/manager/payments",
       },
       tone: "warning",
-      priority: 850_000,
+      priority: 840_000,
     });
   }
 
   for (const request of params.onboardingRequests) {
-    if (
-      request.status !== "submitted" &&
-      request.status !== "agreement_accepted" &&
-      request.status !== "payment_paid"
-    ) {
+    const isIncompleteExistingCapture =
+      request.onboarding_type === "current_occupant" &&
+      request.status === "pending";
+    const isSubmittedKyc = request.status === "submitted";
+    const needsPaymentAction =
+      request.onboarding_type === "new_incoming_tenant" &&
+      (request.status === "agreement_accepted" ||
+        request.status === "payment_initialized");
+
+    if (!isIncompleteExistingCapture && !isSubmittedKyc && !needsPaymentAction) {
       continue;
     }
 
@@ -1552,51 +1569,31 @@ function buildAttentionItems(params: {
       id: `tenant-onboarding-${request.id}`,
       propertyId: request.property_id,
       category: "onboarding",
-      title:
-        request.status === "submitted"
-          ? "Tenant onboarding needs review"
-          : "Tenant onboarding needs completion",
+      title: isIncompleteExistingCapture
+        ? "Existing tenant details incomplete"
+        : isSubmittedKyc
+          ? "Tenant details ready for review"
+          : "First payment needs follow-up",
       subject: tenantName,
       detail: `${unit?.unit_label ?? "Unit"} - ${
         property?.property_name ?? "Property"
       }`,
       action: {
-        label: "Review request",
-        href: `/manager/properties/${request.property_id}?tenantRequest=${request.id}#tenant-onboarding`,
+        label: isIncompleteExistingCapture
+          ? "Continue"
+          : isSubmittedKyc
+            ? "Review details"
+            : "Review payment",
+        href: isSubmittedKyc
+          ? `/manager/tenants/review/${request.id}`
+          : `/manager/properties/${request.property_id}?tenantRequest=${request.id}#tenant-onboarding`,
       },
       tone: "warning",
-      priority: request.status === "submitted" ? 810_000 : 780_000,
-    });
-  }
-
-  for (const [unitId, assignments] of currentTenantAssignmentsByUnitId) {
-    if (assignments.length <= 1) {
-      continue;
-    }
-
-    const unit = unitById.get(unitId);
-    const property = unit ? propertyById.get(unit.property_id) : null;
-
-    attentionItems.push({
-      id: `unit-duplicate-current-tenants-${unitId}`,
-      propertyId: unit?.property_id ?? null,
-      category: "unit_review",
-      title: "Multiple current tenants assigned to one unit",
-      subject: unit?.unit_label ?? "Unit",
-      detail: `${property?.property_name ?? "Property"} - ${assignments
-        .map((assignment) =>
-          formatDisplayName(assignment.tenant.full_name, "Tenant"),
-        )
-        .slice(0, 3)
-        .join(", ")}`,
-      action: unit
-        ? getUnitOverviewAction(unit)
-        : {
-            label: "Review tenants",
-            href: "/manager/tenants",
-          },
-      tone: "danger",
-      priority: 740_000 + assignments.length,
+      priority: isSubmittedKyc
+        ? 900_000
+        : isIncompleteExistingCapture
+          ? 880_000
+          : 840_000,
     });
   }
 
@@ -1612,29 +1609,6 @@ function buildAttentionItems(params: {
       continue;
     }
 
-    if (
-      unit &&
-      unit.status !== "occupied" &&
-      (rentStatus.isCurrentRentBearingTenant ||
-        eligibility.isStoredCurrentTenant)
-    ) {
-      const property = propertyById.get(unit.property_id);
-
-      attentionItems.push({
-        id: `current-tenant-non-occupied-unit-${tenant.id}`,
-        propertyId: unit.property_id,
-        category: "tenant_review",
-        title: "Current tenant assigned to non-occupied unit",
-        subject: formatDisplayName(tenant.full_name, "Tenant"),
-        detail: `${property?.property_name ?? "Property"} - ${
-          unit.unit_label
-        } is ${unit.status}`,
-        action: getTenantOverviewAction(tenant),
-        tone: "warning",
-        priority: 730_000,
-      });
-    }
-
     if (eligibility.isStoredCurrentTenant && !eligibility.hasNextRentDueDate) {
       const property = propertyById.get(tenant.property_id);
       const unitLabel = unit?.unit_label ?? "Unit";
@@ -1648,29 +1622,7 @@ function buildAttentionItems(params: {
         detail: `${property?.property_name ?? "Property"} - ${unitLabel}`,
         action: getTenantOverviewAction(tenant),
         tone: "warning",
-        priority: 720_000,
-      });
-    }
-
-  }
-
-  for (const unit of params.units) {
-    const currentAssignments =
-      currentTenantAssignmentsByUnitId.get(unit.id) ?? [];
-
-    if (unit.status === "occupied" && currentAssignments.length === 0) {
-      const property = propertyById.get(unit.property_id);
-
-      attentionItems.push({
-        id: `occupied-unit-without-active-tenant-${unit.id}`,
-        propertyId: unit.property_id,
-        category: "unit_review",
-        title: "Occupied unit has no active tenant",
-        subject: unit.unit_label,
-        detail: property?.property_name ?? "Property",
-        action: getUnitOverviewAction(unit),
-        tone: "warning",
-        priority: 700_000,
+        priority: 660_000,
       });
     }
   }
@@ -1699,7 +1651,7 @@ function buildAttentionItems(params: {
       },
       tone: "warning",
       priority:
-        560_000 + Math.min(20_000, remittanceSummary.pendingBalance / 1_000),
+        500_000 + Math.min(20_000, remittanceSummary.pendingBalance / 1_000),
     });
   }
 
@@ -1734,7 +1686,7 @@ function buildAttentionItems(params: {
         request.priority === "urgent" || request.priority === "high"
           ? "warning"
           : "neutral",
-      priority: priorityWeight - 120_000,
+      priority: priorityWeight - 180_000,
     });
   }
 
@@ -1748,9 +1700,12 @@ function buildAttentionItems(params: {
         id: `property-without-units-${property.id}`,
         propertyId: property.id,
         category: "property_setup",
-        title: "Property has no units",
+        title: "Property setup incomplete",
         subject: property.property_name,
-        detail: landlordNameById.get(property.landlord_client_id) ?? "Landlord",
+        detail: `Add units to ${formatDisplayTitle(
+          property.property_name,
+          "property",
+        )}`,
         action: {
           label: `Add units to ${formatDisplayTitle(
             property.property_name,
@@ -1761,7 +1716,47 @@ function buildAttentionItems(params: {
         tone: "neutral",
         priority: 600_000,
       });
+
+      continue;
     }
+
+    const needsExistingTenantSetup =
+      property.status === "active" &&
+      property.existing_tenant_setup_required &&
+      !property.existing_tenant_setup_completed_at;
+
+    if (!needsExistingTenantSetup) {
+      continue;
+    }
+
+    const hasIncompleteCapture = params.onboardingRequests.some(
+      (request) =>
+        request.property_id === property.id &&
+        request.onboarding_type === "current_occupant" &&
+        request.status === "pending",
+    );
+
+    if (hasIncompleteCapture) {
+      continue;
+    }
+
+    attentionItems.push({
+      id: `property-existing-tenants-not-captured-${property.id}`,
+      propertyId: property.id,
+      category: "property_setup",
+      title: "Existing tenants not yet captured",
+      subject: property.property_name,
+      detail: `Choose a unit in ${formatDisplayTitle(
+        property.property_name,
+        "property",
+      )}`,
+      action: {
+        label: "Add existing tenant",
+        href: `/manager/properties/${property.id}#units`,
+      },
+      tone: "neutral",
+      priority: 590_000,
+    });
   }
 
   return attentionItems.sort((firstItem, secondItem) => {
@@ -1986,6 +1981,7 @@ function buildPropertySummaries(params: {
   properties: ManagerPropertyRow[];
   units: ManagerUnitRow[];
   attentionItems: ManagerOverviewAttentionItem[];
+  occupancy: ManagerOccupancySnapshot;
 }): ManagerOverviewPropertySummary[] {
   const landlordNameById = new Map(
     params.landlordClients.map((client) => [client.id, client.landlord_name]),
@@ -2007,12 +2003,16 @@ function buildPropertySummaries(params: {
         landlordName:
           landlordNameById.get(property.landlord_client_id) ?? "Landlord",
         totalUnits: propertyUnits.length,
-        occupiedUnits: propertyUnits.filter((unit) => unit.status === "occupied")
-          .length,
-        vacantUnits: propertyUnits.filter((unit) => unit.status === "vacant")
-          .length,
+        occupiedUnits: propertyUnits.filter((unit) =>
+          params.occupancy.occupiedUnitIds.has(unit.id),
+        ).length,
+        vacantUnits: propertyUnits.filter((unit) =>
+          params.occupancy.vacantUnitIds.has(unit.id),
+        ).length,
         unavailableUnits: propertyUnits.filter(
-          (unit) => unit.status === "reserved" || unit.status === "inactive",
+          (unit) =>
+            params.occupancy.reservedUnitIds.has(unit.id) ||
+            params.occupancy.inactiveUnitIds.has(unit.id),
         ).length,
         needsAttentionCount: attentionCountByPropertyId.get(property.id) ?? 0,
         href: `/manager/properties/${property.id}`,
@@ -2077,10 +2077,12 @@ export async function getManagerOverview(
   const currentRentStatuses = rentStatuses.filter(
     (rentStatus) => rentStatus.isCurrentRentBearingTenant,
   );
-  const currentTenants = tenants.filter((tenant) =>
-    isCurrentManagerTenantStatus(tenant.status),
-  );
-  const attentionItems = buildAttentionItems({
+  const occupancy = buildManagerOccupancySnapshot({
+    units,
+    tenants,
+  });
+  const currentTenants = occupancy.currentTenants;
+  const attentionItems = buildManagerOverviewAttentionItems({
     landlordClients: clients,
     properties,
     units,
@@ -2094,10 +2096,6 @@ export async function getManagerOverview(
   return {
     organization,
     primaryAction: buildPrimaryAction({
-      properties,
-      units,
-      tenants,
-      payments,
       attentionItems,
     }),
     totals: {
@@ -2108,8 +2106,8 @@ export async function getManagerOverview(
         (property) => property.status === "active",
       ).length,
       totalUnits: units.length,
-      vacantUnits: units.filter((unit) => unit.status === "vacant").length,
-      occupiedUnits: units.filter((unit) => unit.status === "occupied").length,
+      vacantUnits: occupancy.vacantUnitIds.size,
+      occupiedUnits: occupancy.occupiedUnitIds.size,
       totalTenants: tenants.length,
       activeTenants: currentTenants.length,
       totalRecordedPayments: rentCollected,
@@ -2134,7 +2132,7 @@ export async function getManagerOverview(
         (rentStatus) => rentStatus.kind === "due_soon",
       ).length,
       rentCollected,
-      vacantUnits: units.filter((unit) => unit.status === "vacant").length,
+      vacantUnits: occupancy.vacantUnitIds.size,
     },
     attentionItems,
     upcomingRent: buildUpcomingRent({
@@ -2157,6 +2155,7 @@ export async function getManagerOverview(
       properties,
       units,
       attentionItems,
+      occupancy,
     }),
     recentPayments: payments.slice(0, 6).map((payment) => {
       const tenant = tenants.find((item) => item.id === payment.tenant_id);

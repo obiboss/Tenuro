@@ -113,6 +113,7 @@ export function ManagerPropertyForm({
   const [stateName, setStateName] = useState("");
   const [lga, setLga] = useState("");
   const [city, setCity] = useState("");
+  const [hasExistingTenants, setHasExistingTenants] = useState(false);
 
   const [hasManagementFee, setHasManagementFee] = useState(true);
   const [feeType, setFeeType] =
@@ -198,6 +199,11 @@ export function ManagerPropertyForm({
       <input type="hidden" name="state" value={stateName} />
       <input type="hidden" name="lga" value={lga} />
       <input type="hidden" name="city" value={city} />
+      <input
+        type="hidden"
+        name="hasExistingTenants"
+        value={hasExistingTenants ? "true" : "false"}
+      />
 
       <input type="hidden" name="collectionMode" value="manager_collects" />
       <input type="hidden" name="paymentReceiver" value="manager" />
@@ -242,11 +248,11 @@ export function ManagerPropertyForm({
                 {state.ok ? (
                   <div className="mt-3">
                     <Link
-                      href="/manager/properties"
+                      href={state.nextHref ?? "/manager/properties"}
                       prefetch={false}
                       className="inline-flex min-h-10 items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
                     >
-                      View properties
+                      {state.nextHref ? "Add units" : "View properties"}
                     </Link>
                   </div>
                 ) : null}
@@ -470,6 +476,43 @@ export function ManagerPropertyForm({
                   </div>
                 </section>
 
+                <section className="space-y-3">
+                  <div>
+                    <h2 className="text-lg font-black tracking-tight text-text-strong">
+                      Existing tenants
+                    </h2>
+                    <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                      Are there tenants already living in this property?
+                    </p>
+                  </div>
+
+                  <div className="inline-flex rounded-button border border-border-soft bg-surface p-1">
+                    <button
+                      type="button"
+                      onClick={() => setHasExistingTenants(true)}
+                      className={`min-h-10 rounded-button px-4 text-sm font-black transition ${
+                        hasExistingTenants
+                          ? "bg-white text-primary shadow-sm"
+                          : "text-text-muted hover:text-primary"
+                      }`}
+                    >
+                      Yes
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setHasExistingTenants(false)}
+                      className={`min-h-10 rounded-button px-4 text-sm font-black transition ${
+                        !hasExistingTenants
+                          ? "bg-white text-primary shadow-sm"
+                          : "text-text-muted hover:text-primary"
+                      }`}
+                    >
+                      No
+                    </button>
+                  </div>
+                </section>
+
                 <div className="flex justify-end border-t border-border-soft pt-4">
                   <Button
                     type="button"
@@ -666,6 +709,10 @@ export function ManagerPropertyForm({
             <SummaryItem
               label="Location"
               value={locationSummary || "Not set"}
+            />
+            <SummaryItem
+              label="Existing tenants"
+              value={hasExistingTenants ? "Yes" : "No"}
             />
             <SummaryItem label="Rent collection" value="Manager collects" />
             <SummaryItem

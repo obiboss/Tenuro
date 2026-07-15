@@ -10,18 +10,16 @@ import {
   createManagerLandlordClient as createManagerLandlordClientRecord,
   createManagerOrganization as createManagerOrganizationRecord,
   createManagerProperty as createManagerPropertyRecord,
-  createManagerTenant as createManagerTenantRecord,
   createManagerUnit as createManagerUnitRecord,
   getManagerOrganizationForCurrentUser,
   getManagerOverview as getManagerOverviewRecord,
   getManagerPropertyById,
   getManagerTenantById,
   getManagerUnitById,
-  hasCurrentManagerTenantForUnit,
   isCurrentManagerTenantStatus,
+  markManagerPropertyExistingTenantSetupCompleted,
   recordManagerLandlordRemittance as recordManagerLandlordRemittanceRecord,
   recordManagerRentPayment as recordManagerRentPaymentRecord,
-  updateManagerUnitStatus,
   upsertLandlordPayoutProfile,
 } from "@/server/repositories/manager.repository";
 import { createSupabaseServerClient } from "@/server/supabase/server";
@@ -31,6 +29,7 @@ import type {
   CreateManagerPropertyInput,
   CreateManagerTenantInput,
   CreateManagerUnitInput,
+  CompleteManagerExistingTenantSetupInput,
   RecordManagerLandlordRemittanceInput,
   RecordManagerRentPaymentInput,
   SaveManagerLandlordPayoutProfileInput,
@@ -267,7 +266,20 @@ export async function createManagerProperty(input: CreateManagerPropertyInput) {
     managementFeeValue: roundMoney(input.managementFeeValue),
     paystackChargeBearer: input.paystackChargeBearer,
     paymentReceiver: input.paymentReceiver,
+    hasExistingTenants: input.hasExistingTenants,
     notes: nullableText(input.notes),
+  });
+}
+
+export async function completeManagerExistingTenantSetup(
+  input: CompleteManagerExistingTenantSetupInput,
+) {
+  const { supabase, profile, organization } = await requireManagerOrganization();
+
+  return markManagerPropertyExistingTenantSetupCompleted(supabase, {
+    organizationId: organization.id,
+    propertyId: input.propertyId,
+    completedByProfileId: profile.id,
   });
 }
 
@@ -295,74 +307,20 @@ export async function createManagerUnit(input: CreateManagerUnitInput) {
     unitLabel: input.unitLabel,
     unitType: nullableText(input.unitType),
     rentAmount: roundMoney(input.rentAmount),
-    status: input.status,
+    status: "vacant",
     notes: nullableText(input.notes),
   });
 }
 
 export async function createManagerTenant(input: CreateManagerTenantInput) {
-  const { supabase, organization } = await requireManagerOrganization();
+  void input;
+  await requireManagerOrganization();
 
-  const unit = await getManagerUnitById(supabase, {
-    organizationId: organization.id,
-    landlordClientId: input.landlordClientId,
-    propertyId: input.propertyId,
-    unitId: input.unitId,
-  });
-
-  if (!unit || unit.status === "inactive") {
-    throw new AppError(
-      "MANAGER_UNIT_NOT_FOUND",
-      "The selected unit could not be found.",
-      404,
-    );
-  }
-
-  if (unit.status !== "vacant") {
-    throw new AppError(
-      "MANAGER_UNIT_NOT_VACANT",
-      "This unit is not vacant. Move out the current tenant before adding a new tenant.",
-      400,
-    );
-  }
-
-  const hasCurrentTenant = await hasCurrentManagerTenantForUnit(supabase, {
-    organizationId: organization.id,
-    unitId: input.unitId,
-  });
-
-  if (hasCurrentTenant) {
-    throw new AppError(
-      "MANAGER_UNIT_ALREADY_HAS_CURRENT_TENANT",
-      "This unit already has a current tenant.",
-      400,
-    );
-  }
-
-  const tenant = await createManagerTenantRecord(supabase, {
-    organizationId: organization.id,
-    landlordClientId: input.landlordClientId,
-    propertyId: input.propertyId,
-    unitId: input.unitId,
-    fullName: input.fullName,
-    phoneNumber: input.phoneNumber,
-    email: nullableText(input.email),
-    occupation: nullableText(input.occupation),
-    rentAmount: roundMoney(input.rentAmount),
-    currentBalance: roundMoney(input.currentBalance),
-    moveInDate: nullableDate(input.moveInDate),
-    nextRentDueDate: nullableDate(input.nextRentDueDate),
-    status: "active",
-    notes: nullableText(input.notes),
-  });
-
-  await updateManagerUnitStatus(supabase, {
-    organizationId: organization.id,
-    unitId: input.unitId,
-    status: "occupied",
-  });
-
-  return tenant;
+  throw new AppError(
+    "MANAGER_TENANT_DIRECT_CREATE_DISABLED",
+    "Start tenant onboarding from a specific property unit.",
+    400,
+  );
 }
 
 export async function recordManagerRentPayment(

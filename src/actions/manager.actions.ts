@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { ManagerActionState } from "@/actions/manager.state";
 import { errorResult } from "@/server/errors/result";
 import {
+  completeManagerExistingTenantSetup,
   createManagerLandlordClient,
   createManagerOrganization,
   createManagerProperty,
@@ -15,6 +16,7 @@ import {
 } from "@/server/services/manager.service";
 import { requireManagerWorkspacePermission } from "@/server/services/manager-staff-access.service";
 import {
+  completeManagerExistingTenantSetupSchema,
   createManagerLandlordClientSchema,
   createManagerOrganizationSchema,
   createManagerPropertySchema,
@@ -88,6 +90,7 @@ export async function createManagerLandlordClientAction(
 
     revalidatePath("/manager");
     revalidatePath("/manager/overview");
+    revalidatePath("/manager/attention");
     revalidatePath("/manager/landlords");
     revalidatePath("/manager/properties");
     revalidatePath("/manager/remittances");
@@ -162,6 +165,7 @@ export async function createManagerPropertyAction(
       managementFeeValue: formData.get("managementFeeValue"),
       paystackChargeBearer: formData.get("paystackChargeBearer"),
       paymentReceiver: formData.get("paymentReceiver"),
+      hasExistingTenants: formData.get("hasExistingTenants"),
       notes: formData.get("notes"),
     });
 
@@ -199,12 +203,43 @@ export async function createManagerPropertyAction(
 
     return {
       ok: true,
-      message: "Property added. Add units next.",
+      message: propertyDraft.hasExistingTenants
+        ? "Property added. Add the units in this property, then capture the tenants already living in them."
+        : "Property added. Add units next.",
       propertyId,
       landlordClientId,
       nextHref: propertyId
         ? `/manager/properties/${propertyId}#add-unit`
         : "/manager/properties",
+    };
+  } catch (error) {
+    return toActionError(error);
+  }
+}
+
+export async function completeManagerExistingTenantSetupAction(
+  _previousState: ManagerActionState,
+  formData: FormData,
+): Promise<ManagerActionState> {
+  try {
+    await requireManagerWorkspacePermission("property.manage");
+
+    const parsed = completeManagerExistingTenantSetupSchema.parse({
+      propertyId: formData.get("propertyId"),
+    });
+
+    await completeManagerExistingTenantSetup(parsed);
+
+    revalidatePath("/manager");
+    revalidatePath("/manager/overview");
+    revalidatePath("/manager/attention");
+    revalidatePath("/manager/properties");
+    revalidatePath(`/manager/properties/${parsed.propertyId}`);
+
+    return {
+      ok: true,
+      message: "Existing tenant setup marked complete.",
+      propertyId: parsed.propertyId,
     };
   } catch (error) {
     return toActionError(error);
@@ -224,7 +259,6 @@ export async function createManagerUnitAction(
       unitLabel: formData.get("unitLabel"),
       unitType: formData.get("unitType"),
       rentAmount: formData.get("rentAmount"),
-      status: formData.get("status") || "vacant",
       notes: formData.get("notes"),
     });
 
@@ -235,6 +269,7 @@ export async function createManagerUnitAction(
 
     revalidatePath("/manager");
     revalidatePath("/manager/overview");
+    revalidatePath("/manager/attention");
     revalidatePath("/manager/properties");
     revalidatePath(`/manager/properties/${parsed.propertyId}`);
 
@@ -278,6 +313,7 @@ export async function createManagerTenantAction(
 
     revalidatePath("/manager");
     revalidatePath("/manager/overview");
+    revalidatePath("/manager/attention");
     revalidatePath("/manager/tenants");
     revalidatePath("/manager/properties");
 
@@ -317,6 +353,7 @@ export async function recordManagerRentPaymentAction(
 
     revalidatePath("/manager");
     revalidatePath("/manager/overview");
+    revalidatePath("/manager/attention");
     revalidatePath("/manager/payments");
     revalidatePath("/manager/tenants");
     revalidatePath("/manager/remittances");
@@ -354,6 +391,7 @@ export async function recordManagerLandlordRemittanceAction(
 
     revalidatePath("/manager");
     revalidatePath("/manager/overview");
+    revalidatePath("/manager/attention");
     revalidatePath("/manager/remittances");
 
     return {

@@ -539,6 +539,85 @@ export async function getManagerTenantAgreementByTokenHash(
   return data;
 }
 
+export async function getManagerTenantAgreementById(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    agreementId: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_tenant_agreement_documents")
+    .select(AGREEMENT_SELECT)
+    .eq("organization_id", params.organizationId)
+    .eq("id", params.agreementId)
+    .maybeSingle<ManagerTenantAgreementDocumentRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function listManagerTenantAgreementDocuments(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    propertyId?: string;
+    tenantId?: string;
+  },
+) {
+  let query = supabase
+    .from("manager_tenant_agreement_documents")
+    .select(AGREEMENT_SELECT)
+    .eq("organization_id", params.organizationId);
+
+  if (params.propertyId) {
+    query = query.eq("property_id", params.propertyId);
+  }
+
+  if (params.tenantId) {
+    query = query.eq("tenant_id", params.tenantId);
+  }
+
+  const { data, error } = await query
+    .order("created_at", { ascending: false })
+    .limit(100)
+    .returns<ManagerTenantAgreementDocumentRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function updateManagerTenantAgreementPdfPath(
+  supabase: SupabaseClient,
+  params: {
+    agreementId: string;
+    pdfPath: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_tenant_agreement_documents")
+    .update({
+      pdf_bucket: "tenancy-agreement-pdfs",
+      pdf_path: params.pdfPath,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", params.agreementId)
+    .select(AGREEMENT_SELECT)
+    .single<ManagerTenantAgreementDocumentRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 export async function acceptManagerTenantAgreement(
   supabase: SupabaseClient,
   params: {

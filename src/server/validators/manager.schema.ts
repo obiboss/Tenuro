@@ -6,7 +6,6 @@ import {
   MANAGER_PAYMENT_RECEIVERS,
   MANAGER_PAYSTACK_CHARGE_BEARERS,
   MANAGER_REMITTANCE_PAYMENT_METHODS,
-  MANAGER_UNIT_STATUSES,
 } from "@/constants/manager";
 
 function emptyStringToUndefined(value: unknown) {
@@ -164,6 +163,7 @@ export const createManagerPropertySchema = z
     managementFeeValue: moneySchema,
     paystackChargeBearer: z.enum(MANAGER_PAYSTACK_CHARGE_BEARERS),
     paymentReceiver: z.enum(MANAGER_PAYMENT_RECEIVERS),
+    hasExistingTenants: optionalBooleanFromFormSchema.default(false),
     notes: optionalTextSchema(600, "Notes are too long."),
   })
   .refine(
@@ -187,8 +187,11 @@ export const createManagerUnitSchema = z.object({
   }),
   unitType: optionalTextSchema(80, "Unit type is too long."),
   rentAmount: moneySchema,
-  status: z.enum(MANAGER_UNIT_STATUSES).default("vacant"),
   notes: optionalTextSchema(600, "Notes are too long."),
+});
+
+export const completeManagerExistingTenantSetupSchema = z.object({
+  propertyId: uuidSchema,
 });
 
 export const createManagerTenantSchema = z.object({
@@ -311,6 +314,10 @@ export type CreateManagerPropertyInput = z.infer<
 >;
 
 export type CreateManagerUnitInput = z.infer<typeof createManagerUnitSchema>;
+
+export type CompleteManagerExistingTenantSetupInput = z.infer<
+  typeof completeManagerExistingTenantSetupSchema
+>;
 
 export type CreateManagerTenantInput = z.infer<
   typeof createManagerTenantSchema

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ManagerBankAccountGate } from "@/components/manager/manager-bank-account-gate";
+import { ManagerExistingTenantSetupCard } from "@/components/manager/manager-existing-tenant-setup-card";
 import { ManagerTenantOnboardingForm } from "@/components/manager/manager-tenant-onboarding-form";
 import { ManagerTenantOnboardingReviewList } from "@/components/manager/manager-tenant-onboarding-review-list";
 import { ManagerUnitForm } from "@/components/manager/manager-unit-form";
@@ -8,13 +9,16 @@ import { ManagerUnitList } from "@/components/manager/manager-unit-list";
 import { getActiveManagerPaystackAccount } from "@/server/repositories/manager-paystack-accounts.repository";
 import { expireManagerNewTenantPaymentRequests } from "@/server/repositories/manager-paystack.repository";
 import {
+  buildManagerOccupancySnapshot,
   getManagerOrganizationForCurrentUser,
   listManagerLandlordClients,
   listManagerProperties,
+  listManagerRentPayments,
   listManagerTenants,
   listManagerUnits,
 } from "@/server/repositories/manager.repository";
 import {
+  listManagerTenantAgreementDocuments,
   listManagerTenantOnboardingRequests,
   type ManagerTenantOnboardingRequestRow,
 } from "@/server/repositories/manager-tenant-onboarding.repository";
@@ -76,20 +80,37 @@ function getCollectionSummary(collectionMode: string) {
   return "Automatic split";
 }
 
-function getUnitSummary(units: Awaited<ReturnType<typeof listManagerUnits>>) {
-  return units.reduce(
+function formatDate(date: string | null) {
+  if (!date) {
+    return "Not set";
+  }
+
+  return new Intl.DateTimeFormat("en-NG", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(date));
+}
+
+function getUnitSummary(params: {
+  units: Awaited<ReturnType<typeof listManagerUnits>>;
+  tenants: Awaited<ReturnType<typeof listManagerTenants>>;
+}) {
+  const occupancy = buildManagerOccupancySnapshot(params);
+
+  return params.units.reduce(
     (summary, unit) => {
       summary.total += 1;
 
-      if (unit.status === "occupied") {
+      if (occupancy.occupiedUnitIds.has(unit.id)) {
         summary.occupied += 1;
       }
 
-      if (unit.status === "vacant") {
+      if (occupancy.vacantUnitIds.has(unit.id)) {
         summary.vacant += 1;
       }
 
-      if (unit.status === "reserved") {
+      if (occupancy.reservedUnitIds.has(unit.id)) {
         summary.reserved += 1;
       }
 
@@ -104,14 +125,16 @@ function getUnitSummary(units: Awaited<ReturnType<typeof listManagerUnits>>) {
   );
 }
 
-function hasOpenTenantRequestForUnit(params: {
+function getOpenTenantRequestForUnit(params: {
   requests: ManagerTenantOnboardingRequestRow[];
   unitId: string;
 }) {
-  return params.requests.some(
-    (request) =>
-      request.unit_id === params.unitId &&
-      OPEN_TENANT_REQUEST_STATUSES.has(request.status),
+  return (
+    params.requests.find(
+      (request) =>
+        request.unit_id === params.unitId &&
+        OPEN_TENANT_REQUEST_STATUSES.has(request.status),
+    ) ?? null
   );
 }
 
@@ -142,7 +165,9 @@ export default async function ManagerPropertyDetailPage({
     properties,
     units,
     tenants,
+    payments,
     onboardingRequests,
+    agreementDocuments,
     managerPaystackAccount,
   ] = await Promise.all([
     listManagerLandlordClients(supabase, organization.id),
@@ -152,7 +177,12 @@ export default async function ManagerPropertyDetailPage({
       organizationId: organization.id,
       propertyId,
     }),
+    listManagerRentPayments(supabase, organization.id),
     listManagerTenantOnboardingRequests(supabase, {
+      organizationId: organization.id,
+      propertyId,
+    }),
+    listManagerTenantAgreementDocuments(supabase, {
       organizationId: organization.id,
       propertyId,
     }),
@@ -173,27 +203,31 @@ export default async function ManagerPropertyDetailPage({
     (unit) => unit.property_id === property.id,
   );
 
-  const unitSummary = getUnitSummary(propertyUnits);
+  const unitSummary = getUnitSummary({
+    units: propertyUnits,
+    tenants,
+  });
 
   const submittedRequests = onboardingRequests.filter(
     (request) => request.status === "submitted",
   );
+  const firstSubmittedRequest = submittedRequests[0] ?? null;
 
   const selectedUnit = resolvedSearchParams?.onboardUnit
     ? propertyUnits.find((unit) => unit.id === resolvedSearchParams.onboardUnit)
     : null;
 
-  const selectedUnitHasOpenRequest = selectedUnit
-    ? hasOpenTenantRequestForUnit({
+  const selectedOpenTenantRequest = selectedUnit
+    ? getOpenTenantRequestForUnit({
         requests: onboardingRequests,
         unitId: selectedUnit.id,
       })
-    : false;
+    : null;
 
   const canShowTenantForm = Boolean(
     selectedUnit &&
-    selectedUnit.status === "vacant" &&
-    !selectedUnitHasOpenRequest,
+      ((selectedUnit.status === "vacant" && !selectedOpenTenantRequest) ||
+        selectedOpenTenantRequest?.status === "pending"),
   );
 
   const managerPayoutStatus =
@@ -206,6 +240,20 @@ export default async function ManagerPropertyDetailPage({
 
   const shouldShowAddUnitForm =
     resolvedSearchParams?.addUnit === "1" || propertyUnits.length === 0;
+  const needsExistingTenantSetup =
+    property.existing_tenant_setup_required &&
+    !property.existing_tenant_setup_completed_at;
+  const tenantNameById = new Map(
+    tenants.map((tenant) => [tenant.id, tenant.full_name]),
+  );
+  const downloadableAgreements = agreementDocuments.filter(
+    (agreement) => agreement.document_status === "accepted",
+  );
+  const downloadablePayments = payments.filter(
+    (payment) =>
+      payment.property_id === property.id &&
+      (payment.status === "verified" || payment.status === "recorded"),
+  );
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -317,13 +365,17 @@ export default async function ManagerPropertyDetailPage({
                 waiting for review
               </p>
               <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-                Open the review table to approve or reject submitted tenant
-                details.
+                Open the submitted tenant details to approve or reject the
+                request.
               </p>
             </div>
 
             <Link
-              href="#tenant-review"
+              href={
+                firstSubmittedRequest
+                  ? `/manager/tenants/review/${firstSubmittedRequest.id}`
+                  : "#tenant-review"
+              }
               prefetch={false}
               className="inline-flex min-h-10 items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
             >
@@ -331,6 +383,14 @@ export default async function ManagerPropertyDetailPage({
             </Link>
           </div>
         </section>
+      ) : null}
+
+      {needsExistingTenantSetup ? (
+        <ManagerExistingTenantSetupCard
+          propertyId={property.id}
+          propertyName={property.property_name}
+          hasUnits={propertyUnits.length > 0}
+        />
       ) : null}
 
       <ManagerUnitList
@@ -342,14 +402,78 @@ export default async function ManagerPropertyDetailPage({
         addUnitHref={`/manager/properties/${property.id}?addUnit=1#add-unit`}
       />
 
+      {downloadableAgreements.length > 0 || downloadablePayments.length > 0 ? (
+        <section className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
+          <div>
+            <h2 className="text-lg font-black tracking-tight text-text-strong">
+              Documents
+            </h2>
+            <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+              Download agreements and rent receipts for this property.
+            </p>
+          </div>
+
+          <div className="mt-4 divide-y divide-border-soft">
+            {downloadableAgreements.map((agreement) => (
+              <article
+                key={`agreement-${agreement.id}`}
+                className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div>
+                  <p className="font-black text-text-strong">
+                    Tenancy agreement
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-text-muted">
+                    {tenantNameById.get(agreement.tenant_id) ?? "Tenant"} -
+                    accepted {formatDate(agreement.tenant_accepted_at)}
+                  </p>
+                </div>
+
+                <Link
+                  href={`/manager/agreements/${agreement.id}/download`}
+                  prefetch={false}
+                  className="inline-flex min-h-10 items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+                >
+                  Download agreement
+                </Link>
+              </article>
+            ))}
+
+            {downloadablePayments.map((payment) => (
+              <article
+                key={`receipt-${payment.id}`}
+                className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div>
+                  <p className="font-black text-text-strong">Rent receipt</p>
+                  <p className="mt-1 text-sm font-semibold text-text-muted">
+                    {tenantNameById.get(payment.tenant_id) ?? "Tenant"} -
+                    payment {formatDate(payment.payment_date)}
+                  </p>
+                </div>
+
+                <Link
+                  href={`/manager/receipts/${payment.id}/download`}
+                  prefetch={false}
+                  className="inline-flex min-h-10 items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+                >
+                  Download receipt
+                </Link>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       {canShowTenantForm && selectedUnit ? (
         <ManagerTenantOnboardingForm
           property={property}
           unit={selectedUnit}
           isManagerPayoutVerified={isManagerPayoutVerified}
           managerPayoutStatus={managerPayoutStatus}
+          existingRequest={selectedOpenTenantRequest}
         />
-      ) : resolvedSearchParams?.onboardUnit ? (
+      ) : resolvedSearchParams?.onboardUnit && !selectedOpenTenantRequest ? (
         <section
           id="tenant-onboarding"
           className="rounded-card border border-border-soft bg-white p-4 shadow-sm"

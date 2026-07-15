@@ -38,6 +38,7 @@ import {
   expireManagerNewTenantPaymentRequests,
 } from "@/server/repositories/manager-paystack.repository";
 import { getActiveManagerPaystackAccount } from "@/server/repositories/manager-paystack-accounts.repository";
+import { ensureManagerTenancyAgreementPdf } from "@/server/services/manager-tenancy-agreement-pdf.service";
 import { buildManagerTenancyAgreementTemplate } from "@/server/services/manager-tenancy-agreement-template.service";
 import {
   convertNairaToKobo,
@@ -139,10 +140,12 @@ function getManagerAgreementUrl(token: string) {
   return `${getAppBaseUrl()}/m/agreement/${encodeURIComponent(token)}`;
 }
 
-function getManagerPaystackCallbackUrl(reference: string) {
-  return `${getAppBaseUrl()}/pay/manager/callback?reference=${encodeURIComponent(
-    reference,
-  )}`;
+function getManagerAgreementDownloadUrl(token: string) {
+  return `${getManagerAgreementUrl(token)}/download`;
+}
+
+function getManagerPaystackCallbackUrl() {
+  return `${getAppBaseUrl()}/pay/manager/callback`;
 }
 
 function generatePaystackReference() {
@@ -730,7 +733,7 @@ async function initializeFirstRentPayment(params: {
     email: customerEmail,
     amountKobo: convertNairaToKobo(params.rentAmount),
     reference,
-    callbackUrl: getManagerPaystackCallbackUrl(reference),
+    callbackUrl: getManagerPaystackCallbackUrl(),
     subaccountCode: managerAccount.paystack_subaccount_code,
     transactionChargeKobo: convertNairaToKobo(breakdown.bopaPlatformFee),
     currencyCode: "NGN",
@@ -994,6 +997,12 @@ export async function createManagerTenantOnboardingRequestForCurrentManager(
     metadata: {
       source: "bopa_manager_tenant_onboarding_link",
     },
+  });
+
+  await updateManagerUnitStatusDirect(supabase, {
+    organizationId: organization.id,
+    unitId: input.unitId,
+    status: "reserved",
   });
 
   const claimUrl = getManagerTenantOnboardingUrl(rawToken);
@@ -1402,6 +1411,15 @@ export async function approveManagerTenantOnboardingRequestForCurrentManager(
     },
   });
 
+  const phone = normalisePhoneNumber(tenant.phone_number);
+  const agreementWhatsappMessage = buildAgreementMessage({
+    tenantName: tenant.full_name,
+    organizationName: organization.organization_name,
+    propertyName,
+    unitLabel,
+    agreementUrl,
+  });
+
   await updateManagerTenantOnboardingRequestReviewed(adminSupabase, {
     requestId: request.id,
     organizationId: organization.id,
@@ -1420,23 +1438,16 @@ export async function approveManagerTenantOnboardingRequestForCurrentManager(
       collection_mode: "manager_collects",
       next_rent_due_date: nextRentDueDate,
       payment_frequency: paymentFrequency,
+      agreement_share_message: agreementWhatsappMessage,
     },
   });
-
-  const phone = normalisePhoneNumber(tenant.phone_number);
 
   return {
     tenant,
     agreement,
     agreementUrl,
     tenantWhatsappNumber: phone.national,
-    whatsappMessage: buildAgreementMessage({
-      tenantName: tenant.full_name,
-      organizationName: organization.organization_name,
-      propertyName,
-      unitLabel,
-      agreementUrl,
-    }),
+    whatsappMessage: agreementWhatsappMessage,
   };
 }
 
@@ -1458,23 +1469,34 @@ export async function rejectManagerTenantOnboardingRequestForCurrentManager(
     );
   }
 
-  return updateManagerTenantOnboardingRequestReviewed(supabase, {
-    requestId: request.id,
-    organizationId: organization.id,
-    status: "rejected",
-    approvedTenantId: null,
-    approvedByProfileId: profile.id,
-    confirmedRentAmount: null,
-    confirmedMoveInDate: null,
-    confirmedNextRentDueDate: null,
-    openingBalance: 0,
-    reviewNotes: input.reason,
-    metadata: {
-      ...request.metadata,
-      rejected_at: new Date().toISOString(),
-      rejection_reason: input.reason,
+  const rejectedRequest = await updateManagerTenantOnboardingRequestReviewed(
+    supabase,
+    {
+      requestId: request.id,
+      organizationId: organization.id,
+      status: "rejected",
+      approvedTenantId: null,
+      approvedByProfileId: profile.id,
+      confirmedRentAmount: null,
+      confirmedMoveInDate: null,
+      confirmedNextRentDueDate: null,
+      openingBalance: 0,
+      reviewNotes: input.reason,
+      metadata: {
+        ...request.metadata,
+        rejected_at: new Date().toISOString(),
+        rejection_reason: input.reason,
+      },
     },
+  );
+
+  await updateManagerUnitStatusDirect(supabase, {
+    organizationId: organization.id,
+    unitId: request.unit_id,
+    status: "vacant",
   });
+
+  return rejectedRequest;
 }
 
 export async function resendManagerFirstRentPaymentLinkForCurrentManager(
@@ -1682,7 +1704,8 @@ export async function resolveManagerTenantAgreementToken(token: string) {
 }
 
 export async function acceptManagerTenantAgreementAndCreatePayment(
-  input: AcceptManagerTenantAgreementInput & {
+  input: {
+    token: AcceptManagerTenantAgreementInput["token"];
     ipAddress: string | null;
     userAgent: string | null;
   },
@@ -1693,6 +1716,11 @@ export async function acceptManagerTenantAgreementAndCreatePayment(
   await expireManagerNewTenantPaymentRequests(supabase);
 
   if (agreement.document_status === "accepted") {
+    const agreementWithPdf = await ensureManagerTenancyAgreementPdf(
+      supabase,
+      agreement,
+    );
+
     if (!agreement.onboarding_request_id) {
       throw new AppError(
         "MANAGER_ONBOARDING_REQUEST_MISSING",
@@ -1709,7 +1737,8 @@ export async function acceptManagerTenantAgreementAndCreatePayment(
 
     if (activePayment) {
       return {
-        agreement,
+        agreement: agreementWithPdf,
+        pdfDownloadUrl: getManagerAgreementDownloadUrl(input.token),
         paymentRequestId: activePayment.paymentRequestId,
         paymentUrl: activePayment.paymentUrl,
         paymentExpiresAt: activePayment.paymentExpiresAt,
@@ -1723,7 +1752,8 @@ export async function acceptManagerTenantAgreementAndCreatePayment(
     });
 
     return {
-      agreement,
+      agreement: agreementWithPdf,
+      pdfDownloadUrl: getManagerAgreementDownloadUrl(input.token),
       paymentRequestId: payment.paymentRequestId,
       paymentUrl: payment.paymentUrl,
       paymentExpiresAt: payment.paymentExpiresAt,
@@ -1745,7 +1775,12 @@ export async function acceptManagerTenantAgreementAndCreatePayment(
     userAgent: input.userAgent,
   });
 
-  if (!acceptedAgreement.onboarding_request_id) {
+  const agreementWithPdf = await ensureManagerTenancyAgreementPdf(
+    supabase,
+    acceptedAgreement,
+  );
+
+  if (!agreementWithPdf.onboarding_request_id) {
     throw new AppError(
       "MANAGER_ONBOARDING_REQUEST_MISSING",
       "The onboarding request is missing.",
@@ -1754,16 +1789,17 @@ export async function acceptManagerTenantAgreementAndCreatePayment(
   }
 
   await markManagerOnboardingAgreementAccepted(supabase, {
-    requestId: acceptedAgreement.onboarding_request_id,
+    requestId: agreementWithPdf.onboarding_request_id,
   });
 
   const payment = await initializePaymentForAcceptedAgreement({
     supabase,
-    agreement: acceptedAgreement,
+    agreement: agreementWithPdf,
   });
 
   return {
-    agreement: acceptedAgreement,
+    agreement: agreementWithPdf,
+    pdfDownloadUrl: getManagerAgreementDownloadUrl(input.token),
     paymentRequestId: payment.paymentRequestId,
     paymentUrl: payment.paymentUrl,
     paymentExpiresAt: payment.paymentExpiresAt,

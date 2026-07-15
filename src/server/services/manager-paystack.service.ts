@@ -35,6 +35,8 @@ import {
   updateManagerTenantOnboardingStatus,
   updateManagerUnitStatusDirect,
 } from "@/server/repositories/manager-tenant-onboarding.repository";
+import { getManagerRentReceiptSnapshot } from "@/server/repositories/manager-receipts.repository";
+import { ensureManagerRentReceiptPdfForPayment } from "@/server/services/manager-receipts.service";
 import {
   assertPaystackAmountMatchesExpected,
   convertNairaToKobo,
@@ -77,7 +79,57 @@ export type ManagerPaystackVerificationResult = {
   paymentRequestId: string;
   paymentId: string;
   verifiedPayload: Record<string, unknown>;
+  receiptAvailable: boolean;
 };
+
+type ManagerPaystackSuccessCallbackState = {
+  ok: true;
+  kind: "success";
+  status: "processed" | "duplicate";
+  message: string;
+  paymentConfirmed: true;
+  paymentId: string;
+  receiptAvailable: boolean;
+  agreementAvailable: boolean;
+  receiptDownloadUrl: string | null;
+  agreementDownloadUrl: string | null;
+  documentMessage: string | null;
+  summary: ManagerPaystackCallbackSummary | null;
+};
+
+export type ManagerPaystackCallbackState =
+  | ManagerPaystackSuccessCallbackState
+  | {
+      ok: false;
+      kind: "pending";
+      status: "pending";
+      message: string;
+    }
+  | {
+      ok: false;
+      kind: "failed";
+      status: "failed";
+      message: string;
+    }
+  | {
+      ok: false;
+      kind: "invalid";
+      status: "not_found" | "expired" | "invalid";
+      message: string;
+    };
+
+export type ManagerPaystackCallbackSummary = {
+  tenantName: string;
+  propertyName: string;
+  unitLabel: string;
+  totalPaid: number;
+  paymentDate: string;
+  paymentReference: string | null;
+  nextRentDueDate: string | null;
+};
+
+const MANAGER_RECEIPT_TEMPORARILY_UNAVAILABLE_MESSAGE =
+  "Your payment is confirmed, but the receipt is not ready yet.";
 
 function nullableText(value: string | undefined) {
   if (!value) {
@@ -97,6 +149,18 @@ function nullableDate(value: string | undefined) {
   const trimmed = value.trim();
 
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function isPendingPaystackStatus(status: string) {
+  return ["pending", "processing", "ongoing"].includes(
+    status.trim().toLowerCase(),
+  );
+}
+
+function isFailedPaystackStatus(status: string) {
+  return ["failed", "abandoned", "reversed"].includes(
+    status.trim().toLowerCase(),
+  );
 }
 
 function generatePaystackReference() {
@@ -124,10 +188,8 @@ function getAppBaseUrl() {
   return configuredUrl.replace(/\/$/, "");
 }
 
-function getManagerPaystackCallbackUrl(reference: string) {
-  return `${getAppBaseUrl()}/pay/manager/callback?reference=${encodeURIComponent(
-    reference,
-  )}`;
+function getManagerPaystackCallbackUrl() {
+  return `${getAppBaseUrl()}/pay/manager/callback`;
 }
 
 function resolvePaystackCustomerEmail(params: {
@@ -175,7 +237,24 @@ function isManagerPaymentNotFoundError(error: unknown) {
 }
 
 function isManagerPaymentExpiredError(error: unknown) {
-  return isAppError(error) && error.code === "MANAGER_PAYSTACK_PAYMENT_EXPIRED";
+  return (
+    isAppError(error) &&
+    (error.code === "MANAGER_PAYSTACK_PAYMENT_EXPIRED" ||
+      error.code === "MANAGER_PAYSTACK_PAYMENT_CANCELLED")
+  );
+}
+
+function isManagerPaymentPendingError(error: unknown) {
+  return (
+    isAppError(error) && error.code === "MANAGER_PAYSTACK_PAYMENT_PENDING"
+  );
+}
+
+function isManagerPaymentFailedError(error: unknown) {
+  return (
+    isAppError(error) &&
+    error.code === "MANAGER_PAYSTACK_PAYMENT_NOT_SUCCESSFUL"
+  );
 }
 
 function isFirstRentPaymentRequestExpired(
@@ -534,6 +613,35 @@ async function finalizeFirstRentPayment(
   });
 }
 
+async function tryPrepareManagerReceiptForVerifiedPayment(params: {
+  paymentRequest: ManagerRentPaymentRequestRow;
+  paymentId: string;
+}) {
+  try {
+    await ensureManagerRentReceiptPdfForPayment({
+      organizationId: params.paymentRequest.organization_id,
+      rentPaymentId: params.paymentId,
+      generatedByProfileId: params.paymentRequest.created_by_profile_id,
+    });
+
+    return true;
+  } catch (error) {
+    console.error("manager receipt preparation failed after confirmation", {
+      paymentRequestId: params.paymentRequest.id,
+      rentPaymentId: params.paymentId,
+      error:
+        error instanceof Error
+          ? {
+              name: error.name,
+              message: error.message,
+            }
+          : "Unknown receipt preparation error",
+    });
+
+    return false;
+  }
+}
+
 async function initializeManagerPaymentSettlement(params: {
   supabase: SupabaseClient;
   organizationId: string;
@@ -854,7 +962,7 @@ export async function createManagerPaystackPaymentRequest(
     landlordShare: breakdown.landlordShare,
     bopaPlatformFee: breakdown.bopaPlatformFee,
     collectionMode: property.collection_mode,
-    callbackUrl: getManagerPaystackCallbackUrl(reference),
+    callbackUrl: getManagerPaystackCallbackUrl(),
     metadata,
   });
 
@@ -894,6 +1002,10 @@ export async function verifyAndPostManagerPaystackPaymentReference(params: {
       verifiedPayload: paymentRequest.verified_payload ?? {},
       paidAt: paymentRequest.paid_at ?? new Date().toISOString(),
     });
+    const receiptAvailable = await tryPrepareManagerReceiptForVerifiedPayment({
+      paymentRequest,
+      paymentId: paymentRequest.processed_payment_id,
+    });
 
     return {
       status: "duplicate",
@@ -901,6 +1013,7 @@ export async function verifyAndPostManagerPaystackPaymentReference(params: {
       paymentRequestId: paymentRequest.id,
       paymentId: paymentRequest.processed_payment_id,
       verifiedPayload: paymentRequest.verified_payload ?? {},
+      receiptAvailable,
     };
   }
 
@@ -946,6 +1059,10 @@ export async function verifyAndPostManagerPaystackPaymentReference(params: {
       verifiedPayload: paymentRequest.verified_payload ?? verifiedPayload,
       paidAt: paymentRequest.paid_at ?? new Date().toISOString(),
     });
+    const receiptAvailable = await tryPrepareManagerReceiptForVerifiedPayment({
+      paymentRequest,
+      paymentId: paymentRequest.processed_payment_id,
+    });
 
     return {
       status: "duplicate",
@@ -953,6 +1070,7 @@ export async function verifyAndPostManagerPaystackPaymentReference(params: {
       paymentRequestId: paymentRequest.id,
       paymentId: paymentRequest.processed_payment_id,
       verifiedPayload,
+      receiptAvailable,
     };
   }
 
@@ -976,6 +1094,18 @@ export async function verifyAndPostManagerPaystackPaymentReference(params: {
   }
 
   if (verifiedTransaction.status !== "success") {
+    if (isPendingPaystackStatus(verifiedTransaction.status)) {
+      throw new AppError(
+        "MANAGER_PAYSTACK_PAYMENT_PENDING",
+        "Payment is still being processed. Please check again shortly.",
+        202,
+      );
+    }
+
+    const failureMessage = isFailedPaystackStatus(verifiedTransaction.status)
+      ? "Payment was not successful."
+      : "Payment could not be verified.";
+
     await markManagerPaystackPaymentRequestFailed(supabase, {
       requestId: paymentRequest.id,
       failureReason: `Paystack transaction status: ${verifiedTransaction.status}`,
@@ -988,7 +1118,7 @@ export async function verifyAndPostManagerPaystackPaymentReference(params: {
 
     throw new AppError(
       "MANAGER_PAYSTACK_PAYMENT_NOT_SUCCESSFUL",
-      "Manager rent payment was not successful.",
+      failureMessage,
       400,
     );
   }
@@ -1024,6 +1154,10 @@ export async function verifyAndPostManagerPaystackPaymentReference(params: {
       verifiedPayload,
       paidAt: verifiedTransaction.paid_at ?? new Date().toISOString(),
     });
+    const receiptAvailable = await tryPrepareManagerReceiptForVerifiedPayment({
+      paymentRequest,
+      paymentId: existingPayment.id,
+    });
 
     return {
       status: "duplicate",
@@ -1031,6 +1165,7 @@ export async function verifyAndPostManagerPaystackPaymentReference(params: {
       paymentRequestId: paymentRequest.id,
       paymentId: existingPayment.id,
       verifiedPayload,
+      receiptAvailable,
     };
   }
 
@@ -1112,6 +1247,10 @@ export async function verifyAndPostManagerPaystackPaymentReference(params: {
     verifiedPayload,
     paidAt: verifiedTransaction.paid_at ?? new Date().toISOString(),
   });
+  const receiptAvailable = await tryPrepareManagerReceiptForVerifiedPayment({
+    paymentRequest,
+    paymentId: rentPayment.id,
+  });
 
   return {
     status: "processed",
@@ -1119,50 +1258,210 @@ export async function verifyAndPostManagerPaystackPaymentReference(params: {
     paymentRequestId: paymentRequest.id,
     paymentId: rentPayment.id,
     verifiedPayload,
+    receiptAvailable,
   };
 }
 
-export async function getManagerPaystackCallbackState(reference: string) {
+function getPaymentDocumentDownloadUrl(params: {
+  reference: string;
+  documentType: "receipt" | "agreement";
+}) {
+  return `/pay/manager/${params.documentType}/${encodeURIComponent(
+    params.reference,
+  )}/download`;
+}
+
+async function buildManagerPaystackSuccessCallbackState(params: {
+  reference: string;
+  result: ManagerPaystackVerificationResult;
+  status: "processed" | "duplicate";
+  message: string;
+}): Promise<ManagerPaystackSuccessCallbackState> {
+  const supabase = createSupabaseAdminClient();
+  const paymentRequest = await getManagerPaystackPaymentRequestByReference(
+    supabase,
+    params.reference,
+  ).catch((error) => {
+    console.error("manager callback payment summary lookup failed", {
+      paymentRequestId: params.result.paymentRequestId,
+      paymentId: params.result.paymentId,
+      error:
+        error instanceof Error
+          ? {
+              name: error.name,
+              message: error.message,
+            }
+          : "Unknown payment summary lookup error",
+    });
+
+    return null;
+  });
+
+  if (!paymentRequest) {
+    return {
+      ok: true,
+      kind: "success",
+      status: params.status,
+      message: params.message,
+      paymentConfirmed: true,
+      paymentId: params.result.paymentId,
+      receiptAvailable: params.result.receiptAvailable,
+      agreementAvailable: false,
+      receiptDownloadUrl: getPaymentDocumentDownloadUrl({
+        reference: params.reference,
+        documentType: "receipt",
+      }),
+      agreementDownloadUrl: null,
+      documentMessage: params.result.receiptAvailable
+        ? null
+        : MANAGER_RECEIPT_TEMPORARILY_UNAVAILABLE_MESSAGE,
+      summary: null,
+    };
+  }
+
+  const rentPaymentId =
+    paymentRequest.processed_payment_id ?? params.result.paymentId;
+  const receiptAvailable =
+    params.result.receiptAvailable ||
+    (await tryPrepareManagerReceiptForVerifiedPayment({
+      paymentRequest,
+      paymentId: rentPaymentId,
+    }));
+
+  const snapshot = await getManagerRentReceiptSnapshot(supabase, {
+    organizationId: paymentRequest.organization_id,
+    rentPaymentId,
+  }).catch((error) => {
+    console.error("manager callback payment summary details failed", {
+      paymentRequestId: paymentRequest.id,
+      rentPaymentId,
+      error:
+        error instanceof Error
+          ? {
+              name: error.name,
+              message: error.message,
+            }
+          : "Unknown payment summary details error",
+    });
+
+    return null;
+  });
+
+  const summary = snapshot
+    ? {
+        tenantName: snapshot.tenant.name,
+        propertyName: snapshot.property.name,
+        unitLabel: snapshot.unit.label,
+        totalPaid: snapshot.payment.totalPaid,
+        paymentDate: snapshot.payment.paymentDate,
+        paymentReference: snapshot.payment.paymentReference,
+        nextRentDueDate: snapshot.tenant.nextRentDueDate,
+      }
+    : null;
+
+  return {
+    ok: true,
+    kind: "success",
+    status: params.status,
+    message: params.message,
+    paymentConfirmed: true,
+    paymentId: rentPaymentId,
+    receiptAvailable,
+    agreementAvailable: Boolean(paymentRequest.agreement_document_id),
+    receiptDownloadUrl: getPaymentDocumentDownloadUrl({
+      reference: params.reference,
+      documentType: "receipt",
+    }),
+    agreementDownloadUrl: paymentRequest.agreement_document_id
+      ? getPaymentDocumentDownloadUrl({
+          reference: params.reference,
+          documentType: "agreement",
+        })
+      : null,
+    documentMessage: receiptAvailable
+      ? null
+      : MANAGER_RECEIPT_TEMPORARILY_UNAVAILABLE_MESSAGE,
+    summary,
+  };
+}
+
+export async function getManagerPaystackCallbackState(
+  reference: string,
+): Promise<ManagerPaystackCallbackState> {
   try {
     const result = await verifyAndPostManagerPaystackPaymentReference({
       reference,
       supabase: createSupabaseAdminClient(),
     });
 
-    return {
-      ok: true,
-      status: result.status,
-      message: result.message,
-    };
+    if (result.status === "processed") {
+      return buildManagerPaystackSuccessCallbackState({
+        reference,
+        result,
+        status: "processed",
+        message:
+          "Your payment has been received and your rent record has been updated.",
+      });
+    }
+
+    return buildManagerPaystackSuccessCallbackState({
+      reference,
+      result,
+      status: "duplicate",
+      message:
+        "Your payment was already confirmed and your rent record is up to date.",
+    });
   } catch (error) {
     if (isManagerPaymentNotFoundError(error)) {
       return {
         ok: false,
+        kind: "invalid",
         status: "not_found" as const,
         message: "Payment request was not found.",
+      };
+    }
+
+    if (isManagerPaymentPendingError(error)) {
+      return {
+        ok: false,
+        kind: "pending",
+        status: "pending" as const,
+        message: "Payment is still being processed. Please check again shortly.",
       };
     }
 
     if (isManagerPaymentExpiredError(error)) {
       return {
         ok: false,
+        kind: "invalid",
         status: "expired" as const,
         message:
           "This payment link has expired. Please ask the property manager for a new link.",
       };
     }
 
+    if (isManagerPaymentFailedError(error)) {
+      return {
+        ok: false,
+        kind: "failed",
+        status: "failed" as const,
+        message: error.userMessage,
+      };
+    }
+
     if (isAppError(error)) {
       return {
         ok: false,
-        status: "failed" as const,
+        kind: "invalid",
+        status: "invalid" as const,
         message: error.userMessage,
       };
     }
 
     return {
       ok: false,
-      status: "failed" as const,
+      kind: "invalid",
+      status: "invalid" as const,
       message: "Payment could not be verified.",
     };
   }

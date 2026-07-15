@@ -39,6 +39,14 @@ export type ManagerTenantRentStatus = ManagerTenantCurrentEligibility & {
   amountDue: number;
 };
 
+function formatNairaAmount(amount: number) {
+  return new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency: "NGN",
+    maximumFractionDigits: 0,
+  }).format(Number.isFinite(Number(amount)) ? Number(amount) : 0);
+}
+
 function parseDateOnlyToUtcMs(value: string | null) {
   if (!value) {
     return null;
@@ -149,25 +157,23 @@ export function getManagerTenantRentStatus(params: {
     };
   }
 
-  if (safeCurrentBalance > 0 || (daysFromToday !== null && daysFromToday < 0)) {
-    if (daysFromToday !== null && daysFromToday < 0) {
-      const overdueDays = Math.abs(daysFromToday);
+  if (safeCurrentBalance > 0) {
+    return {
+      ...eligibility,
+      kind: "owing",
+      label: `${formatNairaAmount(safeCurrentBalance)} owing`,
+      daysFromToday,
+      amountDue,
+    };
+  }
 
-      return {
-        ...eligibility,
-        kind: "owing",
-        label: `Owing - ${overdueDays} day${
-          overdueDays === 1 ? "" : "s"
-        } overdue`,
-        daysFromToday,
-        amountDue,
-      };
-    }
+  if (daysFromToday !== null && daysFromToday < 0) {
+    const overdueDays = Math.abs(daysFromToday);
 
     return {
       ...eligibility,
       kind: "owing",
-      label: "Owing",
+      label: `Overdue by ${overdueDays} day${overdueDays === 1 ? "" : "s"}`,
       daysFromToday,
       amountDue,
     };
@@ -184,9 +190,7 @@ export function getManagerTenantRentStatus(params: {
       label:
         daysFromToday === 0
           ? "Due today"
-          : daysFromToday === 1
-            ? "Due tomorrow"
-            : `Due in ${daysFromToday} days`,
+          : `Due in ${daysFromToday} day${daysFromToday === 1 ? "" : "s"}`,
       daysFromToday,
       amountDue,
     };
@@ -195,7 +199,7 @@ export function getManagerTenantRentStatus(params: {
   return {
     ...eligibility,
     kind: "clear",
-    label: "Clear",
+    label: "Paid up",
     daysFromToday,
     amountDue,
   };

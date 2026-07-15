@@ -2,9 +2,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ManagerPropertyList } from "@/components/manager/manager-property-list";
 import {
+  buildManagerOccupancySnapshot,
   getManagerOrganizationForCurrentUser,
   listManagerLandlordClients,
   listManagerProperties,
+  listManagerTenants,
   listManagerUnits,
 } from "@/server/repositories/manager.repository";
 import { requireManager } from "@/server/services/auth.service";
@@ -18,16 +20,21 @@ type ManagerPropertiesPageProps = {
   }>;
 };
 
-function getUnitSummary(units: Awaited<ReturnType<typeof listManagerUnits>>) {
-  return units.reduce(
+function getUnitSummary(params: {
+  units: Awaited<ReturnType<typeof listManagerUnits>>;
+  tenants: Awaited<ReturnType<typeof listManagerTenants>>;
+}) {
+  const occupancy = buildManagerOccupancySnapshot(params);
+
+  return params.units.reduce(
     (summary, unit) => {
       summary.total += 1;
 
-      if (unit.status === "occupied") {
+      if (occupancy.occupiedUnitIds.has(unit.id)) {
         summary.occupied += 1;
       }
 
-      if (unit.status === "vacant") {
+      if (occupancy.vacantUnitIds.has(unit.id)) {
         summary.vacant += 1;
       }
 
@@ -57,13 +64,14 @@ export default async function ManagerPropertiesPage({
     redirect("/manager/onboarding");
   }
 
-  const [landlordClients, properties, units] = await Promise.all([
+  const [landlordClients, properties, units, tenants] = await Promise.all([
     listManagerLandlordClients(supabase, organization.id),
     listManagerProperties(supabase, organization.id),
     listManagerUnits(supabase, { organizationId: organization.id }),
+    listManagerTenants(supabase, { organizationId: organization.id }),
   ]);
 
-  const unitSummary = getUnitSummary(units);
+  const unitSummary = getUnitSummary({ units, tenants });
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
@@ -128,6 +136,7 @@ export default async function ManagerPropertiesPage({
         landlordClients={landlordClients}
         properties={properties}
         units={units}
+        tenants={tenants}
         searchQuery={resolvedSearchParams?.q ?? ""}
         statusFilter={resolvedSearchParams?.status ?? "all"}
         collectionFilter={resolvedSearchParams?.collection ?? "all"}

@@ -106,6 +106,7 @@ export function ManagerOperationalOverview({
 }: ManagerOperationalOverviewProps) {
   const visibleAttentionItems = overview.attentionItems.slice(0, 5);
   const primaryAction = overview.primaryAction;
+  const attentionCount = overview.attentionItems.length;
   const canRecordFirstPayment =
     overview.totals.totalProperties > 0 && overview.totals.totalTenants > 0;
 
@@ -144,14 +145,16 @@ export function ManagerOperationalOverview({
           </p>
         </div>
 
-        <Link
-          href={primaryAction.href}
-          prefetch={false}
-          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-        >
-          {primaryAction.label}
-          <ArrowRight className="size-4" aria-hidden="true" />
-        </Link>
+        {primaryAction ? (
+          <Link
+            href={primaryAction.href}
+            prefetch={false}
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          >
+            {primaryAction.label}
+            <ArrowRight className="size-4" aria-hidden="true" />
+          </Link>
+        ) : null}
       </section>
 
       <section
@@ -164,13 +167,27 @@ export function ManagerOperationalOverview({
               id="manager-attention-title"
               className="text-base font-black text-text-strong"
             >
-              Needs attention
+              Needs attention {numberFormatter.format(attentionCount)}
             </h2>
             <p className="text-xs font-semibold text-text-muted">
               Highest-priority work first
             </p>
           </div>
-          <CircleAlert className="size-5 text-text-muted" aria-hidden="true" />
+          <div className="flex items-center gap-3">
+            {attentionCount > 5 ? (
+              <Link
+                href="/manager/attention"
+                prefetch={false}
+                className="text-sm font-extrabold text-primary underline-offset-4 hover:underline"
+              >
+                View all {numberFormatter.format(attentionCount)}
+              </Link>
+            ) : null}
+            <CircleAlert
+              className="size-5 text-text-muted"
+              aria-hidden="true"
+            />
+          </div>
         </div>
 
         {visibleAttentionItems.length > 0 ? (

@@ -121,6 +121,28 @@ export async function createSignedTenancyAgreementPdfUrl(path: string | null) {
   });
 }
 
+export async function downloadTenancyAgreementPdf(path: string | null) {
+  if (!path) {
+    throw new AppError(
+      "TENANCY_AGREEMENT_PDF_MISSING",
+      "Agreement PDF is not available yet.",
+      404,
+    );
+  }
+
+  const supabase = createSupabaseAdminClient();
+
+  const { data, error } = await supabase.storage
+    .from(TENANCY_AGREEMENT_PDF_BUCKET)
+    .download(path);
+
+  if (error || !data) {
+    throw error;
+  }
+
+  return data.arrayBuffer();
+}
+
 export async function uploadRentReceiptPdf(params: {
   path: string;
   pdfBuffer: Buffer;

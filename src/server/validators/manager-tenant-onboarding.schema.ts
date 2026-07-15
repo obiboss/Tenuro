@@ -145,6 +145,12 @@ export const rejectManagerTenantOnboardingRequestSchema = z.object({
 
 export const acceptManagerTenantAgreementSchema = z.object({
   token: z.string().trim().min(20, "Invalid agreement link."),
+  agreementAcknowledgement: z
+    .string()
+    .refine(
+      (value) => value === "on",
+      "Confirm that you have read and agreed to the tenancy terms.",
+    ),
 });
 
 export const declineManagerTenantAgreementSchema = z.object({

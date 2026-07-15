@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import {
   approveManagerTenantOnboardingRequestAction,
@@ -17,6 +18,12 @@ import type { ManagerTenantOnboardingRequestRow } from "@/server/repositories/ma
 type ManagerTenantOnboardingReviewListProps = {
   requests: ManagerTenantOnboardingRequestRow[];
   initialSelectedRequestId?: string | null;
+};
+
+type ReviewKycDocument = {
+  label: string;
+  path: string | null;
+  signedUrl: string | null;
 };
 
 const ACTIVE_REVIEW_STATUSES = new Set<
@@ -81,17 +88,17 @@ function formatDateTime(date: string | null) {
 
 function getStatusLabel(status: ManagerTenantOnboardingRequestRow["status"]) {
   const labels: Record<ManagerTenantOnboardingRequestRow["status"], string> = {
-    pending: "Waiting for details",
+    pending: "Waiting for tenant details",
     submitted: "Submitted for review",
     approved: "Approved",
     rejected: "Rejected",
     cancelled: "Agreement declined",
     expired: "Expired",
-    agreement_sent: "Agreement sent",
+    agreement_sent: "Waiting for tenant acceptance",
     agreement_accepted: "Agreement accepted",
-    payment_initialized: "Payment link active",
-    payment_paid: "Paid",
-    payment_expired: "Payment expired",
+    payment_initialized: "Payment pending",
+    payment_paid: "Payment confirmed",
+    payment_expired: "Payment pending",
   };
 
   return labels[status];
@@ -157,6 +164,14 @@ function buildToastId(params: {
   return `${params.requestId}-${params.action}-${params.ok ? "success" : "error"}-${params.message}`;
 }
 
+function getMetadataText(metadata: Record<string, unknown>, key: string) {
+  const value = metadata[key];
+
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : null;
+}
+
 function DetailItem({
   label,
   value,
@@ -216,10 +231,12 @@ function WhatsAppActionCard({
   );
 }
 
-function RequestDetailPanel({
+export function ManagerTenantOnboardingReviewDetail({
   request,
+  kycDocuments = [],
 }: {
   request: ManagerTenantOnboardingRequestRow;
+  kycDocuments?: ReviewKycDocument[];
 }) {
   const [showReject, setShowReject] = useState(false);
   const [dismissedToastIds, setDismissedToastIds] = useState<string[]>([]);
@@ -351,6 +368,18 @@ function RequestDetailPanel({
     (request.status === "agreement_accepted" ||
       request.status === "payment_initialized" ||
       request.status === "payment_expired");
+  const approvedAgreementMessage =
+    approveState.ok && approveState.whatsappMessage
+      ? approveState.whatsappMessage
+      : null;
+  const storedAgreementMessage = getMetadataText(
+    request.metadata,
+    "agreement_share_message",
+  );
+  const agreementSentMessage =
+    request.status === "agreement_sent" && !approvedAgreementMessage
+      ? storedAgreementMessage
+      : null;
 
   const tenantName =
     request.tenant_full_name ?? request.invited_tenant_full_name ?? "Tenant";
@@ -369,16 +398,88 @@ function RequestDetailPanel({
       : (request.tenant_move_in_date ?? "");
   const minMoveInDate =
     request.onboarding_type === "new_incoming_tenant" ? today : undefined;
+  const toastStack =
+    toasts.length > 0 ? (
+      <div className="fixed left-1/2 top-4 z-50 grid w-[calc(100%-2rem)] max-w-md -translate-x-1/2 gap-3">
+        {toasts.map((toast) => (
+          <Toast key={toast.id} toast={toast} onDismiss={dismissToast} />
+        ))}
+      </div>
+    ) : null;
+  const tenantLinkReadyCard =
+    tenantLinkState.ok && tenantLinkState.requestId === request.id ? (
+      <WhatsAppActionCard
+        title="Tenant link ready"
+        description="Send the link to the tenant to complete their details."
+        phoneNumber={tenantLinkState.tenantWhatsappNumber}
+        message={tenantLinkState.whatsappMessage}
+        whatsappLabel="Open WhatsApp"
+        copyLabel="Copy message"
+      />
+    ) : null;
+
+  if (request.status === "pending") {
+    return (
+      <>
+        {toastStack}
+
+        <section className="rounded-card border border-border-soft bg-white shadow-sm">
+          <div className="border-b border-border-soft p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="text-lg font-black text-text-strong">
+                  {tenantName}
+                </p>
+                <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                  {unitLabel} - {propertyName} -{" "}
+                  {getTenantTypeLabel(request.onboarding_type)}
+                </p>
+              </div>
+
+              <span
+                className={`w-fit rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${getStatusClassName(
+                  request.status,
+                )}`}
+              >
+                {getStatusLabel(request.status)}
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-4 p-4">
+            {tenantLinkReadyCard}
+
+            <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
+              <div className="rounded-card bg-primary-soft p-4">
+                <p className="text-sm font-black text-text-strong">
+                  Waiting for tenant details
+                </p>
+                <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                  The tenant has not submitted their information yet.
+                </p>
+              </div>
+
+              <form action={tenantLinkAction}>
+                <input type="hidden" name="requestId" value={request.id} />
+
+                <Button
+                  type="submit"
+                  isLoading={isResendingTenantLink}
+                  fullWidth
+                >
+                  Send again
+                </Button>
+              </form>
+            </div>
+          </div>
+        </section>
+      </>
+    );
+  }
 
   return (
     <>
-      {toasts.length > 0 ? (
-        <div className="fixed left-1/2 top-4 z-50 grid w-[calc(100%-2rem)] max-w-md -translate-x-1/2 gap-3">
-          {toasts.map((toast) => (
-            <Toast key={toast.id} toast={toast} onDismiss={dismissToast} />
-          ))}
-        </div>
-      ) : null}
+      {toastStack}
 
       <section className="rounded-card border border-border-soft bg-white shadow-sm">
         <div className="border-b border-border-soft p-4">
@@ -404,28 +505,26 @@ function RequestDetailPanel({
         </div>
 
         <div className="space-y-4 p-4">
-          {approveState.ok ? (
+          {approvedAgreementMessage ? (
             <WhatsAppActionCard
-              title="Agreement link ready"
-              description="Open WhatsApp to send the agreement link to the tenant."
+              title="Agreement ready to send"
+              description="Send the tenancy agreement to the tenant for review and acceptance."
               phoneNumber={approveState.tenantWhatsappNumber}
-              message={approveState.whatsappMessage}
+              message={approvedAgreementMessage}
             />
           ) : null}
 
-          {tenantLinkState.ok && tenantLinkState.requestId === request.id ? (
+          {agreementSentMessage ? (
             <WhatsAppActionCard
-              title="Tenant link ready"
-              description="Open WhatsApp to send the fresh tenant details link."
-              phoneNumber={tenantLinkState.tenantWhatsappNumber}
-              message={tenantLinkState.whatsappMessage}
-              copyText={
-                tenantLinkState.claimUrl ?? tenantLinkState.whatsappMessage
-              }
-              whatsappLabel="Send via WhatsApp"
-              copyLabel="Copy tenant link"
+              title="Agreement sent"
+              description="Waiting for the tenant to review and accept the agreement."
+              phoneNumber={tenantPhone}
+              message={agreementSentMessage}
+              whatsappLabel="Send again"
             />
           ) : null}
+
+          {tenantLinkReadyCard}
 
           {resendState.ok && resendState.requestId === request.id ? (
             <WhatsAppActionCard
@@ -468,6 +567,28 @@ function RequestDetailPanel({
             </div>
           ) : null}
 
+          {kycDocuments.some((document) => document.signedUrl) ? (
+            <div className="rounded-card border border-border-soft bg-white p-4">
+              <p className="text-sm font-black text-text-strong">
+                Uploaded KYC documents
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {kycDocuments
+                  .filter((document) => document.signedUrl)
+                  .map((document) => (
+                    <Link
+                      key={document.label}
+                      href={document.signedUrl ?? "#"}
+                      target="_blank"
+                      className="inline-flex min-h-10 items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+                    >
+                      {document.label}
+                    </Link>
+                  ))}
+              </div>
+            </div>
+          ) : null}
+
           {canResendTenantLink ? (
             <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
               <div className="rounded-card bg-primary-soft p-4">
@@ -475,8 +596,7 @@ function RequestDetailPanel({
                   Waiting for tenant details
                 </p>
                 <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-                  Generate a fresh link if the tenant did not receive the first
-                  one or the previous link has expired.
+                  The tenant has not submitted their information yet.
                 </p>
               </div>
 
@@ -488,19 +608,19 @@ function RequestDetailPanel({
                   isLoading={isResendingTenantLink}
                   fullWidth
                 >
-                  Regenerate Tenant Link
+                  Send again
                 </Button>
               </form>
             </div>
           ) : null}
 
-          {request.status === "agreement_sent" ? (
+          {request.status === "agreement_sent" && !agreementSentMessage ? (
             <div className="rounded-card bg-primary-soft p-4">
               <p className="text-sm font-black text-text-strong">
                 Agreement sent
               </p>
               <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-                The tenant can accept or reject the agreement from their link.
+                Waiting for the tenant to review and accept the agreement.
               </p>
             </div>
           ) : null}
@@ -641,10 +761,12 @@ function RequestDetailPanel({
             <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
               <div className="rounded-card bg-surface p-4">
                 <p className="text-sm font-black text-text-strong">
-                  Agreement accepted
+                  {request.status === "agreement_accepted"
+                    ? "Agreement accepted"
+                    : "Payment pending"}
                 </p>
                 <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-                  The payment link is available to the tenant. Resend only if
+                  The tenant has been shown the payment step. Resend only if
                   the tenant cannot access it.
                 </p>
               </div>
@@ -887,7 +1009,7 @@ export function ManagerTenantOnboardingReviewList({
 
       {selectedRequest ? (
         <div id="tenant-review-detail" ref={detailRef} className="scroll-mt-24">
-          <RequestDetailPanel
+          <ManagerTenantOnboardingReviewDetail
             key={selectedRequest.id}
             request={selectedRequest}
           />

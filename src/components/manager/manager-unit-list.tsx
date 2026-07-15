@@ -33,7 +33,6 @@ const OPEN_REQUEST_STATUSES = new Set<
   "agreement_sent",
   "agreement_accepted",
   "payment_initialized",
-  "payment_expired",
 ]);
 
 function formatNaira(amount: number) {
@@ -95,15 +94,11 @@ function getRequestPriority(
     return 3;
   }
 
-  if (status === "payment_expired") {
+  if (status === "agreement_sent") {
     return 4;
   }
 
-  if (status === "agreement_sent") {
-    return 5;
-  }
-
-  return 6;
+  return 5;
 }
 
 function buildTenantByUnitId(tenants: ManagerTenantRow[]) {
@@ -132,6 +127,10 @@ function buildOpenRequestByUnitId(
 
 function getRequestLabel(request: ManagerTenantOnboardingRequestRow) {
   if (request.status === "pending") {
+    if (request.onboarding_type === "current_occupant") {
+      return "Existing tenant details incomplete";
+    }
+
     return "Waiting for tenant details";
   }
 
@@ -156,6 +155,10 @@ function getRequestLabel(request: ManagerTenantOnboardingRequestRow) {
 
 function getRequestActionLabel(request: ManagerTenantOnboardingRequestRow) {
   if (request.status === "pending") {
+    if (request.onboarding_type === "current_occupant") {
+      return "Continue";
+    }
+
     return "Send link";
   }
 
@@ -169,8 +172,7 @@ function getRequestActionLabel(request: ManagerTenantOnboardingRequestRow) {
 
   if (
     request.status === "agreement_accepted" ||
-    request.status === "payment_initialized" ||
-    request.status === "payment_expired"
+    request.status === "payment_initialized"
   ) {
     return "View payment";
   }
@@ -179,6 +181,10 @@ function getRequestActionLabel(request: ManagerTenantOnboardingRequestRow) {
 }
 
 function getRequestDetailHref(request: ManagerTenantOnboardingRequestRow) {
+  if (request.status === "submitted") {
+    return `/manager/tenants/review/${request.id}`;
+  }
+
   return `/manager/properties/${request.property_id}?tenantRequest=${request.id}#tenant-review-detail`;
 }
 
@@ -211,6 +217,9 @@ export function ManagerUnitList({
 }: ManagerUnitListProps) {
   const propertyNameById = new Map(
     properties.map((property) => [property.id, property.property_name]),
+  );
+  const propertyById = new Map(
+    properties.map((property) => [property.id, property]),
   );
 
   const tenantByUnitId = buildTenantByUnitId(tenants);
@@ -273,6 +282,11 @@ export function ManagerUnitList({
 
               <tbody className="divide-y divide-border-soft bg-white">
                 {units.map((unit) => {
+                  const property = propertyById.get(unit.property_id);
+                  const shouldCaptureExistingTenant = Boolean(
+                    property?.existing_tenant_setup_required &&
+                      !property.existing_tenant_setup_completed_at,
+                  );
                   const tenant = getVisibleTenantForUnit({
                     unit,
                     tenant: tenantByUnitId.get(unit.id),
@@ -350,7 +364,9 @@ export function ManagerUnitList({
                               prefetch={false}
                               className="inline-flex min-h-10 items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
                             >
-                              Add tenant
+                              {shouldCaptureExistingTenant
+                                ? "Add existing tenant"
+                                : "Add tenant"}
                             </Link>
                           ) : unit.status === "reserved" ? (
                             <span className="inline-flex min-h-10 items-center justify-center rounded-button bg-primary-soft px-4 text-sm font-extrabold text-primary">
@@ -380,6 +396,11 @@ export function ManagerUnitList({
 
           <div className="divide-y divide-border-soft md:hidden">
             {units.map((unit) => {
+              const property = propertyById.get(unit.property_id);
+              const shouldCaptureExistingTenant = Boolean(
+                property?.existing_tenant_setup_required &&
+                  !property.existing_tenant_setup_completed_at,
+              );
               const tenant = getVisibleTenantForUnit({
                 unit,
                 tenant: tenantByUnitId.get(unit.id),
@@ -434,7 +455,9 @@ export function ManagerUnitList({
                           prefetch={false}
                           className="inline-flex min-h-10 w-full items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
                         >
-                          Add tenant
+                          {shouldCaptureExistingTenant
+                            ? "Add existing tenant"
+                            : "Add tenant"}
                         </Link>
                       ) : unit.status === "reserved" ? (
                         <span className="inline-flex min-h-10 w-full items-center justify-center rounded-button bg-primary-soft px-4 text-sm font-extrabold text-primary">

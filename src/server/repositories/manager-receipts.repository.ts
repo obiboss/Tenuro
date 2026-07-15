@@ -8,7 +8,7 @@ export type ManagerRentPaymentReceiptRow = {
   organization_id: string;
   rent_payment_id: string;
   receipt_number: string;
-  storage_bucket: typeof MANAGER_RENT_RECEIPTS_BUCKET;
+  storage_bucket: string;
   storage_path: string;
   file_name: string;
   generated_by_profile_id: string | null;
@@ -29,6 +29,11 @@ export type ManagerRentReceiptSnapshot = {
     amountPaid: number;
     managementFeeAmount: number;
     landlordNetAmount: number;
+    bopaPlatformFee: number;
+    paystackChargeAmount: number;
+    otherChargesAmount: number;
+    totalPaid: number;
+    paymentReceiver: string;
     paymentDate: string;
     periodStart: string | null;
     periodEnd: string | null;
@@ -60,6 +65,7 @@ export type ManagerRentReceiptSnapshot = {
     phone: string | null;
     email: string | null;
     balanceAfterPayment: number;
+    nextRentDueDate: string | null;
   };
 };
 
@@ -141,6 +147,25 @@ function readStatus(row: Record<string, unknown>) {
   return "pending_confirmation";
 }
 
+function readMetadataNumber(
+  metadata: Record<string, unknown>,
+  key: string,
+) {
+  const value = metadata[key];
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  return 0;
+}
+
 async function getRecordById(
   supabase: SupabaseClient,
   table: string,
@@ -188,7 +213,7 @@ export async function createManagerRentPaymentReceipt(
     receiptNumber: string;
     storagePath: string;
     fileName: string;
-    generatedByProfileId: string;
+    generatedByProfileId: string | null;
     metadata: Record<string, unknown>;
   },
 ) {
@@ -253,6 +278,7 @@ export async function getManagerRentReceiptSnapshot(
   }
 
   const payment = toRecord(paymentData);
+  const paymentMetadata = toRecord(payment.metadata);
 
   const organizationId = readRequiredText(
     payment,
@@ -284,6 +310,17 @@ export async function getManagerRentReceiptSnapshot(
       amountPaid: readNumber(payment, "amount_paid"),
       managementFeeAmount: readNumber(payment, "management_fee_amount"),
       landlordNetAmount: readNumber(payment, "landlord_net_amount"),
+      bopaPlatformFee: readMetadataNumber(paymentMetadata, "bopa_platform_fee"),
+      paystackChargeAmount: readMetadataNumber(
+        paymentMetadata,
+        "paystack_charge",
+      ),
+      otherChargesAmount: readMetadataNumber(paymentMetadata, "other_charges"),
+      totalPaid: readNumber(payment, "amount_paid"),
+      paymentReceiver:
+        readText(paymentMetadata, "payment_receiver_snapshot") ??
+        readText(payment, "payment_receiver") ??
+        "BOPA verified collection",
       paymentDate:
         readText(payment, "payment_date") ??
         readText(payment, "created_at") ??
@@ -329,6 +366,7 @@ export async function getManagerRentReceiptSnapshot(
       phone: readText(tenant, "phone_number"),
       email: readText(tenant, "email"),
       balanceAfterPayment: readNumber(tenant ?? {}, "current_balance"),
+      nextRentDueDate: readText(tenant, "next_rent_due_date"),
     },
   };
 }

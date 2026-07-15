@@ -17,6 +17,7 @@ type ManagerAgreementPageProps = {
 
 type AcceptedPaymentState = {
   paymentRequestId: string | null;
+  pdfDownloadUrl: string | null;
   paymentUrl: string | null;
   paymentExpiresAt: string | null;
   paymentBreakdown: ManagerTenantPaymentBreakdownState | null;
@@ -59,6 +60,7 @@ async function resolveAgreementPageState(
       userAgent: null,
     })) as {
       paymentRequestId?: string | null;
+      pdfDownloadUrl?: string | null;
       paymentUrl?: string | null;
       paymentExpiresAt?: string | null;
       paymentBreakdown?: ManagerTenantPaymentBreakdownState | null;
@@ -69,6 +71,7 @@ async function resolveAgreementPageState(
       agreement,
       acceptedPayment: {
         paymentRequestId: paymentResult.paymentRequestId ?? null,
+        pdfDownloadUrl: paymentResult.pdfDownloadUrl ?? null,
         paymentUrl: paymentResult.paymentUrl ?? null,
         paymentExpiresAt: paymentResult.paymentExpiresAt ?? null,
         paymentBreakdown: paymentResult.paymentBreakdown ?? null,
@@ -141,6 +144,48 @@ function getSnapshotText(
     : fallback;
 }
 
+function getSnapshotNumber(
+  snapshot: Record<string, unknown>,
+  key: string,
+  fallback = 0,
+) {
+  const value = snapshot[key];
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(/,/g, "").trim());
+
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return fallback;
+}
+
+function formatMoney(amount: number) {
+  return new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency: "NGN",
+    maximumFractionDigits: 0,
+  }).format(Number.isFinite(amount) ? amount : 0);
+}
+
+function formatDate(value: string) {
+  if (!value) {
+    return "Not stated";
+  }
+
+  return new Intl.DateTimeFormat("en-NG", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
 function formatAgreementBody(value: string) {
   return value
     .split("\n")
@@ -158,33 +203,42 @@ function AgreementBodyCard({ agreementBody }: { agreementBody: string }) {
   const lines = formatAgreementBody(agreementBody);
 
   return (
-    <section className="rounded-card border border-border-soft bg-white shadow-sm">
+    <section className="border border-border-soft bg-white shadow-sm">
       <div className="border-b border-border-soft p-4">
         <h2 className="text-lg font-black tracking-tight text-text-strong">
-          Agreement details
+          Final agreement terms
         </h2>
         <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
           Read this carefully before accepting.
         </p>
       </div>
 
-      <div className="max-h-136 overflow-y-auto p-4">
-        <div className="space-y-3 rounded-card bg-surface p-4">
-          {lines.map((line, index) => (
-            <p
-              key={`${line}-${index}`}
-              className={
-                line.length === 0
-                  ? "h-2"
-                  : "whitespace-pre-wrap text-sm font-semibold leading-7 text-text-strong"
-              }
-            >
-              {line}
-            </p>
-          ))}
-        </div>
+      <div className="space-y-3 px-4 py-5 sm:px-8 sm:py-7">
+        {lines.map((line, index) => (
+          <p
+            key={`${line}-${index}`}
+            className={
+              line.length === 0
+                ? "h-2"
+                : "whitespace-pre-wrap text-sm font-semibold leading-7 text-text-strong"
+            }
+          >
+            {line}
+          </p>
+        ))}
       </div>
     </section>
+  );
+}
+
+function SummaryItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border-b border-border-soft px-4 py-3 last:border-b-0 sm:border-r sm:last:border-r-0">
+      <p className="text-xs font-black uppercase tracking-wide text-text-muted">
+        {label}
+      </p>
+      <p className="mt-1 text-sm font-black text-text-strong">{value}</p>
+    </div>
   );
 }
 
@@ -217,6 +271,27 @@ export default async function ManagerAgreementPage({
     "unitLabel",
     "Unit",
   );
+  const managerName = getSnapshotText(
+    agreement.manager_snapshot,
+    "name",
+    "BOPA Manager",
+  );
+  const landlordName = getSnapshotText(
+    agreement.landlord_snapshot,
+    "name",
+    "Landlord",
+  );
+  const rentAmount = getSnapshotNumber(agreement.tenancy_snapshot, "rentAmount");
+  const moveInDate = getSnapshotText(
+    agreement.tenancy_snapshot,
+    "moveInDate",
+    "",
+  );
+  const nextRentDueDate = getSnapshotText(
+    agreement.tenancy_snapshot,
+    "nextRentDueDate",
+    "",
+  );
 
   const statusLabel =
     agreement.document_status === "accepted"
@@ -227,13 +302,14 @@ export default async function ManagerAgreementPage({
 
   return (
     <main className="min-h-screen bg-background">
-      <section className="mx-auto max-w-5xl px-4 py-8 md:px-6 lg:py-10">
+      <section className="mx-auto max-w-6xl px-4 py-8 md:px-6 lg:py-10">
         <ManagerAgreementLogo />
 
         <div className="mb-6 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <h1 className="text-2xl font-black tracking-tight text-text-strong">
-              Review your tenancy agreement
+            <p className="text-sm font-black text-primary">{managerName}</p>
+            <h1 className="mt-1 text-2xl font-black tracking-tight text-text-strong">
+              Tenancy agreement
             </h1>
             <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
               {tenantName} · {unitLabel} · {propertyName}
@@ -244,6 +320,22 @@ export default async function ManagerAgreementPage({
             {statusLabel}
           </span>
         </div>
+
+        <section className="mb-6 overflow-hidden rounded-card border border-border-soft bg-white shadow-sm">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4">
+            <SummaryItem label="Tenant" value={tenantName} />
+            <SummaryItem label="Property" value={propertyName} />
+            <SummaryItem label="Unit" value={unitLabel} />
+            <SummaryItem label="Annual rent" value={formatMoney(rentAmount)} />
+            <SummaryItem label="Move-in date" value={formatDate(moveInDate)} />
+            <SummaryItem
+              label="Next due date"
+              value={formatDate(nextRentDueDate)}
+            />
+            <SummaryItem label="Landlord" value={landlordName} />
+            <SummaryItem label="Manager" value={managerName} />
+          </div>
+        </section>
 
         <div className="grid gap-5 lg:grid-cols-[1fr_24rem]">
           <AgreementBodyCard
@@ -258,7 +350,7 @@ export default async function ManagerAgreementPage({
             <PublicManagerAgreementAcceptanceForm
               token={token}
               agreement={agreement}
-              pdfDownloadUrl={agreement.pdf_path ? null : null}
+              pdfDownloadUrl={acceptedPayment?.pdfDownloadUrl ?? null}
               initialPaymentRequestId={
                 acceptedPayment?.paymentRequestId ?? null
               }

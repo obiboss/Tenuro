@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { MANAGER_CURRENT_TENANT_STATUSES } from "../constants/manager";
 import {
   MANAGER_RENT_DUE_SOON_DAYS,
   getCalendarDaysFromDateOnly,
@@ -29,6 +30,13 @@ function createTenant(
 }
 
 assert.equal(MANAGER_RENT_DUE_SOON_DAYS, 30);
+assert.deepEqual([...MANAGER_CURRENT_TENANT_STATUSES], [
+  "active",
+  "eviction_notice",
+]);
+const currentTenantStatuses = new Set<string>(MANAGER_CURRENT_TENANT_STATUSES);
+assert.equal(currentTenantStatuses.has("inactive"), false);
+assert.equal(currentTenantStatuses.has("moved_out"), false);
 assert.equal(
   getCalendarDaysFromDateOnly({
     targetDate: "2026-07-21",
@@ -87,6 +95,50 @@ assert.equal(evictionNoticeTenantStatus.isCurrentRentBearingTenant, true);
 assert.equal(evictionNoticeTenantStatus.kind, "due_soon");
 assert.equal(evictionNoticeTenantStatus.label, "Due in 7 days");
 
+const dueTomorrowTenantStatus = getManagerTenantRentStatus({
+  tenant: createTenant({
+    next_rent_due_date: "2026-07-15",
+  }),
+  unit: occupiedUnit,
+  todayDate: "2026-07-14",
+});
+
+assert.equal(dueTomorrowTenantStatus.kind, "due_soon");
+assert.equal(dueTomorrowTenantStatus.label, "Due in 1 day");
+
+const dueTodayTenantStatus = getManagerTenantRentStatus({
+  tenant: createTenant({
+    next_rent_due_date: "2026-07-14",
+  }),
+  unit: occupiedUnit,
+  todayDate: "2026-07-14",
+});
+
+assert.equal(dueTodayTenantStatus.kind, "due_soon");
+assert.equal(dueTodayTenantStatus.label, "Due today");
+
+const paidUpTenantStatus = getManagerTenantRentStatus({
+  tenant: createTenant({
+    next_rent_due_date: "2026-08-20",
+  }),
+  unit: occupiedUnit,
+  todayDate: "2026-07-14",
+});
+
+assert.equal(paidUpTenantStatus.kind, "clear");
+assert.equal(paidUpTenantStatus.label, "Paid up");
+
+const owingTenantStatus = getManagerTenantRentStatus({
+  tenant: createTenant({
+    current_balance: 25_000,
+  }),
+  unit: occupiedUnit,
+  todayDate: "2026-07-14",
+});
+
+assert.equal(owingTenantStatus.kind, "owing");
+assert.equal(owingTenantStatus.label, "\u20a625,000 owing");
+
 const activeTenantOnVacantUnitStatus = getManagerTenantRentStatus({
   tenant: createTenant(),
   unit: {
@@ -118,4 +170,15 @@ const overdueTenantStatus = getManagerTenantRentStatus({
 });
 
 assert.equal(overdueTenantStatus.kind, "owing");
-assert.equal(overdueTenantStatus.label, "Owing - 1 day overdue");
+assert.equal(overdueTenantStatus.label, "Overdue by 1 day");
+
+const longOverdueTenantStatus = getManagerTenantRentStatus({
+  tenant: createTenant({
+    next_rent_due_date: "2026-07-10",
+  }),
+  unit: occupiedUnit,
+  todayDate: "2026-07-14",
+});
+
+assert.equal(longOverdueTenantStatus.kind, "owing");
+assert.equal(longOverdueTenantStatus.label, "Overdue by 4 days");

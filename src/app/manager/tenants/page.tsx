@@ -1,21 +1,21 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ManagerTenantList } from "@/components/manager/manager-tenant-list";
-import { isManagerCurrentTenantStatus } from "@/constants/manager";
 import { getManagerTenantRentStatus } from "@/lib/manager-rent-status";
 import {
   getManagerOrganizationForCurrentUser,
   listManagerProperties,
+  listManagerRentPayments,
   listManagerTenants,
   listManagerUnits,
 } from "@/server/repositories/manager.repository";
+import { listManagerTenantAgreementDocuments } from "@/server/repositories/manager-tenant-onboarding.repository";
 import { requireManager } from "@/server/services/auth.service";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 
 type ManagerTenantsPageProps = {
   searchParams?: Promise<{
     q?: string;
-    status?: string;
     rent?: string;
   }>;
 };
@@ -33,9 +33,7 @@ function getTenantSummary(params: {
         unit: unitById.get(tenant.unit_id),
       });
 
-      if (isManagerCurrentTenantStatus(tenant.status)) {
-        summary.active += 1;
-      }
+      summary.current += 1;
 
       if (rentStatus.kind === "owing") {
         summary.owing += 1;
@@ -45,12 +43,17 @@ function getTenantSummary(params: {
         summary.dueSoon += 1;
       }
 
+      if (tenant.status === "eviction_notice") {
+        summary.noticeServed += 1;
+      }
+
       return summary;
     },
     {
-      active: 0,
+      current: 0,
       owing: 0,
       dueSoon: 0,
+      noticeServed: 0,
     },
   );
 }
@@ -72,11 +75,16 @@ export default async function ManagerTenantsPage({
     redirect("/manager/onboarding");
   }
 
-  const [properties, units, tenants] = await Promise.all([
-    listManagerProperties(supabase, organization.id),
-    listManagerUnits(supabase, { organizationId: organization.id }),
-    listManagerTenants(supabase, { organizationId: organization.id }),
-  ]);
+  const [properties, units, tenants, payments, agreementDocuments] =
+    await Promise.all([
+      listManagerProperties(supabase, organization.id),
+      listManagerUnits(supabase, { organizationId: organization.id }),
+      listManagerTenants(supabase, { organizationId: organization.id }),
+      listManagerRentPayments(supabase, organization.id),
+      listManagerTenantAgreementDocuments(supabase, {
+        organizationId: organization.id,
+      }),
+    ]);
 
   const tenantSummary = getTenantSummary({ tenants, units });
 
@@ -88,7 +96,7 @@ export default async function ManagerTenantsPage({
             Tenants
           </h1>
           <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-            Monitor rent status, balances, due dates, and occupied units.
+            Monitor rent positions, balances, due dates, and occupied units.
           </p>
         </div>
 
@@ -104,19 +112,10 @@ export default async function ManagerTenantsPage({
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
           <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-            Total tenants
+            Current tenants
           </p>
           <p className="mt-2 text-2xl font-black text-text-strong">
-            {tenants.length.toLocaleString("en-NG")}
-          </p>
-        </div>
-
-        <div className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
-          <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-            Active tenants
-          </p>
-          <p className="mt-2 text-2xl font-black text-text-strong">
-            {tenantSummary.active.toLocaleString("en-NG")}
+            {tenantSummary.current.toLocaleString("en-NG")}
           </p>
         </div>
 
@@ -137,14 +136,24 @@ export default async function ManagerTenantsPage({
             {tenantSummary.dueSoon.toLocaleString("en-NG")}
           </p>
         </div>
+
+        <div className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
+          <p className="text-xs font-black uppercase tracking-wide text-text-muted">
+            Notice served
+          </p>
+          <p className="mt-2 text-2xl font-black text-text-strong">
+            {tenantSummary.noticeServed.toLocaleString("en-NG")}
+          </p>
+        </div>
       </section>
 
       <ManagerTenantList
         properties={properties}
         units={units}
         tenants={tenants}
+        payments={payments}
+        agreementDocuments={agreementDocuments}
         searchQuery={resolvedSearchParams?.q ?? ""}
-        statusFilter={resolvedSearchParams?.status ?? "all"}
         rentFilter={resolvedSearchParams?.rent ?? "all"}
       />
     </div>

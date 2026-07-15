@@ -20,6 +20,9 @@ type ManagerReceiptDownload = {
   fileBuffer: ArrayBuffer;
 };
 
+export const MANAGER_RECEIPT_NOT_READY_MESSAGE =
+  "Your payment is confirmed, but the receipt is not ready yet. Please try again shortly.";
+
 export type ManagerReceiptShareLink = {
   whatsappUrl: string;
 };
@@ -61,6 +64,28 @@ function canGenerateReceipt(
   status: ManagerRentReceiptSnapshot["payment"]["status"],
 ) {
   return status === "verified" || status === "recorded";
+}
+
+function createReceiptNotReadyError() {
+  return new AppError(
+    "MANAGER_RECEIPT_NOT_READY",
+    MANAGER_RECEIPT_NOT_READY_MESSAGE,
+    503,
+  );
+}
+
+function createReceiptMetadata(snapshot: ManagerRentReceiptSnapshot) {
+  return {
+    source: "bopa_manager_receipt_generation",
+    payment_status: snapshot.payment.status,
+    amount_paid: snapshot.payment.amountPaid,
+    tenant_name: snapshot.tenant.name,
+    landlord_name: snapshot.landlord.name,
+    property_name: snapshot.property.name,
+    unit_label: snapshot.unit.label,
+    manager_company_name: snapshot.organization.name,
+    powered_by: "BOPA - Boldverse Property App",
+  };
 }
 
 function isWebReadableStream(
@@ -156,14 +181,37 @@ async function renderReceiptPdfBuffer(params: {
   return pdfOutputToBuffer(rendered);
 }
 
+async function renderAndUploadReceiptPdf(params: {
+  receiptNumber: string;
+  generatedAt: string;
+  snapshot: ManagerRentReceiptSnapshot;
+  storageBucket?: string;
+  storagePath: string;
+}) {
+  const fileBuffer = await renderReceiptPdfBuffer({
+    receiptNumber: params.receiptNumber,
+    generatedAt: params.generatedAt,
+    snapshot: params.snapshot,
+  });
+
+  await uploadReceiptPdf({
+    storageBucket: params.storageBucket,
+    storagePath: params.storagePath,
+    fileBuffer,
+  });
+
+  return fileBuffer;
+}
+
 async function uploadReceiptPdf(params: {
+  storageBucket?: string;
   storagePath: string;
   fileBuffer: Buffer;
 }) {
   const supabase = createSupabaseAdminClient();
 
   const { error } = await supabase.storage
-    .from(MANAGER_RENT_RECEIPTS_BUCKET)
+    .from(params.storageBucket || MANAGER_RENT_RECEIPTS_BUCKET)
     .upload(params.storagePath, params.fileBuffer, {
       contentType: "application/pdf",
       upsert: true,
@@ -174,12 +222,15 @@ async function uploadReceiptPdf(params: {
   }
 }
 
-async function downloadReceiptPdf(storagePath: string) {
+async function downloadStoredReceiptPdf(params: {
+  storageBucket: string;
+  storagePath: string;
+}) {
   const supabase = createSupabaseAdminClient();
 
   const { data, error } = await supabase.storage
-    .from(MANAGER_RENT_RECEIPTS_BUCKET)
-    .download(storagePath);
+    .from(params.storageBucket || MANAGER_RENT_RECEIPTS_BUCKET)
+    .download(params.storagePath);
 
   if (error || !data) {
     throw error;
@@ -188,12 +239,113 @@ async function downloadReceiptPdf(storagePath: string) {
   return data.arrayBuffer();
 }
 
-async function createReceiptSignedUrl(storagePath: string) {
+async function getReceiptSnapshotForGeneration(params: {
+  organizationId: string;
+  rentPaymentId: string;
+}) {
+  const adminSupabase = createSupabaseAdminClient();
+  const snapshot = await getManagerRentReceiptSnapshot(adminSupabase, {
+    organizationId: params.organizationId,
+    rentPaymentId: params.rentPaymentId,
+  });
+
+  if (!snapshot) {
+    throw new AppError(
+      "MANAGER_PAYMENT_NOT_FOUND",
+      "Payment record was not found.",
+      404,
+    );
+  }
+
+  if (!canGenerateReceipt(snapshot.payment.status)) {
+    throw new AppError(
+      "MANAGER_RECEIPT_NOT_READY",
+      "Receipt can only be generated after payment is recorded or confirmed.",
+      400,
+    );
+  }
+
+  return snapshot;
+}
+
+async function regenerateStoredReceiptPdf(params: {
+  organizationId: string;
+  rentPaymentId: string;
+  receipt: ManagerRentPaymentReceiptRow;
+}) {
+  const snapshot = await getReceiptSnapshotForGeneration({
+    organizationId: params.organizationId,
+    rentPaymentId: params.rentPaymentId,
+  });
+
+  return renderAndUploadReceiptPdf({
+    receiptNumber: params.receipt.receipt_number,
+    generatedAt: params.receipt.generated_at,
+    snapshot,
+    storageBucket: params.receipt.storage_bucket,
+    storagePath: params.receipt.storage_path,
+  });
+}
+
+async function downloadOrRecoverReceiptPdf(params: {
+  organizationId: string;
+  rentPaymentId: string;
+  receipt: ManagerRentPaymentReceiptRow;
+}) {
+  try {
+    return await downloadStoredReceiptPdf({
+      storageBucket: params.receipt.storage_bucket,
+      storagePath: params.receipt.storage_path,
+    });
+  } catch (downloadError) {
+    console.error("manager receipt PDF download failed; attempting recovery", {
+      organizationId: params.organizationId,
+      rentPaymentId: params.rentPaymentId,
+      receiptId: params.receipt.id,
+      error:
+        downloadError instanceof Error
+          ? {
+              name: downloadError.name,
+              message: downloadError.message,
+            }
+          : "Unknown receipt download error",
+    });
+  }
+
+  try {
+    const recoveredBuffer = await regenerateStoredReceiptPdf(params);
+    const fileBuffer = new ArrayBuffer(recoveredBuffer.byteLength);
+
+    new Uint8Array(fileBuffer).set(recoveredBuffer);
+
+    return fileBuffer;
+  } catch (recoveryError) {
+    console.error("manager receipt PDF recovery failed", {
+      organizationId: params.organizationId,
+      rentPaymentId: params.rentPaymentId,
+      receiptId: params.receipt.id,
+      error:
+        recoveryError instanceof Error
+          ? {
+              name: recoveryError.name,
+              message: recoveryError.message,
+            }
+          : "Unknown receipt recovery error",
+    });
+
+    throw createReceiptNotReadyError();
+  }
+}
+
+async function createReceiptSignedUrl(params: {
+  storageBucket: string;
+  storagePath: string;
+}) {
   const supabase = createSupabaseAdminClient();
 
   const { data, error } = await supabase.storage
-    .from(MANAGER_RENT_RECEIPTS_BUCKET)
-    .createSignedUrl(storagePath, 60 * 60 * 24 * 7);
+    .from(params.storageBucket || MANAGER_RENT_RECEIPTS_BUCKET)
+    .createSignedUrl(params.storagePath, 60 * 60 * 24 * 7);
 
   if (error || !data?.signedUrl) {
     throw error;
@@ -260,39 +412,34 @@ export async function getOrCreateManagerRentReceipt(params: {
   const organization = await requireManagerReceiptAccess(
     params.managerProfileId,
   );
-  const adminSupabase = createSupabaseAdminClient();
 
+  return getOrCreateManagerRentReceiptForPayment({
+    organizationId: organization.id,
+    rentPaymentId: params.rentPaymentId,
+    generatedByProfileId: params.managerProfileId,
+  });
+}
+
+export async function getOrCreateManagerRentReceiptForPayment(params: {
+  organizationId: string;
+  rentPaymentId: string;
+  generatedByProfileId: string | null;
+}) {
+  const adminSupabase = createSupabaseAdminClient();
+  const snapshot = await getReceiptSnapshotForGeneration({
+    organizationId: params.organizationId,
+    rentPaymentId: params.rentPaymentId,
+  });
   const existingReceipt = await getManagerRentPaymentReceiptByPaymentId(
     adminSupabase,
     {
-      organizationId: organization.id,
+      organizationId: params.organizationId,
       rentPaymentId: params.rentPaymentId,
     },
   );
 
   if (existingReceipt) {
     return existingReceipt;
-  }
-
-  const snapshot = await getManagerRentReceiptSnapshot(adminSupabase, {
-    organizationId: organization.id,
-    rentPaymentId: params.rentPaymentId,
-  });
-
-  if (!snapshot) {
-    throw new AppError(
-      "MANAGER_PAYMENT_NOT_FOUND",
-      "Payment record was not found.",
-      404,
-    );
-  }
-
-  if (!canGenerateReceipt(snapshot.payment.status)) {
-    throw new AppError(
-      "MANAGER_RECEIPT_NOT_READY",
-      "Receipt can only be generated after payment is recorded or confirmed.",
-      400,
-    );
   }
 
   const generatedAt = new Date().toISOString();
@@ -302,40 +449,51 @@ export async function getOrCreateManagerRentReceipt(params: {
   });
   const fileName = createFileName(receiptNumber);
   const storagePath = createStoragePath({
-    organizationId: organization.id,
+    organizationId: params.organizationId,
     rentPaymentId: snapshot.payment.id,
     fileName,
   });
 
-  const fileBuffer = await renderReceiptPdfBuffer({
+  let storedPdfExists = false;
+
+  try {
+    await downloadStoredReceiptPdf({
+      storageBucket: MANAGER_RENT_RECEIPTS_BUCKET,
+      storagePath,
+    });
+
+    storedPdfExists = true;
+  } catch {
+    storedPdfExists = false;
+  }
+
+  if (storedPdfExists) {
+    return createManagerRentPaymentReceipt(adminSupabase, {
+      organizationId: params.organizationId,
+      rentPaymentId: snapshot.payment.id,
+      receiptNumber,
+      storagePath,
+      fileName,
+      generatedByProfileId: params.generatedByProfileId,
+      metadata: createReceiptMetadata(snapshot),
+    });
+  }
+
+  await renderAndUploadReceiptPdf({
     receiptNumber,
     generatedAt,
     snapshot,
-  });
-
-  await uploadReceiptPdf({
     storagePath,
-    fileBuffer,
   });
 
   return createManagerRentPaymentReceipt(adminSupabase, {
-    organizationId: organization.id,
+    organizationId: params.organizationId,
     rentPaymentId: snapshot.payment.id,
     receiptNumber,
     storagePath,
     fileName,
-    generatedByProfileId: params.managerProfileId,
-    metadata: {
-      source: "bopa_manager_receipt_generation",
-      payment_status: snapshot.payment.status,
-      amount_paid: snapshot.payment.amountPaid,
-      tenant_name: snapshot.tenant.name,
-      landlord_name: snapshot.landlord.name,
-      property_name: snapshot.property.name,
-      unit_label: snapshot.unit.label,
-      manager_company_name: snapshot.organization.name,
-      powered_by: "BOPA - Boldverse Property App",
-    },
+    generatedByProfileId: params.generatedByProfileId,
+    metadata: createReceiptMetadata(snapshot),
   });
 }
 
@@ -343,13 +501,58 @@ export async function getManagerRentReceiptDownload(params: {
   managerProfileId: string;
   rentPaymentId: string;
 }): Promise<ManagerReceiptDownload> {
-  const receipt = await getOrCreateManagerRentReceipt(params);
-  const fileBuffer = await downloadReceiptPdf(receipt.storage_path);
+  const organization = await requireManagerReceiptAccess(
+    params.managerProfileId,
+  );
+  const receipt = await getOrCreateManagerRentReceiptForPayment({
+    organizationId: organization.id,
+    rentPaymentId: params.rentPaymentId,
+    generatedByProfileId: params.managerProfileId,
+  });
+  const fileBuffer = await downloadOrRecoverReceiptPdf({
+    organizationId: organization.id,
+    rentPaymentId: params.rentPaymentId,
+    receipt,
+  });
 
   return {
     receipt,
     fileBuffer,
   };
+}
+
+export async function getManagerRentReceiptDownloadForPayment(params: {
+  organizationId: string;
+  rentPaymentId: string;
+  generatedByProfileId: string | null;
+}): Promise<ManagerReceiptDownload> {
+  const receipt = await getOrCreateManagerRentReceiptForPayment(params);
+  const fileBuffer = await downloadOrRecoverReceiptPdf({
+    organizationId: params.organizationId,
+    rentPaymentId: params.rentPaymentId,
+    receipt,
+  });
+
+  return {
+    receipt,
+    fileBuffer,
+  };
+}
+
+export async function ensureManagerRentReceiptPdfForPayment(params: {
+  organizationId: string;
+  rentPaymentId: string;
+  generatedByProfileId: string | null;
+}) {
+  const receipt = await getOrCreateManagerRentReceiptForPayment(params);
+
+  await downloadOrRecoverReceiptPdf({
+    organizationId: params.organizationId,
+    rentPaymentId: params.rentPaymentId,
+    receipt,
+  });
+
+  return receipt;
 }
 
 export async function getManagerRentReceiptWhatsAppLink(params: {
@@ -375,7 +578,15 @@ export async function getManagerRentReceiptWhatsAppLink(params: {
   }
 
   const receipt = await getOrCreateManagerRentReceipt(params);
-  const signedUrl = await createReceiptSignedUrl(receipt.storage_path);
+  await downloadOrRecoverReceiptPdf({
+    organizationId: organization.id,
+    rentPaymentId: params.rentPaymentId,
+    receipt,
+  });
+  const signedUrl = await createReceiptSignedUrl({
+    storageBucket: receipt.storage_bucket,
+    storagePath: receipt.storage_path,
+  });
   const phoneNumber = normalizeWhatsAppPhone(snapshot.tenant.phone);
 
   if (!phoneNumber) {

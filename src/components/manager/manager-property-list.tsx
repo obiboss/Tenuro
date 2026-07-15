@@ -1,14 +1,17 @@
 import Link from "next/link";
-import type {
-  ManagerLandlordClientRow,
-  ManagerPropertyRow,
-  ManagerUnitRow,
+import {
+  buildManagerOccupancySnapshot,
+  type ManagerLandlordClientRow,
+  type ManagerPropertyRow,
+  type ManagerTenantRow,
+  type ManagerUnitRow,
 } from "@/server/repositories/manager.repository";
 
 type ManagerPropertyListProps = {
   landlordClients: ManagerLandlordClientRow[];
   properties: ManagerPropertyRow[];
   units: ManagerUnitRow[];
+  tenants: ManagerTenantRow[];
   searchQuery: string;
   statusFilter: string;
   collectionFilter: string;
@@ -92,8 +95,13 @@ function getStatusClassName(status: string) {
   return "bg-surface text-text-muted";
 }
 
-function buildUnitSummaryByPropertyId(units: ManagerUnitRow[]) {
-  return units.reduce((summary, unit) => {
+function buildUnitSummaryByPropertyId(params: {
+  units: ManagerUnitRow[];
+  tenants: ManagerTenantRow[];
+}) {
+  const occupancy = buildManagerOccupancySnapshot(params);
+
+  return params.units.reduce((summary, unit) => {
     const existing = summary.get(unit.property_id) ?? {
       total: 0,
       occupied: 0,
@@ -102,11 +110,11 @@ function buildUnitSummaryByPropertyId(units: ManagerUnitRow[]) {
 
     existing.total += 1;
 
-    if (unit.status === "occupied") {
+    if (occupancy.occupiedUnitIds.has(unit.id)) {
       existing.occupied += 1;
     }
 
-    if (unit.status === "vacant") {
+    if (occupancy.vacantUnitIds.has(unit.id)) {
       existing.vacant += 1;
     }
 
@@ -124,6 +132,7 @@ export function ManagerPropertyList({
   landlordClients,
   properties,
   units,
+  tenants,
   searchQuery,
   statusFilter,
   collectionFilter,
@@ -142,7 +151,10 @@ export function ManagerPropertyList({
     landlordClients.map((client) => [client.id, client.landlord_name]),
   );
 
-  const unitSummaryByPropertyId = buildUnitSummaryByPropertyId(units);
+  const unitSummaryByPropertyId = buildUnitSummaryByPropertyId({
+    units,
+    tenants,
+  });
   const lowerSearchQuery = safeSearchQuery.toLowerCase();
 
   const filteredProperties = properties

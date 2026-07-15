@@ -1,11 +1,15 @@
 "use client";
 
 import { useActionState, useMemo, useState } from "react";
-import { createManagerTenantOnboardingRequestAction } from "@/actions/manager-tenant-onboarding.actions";
+import {
+  createManagerTenantOnboardingRequestAction,
+  resendManagerTenantOnboardingLinkAction,
+} from "@/actions/manager-tenant-onboarding.actions";
 import { initialManagerTenantOnboardingActionState } from "@/actions/manager-tenant-onboarding.state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { WhatsAppShareActions } from "@/components/ui/whatsapp-share-actions";
+import type { ManagerTenantOnboardingRequestRow } from "@/server/repositories/manager-tenant-onboarding.repository";
 import type {
   ManagerPropertyRow,
   ManagerUnitRow,
@@ -16,6 +20,7 @@ type ManagerTenantOnboardingFormProps = {
   unit: ManagerUnitRow;
   isManagerPayoutVerified: boolean;
   managerPayoutStatus: string | null;
+  existingRequest?: ManagerTenantOnboardingRequestRow | null;
 };
 
 type TenantOnboardingType = "current_occupant" | "new_incoming_tenant";
@@ -66,6 +71,7 @@ export function ManagerTenantOnboardingForm({
   unit,
   isManagerPayoutVerified,
   managerPayoutStatus,
+  existingRequest = null,
 }: ManagerTenantOnboardingFormProps) {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [onboardingType, setOnboardingType] =
@@ -73,6 +79,11 @@ export function ManagerTenantOnboardingForm({
 
   const [state, formAction, isPending] = useActionState(
     createManagerTenantOnboardingRequestAction,
+    initialManagerTenantOnboardingActionState,
+  );
+
+  const [resendState, resendAction, isResending] = useActionState(
+    resendManagerTenantOnboardingLinkAction,
     initialManagerTenantOnboardingActionState,
   );
 
@@ -89,7 +100,13 @@ export function ManagerTenantOnboardingForm({
     [effectiveOnboardingType],
   );
 
-  if (state.ok) {
+  const linkReadyState = state.ok
+    ? state
+    : resendState.ok && resendState.requestId === existingRequest?.id
+      ? resendState
+      : null;
+
+  if (linkReadyState) {
     return (
       <section
         id="tenant-onboarding"
@@ -101,12 +118,11 @@ export function ManagerTenantOnboardingForm({
           </p>
 
           <h2 className="mt-4 text-lg font-black tracking-tight text-text-strong">
-            Tenant link is ready
+            Tenant link ready
           </h2>
 
           <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-            Send it to the tenant on WhatsApp. When the tenant submits details,
-            the request will appear in the review table.
+            Send the link to the tenant to complete their details.
           </p>
         </div>
 
@@ -116,33 +132,61 @@ export function ManagerTenantOnboardingForm({
               {unit.unit_label} · {property.property_name}
             </p>
             <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-              Do not create another tenant request for this unit while this one
-              is in progress.
+              Waiting for tenant details
             </p>
           </div>
 
-          {state.whatsappMessage ? (
+          {linkReadyState.whatsappMessage ? (
             <WhatsAppShareActions
-              phoneNumber={state.tenantWhatsappNumber}
-              message={state.whatsappMessage}
-              copyText={state.claimUrl ?? state.whatsappMessage}
-              whatsappLabel="Send via WhatsApp"
-              copyLabel="Copy tenant link"
+              phoneNumber={linkReadyState.tenantWhatsappNumber}
+              message={linkReadyState.whatsappMessage}
+              copyText={linkReadyState.whatsappMessage}
+              whatsappLabel="Open WhatsApp"
+              copyLabel="Copy message"
             />
           ) : (
             <div className="rounded-button bg-warning-soft px-4 py-3 text-sm font-semibold leading-6 text-warning">
-              WhatsApp message could not be prepared. Copy the tenant link and
-              send it manually.
+              WhatsApp message could not be prepared. Use Send again to prepare
+              a fresh message.
             </div>
           )}
-
-          <a
-            href="#tenant-review"
-            className="inline-flex min-h-11 w-full items-center justify-center rounded-button border border-border-soft bg-white px-5 text-sm font-extrabold text-text-strong transition hover:bg-surface"
-          >
-            Go to review table
-          </a>
         </div>
+      </section>
+    );
+  }
+
+  if (existingRequest?.status === "pending") {
+    return (
+      <section
+        id="tenant-onboarding"
+        className="rounded-card border border-border-soft bg-white shadow-sm"
+      >
+        <div className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-lg font-black tracking-tight text-text-strong">
+              Waiting for tenant details
+            </h2>
+            <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+              The tenant has not submitted their information yet.
+            </p>
+          </div>
+
+          <form action={resendAction} className="shrink-0">
+            <input type="hidden" name="requestId" value={existingRequest.id} />
+            <Button type="submit" isLoading={isResending}>
+              Send again
+            </Button>
+          </form>
+        </div>
+
+        {resendState.message && !resendState.ok ? (
+          <div
+            role="alert"
+            className="mx-4 mb-4 rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
+          >
+            {resendState.message}
+          </div>
+        ) : null}
       </section>
     );
   }

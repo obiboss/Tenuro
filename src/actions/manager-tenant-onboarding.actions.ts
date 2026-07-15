@@ -58,7 +58,10 @@ export async function createManagerTenantOnboardingRequestAction(
       await createManagerTenantOnboardingRequestForCurrentManager(parsed);
 
     revalidatePath("/manager");
+    revalidatePath("/manager/overview");
+    revalidatePath("/manager/attention");
     revalidatePath("/manager/properties");
+    revalidatePath(`/manager/properties/${parsed.propertyId}`);
     revalidatePath("/manager/tenants");
 
     return {
@@ -123,6 +126,8 @@ export async function approveManagerTenantOnboardingRequestAction(
       await approveManagerTenantOnboardingRequestForCurrentManager(parsed);
 
     revalidatePath("/manager");
+    revalidatePath("/manager/overview");
+    revalidatePath("/manager/attention");
     revalidatePath("/manager/properties");
     revalidatePath("/manager/tenants");
     revalidatePath("/manager/payments");
@@ -130,7 +135,7 @@ export async function approveManagerTenantOnboardingRequestAction(
     return {
       ok: true,
       message: result.agreement
-        ? "Agreement link is ready."
+        ? "Agreement ready to send."
         : "Current occupant approved and added to the unit.",
       tenantId: result.tenant.id,
       agreementId: result.agreement?.id,
@@ -158,6 +163,8 @@ export async function rejectManagerTenantOnboardingRequestAction(
     await rejectManagerTenantOnboardingRequestForCurrentManager(parsed);
 
     revalidatePath("/manager");
+    revalidatePath("/manager/overview");
+    revalidatePath("/manager/attention");
     revalidatePath("/manager/properties");
     revalidatePath("/manager/tenants");
 
@@ -185,6 +192,8 @@ export async function resendManagerTenantOnboardingLinkAction(
       await resendManagerTenantOnboardingLinkForCurrentManager(parsed);
 
     revalidatePath("/manager");
+    revalidatePath("/manager/overview");
+    revalidatePath("/manager/attention");
     revalidatePath("/manager/properties");
     revalidatePath("/manager/tenants");
 
@@ -216,6 +225,8 @@ export async function resendManagerFirstRentPaymentLinkAction(
       await resendManagerFirstRentPaymentLinkForCurrentManager(parsed);
 
     revalidatePath("/manager");
+    revalidatePath("/manager/overview");
+    revalidatePath("/manager/attention");
     revalidatePath("/manager/properties");
     revalidatePath("/manager/tenants");
     revalidatePath("/manager/payments");
@@ -243,6 +254,7 @@ export async function acceptManagerTenantAgreementAction(
   try {
     const parsed = acceptManagerTenantAgreementSchema.parse({
       token: formData.get("token"),
+      agreementAcknowledgement: formData.get("agreementAcknowledgement"),
     });
 
     const requestHeaders = await headers();
@@ -255,6 +267,8 @@ export async function acceptManagerTenantAgreementAction(
     });
 
     revalidatePath("/manager");
+    revalidatePath("/manager/overview");
+    revalidatePath("/manager/attention");
     revalidatePath("/manager/properties");
     revalidatePath(`/manager/properties/${result.agreement.property_id}`);
     revalidatePath("/manager/tenants");
@@ -265,6 +279,7 @@ export async function acceptManagerTenantAgreementAction(
       message: "Agreement accepted. Review the payment summary to continue.",
       agreementId: result.agreement.id,
       paymentRequestId: result.paymentRequestId ?? undefined,
+      pdfDownloadUrl: result.pdfDownloadUrl ?? null,
       paymentUrl: result.paymentUrl ?? undefined,
       paymentExpiresAt: result.paymentExpiresAt ?? undefined,
       paymentBreakdown: result.paymentBreakdown ?? null,
@@ -294,6 +309,8 @@ export async function declineManagerTenantAgreementAction(
     });
 
     revalidatePath("/manager");
+    revalidatePath("/manager/overview");
+    revalidatePath("/manager/attention");
     revalidatePath("/manager/properties");
     revalidatePath(`/manager/properties/${result.agreement.property_id}`);
     revalidatePath("/manager/tenants");

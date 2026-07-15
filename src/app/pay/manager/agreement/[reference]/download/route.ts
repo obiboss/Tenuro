@@ -1,30 +1,25 @@
 import { NextResponse } from "next/server";
 import { isAppError } from "@/server/errors/app-error";
-import { getManagerTenancyAgreementPdfDownload } from "@/server/services/manager-tenancy-agreement-pdf.service";
-import { resolveManagerTenantAgreementToken } from "@/server/services/manager-tenant-onboarding.service";
-import { createSupabaseAdminClient } from "@/server/supabase/admin";
+import { getManagerAgreementDownloadByPaymentReference } from "@/server/services/manager-payment-documents.service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
 
-type ManagerAgreementDownloadRouteProps = {
+type ManagerAgreementByReferenceRouteProps = {
   params: Promise<{
-    token: string;
+    reference: string;
   }>;
 };
 
 export async function GET(
   _request: Request,
-  { params }: ManagerAgreementDownloadRouteProps,
+  { params }: ManagerAgreementByReferenceRouteProps,
 ) {
   try {
-    const { token } = await params;
-    const agreement = await resolveManagerTenantAgreementToken(token);
-    const download = await getManagerTenancyAgreementPdfDownload({
-      supabase: createSupabaseAdminClient(),
-      agreement,
-    });
+    const { reference } = await params;
+    const download = await getManagerAgreementDownloadByPaymentReference(
+      decodeURIComponent(reference),
+    );
 
     return new NextResponse(download.fileBuffer, {
       status: 200,

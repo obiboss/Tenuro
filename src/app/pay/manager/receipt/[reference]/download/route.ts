@@ -1,32 +1,26 @@
 import { NextResponse } from "next/server";
 import { isAppError } from "@/server/errors/app-error";
-import { requireManager } from "@/server/services/auth.service";
-import {
-  getManagerRentReceiptDownload,
-  MANAGER_RECEIPT_NOT_READY_MESSAGE,
-} from "@/server/services/manager-receipts.service";
+import { getManagerReceiptDownloadByPaymentReference } from "@/server/services/manager-payment-documents.service";
+import { MANAGER_RECEIPT_NOT_READY_MESSAGE } from "@/server/services/manager-receipts.service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type ManagerReceiptDownloadRouteProps = {
+type ManagerReceiptByReferenceRouteProps = {
   params: Promise<{
-    paymentId: string;
+    reference: string;
   }>;
 };
 
 export async function GET(
   _request: Request,
-  { params }: ManagerReceiptDownloadRouteProps,
+  { params }: ManagerReceiptByReferenceRouteProps,
 ) {
   try {
-    const manager = await requireManager();
-    const resolvedParams = await params;
-
-    const download = await getManagerRentReceiptDownload({
-      managerProfileId: manager.id,
-      rentPaymentId: resolvedParams.paymentId,
-    });
+    const { reference } = await params;
+    const download = await getManagerReceiptDownloadByPaymentReference(
+      decodeURIComponent(reference),
+    );
 
     return new NextResponse(download.fileBuffer, {
       status: 200,

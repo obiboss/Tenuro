@@ -196,6 +196,7 @@ export function PublicManagerAgreementAcceptanceForm({
     acceptState.paymentBreakdown ??
     initialPaymentBreakdown ??
     buildFallbackPaymentBreakdown(agreement);
+  const agreementPdfUrl = acceptState.pdfDownloadUrl ?? pdfDownloadUrl;
 
   const hasTriedPreparingPayment =
     acceptState.ok || agreement.document_status === "accepted";
@@ -217,14 +218,14 @@ export function PublicManagerAgreementAcceptanceForm({
       </div>
 
       <div className="mt-4 space-y-3">
-        {pdfDownloadUrl ? (
+        {agreementPdfUrl ? (
           <a
-            href={pdfDownloadUrl}
+            href={agreementPdfUrl}
             target="_blank"
             rel="noreferrer"
             className="inline-flex min-h-11 w-full items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
           >
-            Download Agreement PDF
+            Download agreement
           </a>
         ) : null}
 
@@ -275,6 +276,17 @@ export function PublicManagerAgreementAcceptanceForm({
 
             <PaymentSummaryCard breakdown={paymentBreakdown} />
 
+            {agreementPdfUrl ? (
+              <a
+                href={agreementPdfUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex min-h-11 w-full items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+              >
+                Download agreement
+              </a>
+            ) : null}
+
             {paymentUrl ? (
               <>
                 <p className="text-sm font-semibold leading-6 text-text-muted">
@@ -310,8 +322,20 @@ export function PublicManagerAgreementAcceptanceForm({
             )}
           </div>
         ) : !declined ? (
-          <form action={acceptAction}>
+          <form action={acceptAction} className="space-y-4">
             <input type="hidden" name="token" value={token} />
+
+            <label className="flex gap-3 rounded-card border border-border-soft bg-surface p-4 text-sm font-semibold leading-6 text-text-strong">
+              <input
+                type="checkbox"
+                name="agreementAcknowledgement"
+                required
+                className="mt-1 size-4 shrink-0 rounded border-border-soft text-primary focus:ring-primary"
+              />
+              <span>
+                I have read and agree to the tenancy terms shown above.
+              </span>
+            </label>
 
             <Button type="submit" isLoading={isAccepting} fullWidth>
               Accept agreement

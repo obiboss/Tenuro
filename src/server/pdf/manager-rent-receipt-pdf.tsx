@@ -198,6 +198,22 @@ function getPaymentStatusLabel(
   return "Reversed payment";
 }
 
+function getPaymentReceiverLabel(value: string) {
+  if (value === "bopa_verified") {
+    return "BOPA verified collection";
+  }
+
+  if (value === "manager") {
+    return "Property manager";
+  }
+
+  if (value === "landlord") {
+    return "Landlord";
+  }
+
+  return value || "Not stated";
+}
+
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.row}>
@@ -253,9 +269,9 @@ export function ManagerRentReceiptPdf({
         </View>
 
         <View style={styles.amountBox}>
-          <Text style={styles.amountLabel}>Amount paid</Text>
+          <Text style={styles.amountLabel}>Total paid</Text>
           <Text style={styles.amountValue}>
-            {formatNaira(snapshot.payment.amountPaid)}
+            {formatNaira(snapshot.payment.totalPaid)}
           </Text>
           <Text style={styles.balanceText}>
             Tenant balance after this record:{" "}
@@ -292,7 +308,29 @@ export function ManagerRentReceiptPdf({
             label="Payment reference"
             value={snapshot.payment.paymentReference ?? "Not stated"}
           />
+          <Row
+            label="Payment receiver"
+            value={getPaymentReceiverLabel(snapshot.payment.paymentReceiver)}
+          />
           <Row label="Payment status" value={paymentStatusLabel} />
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Amount breakdown</Text>
+          <Row label="Rent amount" value={formatNaira(snapshot.payment.amountPaid)} />
+          <Row
+            label="BOPA fee"
+            value={formatNaira(snapshot.payment.bopaPlatformFee)}
+          />
+          <Row
+            label="Paystack charge"
+            value={formatNaira(snapshot.payment.paystackChargeAmount)}
+          />
+          <Row
+            label="Other charges"
+            value={formatNaira(snapshot.payment.otherChargesAmount)}
+          />
+          <Row label="Total paid" value={formatNaira(snapshot.payment.totalPaid)} />
         </View>
 
         {snapshot.payment.status === "recorded" ? (

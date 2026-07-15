@@ -21,6 +21,7 @@ export type ManagerTenantOnboardingActionState = {
   paymentRequestId?: string;
   claimUrl?: string;
   agreementUrl?: string;
+  pdfDownloadUrl?: string | null;
   paymentUrl?: string | null;
   paymentExpiresAt?: string | null;
   paymentBreakdown?: ManagerTenantPaymentBreakdownState | null;

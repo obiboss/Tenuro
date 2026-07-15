@@ -4,10 +4,6 @@ import Link from "next/link";
 import { useActionState, useMemo, useState } from "react";
 import { createManagerUnitAction } from "@/actions/manager.actions";
 import { initialManagerActionState } from "@/actions/manager.state";
-import {
-  MANAGER_CREATABLE_UNIT_STATUSES,
-  MANAGER_UNIT_STATUS_LABELS,
-} from "@/constants/manager";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { CurrencyInput } from "@/components/ui/currency-input";
@@ -230,33 +226,6 @@ export function ManagerUnitForm({
               error={state.ok ? undefined : state.fieldErrors?.rentAmount?.[0]}
               required
             />
-
-            <div className="space-y-2">
-              <label
-                htmlFor="manager-unit-status"
-                className="text-sm font-bold text-text-strong"
-              >
-                Unit status
-              </label>
-              <select
-                id="manager-unit-status"
-                name="status"
-                className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
-                defaultValue="vacant"
-                required
-              >
-                {MANAGER_CREATABLE_UNIT_STATUSES.map((status) => (
-                  <option key={status} value={status}>
-                    {MANAGER_UNIT_STATUS_LABELS[status]}
-                  </option>
-                ))}
-              </select>
-              {state.ok ? null : state.fieldErrors?.status?.[0] ? (
-                <p className="text-sm font-semibold text-danger">
-                  {state.fieldErrors.status[0]}
-                </p>
-              ) : null}
-            </div>
 
             <div className="space-y-2">
               <label
