@@ -2,7 +2,17 @@ import Link from "next/link";
 import { DeveloperLoginForm } from "@/components/developer/developer-login-form";
 import { PageHeader } from "@/components/ui/page-header";
 
-export default function DeveloperLoginPage() {
+type DeveloperLoginPageProps = {
+  searchParams?: Promise<{
+    passwordUpdated?: string;
+  }>;
+};
+
+export default async function DeveloperLoginPage({
+  searchParams,
+}: DeveloperLoginPageProps) {
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+
   return (
     <main className="min-h-screen bg-background">
       <section className="mx-auto max-w-xl px-4 py-12 md:px-6">
@@ -26,7 +36,9 @@ export default function DeveloperLoginPage() {
           description="Access your estate sales workspace, buyer records, payment tracking, and developer tools."
         />
 
-        <DeveloperLoginForm />
+        <DeveloperLoginForm
+          passwordUpdated={resolvedSearchParams.passwordUpdated === "true"}
+        />
       </section>
     </main>
   );

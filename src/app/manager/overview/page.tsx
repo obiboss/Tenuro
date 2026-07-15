@@ -1,13 +1,10 @@
 import { redirect } from "next/navigation";
 import { ManagerBankAccountGate } from "@/components/manager/manager-bank-account-gate";
-import { ManagerOverviewCards } from "@/components/manager/manager-overview-cards";
+import { ManagerOperationalOverview } from "@/components/manager/manager-operational-overview";
 import { getActiveManagerPaystackAccount } from "@/server/repositories/manager-paystack-accounts.repository";
 import {
+  getManagerOverview,
   getManagerOrganizationForCurrentUser,
-  listManagerProperties,
-  listManagerRentPayments,
-  listManagerTenants,
-  listManagerUnits,
 } from "@/server/repositories/manager.repository";
 import { requireManager } from "@/server/services/auth.service";
 import { createSupabaseServerClient } from "@/server/supabase/server";
@@ -25,26 +22,24 @@ export default async function ManagerOverviewPage() {
     redirect("/manager/onboarding");
   }
 
-  const [properties, units, tenants, payments, managerPaystackAccount] =
-    await Promise.all([
-      listManagerProperties(supabase, organization.id),
-      listManagerUnits(supabase, { organizationId: organization.id }),
-      listManagerTenants(supabase, { organizationId: organization.id }),
-      listManagerRentPayments(supabase, organization.id),
-      getActiveManagerPaystackAccount(supabase, organization.id),
-    ]);
+  const [overview, managerPaystackAccount] = await Promise.all([
+    getManagerOverview(supabase, organization.id),
+    getActiveManagerPaystackAccount(supabase, organization.id),
+  ]);
+
+  if (!overview) {
+    redirect("/manager/onboarding");
+  }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <ManagerBankAccountGate
         verificationStatus={managerPaystackAccount?.verification_status ?? null}
       />
 
-      <ManagerOverviewCards
-        properties={properties}
-        units={units}
-        tenants={tenants}
-        payments={payments}
+      <ManagerOperationalOverview
+        managerName={manager.fullName}
+        overview={overview}
       />
     </div>
   );

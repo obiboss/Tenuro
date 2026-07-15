@@ -17,6 +17,8 @@ import {
   getManagerPropertyById,
   getManagerTenantById,
   getManagerUnitById,
+  hasCurrentManagerTenantForUnit,
+  isCurrentManagerTenantStatus,
   recordManagerLandlordRemittance as recordManagerLandlordRemittanceRecord,
   recordManagerRentPayment as recordManagerRentPaymentRecord,
   updateManagerUnitStatus,
@@ -316,10 +318,23 @@ export async function createManagerTenant(input: CreateManagerTenantInput) {
     );
   }
 
-  if (input.status === "active" && unit.status !== "vacant") {
+  if (unit.status !== "vacant") {
     throw new AppError(
       "MANAGER_UNIT_NOT_VACANT",
-      "This unit is not vacant. Move out the current tenant before adding a new active tenant.",
+      "This unit is not vacant. Move out the current tenant before adding a new tenant.",
+      400,
+    );
+  }
+
+  const hasCurrentTenant = await hasCurrentManagerTenantForUnit(supabase, {
+    organizationId: organization.id,
+    unitId: input.unitId,
+  });
+
+  if (hasCurrentTenant) {
+    throw new AppError(
+      "MANAGER_UNIT_ALREADY_HAS_CURRENT_TENANT",
+      "This unit already has a current tenant.",
       400,
     );
   }
@@ -337,17 +352,15 @@ export async function createManagerTenant(input: CreateManagerTenantInput) {
     currentBalance: roundMoney(input.currentBalance),
     moveInDate: nullableDate(input.moveInDate),
     nextRentDueDate: nullableDate(input.nextRentDueDate),
-    status: input.status,
+    status: "active",
     notes: nullableText(input.notes),
   });
 
-  if (input.status === "active" && unit.status === "vacant") {
-    await updateManagerUnitStatus(supabase, {
-      organizationId: organization.id,
-      unitId: input.unitId,
-      status: "occupied",
-    });
-  }
+  await updateManagerUnitStatus(supabase, {
+    organizationId: organization.id,
+    unitId: input.unitId,
+    status: "occupied",
+  });
 
   return tenant;
 }
@@ -395,10 +408,10 @@ export async function recordManagerRentPayment(
     tenantId: input.tenantId,
   });
 
-  if (!tenant || tenant.status !== "active") {
+  if (!tenant || !isCurrentManagerTenantStatus(tenant.status)) {
     throw new AppError(
       "MANAGER_PAYMENT_TENANT_NOT_ACTIVE",
-      "The selected tenant is not active.",
+      "The selected tenant is not current.",
       400,
     );
   }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import Link from "next/link";
+import { useActionState, useEffect, useState } from "react";
 import { phonePasswordLoginAction } from "@/actions/auth.actions";
 import { initialAuthActionState } from "@/actions/auth.state";
 import { PhoneNumberInput } from "@/components/auth/phone-number-input";
@@ -9,17 +10,34 @@ import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { TrustNotice } from "@/components/ui/trust-notice";
 
+const PASSWORD_UPDATED_MESSAGE =
+  "Password changed successfully. Sign in with your new password.";
+
 type PhoneLoginFormProps = {
   purpose?: "login" | "register";
+  passwordUpdated?: boolean;
 };
 
-export function PhoneLoginForm({ purpose = "login" }: PhoneLoginFormProps) {
+export function PhoneLoginForm({
+  purpose = "login",
+  passwordUpdated = false,
+}: PhoneLoginFormProps) {
   const [phoneNumber, setPhoneNumber] = useState("");
 
   const [state, formAction, isPending] = useActionState(
     phonePasswordLoginAction,
     initialAuthActionState,
   );
+
+  useEffect(() => {
+    if (!passwordUpdated) {
+      return;
+    }
+
+    const url = new URL(window.location.href);
+    url.searchParams.delete("passwordUpdated");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}`);
+  }, [passwordUpdated]);
 
   const noticeTitle =
     purpose === "register"
@@ -31,6 +49,13 @@ export function PhoneLoginForm({ purpose = "login" }: PhoneLoginFormProps) {
       ? "Use your phone number and password to continue setting up your account."
       : "Use your registered phone number and password. No verification code is required for normal login.";
 
+  const statusMessage = state.message
+    ? state.message
+    : passwordUpdated
+      ? PASSWORD_UPDATED_MESSAGE
+      : "";
+  const statusOk = state.message ? state.ok : passwordUpdated;
+
   return (
     <div className="space-y-5">
       <TrustNotice title={noticeTitle} description={noticeDescription} />
@@ -38,16 +63,16 @@ export function PhoneLoginForm({ purpose = "login" }: PhoneLoginFormProps) {
       <form action={formAction}>
         <Card>
           <CardContent>
-            {state.message ? (
+            {statusMessage ? (
               <div
                 role="alert"
                 className={
-                  state.ok
+                  statusOk
                     ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
                     : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
                 }
               >
-                {state.message}
+                {statusMessage}
               </div>
             ) : null}
 
@@ -61,15 +86,26 @@ export function PhoneLoginForm({ purpose = "login" }: PhoneLoginFormProps) {
               required
             />
 
-            <Input
-              label="Password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              placeholder="Enter your password"
-              error={state.fieldErrors?.password?.[0]}
-              required
-            />
+            <div className="space-y-2">
+              <Input
+                label="Password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                placeholder="Enter your password"
+                error={state.fieldErrors?.password?.[0]}
+                required
+              />
+
+              <div className="text-right">
+                <Link
+                  href="/forgot-password"
+                  className="text-sm font-bold text-primary hover:text-primary-hover"
+                >
+                  Forgot password?
+                </Link>
+              </div>
+            </div>
           </CardContent>
 
           <CardFooter className="items-stretch">

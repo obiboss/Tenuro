@@ -79,6 +79,22 @@ export const MANAGER_TENANT_STATUSES = [
 
 export type ManagerTenantStatus = (typeof MANAGER_TENANT_STATUSES)[number];
 
+export const MANAGER_CURRENT_TENANT_STATUSES = [
+  "active",
+  "eviction_notice",
+] as const satisfies readonly ManagerTenantStatus[];
+
+export type ManagerCurrentTenantStatus =
+  (typeof MANAGER_CURRENT_TENANT_STATUSES)[number];
+
+export function isManagerCurrentTenantStatus(
+  status: string,
+): status is ManagerCurrentTenantStatus {
+  return MANAGER_CURRENT_TENANT_STATUSES.some(
+    (currentStatus) => currentStatus === status,
+  );
+}
+
 export const MANAGER_PAYMENT_METHODS = [
   "bank_transfer",
   "cash",
@@ -185,9 +201,9 @@ export const MANAGER_UNIT_STATUS_LABELS: Record<ManagerUnitStatus, string> = {
 
 export const MANAGER_TENANT_STATUS_LABELS: Record<ManagerTenantStatus, string> =
   {
-    active: "Active",
+    active: "Current",
     moved_out: "Moved out",
-    eviction_notice: "Eviction notice",
+    eviction_notice: "Notice served",
     inactive: "Inactive",
   };
 

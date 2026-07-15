@@ -3,7 +3,17 @@ import { ManagerLoginForm } from "@/components/manager/manager-login-form";
 import { PageHeader } from "@/components/ui/page-header";
 import { TrustNotice } from "@/components/ui/trust-notice";
 
-export default function PropertyManagerLoginPage() {
+type PropertyManagerLoginPageProps = {
+  searchParams?: Promise<{
+    passwordUpdated?: string;
+  }>;
+};
+
+export default async function PropertyManagerLoginPage({
+  searchParams,
+}: PropertyManagerLoginPageProps) {
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+
   return (
     <>
       <PageHeader
@@ -17,7 +27,9 @@ export default function PropertyManagerLoginPage() {
           description="Use this workspace to manage landlord clients, properties, tenants, rents, and payment records."
         />
 
-        <ManagerLoginForm />
+        <ManagerLoginForm
+          passwordUpdated={resolvedSearchParams.passwordUpdated === "true"}
+        />
 
         <p className="text-center text-sm text-text-muted">
           New property management firm?{" "}

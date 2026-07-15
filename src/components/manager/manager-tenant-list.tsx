@@ -1,5 +1,8 @@
 import Link from "next/link";
-import { MANAGER_TENANT_STATUS_LABELS } from "@/constants/manager";
+import {
+  getManagerTenantRentStatus,
+  type ManagerTenantRentStatus,
+} from "@/lib/manager-rent-status";
 import type {
   ManagerPropertyRow,
   ManagerTenantRow,
@@ -15,12 +18,6 @@ type ManagerTenantListProps = {
   rentFilter: string;
 };
 
-type TenantRentSignal = {
-  label: string;
-  value: "clear" | "owing" | "due_soon" | "overdue" | "not_set";
-  className: string;
-};
-
 const statusFilterOptions = [
   {
     value: "all",
@@ -28,19 +25,11 @@ const statusFilterOptions = [
   },
   {
     value: "active",
-    label: "Active",
-  },
-  {
-    value: "inactive",
-    label: "Inactive",
-  },
-  {
-    value: "moved_out",
-    label: "Moved out",
+    label: "Current",
   },
   {
     value: "eviction_notice",
-    label: "Eviction notice",
+    label: "Notice served",
   },
 ] as const;
 
@@ -87,71 +76,65 @@ function formatDate(date: string | null) {
   }).format(new Date(`${date}T00:00:00`));
 }
 
-function getDaysFromToday(date: string | null) {
-  if (!date) {
-    return null;
-  }
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const dueDate = new Date(`${date}T00:00:00`);
-  const difference = dueDate.getTime() - today.getTime();
-
-  return Math.ceil(difference / (1000 * 60 * 60 * 24));
-}
-
-function getTenantRentSignal(tenant: ManagerTenantRow): TenantRentSignal {
-  const balance = Number(tenant.current_balance);
-
-  if (balance > 0) {
-    return {
-      label: "Owing",
-      value: "owing",
-      className: "bg-danger-soft text-danger",
-    };
-  }
-
-  const daysUntilDue = getDaysFromToday(tenant.next_rent_due_date);
-
-  if (daysUntilDue === null) {
-    return {
-      label: "No due date",
-      value: "not_set",
-      className: "bg-surface text-text-muted",
-    };
-  }
-
-  if (daysUntilDue < 0) {
-    return {
-      label: `Overdue by ${Math.abs(daysUntilDue)} day${
-        Math.abs(daysUntilDue) === 1 ? "" : "s"
-      }`,
-      value: "overdue",
-      className: "bg-danger-soft text-danger",
-    };
-  }
-
-  if (daysUntilDue <= 30) {
-    return {
-      label:
-        daysUntilDue === 0
-          ? "Due today"
-          : `Due in ${daysUntilDue} day${daysUntilDue === 1 ? "" : "s"}`,
-      value: "due_soon",
-      className: "bg-warning-soft text-warning",
-    };
-  }
-
-  return {
-    label: "Clear",
-    value: "clear",
-    className: "bg-success-soft text-success",
-  };
-}
-
 function normaliseFilter(value: string, allowedValues: readonly string[]) {
   return allowedValues.includes(value) ? value : "all";
+}
+
+function getTenantRentStatusClassName(rentStatus: ManagerTenantRentStatus) {
+  if (rentStatus.kind === "owing") {
+    return "bg-danger-soft text-danger";
+  }
+
+  if (rentStatus.kind === "due_soon") {
+    return "bg-warning-soft text-warning";
+  }
+
+  if (rentStatus.kind === "clear") {
+    return "bg-success-soft text-success";
+  }
+
+  return "bg-surface text-text-muted";
+}
+
+function getTenantRentFilterValue(rentStatus: ManagerTenantRentStatus) {
+  if (rentStatus.kind === "owing" && Number(rentStatus.daysFromToday) < 0) {
+    return "overdue";
+  }
+
+  return rentStatus.kind;
+}
+
+function getTenantDisplayStatusLabel(params: {
+  tenant: ManagerTenantRow;
+}) {
+  if (params.tenant.status === "eviction_notice") {
+    return "Notice served";
+  }
+
+  return "Current";
+}
+
+function getTenantDisplayStatusClassName(tenant: ManagerTenantRow) {
+  if (tenant.status === "eviction_notice") {
+    return "bg-warning-soft text-warning";
+  }
+
+  return "bg-success-soft text-success";
+}
+
+function tenantMatchesStatusFilter(params: {
+  tenant: ManagerTenantRow;
+  statusFilter: string;
+}) {
+  if (params.statusFilter === "all") {
+    return true;
+  }
+
+  if (params.statusFilter === "active") {
+    return params.tenant.status === "active";
+  }
+
+  return params.tenant.status === params.statusFilter;
 }
 
 export function ManagerTenantList({
@@ -181,13 +164,25 @@ export function ManagerTenantList({
 
   const filteredTenants = tenants
     .filter((tenant) => {
-      if (safeStatusFilter !== "all" && tenant.status !== safeStatusFilter) {
+      const unit = unitById.get(tenant.unit_id);
+      const rentStatus = getManagerTenantRentStatus({
+        tenant,
+        unit,
+      });
+
+      if (
+        !tenantMatchesStatusFilter({
+          tenant,
+          statusFilter: safeStatusFilter,
+        })
+      ) {
         return false;
       }
 
-      const signal = getTenantRentSignal(tenant);
-
-      if (safeRentFilter !== "all" && signal.value !== safeRentFilter) {
+      if (
+        safeRentFilter !== "all" &&
+        getTenantRentFilterValue(rentStatus) !== safeRentFilter
+      ) {
         return false;
       }
 
@@ -195,7 +190,6 @@ export function ManagerTenantList({
         return true;
       }
 
-      const unit = unitById.get(tenant.unit_id);
       const propertyName = propertyNameById.get(tenant.property_id) ?? "";
 
       return [
@@ -346,7 +340,10 @@ export function ManagerTenantList({
               <tbody className="divide-y divide-border-soft bg-white">
                 {filteredTenants.map((tenant) => {
                   const unit = unitById.get(tenant.unit_id);
-                  const signal = getTenantRentSignal(tenant);
+                  const rentStatus = getManagerTenantRentStatus({
+                    tenant,
+                    unit,
+                  });
 
                   return (
                     <tr
@@ -390,15 +387,23 @@ export function ManagerTenantList({
 
                       <td className="px-4 py-4">
                         <span
-                          className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${signal.className}`}
+                          className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${getTenantRentStatusClassName(
+                            rentStatus,
+                          )}`}
                         >
-                          {signal.label}
+                          {rentStatus.label}
                         </span>
                       </td>
 
                       <td className="px-4 py-4">
-                        <span className="rounded-full bg-primary-soft px-3 py-1 text-xs font-black uppercase tracking-wide text-primary">
-                          {MANAGER_TENANT_STATUS_LABELS[tenant.status]}
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${getTenantDisplayStatusClassName(
+                            tenant,
+                          )}`}
+                        >
+                          {getTenantDisplayStatusLabel({
+                            tenant,
+                          })}
                         </span>
                       </td>
 
@@ -421,7 +426,10 @@ export function ManagerTenantList({
           <div className="divide-y divide-border-soft md:hidden">
             {filteredTenants.map((tenant) => {
               const unit = unitById.get(tenant.unit_id);
-              const signal = getTenantRentSignal(tenant);
+              const rentStatus = getManagerTenantRentStatus({
+                tenant,
+                unit,
+              });
 
               return (
                 <article
@@ -445,9 +453,11 @@ export function ManagerTenantList({
                     </div>
 
                     <span
-                      className={`shrink-0 rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${signal.className}`}
+                      className={`shrink-0 rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${getTenantRentStatusClassName(
+                        rentStatus,
+                      )}`}
                     >
-                      {signal.label}
+                      {rentStatus.label}
                     </span>
                   </div>
 

@@ -6,7 +6,6 @@ import {
   MANAGER_PAYMENT_RECEIVERS,
   MANAGER_PAYSTACK_CHARGE_BEARERS,
   MANAGER_REMITTANCE_PAYMENT_METHODS,
-  MANAGER_TENANT_STATUSES,
   MANAGER_UNIT_STATUSES,
 } from "@/constants/manager";
 
@@ -214,7 +213,6 @@ export const createManagerTenantSchema = z.object({
   currentBalance: moneySchema.default(0),
   moveInDate: optionalDateSchema,
   nextRentDueDate: optionalDateSchema,
-  status: z.enum(MANAGER_TENANT_STATUSES).default("active"),
   notes: optionalTextSchema(600, "Notes are too long."),
 });
 

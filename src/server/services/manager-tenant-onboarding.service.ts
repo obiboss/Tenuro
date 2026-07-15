@@ -12,6 +12,7 @@ import {
   getManagerOrganizationForCurrentUser,
   getManagerPropertyById,
   getManagerUnitById,
+  hasCurrentManagerTenantForUnit,
 } from "@/server/repositories/manager.repository";
 import {
   acceptManagerTenantAgreement,
@@ -960,6 +961,19 @@ export async function createManagerTenantOnboardingRequestForCurrentManager(
     unitId: input.unitId,
   });
 
+  const hasCurrentTenant = await hasCurrentManagerTenantForUnit(supabase, {
+    organizationId: organization.id,
+    unitId: input.unitId,
+  });
+
+  if (hasCurrentTenant) {
+    throw new AppError(
+      "MANAGER_UNIT_ALREADY_HAS_CURRENT_TENANT",
+      "This unit already has a current tenant.",
+      400,
+    );
+  }
+
   const tenantPhone = normalisePhoneNumber(input.phoneNumber);
   const rawToken = createSecureToken();
   const tokenHash = hashToken(rawToken);
@@ -1213,6 +1227,19 @@ export async function approveManagerTenantOnboardingRequestForCurrentManager(
     moveInDate: input.confirmedMoveInDate,
     paymentFrequency,
   });
+
+  const hasCurrentTenant = await hasCurrentManagerTenantForUnit(adminSupabase, {
+    organizationId: organization.id,
+    unitId: request.unit_id,
+  });
+
+  if (hasCurrentTenant) {
+    throw new AppError(
+      "MANAGER_UNIT_ALREADY_HAS_CURRENT_TENANT",
+      "This unit already has a current tenant.",
+      400,
+    );
+  }
 
   const tenantStatus =
     request.onboarding_type === "new_incoming_tenant" ? "inactive" : "active";

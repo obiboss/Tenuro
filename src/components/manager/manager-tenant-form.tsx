@@ -3,10 +3,6 @@
 import { useMemo, useState, useActionState } from "react";
 import { createManagerTenantAction } from "@/actions/manager.actions";
 import { initialManagerActionState } from "@/actions/manager.state";
-import {
-  MANAGER_TENANT_STATUS_LABELS,
-  MANAGER_TENANT_STATUSES,
-} from "@/constants/manager";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -316,33 +312,6 @@ export function ManagerTenantForm({
             error={state.fieldErrors?.currentBalance?.[0]}
             required
           />
-
-          <div className="space-y-2">
-            <label
-              htmlFor="manager-tenant-status"
-              className="text-sm font-bold text-text-strong"
-            >
-              Status
-            </label>
-            <select
-              id="manager-tenant-status"
-              name="status"
-              className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
-              defaultValue="active"
-              required
-            >
-              {MANAGER_TENANT_STATUSES.map((status) => (
-                <option key={status} value={status}>
-                  {MANAGER_TENANT_STATUS_LABELS[status]}
-                </option>
-              ))}
-            </select>
-            {state.fieldErrors?.status?.[0] ? (
-              <p className="text-sm font-semibold text-danger">
-                {state.fieldErrors.status[0]}
-              </p>
-            ) : null}
-          </div>
 
           <div className="space-y-2">
             <label

@@ -26,6 +26,7 @@ export type AuthActionState = {
   message: string;
   phoneNumber?: string;
   maskedPhoneNumber?: string;
+  redirectTo?: string;
   fieldErrors?: Record<string, string[]>;
 };
 

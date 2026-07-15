@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { isManagerCurrentTenantStatus } from "@/constants/manager";
 import type {
   ManagerPropertyRow,
   ManagerTenantRow,
@@ -76,7 +77,7 @@ function getTenantPriority(status: ManagerTenantRow["status"]) {
     return 3;
   }
 
-  return 4;
+  return 3;
 }
 
 function getRequestPriority(
@@ -106,10 +107,12 @@ function getRequestPriority(
 }
 
 function buildTenantByUnitId(tenants: ManagerTenantRow[]) {
-  const sortedTenants = [...tenants].sort(
-    (first, second) =>
-      getTenantPriority(first.status) - getTenantPriority(second.status),
-  );
+  const sortedTenants = tenants
+    .filter((tenant) => isManagerCurrentTenantStatus(tenant.status))
+    .sort(
+      (first, second) =>
+        getTenantPriority(first.status) - getTenantPriority(second.status),
+    );
 
   return new Map(sortedTenants.map((tenant) => [tenant.unit_id, tenant]));
 }

@@ -271,7 +271,6 @@ export async function createManagerTenantAction(
       currentBalance: formData.get("currentBalance"),
       moveInDate: formData.get("moveInDate"),
       nextRentDueDate: formData.get("nextRentDueDate"),
-      status: formData.get("status") || "active",
       notes: formData.get("notes"),
     });
 

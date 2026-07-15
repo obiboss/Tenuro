@@ -1,10 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type {
-  ManagerCollectionMode,
-  ManagerManagementFeeType,
-  ManagerPaymentReceiver,
-  ManagerPaystackChargeBearer,
-  ManagerTenantStatus,
+import {
+  MANAGER_CURRENT_TENANT_STATUSES,
+  type ManagerCollectionMode,
+  type ManagerManagementFeeType,
+  type ManagerPaymentReceiver,
+  type ManagerPaystackChargeBearer,
+  type ManagerTenantStatus,
 } from "@/constants/manager";
 
 export type ManagerRentPaymentRequestStatus =
@@ -161,6 +162,7 @@ export async function getManagerTenantForPaystackRequest(
     .select(MANAGER_PAYSTACK_PAYMENT_TENANT_SELECT)
     .eq("organization_id", params.organizationId)
     .eq("id", params.tenantId)
+    .in("status", [...MANAGER_CURRENT_TENANT_STATUSES])
     .maybeSingle<ManagerPaystackPaymentTenantRow>();
 
   if (error) {

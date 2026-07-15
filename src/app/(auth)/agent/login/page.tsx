@@ -4,7 +4,17 @@ import { PhoneLoginForm } from "@/components/auth/phone-login-form";
 import { PageHeader } from "@/components/ui/page-header";
 import { TrustNotice } from "@/components/ui/trust-notice";
 
-export default function AgentLoginPage() {
+type AgentLoginPageProps = {
+  searchParams?: Promise<{
+    passwordUpdated?: string;
+  }>;
+};
+
+export default async function AgentLoginPage({
+  searchParams,
+}: AgentLoginPageProps) {
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+
   return (
     <>
       <PageHeader
@@ -18,7 +28,10 @@ export default function AgentLoginPage() {
           description="Only accounts registered as agents can access the BOPA agent workspace."
         />
 
-        <PhoneLoginForm purpose="login" />
+        <PhoneLoginForm
+          purpose="login"
+          passwordUpdated={resolvedSearchParams.passwordUpdated === "true"}
+        />
 
         <EmailFallbackPanel />
 

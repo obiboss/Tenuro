@@ -3,7 +3,15 @@ import { EmailFallbackPanel } from "@/components/auth/email-fallback-panel";
 import { PhoneLoginForm } from "@/components/auth/phone-login-form";
 import { PageHeader } from "@/components/ui/page-header";
 
-export default function LoginPage() {
+type LoginPageProps = {
+  searchParams?: Promise<{
+    passwordUpdated?: string;
+  }>;
+};
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+
   return (
     <>
       <PageHeader
@@ -12,7 +20,10 @@ export default function LoginPage() {
       />
 
       <div className="space-y-6">
-        <PhoneLoginForm purpose="login" />
+        <PhoneLoginForm
+          purpose="login"
+          passwordUpdated={resolvedSearchParams.passwordUpdated === "true"}
+        />
 
         <EmailFallbackPanel />
 

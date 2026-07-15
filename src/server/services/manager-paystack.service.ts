@@ -26,13 +26,14 @@ import {
   getManagerOrganizationForCurrentUser,
   getManagerPropertyById,
   getManagerUnitById,
+  hasCurrentManagerTenantForUnit,
+  isCurrentManagerTenantStatus,
   recordManagerRentPayment as recordManagerRentPaymentRecord,
 } from "@/server/repositories/manager.repository";
 import {
   getManagerTenantOnboardingRequestById,
   updateManagerTenantOnboardingStatus,
   updateManagerUnitStatusDirect,
-  type ManagerTenantOnboardingRequestRow,
 } from "@/server/repositories/manager-tenant-onboarding.repository";
 import {
   assertPaystackAmountMatchesExpected,
@@ -452,6 +453,23 @@ async function activateManagerTenantAfterFirstRent(
   supabase: SupabaseClient,
   paymentRequest: ManagerRentPaymentRequestRow,
 ) {
+  const hasAnotherCurrentTenant = await hasCurrentManagerTenantForUnit(
+    supabase,
+    {
+      organizationId: paymentRequest.organization_id,
+      unitId: paymentRequest.unit_id,
+      excludeTenantId: paymentRequest.tenant_id,
+    },
+  );
+
+  if (hasAnotherCurrentTenant) {
+    throw new AppError(
+      "MANAGER_UNIT_ALREADY_HAS_CURRENT_TENANT",
+      "This unit already has a current tenant.",
+      400,
+    );
+  }
+
   const { error } = await supabase
     .from("manager_tenants")
     .update({
@@ -696,10 +714,10 @@ export async function createManagerPaystackPaymentRequest(
     tenantId: input.tenantId,
   });
 
-  if (!tenant || tenant.status !== "active") {
+  if (!tenant || !isCurrentManagerTenantStatus(tenant.status)) {
     throw new AppError(
       "MANAGER_PAYSTACK_TENANT_NOT_FOUND",
-      "The selected active tenant could not be found.",
+      "The selected current tenant could not be found.",
       404,
     );
   }

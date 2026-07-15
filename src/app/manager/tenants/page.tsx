@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ManagerTenantList } from "@/components/manager/manager-tenant-list";
+import { isManagerCurrentTenantStatus } from "@/constants/manager";
+import { getManagerTenantRentStatus } from "@/lib/manager-rent-status";
 import {
   getManagerOrganizationForCurrentUser,
   listManagerProperties,
@@ -18,41 +20,28 @@ type ManagerTenantsPageProps = {
   }>;
 };
 
-function getDaysFromToday(date: string | null) {
-  if (!date) {
-    return null;
-  }
+function getTenantSummary(params: {
+  tenants: Awaited<ReturnType<typeof listManagerTenants>>;
+  units: Awaited<ReturnType<typeof listManagerUnits>>;
+}) {
+  const unitById = new Map(params.units.map((unit) => [unit.id, unit]));
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const dueDate = new Date(`${date}T00:00:00`);
-  const difference = dueDate.getTime() - today.getTime();
-
-  return Math.ceil(difference / (1000 * 60 * 60 * 24));
-}
-
-function getTenantSummary(
-  tenants: Awaited<ReturnType<typeof listManagerTenants>>,
-) {
-  return tenants.reduce(
+  return params.tenants.reduce(
     (summary, tenant) => {
-      if (tenant.status === "active") {
+      const rentStatus = getManagerTenantRentStatus({
+        tenant,
+        unit: unitById.get(tenant.unit_id),
+      });
+
+      if (isManagerCurrentTenantStatus(tenant.status)) {
         summary.active += 1;
       }
 
-      if (Number(tenant.current_balance) > 0) {
+      if (rentStatus.kind === "owing") {
         summary.owing += 1;
       }
 
-      const daysFromToday = getDaysFromToday(tenant.next_rent_due_date);
-
-      if (
-        tenant.status === "active" &&
-        daysFromToday !== null &&
-        daysFromToday >= 0 &&
-        daysFromToday <= 30
-      ) {
+      if (rentStatus.kind === "due_soon") {
         summary.dueSoon += 1;
       }
 
@@ -89,7 +78,7 @@ export default async function ManagerTenantsPage({
     listManagerTenants(supabase, { organizationId: organization.id }),
   ]);
 
-  const tenantSummary = getTenantSummary(tenants);
+  const tenantSummary = getTenantSummary({ tenants, units });
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
