@@ -6,6 +6,7 @@ import {
   ArrowRight,
   BriefcaseBusiness,
   Building2,
+  Landmark,
   UserRoundCheck,
   X,
 } from "lucide-react";
@@ -17,7 +18,7 @@ type LoginRoleOption = {
   description: string;
   href: string;
   icon: typeof Building2;
-  tone: "primary" | "success" | "gold";
+  tone: "primary" | "success" | "gold" | "warning";
 };
 
 const loginRoles: LoginRoleOption[] = [
@@ -42,12 +43,20 @@ const loginRoles: LoginRoleOption[] = [
     icon: BriefcaseBusiness,
     tone: "gold",
   },
+  {
+    title: "Real Estate Developer",
+    description: "Manage estates, buyers, plots, payments, and documents",
+    href: "/developer/login",
+    icon: Landmark,
+    tone: "warning",
+  },
 ];
 
 const iconTones: Record<LoginRoleOption["tone"], string> = {
   primary: "bg-primary-soft text-primary",
   success: "bg-success-soft text-success",
   gold: "bg-gold-soft text-gold-deep",
+  warning: "bg-warning-soft text-warning",
 };
 
 type LoginRoleSelectionModalProps = {
@@ -98,7 +107,7 @@ export function LoginRoleSelectionModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative w-full max-w-lg rounded-4xl bg-background p-5 shadow-2xl sm:p-6"
+        className="relative max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-hidden rounded-4xl bg-background p-5 shadow-2xl sm:p-6"
       >
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
@@ -118,7 +127,7 @@ export function LoginRoleSelectionModal({
           </Button>
         </div>
 
-        <div className="mt-5 space-y-3">
+        <div className="mt-5 max-h-[calc(100vh-10rem)] space-y-3 overflow-y-auto pr-1">
           {loginRoles.map((role) => {
             const Icon = role.icon;
 
