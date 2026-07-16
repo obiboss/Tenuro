@@ -7,6 +7,7 @@ import {
   type ManagerPaystackChargeBearer,
   type ManagerTenantStatus,
 } from "@/constants/manager";
+import type { ManagerServiceChargePaymentSnapshotItem } from "@/server/repositories/manager.repository";
 
 export type ManagerRentPaymentRequestStatus =
   | "pending"
@@ -42,6 +43,9 @@ export type ManagerRentPaymentRequestRow = {
   token: string;
   reference: string;
   amount_requested: number;
+  base_rent_amount: number;
+  service_charge_amount: number;
+  service_charge_items_snapshot: ManagerServiceChargePaymentSnapshotItem[];
   currency_code: "NGN";
   collection_mode: ManagerCollectionMode;
   payment_receiver: ManagerPaymentReceiver;
@@ -102,6 +106,9 @@ const MANAGER_RENT_PAYMENT_REQUEST_SELECT = `
   token,
   reference,
   amount_requested,
+  base_rent_amount,
+  service_charge_amount,
+  service_charge_items_snapshot,
   currency_code,
   collection_mode,
   payment_receiver,
@@ -185,6 +192,9 @@ export async function createPendingManagerPaystackPaymentRequest(
     token: string;
     reference: string;
     amountRequested: number;
+    baseRentAmount?: number;
+    serviceChargeAmount?: number;
+    serviceChargeItemsSnapshot?: ManagerServiceChargePaymentSnapshotItem[];
     collectionMode: ManagerCollectionMode;
     paystackChargeBearer: ManagerPaystackChargeBearer;
     managementFeeType: ManagerManagementFeeType;
@@ -218,6 +228,9 @@ export async function createPendingManagerPaystackPaymentRequest(
       token: params.token,
       reference: params.reference,
       amount_requested: params.amountRequested,
+      base_rent_amount: params.baseRentAmount ?? params.amountRequested,
+      service_charge_amount: params.serviceChargeAmount ?? 0,
+      service_charge_items_snapshot: params.serviceChargeItemsSnapshot ?? [],
       currency_code: "NGN",
       collection_mode: params.collectionMode,
       payment_receiver: "bopa_verified",

@@ -178,14 +178,20 @@ export default async function ManagerPaystackCallbackPage({
     trxref: resolvedSearchParams.trxref,
   });
 
-  const state: CallbackPageState = callbackReference.reference
-    ? await getManagerPaystackCallbackState(callbackReference.reference)
-    : {
-        ok: false,
-        kind: "invalid",
-        status: callbackReference.status,
-        message: callbackReference.message,
-      };
+  let state: CallbackPageState;
+
+  if (callbackReference.reference !== null) {
+    state = await getManagerPaystackCallbackState(
+      callbackReference.reference,
+    );
+  } else {
+    state = {
+      ok: false,
+      kind: "invalid",
+      status: callbackReference.status,
+      message: callbackReference.message,
+    };
+  }
   const pageCopy = getCallbackPageCopy(state);
 
   const successState = state.kind === "success" ? state : null;

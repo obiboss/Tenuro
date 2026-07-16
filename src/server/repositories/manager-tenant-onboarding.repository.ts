@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { ManagerTenantGuarantorRow } from "@/server/repositories/manager-tenant-guarantors.repository";
 
 export type ManagerTenantOnboardingType =
   | "current_occupant"
@@ -16,6 +17,50 @@ export type ManagerTenantOnboardingStatus =
   | "payment_initialized"
   | "payment_paid"
   | "payment_expired";
+
+export type ManagerTenantScreeningResult =
+  | "not_screened"
+  | "eligible"
+  | "review"
+  | "declined";
+
+export type ManagerTenantRequirementSnapshotItem = {
+  id: string;
+  requirementCode:
+    | "pets"
+    | "subletting"
+    | "minimum_monthly_income"
+    | "employment_required"
+    | "maximum_occupants"
+    | "business_use"
+    | "smoking"
+    | "guarantor_required"
+    | "custom_yes_no";
+  title: string;
+  questionText: string;
+  description: string | null;
+  answerType: "yes_no" | "money" | "integer";
+  expectedBoolean: boolean | null;
+  minimumValue: number | null;
+  maximumValue: number | null;
+  requiredGuarantorCount: number | null;
+  mismatchAction: "review" | "decline";
+  includeInAgreement: boolean;
+  agreementClause: string | null;
+};
+
+export type ManagerTenantRequirementAnswerItem = {
+  requirementId: string;
+  requirementCode: ManagerTenantRequirementSnapshotItem["requirementCode"];
+  title: string;
+  questionText: string;
+  answerType: ManagerTenantRequirementSnapshotItem["answerType"];
+  booleanAnswer: boolean | null;
+  numberAnswer: number | null;
+  qualifies: boolean;
+  mismatchAction: ManagerTenantRequirementSnapshotItem["mismatchAction"];
+  reason: string | null;
+};
 
 export type ManagerTenantAgreementStatus =
   | "draft"
@@ -46,8 +91,18 @@ export type ManagerTenantOnboardingRequestRow = {
   tenant_move_in_date: string | null;
   tenant_claimed_next_rent_due_date: string | null;
   tenant_claimed_rent_amount: number | null;
+  existing_tenant_last_payment_amount: number | null;
+  existing_tenant_last_payment_date: string | null;
+  existing_tenant_last_payment_receipt_path: string | null;
+  existing_tenant_last_payment_receipt_file_name: string | null;
+  existing_tenant_last_payment_receipt_mime_type: string | null;
+  existing_tenant_last_payment_receipt_size_bytes: number | null;
   tenant_payment_frequency: "annual" | "monthly" | "quarterly" | "biannual";
   tenant_notes: string | null;
+  tenant_requirements_snapshot: ManagerTenantRequirementSnapshotItem[];
+  tenant_requirement_answers: ManagerTenantRequirementAnswerItem[];
+  tenant_screening_result: ManagerTenantScreeningResult;
+  tenant_screening_reasons: string[];
   manager_confirmed_rent_amount: number | null;
   manager_confirmed_move_in_date: string | null;
   manager_confirmed_next_rent_due_date: string | null;
@@ -91,6 +146,7 @@ export type ManagerTenantOnboardingRequestRow = {
     organization_phone: string | null;
     organization_email: string | null;
   } | null;
+  manager_tenant_guarantors: ManagerTenantGuarantorRow[];
 };
 
 export type ManagerTenantAgreementDocumentRow = {
@@ -147,8 +203,18 @@ const REQUEST_SELECT = `
   tenant_move_in_date,
   tenant_claimed_next_rent_due_date,
   tenant_claimed_rent_amount,
+  existing_tenant_last_payment_amount,
+  existing_tenant_last_payment_date,
+  existing_tenant_last_payment_receipt_path,
+  existing_tenant_last_payment_receipt_file_name,
+  existing_tenant_last_payment_receipt_mime_type,
+  existing_tenant_last_payment_receipt_size_bytes,
   tenant_payment_frequency,
   tenant_notes,
+  tenant_requirements_snapshot,
+  tenant_requirement_answers,
+  tenant_screening_result,
+  tenant_screening_reasons,
   manager_confirmed_rent_amount,
   manager_confirmed_move_in_date,
   manager_confirmed_next_rent_due_date,
@@ -191,6 +257,37 @@ const REQUEST_SELECT = `
     organization_name,
     organization_phone,
     organization_email
+  ),
+  manager_tenant_guarantors (
+    id,
+    organization_id,
+    landlord_client_id,
+    property_id,
+    unit_id,
+    onboarding_request_id,
+    position,
+    full_name,
+    phone_number,
+    email,
+    relationship_to_tenant,
+    residential_address,
+    occupation,
+    employer_or_business,
+    monthly_income,
+    id_type,
+    id_number,
+    status,
+    confirmation_token_hash,
+    confirmation_token_expires_at,
+    confirmation_token_used_at,
+    responsibility_acknowledged,
+    confirmed_at,
+    confirmation_ip,
+    confirmation_user_agent,
+    metadata,
+    cancelled_at,
+    created_at,
+    updated_at
   )
 `;
 
@@ -239,6 +336,7 @@ export async function createManagerTenantOnboardingRequest(
     invitedTenantPhoneNumber: string;
     invitedTenantEmail: string | null;
     note: string | null;
+    tenantRequirementsSnapshot: ManagerTenantRequirementSnapshotItem[];
     metadata: Record<string, unknown>;
   },
 ) {
@@ -256,6 +354,10 @@ export async function createManagerTenantOnboardingRequest(
       invited_tenant_phone_number: params.invitedTenantPhoneNumber,
       invited_tenant_email: params.invitedTenantEmail,
       manager_review_notes: params.note,
+      tenant_requirements_snapshot: params.tenantRequirementsSnapshot,
+      tenant_requirement_answers: [],
+      tenant_screening_result: "not_screened",
+      tenant_screening_reasons: [],
       status: "pending",
       metadata: params.metadata,
     })
@@ -382,8 +484,18 @@ export async function submitManagerTenantOnboardingRequest(
     moveInDate: string | null;
     statedRentDueDate: string | null;
     claimedRentAmount: number | null;
+    lastPaymentAmount: number | null;
+    lastPaymentDate: string | null;
+    lastPaymentReceiptPath: string | null;
+    lastPaymentReceiptFileName: string | null;
+    lastPaymentReceiptMimeType: string | null;
+    lastPaymentReceiptSizeBytes: number | null;
     paymentFrequency: "annual" | "monthly" | "quarterly" | "biannual";
     tenantNotes: string | null;
+    requirementAnswers: ManagerTenantRequirementAnswerItem[];
+    screeningResult: ManagerTenantScreeningResult;
+    screeningReasons: string[];
+    status: "submitted" | "rejected";
   },
 ) {
   const now = new Date().toISOString();
@@ -400,11 +512,28 @@ export async function submitManagerTenantOnboardingRequest(
       tenant_move_in_date: params.moveInDate,
       tenant_claimed_next_rent_due_date: params.statedRentDueDate,
       tenant_claimed_rent_amount: params.claimedRentAmount,
+      existing_tenant_last_payment_amount: params.lastPaymentAmount,
+      existing_tenant_last_payment_date: params.lastPaymentDate,
+      existing_tenant_last_payment_receipt_path: params.lastPaymentReceiptPath,
+      existing_tenant_last_payment_receipt_file_name:
+        params.lastPaymentReceiptFileName,
+      existing_tenant_last_payment_receipt_mime_type:
+        params.lastPaymentReceiptMimeType,
+      existing_tenant_last_payment_receipt_size_bytes:
+        params.lastPaymentReceiptSizeBytes,
       tenant_payment_frequency: params.paymentFrequency,
       tenant_notes: params.tenantNotes,
-      status: "submitted",
+      tenant_requirement_answers: params.requirementAnswers,
+      tenant_screening_result: params.screeningResult,
+      tenant_screening_reasons: params.screeningReasons,
+      status: params.status,
+      rejection_reason:
+        params.status === "rejected"
+          ? params.screeningReasons.join(" ")
+          : null,
       token_used_at: now,
       submitted_at: now,
+      reviewed_at: params.status === "rejected" ? now : null,
       updated_at: now,
     })
     .eq("id", params.requestId)
@@ -624,6 +753,7 @@ export async function acceptManagerTenantAgreement(
     agreementId: string;
     ipAddress: string | null;
     userAgent: string | null;
+    metadata: Record<string, unknown>;
   },
 ) {
   const { data, error } = await supabase
@@ -633,6 +763,7 @@ export async function acceptManagerTenantAgreement(
       tenant_accepted_at: new Date().toISOString(),
       tenant_acceptance_ip: params.ipAddress,
       tenant_acceptance_user_agent: params.userAgent,
+      metadata: params.metadata,
       updated_at: new Date().toISOString(),
     })
     .eq("id", params.agreementId)

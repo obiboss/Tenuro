@@ -14,6 +14,10 @@ import {
   resendManagerTenantOnboardingLinkForCurrentManager,
   submitManagerTenantOnboardingRequestByToken,
 } from "@/server/services/manager-tenant-onboarding.service";
+import {
+  confirmManagerTenantGuarantorByToken,
+  resendManagerTenantGuarantorLinkForCurrentManager,
+} from "@/server/services/manager-tenant-guarantor.service";
 import { requireManagerWorkspacePermission } from "@/server/services/manager-staff-access.service";
 import {
   acceptManagerTenantAgreementSchema,
@@ -25,6 +29,10 @@ import {
   resendManagerTenantOnboardingLinkSchema,
   submitManagerTenantOnboardingRequestSchema,
 } from "@/server/validators/manager-tenant-onboarding.schema";
+import {
+  confirmManagerTenantGuarantorSchema,
+  resendManagerTenantGuarantorLinkSchema,
+} from "@/server/validators/manager-tenant-guarantor.schema";
 
 function toActionError(error: unknown): ManagerTenantOnboardingActionState {
   const result = errorResult(error);
@@ -34,6 +42,17 @@ function toActionError(error: unknown): ManagerTenantOnboardingActionState {
     message: result.message,
     fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
   };
+}
+
+
+function parseJsonArray(value: FormDataEntryValue | null) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return [];
+  }
+
+  const parsed = JSON.parse(value) as unknown;
+
+  return Array.isArray(parsed) ? parsed : [];
 }
 
 export async function createManagerTenantOnboardingRequestAction(
@@ -92,15 +111,107 @@ export async function submitManagerTenantOnboardingRequestAction(
       idNumber: formData.get("idNumber"),
       moveInDate: formData.get("moveInDate"),
       claimedRentAmount: formData.get("claimedRentAmount"),
+      lastPaymentAmount: formData.get("lastPaymentAmount"),
+      lastPaymentDate: formData.get("lastPaymentDate"),
+      lastPaymentReceiptPath: formData.get("lastPaymentReceiptPath"),
+      lastPaymentReceiptFileName: formData.get("lastPaymentReceiptFileName"),
+      lastPaymentReceiptMimeType: formData.get("lastPaymentReceiptMimeType"),
+      lastPaymentReceiptSizeBytes: formData.get(
+        "lastPaymentReceiptSizeBytes",
+      ),
       paymentFrequency: formData.get("paymentFrequency"),
+      requirementAnswers: parseJsonArray(
+        formData.get("requirementAnswersJson"),
+      ),
+      guarantors: parseJsonArray(formData.get("guarantorsJson")),
       tenantNotes: formData.get("tenantNotes"),
     });
 
-    await submitManagerTenantOnboardingRequestByToken(parsed);
+    const result =
+      await submitManagerTenantOnboardingRequestByToken(parsed);
+
+    const screeningResult = result.request.tenant_screening_result;
 
     return {
       ok: true,
-      message: "Your details have been submitted.",
+      message:
+        screeningResult === "declined"
+          ? "Your application does not meet one or more property requirements."
+          : screeningResult === "review"
+            ? "Your application has been sent to the property manager for review."
+            : "Your details have been submitted.",
+      screeningResult,
+      guarantorLinks: result.guarantorLinks,
+    };
+  } catch (error) {
+    return toActionError(error);
+  }
+}
+
+export async function confirmManagerTenantGuarantorAction(
+  _previousState: ManagerTenantOnboardingActionState,
+  formData: FormData,
+): Promise<ManagerTenantOnboardingActionState> {
+  try {
+    const parsed = confirmManagerTenantGuarantorSchema.parse({
+      token: formData.get("token"),
+      fullName: formData.get("fullName"),
+      phoneNumber: formData.get("phoneNumber"),
+      email: formData.get("email"),
+      relationshipToTenant: formData.get("relationshipToTenant"),
+      residentialAddress: formData.get("residentialAddress"),
+      occupation: formData.get("occupation"),
+      employerOrBusiness: formData.get("employerOrBusiness"),
+      monthlyIncome: formData.get("monthlyIncome"),
+      idType: formData.get("idType"),
+      idNumber: formData.get("idNumber"),
+      responsibilityAcknowledgement: formData.get(
+        "responsibilityAcknowledgement",
+      ),
+    });
+    const requestHeaders = await headers();
+    const result = await confirmManagerTenantGuarantorByToken({
+      ...parsed,
+      ipAddress:
+        requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+      userAgent: requestHeaders.get("user-agent"),
+    });
+
+    revalidatePath("/manager");
+    revalidatePath("/manager/tenants");
+    revalidatePath(`/manager/properties/${result.property_id}`);
+
+    return {
+      ok: true,
+      message: "Guarantor details confirmed.",
+      guarantorId: result.id,
+      guarantorConfirmed: true,
+    };
+  } catch (error) {
+    return toActionError(error);
+  }
+}
+
+export async function resendManagerTenantGuarantorLinkAction(
+  _previousState: ManagerTenantOnboardingActionState,
+  formData: FormData,
+): Promise<ManagerTenantOnboardingActionState> {
+  try {
+    await requireManagerWorkspacePermission("property.manage");
+    const parsed = resendManagerTenantGuarantorLinkSchema.parse({
+      guarantorId: formData.get("guarantorId"),
+    });
+    const result =
+      await resendManagerTenantGuarantorLinkForCurrentManager(parsed);
+
+    revalidatePath("/manager");
+    revalidatePath("/manager/tenants");
+
+    return {
+      ok: true,
+      message: "Guarantor confirmation link is ready.",
+      guarantorId: result.guarantorId,
+      guarantorLinks: [result],
     };
   } catch (error) {
     return toActionError(error);
@@ -255,6 +366,15 @@ export async function acceptManagerTenantAgreementAction(
     const parsed = acceptManagerTenantAgreementSchema.parse({
       token: formData.get("token"),
       agreementAcknowledgement: formData.get("agreementAcknowledgement"),
+      propertyRulesAcknowledgement: formData.get(
+        "propertyRulesAcknowledgement",
+      ),
+      tenantRequirementsAcknowledgement: formData.get(
+        "tenantRequirementsAcknowledgement",
+      ),
+      guarantorAcknowledgement: formData.get(
+        "guarantorAcknowledgement",
+      ),
     });
 
     const requestHeaders = await headers();

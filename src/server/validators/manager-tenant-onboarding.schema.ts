@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { managerTenantGuarantorInputSchema } from "@/server/validators/manager-tenant-guarantor.schema";
 
 function blankToUndefined(value: unknown) {
   if (value === null || value === undefined) {
@@ -48,6 +49,33 @@ const optionalDateSchema = z.preprocess(
   blankToUndefined,
   dateSchema.optional(),
 );
+
+function getNigeriaDateOnly() {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Africa/Lagos",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  if (!year || !month || !day) {
+    throw new Error("Nigeria date could not be determined.");
+  }
+
+  return `${year}-${month}-${day}`;
+}
+
+const optionalPastOrTodayDateSchema = optionalDateSchema.refine((value) => {
+  if (!value) {
+    return true;
+  }
+
+  return value <= getNigeriaDateOnly();
+}, "Date cannot be in the future.");
 
 const moneySchema = z.preprocess(
   moneyValue,
@@ -116,6 +144,46 @@ export const createManagerTenantOnboardingRequestSchema = z.object({
   note: optionalTextSchema(600, "Note is too long."),
 });
 
+const managerTenantRequirementAnswerSchema = z
+  .object({
+    requirementId: uuidSchema,
+    booleanAnswer: z.preprocess(
+      blankToUndefined,
+      z
+        .union([z.boolean(), z.enum(["true", "false"])])
+        .optional()
+        .transform((value) => {
+          if (value === undefined) {
+            return undefined;
+          }
+
+          return value === true || value === "true";
+        }),
+    ),
+    numberAnswer: z.preprocess(
+      blankToUndefined,
+      z.preprocess(
+        moneyValue,
+        z.coerce
+          .number()
+          .finite("Enter a valid requirement answer.")
+          .nonnegative("Requirement answer cannot be negative.")
+          .optional(),
+      ),
+    ),
+  })
+  .superRefine((value, context) => {
+    const hasBoolean = typeof value.booleanAnswer === "boolean";
+    const hasNumber = typeof value.numberAnswer === "number";
+
+    if (hasBoolean === hasNumber) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Provide one valid answer for this requirement.",
+      });
+    }
+  });
+
 export const submitManagerTenantOnboardingRequestSchema = z.object({
   token: z.string().trim().min(20, "Invalid tenant link."),
   fullName: z.string().trim().min(2, "Enter your full name.").max(180),
@@ -126,7 +194,36 @@ export const submitManagerTenantOnboardingRequestSchema = z.object({
   idNumber: z.string().trim().min(3, "Enter your ID number.").max(120),
   moveInDate: optionalDateSchema,
   claimedRentAmount: optionalPositiveMoneySchema,
+  lastPaymentAmount: optionalPositiveMoneySchema,
+  lastPaymentDate: optionalPastOrTodayDateSchema,
+  lastPaymentReceiptPath: optionalTextSchema(1000, "Receipt path is too long."),
+  lastPaymentReceiptFileName: optionalTextSchema(
+    255,
+    "Receipt file name is too long.",
+  ),
+  lastPaymentReceiptMimeType: z.preprocess(
+    blankToUndefined,
+    z
+      .enum(["application/pdf", "image/jpeg", "image/png", "image/webp"])
+      .optional(),
+  ),
+  lastPaymentReceiptSizeBytes: z.preprocess(
+    blankToUndefined,
+    z.coerce
+      .number()
+      .int("Receipt size is invalid.")
+      .positive("Receipt size is invalid.")
+      .optional(),
+  ),
   paymentFrequency: optionalPaymentFrequencySchema,
+  requirementAnswers: z
+    .array(managerTenantRequirementAnswerSchema)
+    .max(20, "Too many tenant requirement answers.")
+    .default([]),
+  guarantors: z
+    .array(managerTenantGuarantorInputSchema)
+    .max(2, "A tenant application cannot contain more than two guarantors.")
+    .default([]),
   tenantNotes: optionalTextSchema(1000, "Note is too long."),
 });
 
@@ -151,6 +248,18 @@ export const acceptManagerTenantAgreementSchema = z.object({
       (value) => value === "on",
       "Confirm that you have read and agreed to the tenancy terms.",
     ),
+  propertyRulesAcknowledgement: z.preprocess(
+    blankToUndefined,
+    z.string().optional(),
+  ),
+  tenantRequirementsAcknowledgement: z.preprocess(
+    blankToUndefined,
+    z.string().optional(),
+  ),
+  guarantorAcknowledgement: z.preprocess(
+    blankToUndefined,
+    z.string().optional(),
+  ),
 });
 
 export const declineManagerTenantAgreementSchema = z.object({

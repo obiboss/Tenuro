@@ -6,7 +6,9 @@ import { AppError } from "@/server/errors/app-error";
 import { getAgentPropertyListingById } from "@/server/repositories/agent-property-listings.repository";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { resolveTenantOnboardingToken } from "@/server/services/onboarding.service";
+import { resolveManagerTenantOnboardingToken } from "@/server/services/manager-tenant-onboarding.service";
 import type {
+  ManagerCurrentOccupantEvidenceDocumentType,
   PublicTenantKycDocumentType,
   TenantKycDocumentType,
 } from "@/server/validators/file.schema";
@@ -89,6 +91,43 @@ function createPublicListingApplicationStoragePath(params: {
   ].join("/");
 }
 
+function safeFileName(fileName: string) {
+  const fileNameWithoutExtension = fileName
+    .trim()
+    .replace(/\.[^./\\]+$/, "");
+
+  const cleaned = fileNameWithoutExtension
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 100);
+
+  return cleaned || "receipt";
+}
+
+function createManagerCurrentOccupantEvidenceStoragePath(params: {
+  organizationId: string;
+  propertyId: string;
+  unitId: string;
+  requestId: string;
+  fileName: string;
+  mimeType: string;
+}) {
+  return [
+    "manager",
+    params.organizationId,
+    "properties",
+    params.propertyId,
+    "units",
+    params.unitId,
+    "onboarding",
+    params.requestId,
+    "last-payment",
+    `${crypto.randomUUID()}-${safeFileName(params.fileName)}.${getExtensionForMimeType(
+      params.mimeType,
+    )}`,
+  ].join("/");
+}
+
 async function uploadFileToTenantKycBucket(params: {
   path: string;
   file: File;
@@ -112,6 +151,7 @@ async function uploadFileToTenantKycBucket(params: {
     path: params.path,
     contentType: params.file.type,
     sizeBytes: params.file.size,
+    fileName: params.file.name,
   };
 }
 
@@ -174,6 +214,39 @@ export async function uploadPublicTenantListingKycDocument(params: {
   const path = createPublicListingApplicationStoragePath({
     agentPropertyListingId: listing.id,
     documentType: params.documentType,
+    mimeType: params.file.type,
+  });
+
+  return uploadFileToTenantKycBucket({
+    path,
+    file: params.file,
+  });
+}
+
+export async function uploadManagerCurrentOccupantEvidenceDocument(params: {
+  token: string;
+  documentType: ManagerCurrentOccupantEvidenceDocumentType;
+  file: File;
+}) {
+  void params.documentType;
+  assertSupportedFile(params.file);
+
+  const request = await resolveManagerTenantOnboardingToken(params.token);
+
+  if (request.onboarding_type !== "current_occupant") {
+    throw new AppError(
+      "MANAGER_EXISTING_PAYMENT_UPLOAD_NOT_ALLOWED",
+      "Last payment receipt upload is only available for existing tenants.",
+      400,
+    );
+  }
+
+  const path = createManagerCurrentOccupantEvidenceStoragePath({
+    organizationId: request.organization_id,
+    propertyId: request.property_id,
+    unitId: request.unit_id,
+    requestId: request.id,
+    fileName: params.file.name,
     mimeType: params.file.type,
   });
 

@@ -250,7 +250,7 @@ function isManagerPaymentPendingError(error: unknown) {
   );
 }
 
-function isManagerPaymentFailedError(error: unknown) {
+function isManagerPaymentFailedError(error: unknown): error is AppError {
   return (
     isAppError(error) &&
     error.code === "MANAGER_PAYSTACK_PAYMENT_NOT_SUCCESSFUL"
@@ -1192,6 +1192,10 @@ export async function verifyAndPostManagerPaystackPaymentReference(params: {
     paymentReceiver: "bopa_verified",
     paystackChargeBearer: paymentRequest.paystack_charge_bearer,
     amountPaid: Number(paymentRequest.amount_requested),
+    baseRentAmount: Number(paymentRequest.base_rent_amount),
+    serviceChargeAmount: Number(paymentRequest.service_charge_amount),
+    serviceChargeItemsSnapshot:
+      paymentRequest.service_charge_items_snapshot ?? [],
     paymentMethod: "other",
     paymentReference: paymentRequest.reference,
     paymentDate:
@@ -1218,6 +1222,10 @@ export async function verifyAndPostManagerPaystackPaymentReference(params: {
       landlord_share: Number(paymentRequest.landlord_net_amount),
       bopa_platform_fee: Number(paymentRequest.bopa_platform_fee),
       paystack_charge: Number(paymentRequest.paystack_charge_amount),
+      base_rent_amount: Number(paymentRequest.base_rent_amount),
+      service_charge_amount: Number(paymentRequest.service_charge_amount),
+      service_charge_items_snapshot:
+        paymentRequest.service_charge_items_snapshot ?? [],
       collection_mode_snapshot: paymentRequest.collection_mode,
       payment_receiver_snapshot: "bopa_verified",
       paystack_charge_bearer_snapshot: paymentRequest.paystack_charge_bearer,

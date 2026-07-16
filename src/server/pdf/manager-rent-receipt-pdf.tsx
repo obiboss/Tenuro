@@ -317,7 +317,27 @@ export function ManagerRentReceiptPdf({
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Amount breakdown</Text>
-          <Row label="Rent amount" value={formatNaira(snapshot.payment.amountPaid)} />
+          <Row
+            label="Rent"
+            value={formatNaira(
+              snapshot.payment.baseRentAmount > 0
+                ? snapshot.payment.baseRentAmount
+                : snapshot.payment.amountPaid,
+            )}
+          />
+          {snapshot.payment.serviceChargeItems.map((item) => (
+            <Row
+              key={`${item.chargeId}-${item.name}`}
+              label={item.name}
+              value={formatNaira(item.amount)}
+            />
+          ))}
+          {snapshot.payment.serviceChargeAmount > 0 ? (
+            <Row
+              label="Service-charge total"
+              value={formatNaira(snapshot.payment.serviceChargeAmount)}
+            />
+          ) : null}
           <Row
             label="BOPA fee"
             value={formatNaira(snapshot.payment.bopaPlatformFee)}

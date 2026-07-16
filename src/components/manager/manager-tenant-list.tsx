@@ -17,6 +17,15 @@ type ManagerTenantListProps = {
   tenants: ManagerTenantRow[];
   payments: ManagerRentPaymentRow[];
   agreementDocuments: ManagerTenantAgreementDocumentRow[];
+  existingTenantEvidence: Array<{
+    tenantId: string;
+    amount: number | null;
+    paymentDate: string | null;
+    receipt: {
+      label: string;
+      signedUrl: string | null;
+    };
+  }>;
   searchQuery: string;
   rentFilter: string;
 };
@@ -94,6 +103,7 @@ export function ManagerTenantList({
   tenants,
   payments,
   agreementDocuments,
+  existingTenantEvidence,
   searchQuery,
   rentFilter,
 }: ManagerTenantListProps) {
@@ -114,6 +124,9 @@ export function ManagerTenantList({
     ManagerTenantAgreementDocumentRow[]
   >();
   const paymentsByTenantId = new Map<string, ManagerRentPaymentRow[]>();
+  const evidenceByTenantId = new Map(
+    existingTenantEvidence.map((evidence) => [evidence.tenantId, evidence]),
+  );
 
   for (const agreement of agreementDocuments) {
     if (agreement.document_status !== "accepted") {
@@ -298,6 +311,7 @@ export function ManagerTenantList({
                   const tenantAgreements =
                     agreementsByTenantId.get(tenant.id) ?? [];
                   const tenantPayments = paymentsByTenantId.get(tenant.id) ?? [];
+                  const tenantEvidence = evidenceByTenantId.get(tenant.id);
 
                   return (
                     <tr
@@ -385,6 +399,16 @@ export function ManagerTenantList({
                               Receipt {formatDate(payment.payment_date)}
                             </Link>
                           ))}
+
+                          {tenantEvidence?.receipt.signedUrl ? (
+                            <Link
+                              href={tenantEvidence.receipt.signedUrl}
+                              target="_blank"
+                              className="text-xs font-black text-primary underline-offset-4 hover:underline"
+                            >
+                              Last payment evidence
+                            </Link>
+                          ) : null}
                         </div>
                       </td>
                     </tr>
@@ -404,6 +428,7 @@ export function ManagerTenantList({
               const tenantAgreements =
                 agreementsByTenantId.get(tenant.id) ?? [];
               const tenantPayments = paymentsByTenantId.get(tenant.id) ?? [];
+              const tenantEvidence = evidenceByTenantId.get(tenant.id);
 
               return (
                 <article
@@ -451,7 +476,9 @@ export function ManagerTenantList({
                     Open property
                   </Link>
 
-                  {tenantAgreements.length > 0 || tenantPayments.length > 0 ? (
+                  {tenantAgreements.length > 0 ||
+                  tenantPayments.length > 0 ||
+                  tenantEvidence?.receipt.signedUrl ? (
                     <div className="mt-3 rounded-card bg-surface p-3">
                       <p className="text-xs font-black uppercase tracking-wide text-text-muted">
                         Documents
@@ -478,6 +505,16 @@ export function ManagerTenantList({
                             Receipt {formatDate(payment.payment_date)}
                           </Link>
                         ))}
+
+                        {tenantEvidence?.receipt.signedUrl ? (
+                          <Link
+                            href={tenantEvidence.receipt.signedUrl}
+                            target="_blank"
+                            className="text-sm font-black text-primary"
+                          >
+                            Last payment evidence
+                          </Link>
+                        ) : null}
                       </div>
                     </div>
                   ) : null}

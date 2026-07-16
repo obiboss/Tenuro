@@ -29,10 +29,20 @@ import {
   listManagerTenantOnboardingRequests,
   type ManagerTenantOnboardingRequestRow,
 } from "@/server/repositories/manager-tenant-onboarding.repository";
+import type {
+  PropertyRuleAppliesTo,
+  PropertyRuleCategory,
+  PropertyRuleEnforcement,
+  PropertyRuleStatus,
+} from "@/server/repositories/property-rules.repository";
 
 export type ManagerOrganizationStatus = "active" | "suspended" | "inactive";
 export type ManagerClientStatus = "active" | "inactive" | "archived";
 export type ManagerPropertyStatus = "active" | "inactive" | "archived";
+export type ManagerPropertyServiceChargeStatus =
+  | "active"
+  | "inactive"
+  | "archived";
 
 export type ManagerOrganizationRow = {
   id: string;
@@ -137,6 +147,45 @@ export type ManagerPropertyRow = {
   updated_at: string;
 };
 
+export type ManagerPropertyServiceChargeRow = {
+  id: string;
+  organization_id: string;
+  landlord_client_id: string;
+  property_id: string;
+  charge_code: string | null;
+  charge_name: string;
+  description: string | null;
+  amount: number;
+  currency_code: "NGN";
+  status: ManagerPropertyServiceChargeStatus;
+  is_required_before_move_in: boolean;
+  sort_order: number;
+  created_by_profile_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ManagerPropertyRuleRow = {
+  id: string;
+  organization_id: string;
+  landlord_client_id: string;
+  property_id: string;
+  title: string;
+  description: string;
+  category: PropertyRuleCategory;
+  enforcement: PropertyRuleEnforcement;
+  applies_to: PropertyRuleAppliesTo;
+  status: PropertyRuleStatus;
+  requires_tenant_acknowledgement: boolean;
+  sort_order: number;
+  metadata: Record<string, unknown>;
+  created_by_profile_id: string | null;
+  archived_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ManagerUnitRow = {
   id: string;
   organization_id: string;
@@ -183,6 +232,9 @@ export type ManagerRentPaymentRow = {
   payment_receiver: ManagerPaymentReceiver;
   paystack_charge_bearer: ManagerPaystackChargeBearer;
   amount_paid: number;
+  base_rent_amount: number;
+  service_charge_amount: number;
+  service_charge_items_snapshot: ManagerServiceChargePaymentSnapshotItem[];
   currency_code: "NGN";
   payment_method: ManagerPaymentMethod;
   payment_reference: string | null;
@@ -204,6 +256,14 @@ export type ManagerRentPaymentRow = {
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+};
+
+export type ManagerServiceChargePaymentSnapshotItem = {
+  chargeId: string;
+  code: string | null;
+  name: string;
+  amount: number;
+  currencyCode: "NGN";
 };
 
 export type ManagerOverviewRecentPayment = {
@@ -422,6 +482,45 @@ const MANAGER_PROPERTY_SELECT = `
   updated_at
 `;
 
+const MANAGER_PROPERTY_SERVICE_CHARGE_SELECT = `
+  id,
+  organization_id,
+  landlord_client_id,
+  property_id,
+  charge_code,
+  charge_name,
+  description,
+  amount,
+  currency_code,
+  status,
+  is_required_before_move_in,
+  sort_order,
+  created_by_profile_id,
+  metadata,
+  created_at,
+  updated_at
+`;
+
+const MANAGER_PROPERTY_RULE_SELECT = `
+  id,
+  organization_id,
+  landlord_client_id,
+  property_id,
+  title,
+  description,
+  category,
+  enforcement,
+  applies_to,
+  status,
+  requires_tenant_acknowledgement,
+  sort_order,
+  metadata,
+  created_by_profile_id,
+  archived_at,
+  created_at,
+  updated_at
+`;
+
 const MANAGER_UNIT_SELECT = `
   id,
   organization_id,
@@ -468,6 +567,9 @@ const MANAGER_RENT_PAYMENT_SELECT = `
   payment_receiver,
   paystack_charge_bearer,
   amount_paid,
+  base_rent_amount,
+  service_charge_amount,
+  service_charge_items_snapshot,
   currency_code,
   payment_method,
   payment_reference,
@@ -835,6 +937,201 @@ export async function createManagerProperty(
   return data;
 }
 
+export async function createManagerPropertyServiceCharges(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    landlordClientId: string;
+    propertyId: string;
+    createdByProfileId: string;
+    charges: Array<{
+      chargeCode: string | null;
+      chargeName: string;
+      description: string | null;
+      amount: number;
+      isRequiredBeforeMoveIn: boolean;
+      sortOrder: number;
+      metadata: Record<string, unknown>;
+    }>;
+  },
+) {
+  if (params.charges.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from("manager_property_service_charges")
+    .insert(
+      params.charges.map((charge) => ({
+        organization_id: params.organizationId,
+        landlord_client_id: params.landlordClientId,
+        property_id: params.propertyId,
+        charge_code: charge.chargeCode,
+        charge_name: charge.chargeName,
+        description: charge.description,
+        amount: charge.amount,
+        currency_code: "NGN",
+        status: "active",
+        is_required_before_move_in: charge.isRequiredBeforeMoveIn,
+        sort_order: charge.sortOrder,
+        created_by_profile_id: params.createdByProfileId,
+        metadata: charge.metadata,
+      })),
+    )
+    .select(MANAGER_PROPERTY_SERVICE_CHARGE_SELECT)
+    .returns<ManagerPropertyServiceChargeRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function createManagerPropertyRules(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    landlordClientId: string;
+    propertyId: string;
+    createdByProfileId: string;
+    rules: Array<{
+      title: string;
+      description: string;
+      category: PropertyRuleCategory;
+      enforcement: PropertyRuleEnforcement;
+      appliesTo: PropertyRuleAppliesTo;
+      requiresTenantAcknowledgement: boolean;
+      sortOrder: number;
+      metadata: Record<string, unknown>;
+    }>;
+  },
+) {
+  if (params.rules.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from("manager_property_rules")
+    .insert(
+      params.rules.map((rule) => ({
+        organization_id: params.organizationId,
+        landlord_client_id: params.landlordClientId,
+        property_id: params.propertyId,
+        title: rule.title,
+        description: rule.description,
+        category: rule.category,
+        enforcement: rule.enforcement,
+        applies_to: rule.appliesTo,
+        status: "active",
+        requires_tenant_acknowledgement:
+          rule.requiresTenantAcknowledgement,
+        sort_order: rule.sortOrder,
+        metadata: rule.metadata,
+        created_by_profile_id: params.createdByProfileId,
+      })),
+    )
+    .select(MANAGER_PROPERTY_RULE_SELECT)
+    .returns<ManagerPropertyRuleRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function listManagerPropertyServiceCharges(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    landlordClientId?: string;
+    propertyId?: string;
+    activeOnly?: boolean;
+    requiredBeforeMoveInOnly?: boolean;
+    chargeBearer?: "tenant" | "landlord";
+  },
+) {
+  let query = supabase
+    .from("manager_property_service_charges")
+    .select(MANAGER_PROPERTY_SERVICE_CHARGE_SELECT)
+    .eq("organization_id", params.organizationId);
+
+  if (params.landlordClientId) {
+    query = query.eq("landlord_client_id", params.landlordClientId);
+  }
+
+  if (params.propertyId) {
+    query = query.eq("property_id", params.propertyId);
+  }
+
+  if (params.activeOnly) {
+    query = query.eq("status", "active");
+  }
+
+  if (params.requiredBeforeMoveInOnly) {
+    query = query.eq("is_required_before_move_in", true);
+  }
+
+  if (params.chargeBearer) {
+    query = query.eq("charge_bearer", params.chargeBearer);
+  }
+
+  const { data, error } = await query
+    .order("sort_order", { ascending: true })
+    .order("charge_name", { ascending: true })
+    .returns<ManagerPropertyServiceChargeRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function listManagerPropertyRules(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    landlordClientId?: string;
+    propertyId?: string;
+    activeOnly?: boolean;
+    appliesTo?: Array<PropertyRuleAppliesTo>;
+  },
+) {
+  let query = supabase
+    .from("manager_property_rules")
+    .select(MANAGER_PROPERTY_RULE_SELECT)
+    .eq("organization_id", params.organizationId);
+
+  if (params.landlordClientId) {
+    query = query.eq("landlord_client_id", params.landlordClientId);
+  }
+
+  if (params.propertyId) {
+    query = query.eq("property_id", params.propertyId);
+  }
+
+  if (params.activeOnly) {
+    query = query.eq("status", "active");
+  }
+
+  if (params.appliesTo && params.appliesTo.length > 0) {
+    query = query.in("applies_to", params.appliesTo);
+  }
+
+  const { data, error } = await query
+    .order("sort_order", { ascending: true })
+    .order("title", { ascending: true })
+    .returns<ManagerPropertyRuleRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 export async function markManagerPropertyExistingTenantSetupCompleted(
   supabase: SupabaseClient,
   params: {
@@ -856,6 +1153,30 @@ export async function markManagerPropertyExistingTenantSetupCompleted(
     .eq("status", "active")
     .select(MANAGER_PROPERTY_SELECT)
     .single<ManagerPropertyRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function deleteManagerProperty(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    landlordClientId: string;
+    propertyId: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_properties")
+    .delete()
+    .eq("id", params.propertyId)
+    .eq("organization_id", params.organizationId)
+    .eq("landlord_client_id", params.landlordClientId)
+    .select("id")
+    .single<{ id: string }>();
 
   if (error) {
     throw error;
@@ -1128,6 +1449,9 @@ export async function recordManagerRentPayment(
     paymentReceiver: ManagerPaymentReceiver;
     paystackChargeBearer: ManagerPaystackChargeBearer;
     amountPaid: number;
+    baseRentAmount: number;
+    serviceChargeAmount: number;
+    serviceChargeItemsSnapshot: ManagerServiceChargePaymentSnapshotItem[];
     paymentMethod: ManagerPaymentMethod;
     paymentReference: string | null;
     paymentDate: string;
@@ -1155,6 +1479,9 @@ export async function recordManagerRentPayment(
       payment_receiver: params.paymentReceiver,
       paystack_charge_bearer: params.paystackChargeBearer,
       amount_paid: params.amountPaid,
+      base_rent_amount: params.baseRentAmount,
+      service_charge_amount: params.serviceChargeAmount,
+      service_charge_items_snapshot: params.serviceChargeItemsSnapshot,
       currency_code: "NGN",
       payment_method: params.paymentMethod,
       payment_reference: params.paymentReference,

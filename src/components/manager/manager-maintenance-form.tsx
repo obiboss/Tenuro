@@ -1,17 +1,20 @@
 "use client";
 
-import { useMemo, useState, useActionState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { createManagerMaintenanceRequestAction } from "@/actions/manager-maintenance.actions";
-import { initialManagerActionState } from "@/actions/manager.state";
+import {
+  initialManagerActionState,
+  type ManagerActionState,
+} from "@/actions/manager.state";
 import {
   MANAGER_MAINTENANCE_PRIORITIES,
   MANAGER_MAINTENANCE_PRIORITY_LABELS,
-  MANAGER_MAINTENANCE_STATUSES,
-  MANAGER_MAINTENANCE_STATUS_LABELS,
 } from "@/constants/manager";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Input } from "@/components/ui/input";
+import { Toast, type ToastItem } from "@/components/ui/toast";
 import type {
   ManagerLandlordClientRow,
   ManagerPropertyRow,
@@ -26,18 +29,43 @@ type ManagerMaintenanceFormProps = {
   tenants: ManagerTenantRow[];
 };
 
-function getTodayDateValue() {
-  return new Date().toISOString().slice(0, 10);
+type MaintenanceFormFieldsProps = ManagerMaintenanceFormProps & {
+  formAction: (formData: FormData) => void;
+  isPending: boolean;
+  state: ManagerActionState;
+};
+
+function getNigeriaDateValue() {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Africa/Lagos",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  if (!year || !month || !day) {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  return `${year}-${month}-${day}`;
 }
 
-export function ManagerMaintenanceForm({
+function MaintenanceFormFields({
   landlordClients,
   properties,
   units,
   tenants,
-}: ManagerMaintenanceFormProps) {
-  const activeProperties = properties.filter(
-    (property) => property.status === "active",
+  formAction,
+  isPending,
+  state,
+}: MaintenanceFormFieldsProps) {
+  const activeProperties = useMemo(
+    () => properties.filter((property) => property.status === "active"),
+    [properties],
   );
 
   const [selectedPropertyId, setSelectedPropertyId] = useState(
@@ -46,47 +74,37 @@ export function ManagerMaintenanceForm({
   const [selectedUnitId, setSelectedUnitId] = useState("");
   const [selectedTenantId, setSelectedTenantId] = useState("");
 
-  const selectedProperty = useMemo(
-    () =>
-      activeProperties.find((property) => property.id === selectedPropertyId) ??
-      null,
-    [activeProperties, selectedPropertyId],
-  );
+  const selectedProperty =
+    activeProperties.find(
+      (property) => property.id === selectedPropertyId,
+    ) ?? null;
 
-  const unitsForProperty = useMemo(
-    () => units.filter((unit) => unit.property_id === selectedPropertyId),
+  const selectedLandlord =
+    landlordClients.find(
+      (landlord) =>
+        landlord.id === selectedProperty?.landlord_client_id,
+    ) ?? null;
+
+  const availableUnits = useMemo(
+    () =>
+      units.filter(
+        (unit) =>
+          unit.property_id === selectedPropertyId &&
+          unit.status !== "inactive",
+      ),
     [selectedPropertyId, units],
   );
 
-  const tenantsForSelection = useMemo(
+  const availableTenants = useMemo(
     () =>
-      tenants.filter((tenant) => {
-        if (tenant.property_id !== selectedPropertyId) {
-          return false;
-        }
-
-        if (selectedUnitId && tenant.unit_id !== selectedUnitId) {
-          return false;
-        }
-
-        return tenant.status === "active";
-      }),
+      tenants.filter(
+        (tenant) =>
+          tenant.property_id === selectedPropertyId &&
+          (!selectedUnitId || tenant.unit_id === selectedUnitId) &&
+          (tenant.status === "active" ||
+            tenant.status === "eviction_notice"),
+      ),
     [selectedPropertyId, selectedUnitId, tenants],
-  );
-
-  const selectedLandlordClient = useMemo(
-    () =>
-      selectedProperty
-        ? (landlordClients.find(
-            (client) => client.id === selectedProperty.landlord_client_id,
-          ) ?? null)
-        : null,
-    [landlordClients, selectedProperty],
-  );
-
-  const [state, formAction, isPending] = useActionState(
-    createManagerMaintenanceRequestAction,
-    initialManagerActionState,
   );
 
   function handlePropertyChange(propertyId: string) {
@@ -104,14 +122,13 @@ export function ManagerMaintenanceForm({
     return (
       <Card>
         <CardContent>
-          <h2 className="text-lg font-black tracking-tight text-text-strong">
-            Record maintenance issue
+          <h2 className="text-lg font-black text-text-strong">
+            Add a property first
           </h2>
-          <div className="rounded-card bg-surface p-4">
-            <p className="text-sm font-semibold leading-6 text-text-muted">
-              Add an active property before recording maintenance issues.
-            </p>
-          </div>
+
+          <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+            Maintenance issues must be connected to a managed property.
+          </p>
         </CardContent>
       </Card>
     );
@@ -125,36 +142,21 @@ export function ManagerMaintenanceForm({
         value={selectedProperty?.landlord_client_id ?? ""}
       />
 
+      <input
+        type="hidden"
+        name="reportedDate"
+        value={getNigeriaDateValue()}
+      />
+
       <Card>
-        <CardContent>
+        <CardContent className="space-y-5">
           <div>
             <h2 className="text-lg font-black tracking-tight text-text-strong">
               Record maintenance issue
             </h2>
+
             <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-              Track repairs without creating a complex vendor workflow.
-            </p>
-          </div>
-
-          {state.message ? (
-            <div
-              role="alert"
-              className={
-                state.ok
-                  ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
-                  : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
-              }
-            >
-              {state.message}
-            </div>
-          ) : null}
-
-          <div className="rounded-card bg-surface p-4">
-            <p className="text-sm font-semibold leading-6 text-text-muted">
-              Landlord Client:{" "}
-              <span className="font-black text-text-strong">
-                {selectedLandlordClient?.landlord_name ?? "Not available"}
-              </span>
+              Capture the issue and the amount expected for the repair.
             </p>
           </div>
 
@@ -165,11 +167,14 @@ export function ManagerMaintenanceForm({
             >
               Property
             </label>
+
             <select
               id="manager-maintenance-property"
               name="propertyId"
               value={selectedPropertyId}
-              onChange={(event) => handlePropertyChange(event.target.value)}
+              onChange={(event) =>
+                handlePropertyChange(event.target.value)
+              }
               className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
               required
             >
@@ -179,78 +184,92 @@ export function ManagerMaintenanceForm({
                 </option>
               ))}
             </select>
+
+            {selectedLandlord ? (
+              <p className="text-xs font-semibold text-text-muted">
+                Landlord: {selectedLandlord.landlord_name}
+              </p>
+            ) : null}
+
             {state.fieldErrors?.propertyId?.[0] ? (
               <p className="text-sm font-semibold text-danger">
                 {state.fieldErrors.propertyId[0]}
               </p>
             ) : null}
-            {state.fieldErrors?.landlordClientId?.[0] ? (
-              <p className="text-sm font-semibold text-danger">
-                {state.fieldErrors.landlordClientId[0]}
-              </p>
-            ) : null}
           </div>
 
-          <div className="space-y-2">
-            <label
-              htmlFor="manager-maintenance-unit"
-              className="text-sm font-bold text-text-strong"
-            >
-              Unit
-            </label>
-            <select
-              id="manager-maintenance-unit"
-              name="unitId"
-              value={selectedUnitId}
-              onChange={(event) => handleUnitChange(event.target.value)}
-              className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
-            >
-              <option value="">Property-wide issue</option>
-              {unitsForProperty.map((unit) => (
-                <option key={unit.id} value={unit.id}>
-                  {unit.unit_label}
-                </option>
-              ))}
-            </select>
-            {state.fieldErrors?.unitId?.[0] ? (
-              <p className="text-sm font-semibold text-danger">
-                {state.fieldErrors.unitId[0]}
-              </p>
-            ) : null}
-          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <label
+                htmlFor="manager-maintenance-unit"
+                className="text-sm font-bold text-text-strong"
+              >
+                Unit
+              </label>
 
-          <div className="space-y-2">
-            <label
-              htmlFor="manager-maintenance-tenant"
-              className="text-sm font-bold text-text-strong"
-            >
-              Tenant
-            </label>
-            <select
-              id="manager-maintenance-tenant"
-              name="tenantId"
-              value={selectedTenantId}
-              onChange={(event) => setSelectedTenantId(event.target.value)}
-              className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
-            >
-              <option value="">No tenant linked</option>
-              {tenantsForSelection.map((tenant) => (
-                <option key={tenant.id} value={tenant.id}>
-                  {tenant.full_name}
-                </option>
-              ))}
-            </select>
-            {state.fieldErrors?.tenantId?.[0] ? (
-              <p className="text-sm font-semibold text-danger">
-                {state.fieldErrors.tenantId[0]}
-              </p>
-            ) : null}
+              <select
+                id="manager-maintenance-unit"
+                name="unitId"
+                value={selectedUnitId}
+                onChange={(event) =>
+                  handleUnitChange(event.target.value)
+                }
+                className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
+              >
+                <option value="">Property-wide issue</option>
+
+                {availableUnits.map((unit) => (
+                  <option key={unit.id} value={unit.id}>
+                    {unit.unit_label}
+                  </option>
+                ))}
+              </select>
+
+              {state.fieldErrors?.unitId?.[0] ? (
+                <p className="text-sm font-semibold text-danger">
+                  {state.fieldErrors.unitId[0]}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="space-y-2">
+              <label
+                htmlFor="manager-maintenance-tenant"
+                className="text-sm font-bold text-text-strong"
+              >
+                Tenant
+              </label>
+
+              <select
+                id="manager-maintenance-tenant"
+                name="tenantId"
+                value={selectedTenantId}
+                onChange={(event) =>
+                  setSelectedTenantId(event.target.value)
+                }
+                className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
+              >
+                <option value="">No tenant linked</option>
+
+                {availableTenants.map((tenant) => (
+                  <option key={tenant.id} value={tenant.id}>
+                    {tenant.full_name}
+                  </option>
+                ))}
+              </select>
+
+              {state.fieldErrors?.tenantId?.[0] ? (
+                <p className="text-sm font-semibold text-danger">
+                  {state.fieldErrors.tenantId[0]}
+                </p>
+              ) : null}
+            </div>
           </div>
 
           <Input
-            label="Repair issue"
+            label="Issue"
             name="issueTitle"
-            placeholder="Example: Leaking kitchen sink"
+            placeholder="For example, leaking bathroom pipe"
             error={state.fieldErrors?.issueTitle?.[0]}
             required
           />
@@ -260,15 +279,17 @@ export function ManagerMaintenanceForm({
               htmlFor="manager-maintenance-description"
               className="text-sm font-bold text-text-strong"
             >
-              Issue description
+              Description
             </label>
+
             <textarea
               id="manager-maintenance-description"
               name="issueDescription"
-              rows={4}
-              placeholder="Describe the problem briefly"
+              rows={3}
+              placeholder="Optional details about the problem"
               className="w-full rounded-button border border-border-soft bg-white px-4 py-3 text-sm font-semibold text-text-strong outline-none transition placeholder:text-text-muted focus:border-primary"
             />
+
             {state.fieldErrors?.issueDescription?.[0] ? (
               <p className="text-sm font-semibold text-danger">
                 {state.fieldErrors.issueDescription[0]}
@@ -277,6 +298,14 @@ export function ManagerMaintenanceForm({
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
+            <CurrencyInput
+              label="Expected amount"
+              name="estimatedCost"
+              placeholder="0.00"
+              error={state.fieldErrors?.estimatedCost?.[0]}
+              required
+            />
+
             <div className="space-y-2">
               <label
                 htmlFor="manager-maintenance-priority"
@@ -284,12 +313,12 @@ export function ManagerMaintenanceForm({
               >
                 Priority
               </label>
+
               <select
                 id="manager-maintenance-priority"
                 name="priority"
-                className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
                 defaultValue="medium"
-                required
+                className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
               >
                 {MANAGER_MAINTENANCE_PRIORITIES.map((priority) => (
                   <option key={priority} value={priority}>
@@ -297,86 +326,13 @@ export function ManagerMaintenanceForm({
                   </option>
                 ))}
               </select>
+
               {state.fieldErrors?.priority?.[0] ? (
                 <p className="text-sm font-semibold text-danger">
                   {state.fieldErrors.priority[0]}
                 </p>
               ) : null}
             </div>
-
-            <div className="space-y-2">
-              <label
-                htmlFor="manager-maintenance-status"
-                className="text-sm font-bold text-text-strong"
-              >
-                Status
-              </label>
-              <select
-                id="manager-maintenance-status"
-                name="status"
-                className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
-                defaultValue="reported"
-                required
-              >
-                {MANAGER_MAINTENANCE_STATUSES.map((status) => (
-                  <option key={status} value={status}>
-                    {MANAGER_MAINTENANCE_STATUS_LABELS[status]}
-                  </option>
-                ))}
-              </select>
-              {state.fieldErrors?.status?.[0] ? (
-                <p className="text-sm font-semibold text-danger">
-                  {state.fieldErrors.status[0]}
-                </p>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Input
-              label="Estimated cost"
-              name="estimatedCost"
-              type="number"
-              min="0"
-              step="0.01"
-              defaultValue="0"
-              error={state.fieldErrors?.estimatedCost?.[0]}
-            />
-
-            <Input
-              label="Actual cost"
-              name="actualCost"
-              type="number"
-              min="0"
-              step="0.01"
-              defaultValue="0"
-              error={state.fieldErrors?.actualCost?.[0]}
-            />
-          </div>
-
-          <Input
-            label="Vendor / technician"
-            name="vendorName"
-            placeholder="Optional"
-            error={state.fieldErrors?.vendorName?.[0]}
-          />
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Input
-              label="Reported date"
-              name="reportedDate"
-              type="date"
-              defaultValue={getTodayDateValue()}
-              error={state.fieldErrors?.reportedDate?.[0]}
-              required
-            />
-
-            <Input
-              label="Resolved date"
-              name="resolvedDate"
-              type="date"
-              error={state.fieldErrors?.resolvedDate?.[0]}
-            />
           </div>
 
           <div className="space-y-2">
@@ -384,15 +340,17 @@ export function ManagerMaintenanceForm({
               htmlFor="manager-maintenance-notes"
               className="text-sm font-bold text-text-strong"
             >
-              Notes
+              Note
             </label>
+
             <textarea
               id="manager-maintenance-notes"
               name="notes"
               rows={3}
-              placeholder="Optional note"
+              placeholder="Optional internal note"
               className="w-full rounded-button border border-border-soft bg-white px-4 py-3 text-sm font-semibold text-text-strong outline-none transition placeholder:text-text-muted focus:border-primary"
             />
+
             {state.fieldErrors?.notes?.[0] ? (
               <p className="text-sm font-semibold text-danger">
                 {state.fieldErrors.notes[0]}
@@ -403,10 +361,78 @@ export function ManagerMaintenanceForm({
 
         <CardFooter>
           <Button type="submit" isLoading={isPending} fullWidth>
-            Record Maintenance
+            Record issue
           </Button>
         </CardFooter>
       </Card>
     </form>
+  );
+}
+
+export function ManagerMaintenanceForm(
+  props: ManagerMaintenanceFormProps,
+) {
+  const [dismissedToastId, setDismissedToastId] =
+    useState<string | null>(null);
+
+  const [state, formAction, isPending] = useActionState(
+    createManagerMaintenanceRequestAction,
+    initialManagerActionState,
+  );
+
+  const toast = useMemo<ToastItem | null>(() => {
+    if (!state.message) {
+      return null;
+    }
+
+    const id = [
+      "maintenance",
+      state.ok ? "success" : "error",
+      state.submissionId ?? state.message,
+    ].join("-");
+
+    if (dismissedToastId === id) {
+      return null;
+    }
+
+    return {
+      id,
+      tone: state.ok ? "success" : "error",
+      title: state.ok
+        ? "Issue recorded"
+        : "Could not record issue",
+      description: state.message,
+    };
+  }, [
+    dismissedToastId,
+    state.message,
+    state.ok,
+    state.submissionId,
+  ]);
+
+  const formKey =
+    state.ok && state.submissionId
+      ? state.submissionId
+      : "maintenance-form";
+
+  return (
+    <>
+      {toast ? (
+        <div className="fixed left-1/2 top-4 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2">
+          <Toast
+            toast={toast}
+            onDismiss={setDismissedToastId}
+          />
+        </div>
+      ) : null}
+
+      <MaintenanceFormFields
+        key={formKey}
+        {...props}
+        formAction={formAction}
+        isPending={isPending}
+        state={state}
+      />
+    </>
   );
 }

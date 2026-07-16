@@ -13,7 +13,10 @@ function toActionError(error: unknown): ManagerActionState {
   return {
     ok: false,
     message: result.message,
-    fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
+    fieldErrors:
+      "fieldErrors" in result
+        ? result.fieldErrors
+        : undefined,
   };
 }
 
@@ -22,24 +25,27 @@ export async function createManagerMaintenanceRequestAction(
   formData: FormData,
 ): Promise<ManagerActionState> {
   try {
-    await requireManagerWorkspacePermission("maintenance.manage");
+    await requireManagerWorkspacePermission(
+      "maintenance.manage",
+    );
 
-    const parsed = createManagerMaintenanceRequestSchema.parse({
-      landlordClientId: formData.get("landlordClientId"),
-      propertyId: formData.get("propertyId"),
-      unitId: formData.get("unitId"),
-      tenantId: formData.get("tenantId"),
-      issueTitle: formData.get("issueTitle"),
-      issueDescription: formData.get("issueDescription"),
-      priority: formData.get("priority") || "medium",
-      status: formData.get("status") || "reported",
-      estimatedCost: formData.get("estimatedCost") || "0",
-      actualCost: formData.get("actualCost") || "0",
-      vendorName: formData.get("vendorName"),
-      reportedDate: formData.get("reportedDate"),
-      resolvedDate: formData.get("resolvedDate"),
-      notes: formData.get("notes"),
-    });
+    const parsed =
+      createManagerMaintenanceRequestSchema.parse({
+        landlordClientId: formData.get("landlordClientId"),
+        propertyId: formData.get("propertyId"),
+        unitId: formData.get("unitId"),
+        tenantId: formData.get("tenantId"),
+        issueTitle: formData.get("issueTitle"),
+        issueDescription: formData.get("issueDescription"),
+        priority: formData.get("priority") || "medium",
+        status: "reported",
+        estimatedCost: formData.get("estimatedCost"),
+        actualCost: "0",
+        vendorName: undefined,
+        reportedDate: formData.get("reportedDate"),
+        resolvedDate: undefined,
+        notes: formData.get("notes"),
+      });
 
     await createManagerMaintenanceRequest(parsed);
 
@@ -49,7 +55,8 @@ export async function createManagerMaintenanceRequestAction(
 
     return {
       ok: true,
-      message: "Maintenance request recorded successfully.",
+      message: "Maintenance issue recorded.",
+      submissionId: `${Date.now()}`,
     };
   } catch (error) {
     return toActionError(error);

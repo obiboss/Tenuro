@@ -16,6 +16,7 @@ type ManagerMaintenanceListProps = {
   units: ManagerUnitRow[];
   tenants: ManagerTenantRow[];
   maintenanceRequests: ManagerMaintenanceRequestRow[];
+  selectedPropertyId: string;
 };
 
 function formatNaira(amount: number) {
@@ -56,6 +57,7 @@ export function ManagerMaintenanceList({
   units,
   tenants,
   maintenanceRequests,
+  selectedPropertyId,
 }: ManagerMaintenanceListProps) {
   const landlordNameById = new Map(
     landlordClients.map((client) => [client.id, client.landlord_name]),
@@ -77,9 +79,34 @@ export function ManagerMaintenanceList({
           Maintenance records
         </h2>
         <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-          Track reported repairs, status, vendor, and costs.
+          Track reported repairs, expected costs, and progress.
         </p>
       </div>
+
+      <form
+        action="/manager/maintenance"
+        className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]"
+      >
+        <select
+          name="propertyId"
+          defaultValue={selectedPropertyId}
+          className="min-h-11 rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
+        >
+          <option value="">All properties</option>
+          {properties.map((property) => (
+            <option key={property.id} value={property.id}>
+              {property.property_name}
+            </option>
+          ))}
+        </select>
+
+        <button
+          type="submit"
+          className="min-h-11 rounded-button bg-primary px-5 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
+        >
+          Filter
+        </button>
+      </form>
 
       {maintenanceRequests.length > 0 ? (
         <div className="mt-4 divide-y divide-border-soft">
@@ -97,7 +124,7 @@ export function ManagerMaintenanceList({
                       : " · Property-wide"}
                   </p>
                   <p className="mt-1 text-sm font-semibold text-text-muted">
-                    Landlord Client:{" "}
+                    Landlord:{" "}
                     {landlordNameById.get(request.landlord_client_id) ??
                       "Not available"}
                   </p>
@@ -167,7 +194,7 @@ export function ManagerMaintenanceList({
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-card bg-surface p-3">
                   <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
-                    Estimated cost
+                    Expected amount
                   </p>
                   <p className="mt-1 text-sm font-black text-text-strong">
                     {formatNaira(request.estimated_cost)}

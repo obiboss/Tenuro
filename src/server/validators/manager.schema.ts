@@ -7,6 +7,10 @@ import {
   MANAGER_PAYSTACK_CHARGE_BEARERS,
   MANAGER_REMITTANCE_PAYMENT_METHODS,
 } from "@/constants/manager";
+import {
+  propertyRuleAppliesToSchema,
+  propertyRuleCategorySchema,
+} from "@/server/validators/property-rule.schema";
 
 function emptyStringToUndefined(value: unknown) {
   if (typeof value === "string" && value.trim().length === 0) {
@@ -88,6 +92,55 @@ const optionalBooleanFromFormSchema = z.preprocess((value) => {
   return value === true || value === "true" || value === "on" || value === "1";
 }, z.boolean());
 
+const managerPropertyServiceChargeSchema = z.object({
+  chargeCode: optionalTextSchema(80, "Service charge code is too long."),
+  chargeName: requiredTextSchema({
+    min: 1,
+    max: 120,
+    requiredMessage: "Enter the service charge name.",
+    maxMessage: "Service charge name is too long.",
+  }),
+  description: optionalTextSchema(500, "Service charge description is too long."),
+  amount: positiveMoneySchema,
+  isRequiredBeforeMoveIn: z.boolean().default(true),
+});
+
+const managerPropertyRuleSchema = z.object({
+  title: requiredTextSchema({
+    min: 3,
+    max: 180,
+    requiredMessage: "Enter the rule title.",
+    maxMessage: "Rule title is too long.",
+  }),
+  description: requiredTextSchema({
+    min: 5,
+    max: 1000,
+    requiredMessage: "Enter the rule description.",
+    maxMessage: "Rule description is too long.",
+  }),
+  category: propertyRuleCategorySchema.default("other"),
+  appliesTo: propertyRuleAppliesToSchema.default("new_tenants"),
+  requiresTenantAcknowledgement: z.boolean().default(true),
+});
+
+function assertUniqueServiceChargeNames(
+  charges: Array<{ chargeName: string }>,
+) {
+  const seen = new Set<string>();
+
+  for (const charge of charges) {
+    const key = charge.chargeName.trim().toLowerCase();
+
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+  }
+
+  return true;
+}
+
 export const createManagerOrganizationSchema = z.object({
   organizationName: requiredTextSchema({
     min: 2,
@@ -164,7 +217,13 @@ export const createManagerPropertySchema = z
     paystackChargeBearer: z.enum(MANAGER_PAYSTACK_CHARGE_BEARERS),
     paymentReceiver: z.enum(MANAGER_PAYMENT_RECEIVERS),
     hasExistingTenants: optionalBooleanFromFormSchema.default(false),
+    serviceCharges: z.array(managerPropertyServiceChargeSchema).default([]),
+    propertyRules: z.array(managerPropertyRuleSchema).default([]),
     notes: optionalTextSchema(600, "Notes are too long."),
+  })
+  .refine((value) => assertUniqueServiceChargeNames(value.serviceCharges), {
+    path: ["serviceCharges"],
+    message: "Service charge names must be unique.",
   })
   .refine(
     (value) =>

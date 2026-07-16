@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ManagerRentPaymentStatus } from "@/constants/manager";
+import type { ManagerServiceChargePaymentSnapshotItem } from "@/server/repositories/manager.repository";
 
 export const MANAGER_RENT_RECEIPTS_BUCKET = "manager-rent-receipts";
 
@@ -27,6 +28,9 @@ export type ManagerRentReceiptSnapshot = {
     unitId: string;
     tenantId: string;
     amountPaid: number;
+    baseRentAmount: number;
+    serviceChargeAmount: number;
+    serviceChargeItems: ManagerServiceChargePaymentSnapshotItem[];
     managementFeeAmount: number;
     landlordNetAmount: number;
     bopaPlatformFee: number;
@@ -164,6 +168,42 @@ function readMetadataNumber(
   }
 
   return 0;
+}
+
+function readServiceChargeItems(
+  value: unknown,
+): ManagerServiceChargePaymentSnapshotItem[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((item) => {
+    if (typeof item !== "object" || item === null) {
+      return [];
+    }
+
+    const record = item as Record<string, unknown>;
+    const name = typeof record.name === "string" ? record.name.trim() : "";
+    const amount =
+      typeof record.amount === "number" && Number.isFinite(record.amount)
+        ? record.amount
+        : 0;
+
+    if (!name || amount <= 0) {
+      return [];
+    }
+
+    return [
+      {
+        chargeId:
+          typeof record.chargeId === "string" ? record.chargeId : name,
+        code: typeof record.code === "string" ? record.code : null,
+        name,
+        amount,
+        currencyCode: "NGN",
+      },
+    ];
+  });
 }
 
 async function getRecordById(
@@ -308,6 +348,11 @@ export async function getManagerRentReceiptSnapshot(
       unitId,
       tenantId,
       amountPaid: readNumber(payment, "amount_paid"),
+      baseRentAmount: readNumber(payment, "base_rent_amount"),
+      serviceChargeAmount: readNumber(payment, "service_charge_amount"),
+      serviceChargeItems: readServiceChargeItems(
+        payment.service_charge_items_snapshot,
+      ),
       managementFeeAmount: readNumber(payment, "management_fee_amount"),
       landlordNetAmount: readNumber(payment, "landlord_net_amount"),
       bopaPlatformFee: readMetadataNumber(paymentMetadata, "bopa_platform_fee"),

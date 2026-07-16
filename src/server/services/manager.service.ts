@@ -10,6 +10,9 @@ import {
   createManagerLandlordClient as createManagerLandlordClientRecord,
   createManagerOrganization as createManagerOrganizationRecord,
   createManagerProperty as createManagerPropertyRecord,
+  createManagerPropertyRules,
+  deleteManagerProperty as deleteManagerPropertyRecord,
+  createManagerPropertyServiceCharges,
   createManagerUnit as createManagerUnitRecord,
   getManagerOrganizationForCurrentUser,
   getManagerOverview as getManagerOverviewRecord,
@@ -22,6 +25,7 @@ import {
   recordManagerRentPayment as recordManagerRentPaymentRecord,
   upsertLandlordPayoutProfile,
 } from "@/server/repositories/manager.repository";
+import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import type {
   CreateManagerLandlordClientInput,
@@ -251,9 +255,9 @@ export async function saveManagerLandlordPayoutProfile(
 }
 
 export async function createManagerProperty(input: CreateManagerPropertyInput) {
-  const { supabase, organization } = await requireManagerOrganization();
+  const { supabase, profile, organization } = await requireManagerOrganization();
 
-  return createManagerPropertyRecord(supabase, {
+  const property = await createManagerPropertyRecord(supabase, {
     organizationId: organization.id,
     landlordClientId: input.landlordClientId,
     propertyName: input.propertyName,
@@ -269,6 +273,66 @@ export async function createManagerProperty(input: CreateManagerPropertyInput) {
     hasExistingTenants: input.hasExistingTenants,
     notes: nullableText(input.notes),
   });
+
+  try {
+    await createManagerPropertyServiceCharges(supabase, {
+      organizationId: organization.id,
+      landlordClientId: input.landlordClientId,
+      propertyId: property.id,
+      createdByProfileId: profile.id,
+      charges: input.serviceCharges.map((charge, index) => ({
+        chargeCode: nullableText(charge.chargeCode),
+        chargeName: charge.chargeName,
+        description: nullableText(charge.description),
+        amount: roundMoney(charge.amount),
+        isRequiredBeforeMoveIn: charge.isRequiredBeforeMoveIn,
+        sortOrder: index,
+        metadata: {
+          source: "bopa_manager_property_onboarding",
+        },
+      })),
+    });
+
+    await createManagerPropertyRules(supabase, {
+      organizationId: organization.id,
+      landlordClientId: input.landlordClientId,
+      propertyId: property.id,
+      createdByProfileId: profile.id,
+      rules: input.propertyRules.map((rule, index) => ({
+        title: rule.title,
+        description: rule.description,
+        category: rule.category,
+        enforcement: "information_only",
+        appliesTo: rule.appliesTo,
+        requiresTenantAcknowledgement:
+          rule.requiresTenantAcknowledgement,
+        sortOrder: index,
+        metadata: {
+          source: "bopa_manager_property_onboarding",
+        },
+      })),
+    });
+  } catch (error) {
+    const adminSupabase = createSupabaseAdminClient();
+
+    try {
+      await deleteManagerPropertyRecord(adminSupabase, {
+        organizationId: organization.id,
+        landlordClientId: input.landlordClientId,
+        propertyId: property.id,
+      });
+    } catch {
+      throw new AppError(
+        "MANAGER_PROPERTY_CLEANUP_FAILED",
+        "We could not finish adding this property. Please contact support before trying again.",
+        500,
+      );
+    }
+
+    throw error;
+  }
+
+  return property;
 }
 
 export async function completeManagerExistingTenantSetup(
@@ -397,6 +461,9 @@ export async function recordManagerRentPayment(
     paymentReceiver: input.paymentReceiver,
     paystackChargeBearer: property.paystack_charge_bearer,
     amountPaid,
+    baseRentAmount: amountPaid,
+    serviceChargeAmount: 0,
+    serviceChargeItemsSnapshot: [],
     paymentMethod: input.paymentMethod,
     paymentReference: nullableText(input.paymentReference),
     paymentDate: input.paymentDate,

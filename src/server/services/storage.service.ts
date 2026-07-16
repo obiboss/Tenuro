@@ -3,7 +3,7 @@ import "server-only";
 import { AppError } from "@/server/errors/app-error";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 
-const TENANT_KYC_BUCKET = "tenant-kyc-documents";
+export const TENANT_KYC_BUCKET = "tenant-kyc-documents";
 const TENANCY_AGREEMENT_PDF_BUCKET = "tenancy-agreement-pdfs";
 const RENT_RECEIPTS_BUCKET = "rent-receipts";
 const DEVELOPER_PAYMENT_RECEIPTS_BUCKET = "developer-payment-receipts";
@@ -100,6 +100,133 @@ export async function createTenantKycDocumentLinks(params: {
       path: params.guarantorIdDocumentPath,
       signedUrl: guarantorIdDocumentUrl,
     },
+  };
+}
+
+export async function createExistingTenantPaymentEvidenceLink(params: {
+  path: string | null;
+  fileName: string | null;
+}) {
+  const signedUrl = await createSignedStorageUrl({
+    bucket: TENANT_KYC_BUCKET,
+    path: params.path,
+  });
+
+  return {
+    label: params.fileName ?? "Last payment receipt",
+    path: params.path,
+    signedUrl,
+  };
+}
+
+const EXISTING_TENANT_EVIDENCE_MIME_TYPES = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
+
+function createExistingTenantEvidencePrefix(params: {
+  organizationId: string;
+  propertyId: string;
+  unitId: string;
+  requestId: string;
+}) {
+  return [
+    "manager",
+    params.organizationId,
+    "properties",
+    params.propertyId,
+    "units",
+    params.unitId,
+    "onboarding",
+    params.requestId,
+    "last-payment",
+    "",
+  ].join("/");
+}
+
+function getExistingTenantEvidenceFileName(path: string) {
+  const storedFileName = path.split("/").at(-1)?.trim();
+
+  if (!storedFileName) {
+    return "Last payment receipt";
+  }
+
+  return storedFileName.replace(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-/i,
+    "",
+  );
+}
+
+export async function verifyExistingTenantPaymentEvidenceUpload(params: {
+  organizationId: string;
+  propertyId: string;
+  unitId: string;
+  requestId: string;
+  path: string;
+  submittedMimeType: string;
+  submittedSizeBytes: number;
+}) {
+  const expectedPrefix = createExistingTenantEvidencePrefix(params);
+
+  if (
+    !params.path.startsWith(expectedPrefix) ||
+    params.path.includes("..") ||
+    params.path.includes("\\")
+  ) {
+    throw new AppError(
+      "MANAGER_EXISTING_PAYMENT_EVIDENCE_INVALID",
+      "The uploaded receipt does not belong to this tenant request.",
+      400,
+    );
+  }
+
+  const supabase = createSupabaseAdminClient();
+
+  const { data, error } = await supabase.storage
+    .from(TENANT_KYC_BUCKET)
+    .download(params.path);
+
+  if (error || !data) {
+    throw new AppError(
+      "MANAGER_EXISTING_PAYMENT_EVIDENCE_NOT_FOUND",
+      "The uploaded receipt could not be found. Upload it again.",
+      400,
+    );
+  }
+
+  const actualMimeType = data.type.trim().toLowerCase();
+  const submittedMimeType = params.submittedMimeType.trim().toLowerCase();
+
+  if (
+    !EXISTING_TENANT_EVIDENCE_MIME_TYPES.has(actualMimeType) ||
+    actualMimeType !== submittedMimeType
+  ) {
+    throw new AppError(
+      "MANAGER_EXISTING_PAYMENT_EVIDENCE_TYPE_MISMATCH",
+      "The uploaded receipt type could not be verified. Upload it again.",
+      400,
+    );
+  }
+
+  if (
+    data.size <= 0 ||
+    data.size !== params.submittedSizeBytes ||
+    data.size > 5 * 1024 * 1024
+  ) {
+    throw new AppError(
+      "MANAGER_EXISTING_PAYMENT_EVIDENCE_SIZE_MISMATCH",
+      "The uploaded receipt could not be verified. Upload it again.",
+      400,
+    );
+  }
+
+  return {
+    path: params.path,
+    fileName: getExistingTenantEvidenceFileName(params.path),
+    mimeType: actualMimeType,
+    sizeBytes: data.size,
   };
 }
 

@@ -50,6 +50,14 @@ const moneySchema = z.preprocess(
     .min(0, "Amount cannot be negative."),
 );
 
+const positiveMoneySchema = z.preprocess(
+  moneyValue,
+  z.coerce
+    .number()
+    .finite("Enter a valid amount.")
+    .positive("Amount must be greater than zero."),
+);
+
 export const createManagerMaintenanceRequestSchema = z
   .object({
     landlordClientId: uuidSchema,
@@ -67,7 +75,7 @@ export const createManagerMaintenanceRequestSchema = z
     ),
     priority: z.enum(MANAGER_MAINTENANCE_PRIORITIES).default("medium"),
     status: z.enum(MANAGER_MAINTENANCE_STATUSES).default("reported"),
-    estimatedCost: moneySchema.default(0),
+    estimatedCost: positiveMoneySchema,
     actualCost: moneySchema.default(0),
     vendorName: optionalTextSchema(180, "Vendor name is too long."),
     reportedDate: z

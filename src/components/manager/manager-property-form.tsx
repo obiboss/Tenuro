@@ -1,7 +1,14 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import {
+  useActionState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createManagerPropertyAction } from "@/actions/manager.actions";
 import { initialManagerActionState } from "@/actions/manager.state";
 import type { ManagerManagementFeeType } from "@/constants/manager";
@@ -12,6 +19,7 @@ import {
   getNigeriaLgaOptions,
   getNigeriaStateOptions,
 } from "@/lib/nigeria-state-lga";
+import { LANDLORD_CHARGE_PRESETS } from "@/lib/landlord-charge-presets";
 import type { ManagerLandlordClientRow } from "@/server/repositories/manager.repository";
 
 type ManagerPropertyFormProps = {
@@ -19,7 +27,44 @@ type ManagerPropertyFormProps = {
 };
 
 type OwnerMode = "existing" | "new";
-type FormStep = "details" | "rent";
+type FormStep = "details" | "rent" | "charges" | "rules" | "existing" | "review";
+
+type ServiceChargeDraft = {
+  id: string;
+  chargeCode: string | null;
+  chargeName: string;
+  description: string;
+  amount: string;
+  isRequiredBeforeMoveIn: boolean;
+  customName: string;
+};
+
+type PropertyRuleDraft = {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  appliesTo: "all_tenants" | "new_tenants" | "renewing_tenants";
+  requiresTenantAcknowledgement: boolean;
+};
+
+const ruleCategoryOptions = [
+  ["occupancy", "Occupancy"],
+  ["pets", "Pets"],
+  ["payment", "Payment"],
+  ["noise", "Noise"],
+  ["business_use", "Business use"],
+  ["maintenance", "Maintenance"],
+  ["safety", "Safety"],
+  ["documentation", "Documentation"],
+  ["other", "Other"],
+] as const;
+
+const ruleAppliesToOptions = [
+  ["all_tenants", "All tenants"],
+  ["new_tenants", "New tenants"],
+  ["renewing_tenants", "Renewing tenants"],
+] as const;
 
 function normaliseRequiredText(value: string) {
   return value.trim().length > 0;
@@ -37,6 +82,58 @@ function formatNaira(value: string) {
     currency: "NGN",
     maximumFractionDigits: 0,
   }).format(amount);
+}
+
+function createDraftId() {
+  return crypto.randomUUID();
+}
+
+function createServiceChargeDraft(presetId: string): ServiceChargeDraft {
+  const preset =
+    LANDLORD_CHARGE_PRESETS.find((item) => item.id === presetId) ??
+    LANDLORD_CHARGE_PRESETS[0];
+
+  return {
+    id: createDraftId(),
+    chargeCode: preset.id === "other" ? null : preset.id,
+    chargeName: preset.id === "other" ? "" : preset.name,
+    description: preset.defaultDescription,
+    amount: "",
+    isRequiredBeforeMoveIn: preset.isRequiredBeforeMoveIn,
+    customName: "",
+  };
+}
+
+function createPropertyRuleDraft(): PropertyRuleDraft {
+  return {
+    id: createDraftId(),
+    title: "",
+    description: "",
+    category: "other",
+    appliesTo: "new_tenants",
+    requiresTenantAcknowledgement: true,
+  };
+}
+
+function getServiceChargePayload(charges: ServiceChargeDraft[]) {
+  return charges.map((charge) => ({
+    chargeCode: charge.chargeCode,
+    chargeName:
+      charge.chargeCode === null ? charge.customName.trim() : charge.chargeName,
+    description: charge.description,
+    amount: charge.amount,
+    isRequiredBeforeMoveIn: charge.isRequiredBeforeMoveIn,
+  }));
+}
+
+function getPropertyRulePayload(rules: PropertyRuleDraft[]) {
+  return rules.map((rule) => ({
+    title: rule.title,
+    description: rule.description,
+    category: rule.category,
+    appliesTo: rule.appliesTo,
+    requiresTenantAcknowledgement: rule.requiresTenantAcknowledgement,
+  }));
 }
 
 function SummaryItem({ label, value }: { label: string; value: string }) {
@@ -84,6 +181,7 @@ function StepButton({
 export function ManagerPropertyForm({
   landlordClients,
 }: ManagerPropertyFormProps) {
+  const router = useRouter();
   const [state, formAction, isPending] = useActionState(
     createManagerPropertyAction,
     initialManagerActionState,
@@ -119,6 +217,11 @@ export function ManagerPropertyForm({
   const [feeType, setFeeType] =
     useState<ManagerManagementFeeType>("percentage");
   const [managementFeeValue, setManagementFeeValue] = useState("10");
+  const [hasNoServiceCharges, setHasNoServiceCharges] = useState(false);
+  const [serviceCharges, setServiceCharges] = useState<ServiceChargeDraft[]>(
+    [],
+  );
+  const [propertyRules, setPropertyRules] = useState<PropertyRuleDraft[]>([]);
   const [notes, setNotes] = useState("");
 
   const lgaOptions = useMemo(
@@ -151,6 +254,19 @@ export function ManagerPropertyForm({
       ? `${managementFeeValue || "0"}%`
       : formatNaira(managementFeeValue);
 
+  const effectiveServiceCharges = hasNoServiceCharges ? [] : serviceCharges;
+  const serviceChargeTotal = effectiveServiceCharges.reduce((total, charge) => {
+    const amount = Number(charge.amount);
+
+    return Number.isFinite(amount) ? total + amount : total;
+  }, 0);
+  const serviceChargesJson = JSON.stringify(
+    getServiceChargePayload(effectiveServiceCharges),
+  );
+  const propertyRulesJson = JSON.stringify(
+    getPropertyRulePayload(propertyRules),
+  );
+
   const canContinueFromDetails = useMemo(() => {
     const hasLandlord = useExistingLandlord
       ? normaliseRequiredText(selectedLandlordId)
@@ -178,6 +294,86 @@ export function ManagerPropertyForm({
   function handleStateChange(nextState: string) {
     setStateName(nextState);
     setLga("");
+  }
+
+  const resetFormState = useCallback(() => {
+    setStep("details");
+    setOwnerMode(landlordClients.length > 0 ? "existing" : "new");
+    setSelectedLandlordId(landlordClients[0]?.id ?? "");
+    setNewLandlordName("");
+    setNewLandlordPhone("");
+    setNewLandlordEmail("");
+    setNewLandlordAddress("");
+    setPropertyName("");
+    setPropertyAddress("");
+    setStateName("");
+    setLga("");
+    setCity("");
+    setHasExistingTenants(false);
+    setHasManagementFee(true);
+    setFeeType("percentage");
+    setManagementFeeValue("10");
+    setHasNoServiceCharges(false);
+    setServiceCharges([]);
+    setPropertyRules([]);
+    setNotes("");
+    setShowMoreLandlordDetails(false);
+    setShowNote(false);
+  }, [landlordClients]);
+
+  useEffect(() => {
+    if (!state.ok || !state.nextHref) {
+      return;
+    }
+
+    const nextHref = state.nextHref;
+
+    const timeoutId = window.setTimeout(() => {
+      resetFormState();
+      router.push(nextHref);
+    }, 900);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [resetFormState, router, state.nextHref, state.ok]);
+
+  function addServiceCharge(presetId: string) {
+    setHasNoServiceCharges(false);
+    setServiceCharges((current) => [
+      ...current,
+      createServiceChargeDraft(presetId),
+    ]);
+  }
+
+  function updateServiceCharge(
+    id: string,
+    updater: (charge: ServiceChargeDraft) => ServiceChargeDraft,
+  ) {
+    setServiceCharges((current) =>
+      current.map((charge) => (charge.id === id ? updater(charge) : charge)),
+    );
+  }
+
+  function removeServiceCharge(id: string) {
+    setServiceCharges((current) =>
+      current.filter((charge) => charge.id !== id),
+    );
+  }
+
+  function addPropertyRule() {
+    setPropertyRules((current) => [...current, createPropertyRuleDraft()]);
+  }
+
+  function updatePropertyRule(
+    id: string,
+    updater: (rule: PropertyRuleDraft) => PropertyRuleDraft,
+  ) {
+    setPropertyRules((current) =>
+      current.map((rule) => (rule.id === id ? updater(rule) : rule)),
+    );
+  }
+
+  function removePropertyRule(id: string) {
+    setPropertyRules((current) => current.filter((rule) => rule.id !== id));
   }
 
   return (
@@ -214,21 +410,51 @@ export function ManagerPropertyForm({
         name="managementFeeValue"
         value={hasManagementFee ? managementFeeValue : "0"}
       />
+      <input
+        type="hidden"
+        name="serviceChargesJson"
+        value={serviceChargesJson}
+      />
+      <input
+        type="hidden"
+        name="propertyRulesJson"
+        value={propertyRulesJson}
+      />
       <input type="hidden" name="notes" value={notes} />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
         <section className="rounded-card border border-border-soft bg-white shadow-sm">
           <div className="border-b border-border-soft p-4">
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
               <StepButton
                 active={step === "details"}
-                label="1. Property details"
+                label="1. Details"
                 description="Landlord, address, and location."
               />
               <StepButton
                 active={step === "rent"}
-                label="2. Rent setup"
+                label="2. Collection"
                 description="Manager collection and management fee."
+              />
+              <StepButton
+                active={step === "charges"}
+                label="3. Charges"
+                description="Move-in service charges."
+              />
+              <StepButton
+                active={step === "rules"}
+                label="4. Rules"
+                description="Agreement rules."
+              />
+              <StepButton
+                active={step === "existing"}
+                label="5. Tenants"
+                description="Current occupants."
+              />
+              <StepButton
+                active={step === "review"}
+                label="6. Review"
+                description="Confirm and create."
               />
             </div>
           </div>
@@ -476,43 +702,6 @@ export function ManagerPropertyForm({
                   </div>
                 </section>
 
-                <section className="space-y-3">
-                  <div>
-                    <h2 className="text-lg font-black tracking-tight text-text-strong">
-                      Existing tenants
-                    </h2>
-                    <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-                      Are there tenants already living in this property?
-                    </p>
-                  </div>
-
-                  <div className="inline-flex rounded-button border border-border-soft bg-surface p-1">
-                    <button
-                      type="button"
-                      onClick={() => setHasExistingTenants(true)}
-                      className={`min-h-10 rounded-button px-4 text-sm font-black transition ${
-                        hasExistingTenants
-                          ? "bg-white text-primary shadow-sm"
-                          : "text-text-muted hover:text-primary"
-                      }`}
-                    >
-                      Yes
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setHasExistingTenants(false)}
-                      className={`min-h-10 rounded-button px-4 text-sm font-black transition ${
-                        !hasExistingTenants
-                          ? "bg-white text-primary shadow-sm"
-                          : "text-text-muted hover:text-primary"
-                      }`}
-                    >
-                      No
-                    </button>
-                  </div>
-                </section>
-
                 <div className="flex justify-end border-t border-border-soft pt-4">
                   <Button
                     type="button"
@@ -523,7 +712,7 @@ export function ManagerPropertyForm({
                   </Button>
                 </div>
               </>
-            ) : (
+            ) : step === "rent" ? (
               <>
                 <section className="space-y-4">
                   <div>
@@ -686,6 +875,399 @@ export function ManagerPropertyForm({
                     Back
                   </Button>
 
+                  <Button type="button" onClick={() => setStep("charges")}>
+                    Continue
+                  </Button>
+                </div>
+              </>
+            ) : step === "charges" ? (
+              <>
+                <section className="space-y-4">
+                  <div>
+                    <h2 className="text-lg font-black tracking-tight text-text-strong">
+                      Service charges
+                    </h2>
+                    <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                      Add any charges tenants must pay before moving in.
+                    </p>
+                  </div>
+
+                  <label className="flex gap-3 rounded-card border border-border-soft bg-surface p-4 text-sm font-semibold text-text-strong">
+                    <input
+                      type="checkbox"
+                      checked={hasNoServiceCharges}
+                      onChange={(event) =>
+                        setHasNoServiceCharges(event.target.checked)
+                      }
+                      className="mt-1 size-4 rounded border-border-soft text-primary focus:ring-primary"
+                    />
+                    <span>This property has no service charge</span>
+                  </label>
+
+                  {!hasNoServiceCharges ? (
+                    <>
+                      <div className="flex flex-wrap gap-2">
+                        {LANDLORD_CHARGE_PRESETS.map((preset) => (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            onClick={() => addServiceCharge(preset.id)}
+                            className="inline-flex min-h-10 items-center rounded-button border border-border-soft bg-white px-3 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+                          >
+                            {preset.name}
+                          </button>
+                        ))}
+                      </div>
+
+                      {serviceCharges.length > 0 ? (
+                        <div className="space-y-3">
+                          {serviceCharges.map((charge) => (
+                            <div
+                              key={charge.id}
+                              className="rounded-card border border-border-soft bg-white p-4"
+                            >
+                              <div className="grid gap-3 sm:grid-cols-[1fr_180px_auto]">
+                                {charge.chargeCode === null ? (
+                                  <Input
+                                    label="Item name"
+                                    value={charge.customName}
+                                    onChange={(event) =>
+                                      updateServiceCharge(charge.id, (item) => ({
+                                        ...item,
+                                        customName: event.target.value,
+                                      }))
+                                    }
+                                    placeholder="Example: Security"
+                                    required
+                                  />
+                                ) : (
+                                  <Input
+                                    label="Item name"
+                                    value={charge.chargeName}
+                                    onChange={(event) =>
+                                      updateServiceCharge(charge.id, (item) => ({
+                                        ...item,
+                                        chargeName: event.target.value,
+                                      }))
+                                    }
+                                    required
+                                  />
+                                )}
+
+                                <CurrencyInput
+                                  label="Amount"
+                                  name={`charge-${charge.id}`}
+                                  value={charge.amount}
+                                  onValueChange={(value) =>
+                                    updateServiceCharge(charge.id, (item) => ({
+                                      ...item,
+                                      amount: value,
+                                    }))
+                                  }
+                                  placeholder="0.00"
+                                  required
+                                />
+
+                                <div className="flex items-end">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      removeServiceCharge(charge.id)
+                                    }
+                                    className="min-h-11 rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="rounded-card bg-surface p-4 text-sm font-semibold leading-6 text-text-muted">
+                          No service charges added.
+                        </p>
+                      )}
+
+                      <p className="rounded-card bg-primary-soft p-4 text-sm font-black text-text-strong">
+                        Service charge total: {formatNaira(String(serviceChargeTotal))}
+                      </p>
+                    </>
+                  ) : null}
+
+                  {state.fieldErrors?.serviceCharges?.[0] ? (
+                    <p className="text-sm font-semibold text-danger">
+                      {state.fieldErrors.serviceCharges[0]}
+                    </p>
+                  ) : null}
+                </section>
+
+                <div className="flex flex-col gap-3 border-t border-border-soft pt-4 sm:flex-row sm:items-center sm:justify-between">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setStep("rent")}
+                  >
+                    Back
+                  </Button>
+
+                  <Button type="button" onClick={() => setStep("rules")}>
+                    Continue
+                  </Button>
+                </div>
+              </>
+            ) : step === "rules" ? (
+              <>
+                <section className="space-y-4">
+                  <div>
+                    <h2 className="text-lg font-black tracking-tight text-text-strong">
+                      Property rules
+                    </h2>
+                    <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                      Add important rules tenants should know before accepting
+                      the agreement.
+                    </p>
+                  </div>
+
+                  <Button type="button" variant="secondary" onClick={addPropertyRule}>
+                    Add rule
+                  </Button>
+
+                  {propertyRules.length > 0 ? (
+                    <div className="space-y-3">
+                      {propertyRules.map((rule) => (
+                        <div
+                          key={rule.id}
+                          className="space-y-3 rounded-card border border-border-soft bg-white p-4"
+                        >
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <Input
+                              label="Rule title"
+                              value={rule.title}
+                              onChange={(event) =>
+                                updatePropertyRule(rule.id, (item) => ({
+                                  ...item,
+                                  title: event.target.value,
+                                }))
+                              }
+                              placeholder="Example: No short-let"
+                              required
+                            />
+
+                            <div className="space-y-2">
+                              <label className="text-sm font-bold text-text-strong">
+                                Applies to
+                              </label>
+                              <select
+                                value={rule.appliesTo}
+                                onChange={(event) =>
+                                  updatePropertyRule(rule.id, (item) => ({
+                                    ...item,
+                                    appliesTo: event.target
+                                      .value as PropertyRuleDraft["appliesTo"],
+                                  }))
+                                }
+                                className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
+                              >
+                                {ruleAppliesToOptions.map(([value, label]) => (
+                                  <option key={value} value={value}>
+                                    {label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-sm font-bold text-text-strong">
+                              Description
+                            </label>
+                            <textarea
+                              value={rule.description}
+                              onChange={(event) =>
+                                updatePropertyRule(rule.id, (item) => ({
+                                  ...item,
+                                  description: event.target.value,
+                                }))
+                              }
+                              rows={3}
+                              className="w-full rounded-button border border-border-soft bg-white px-4 py-3 text-sm font-semibold text-text-strong outline-none transition placeholder:text-text-muted focus:border-primary"
+                              required
+                            />
+                          </div>
+
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="space-y-2">
+                              <label className="text-sm font-bold text-text-strong">
+                                Category
+                              </label>
+                              <select
+                                value={rule.category}
+                                onChange={(event) =>
+                                  updatePropertyRule(rule.id, (item) => ({
+                                    ...item,
+                                    category: event.target.value,
+                                  }))
+                                }
+                                className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
+                              >
+                                {ruleCategoryOptions.map(([value, label]) => (
+                                  <option key={value} value={value}>
+                                    {label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <label className="flex items-center gap-3 rounded-card bg-surface p-4 text-sm font-semibold text-text-strong">
+                              <input
+                                type="checkbox"
+                                checked={rule.requiresTenantAcknowledgement}
+                                onChange={(event) =>
+                                  updatePropertyRule(rule.id, (item) => ({
+                                    ...item,
+                                    requiresTenantAcknowledgement:
+                                      event.target.checked,
+                                  }))
+                                }
+                                className="size-4 rounded border-border-soft text-primary focus:ring-primary"
+                              />
+                              Require tenant acknowledgement
+                            </label>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => removePropertyRule(rule.id)}
+                            className="text-sm font-black text-danger underline-offset-4 hover:underline"
+                          >
+                            Remove rule
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="rounded-card bg-surface p-4 text-sm font-semibold leading-6 text-text-muted">
+                      No special property rules.
+                    </p>
+                  )}
+                </section>
+
+                <div className="flex flex-col gap-3 border-t border-border-soft pt-4 sm:flex-row sm:items-center sm:justify-between">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setStep("charges")}
+                  >
+                    Back
+                  </Button>
+
+                  <Button type="button" onClick={() => setStep("existing")}>
+                    Continue
+                  </Button>
+                </div>
+              </>
+            ) : step === "existing" ? (
+              <>
+                <section className="space-y-3">
+                  <div>
+                    <h2 className="text-lg font-black tracking-tight text-text-strong">
+                      Existing tenants
+                    </h2>
+                    <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                      Are there tenants already living in this property?
+                    </p>
+                  </div>
+
+                  <div className="inline-flex rounded-button border border-border-soft bg-surface p-1">
+                    <button
+                      type="button"
+                      onClick={() => setHasExistingTenants(true)}
+                      className={`min-h-10 rounded-button px-4 text-sm font-black transition ${
+                        hasExistingTenants
+                          ? "bg-white text-primary shadow-sm"
+                          : "text-text-muted hover:text-primary"
+                      }`}
+                    >
+                      Yes
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setHasExistingTenants(false)}
+                      className={`min-h-10 rounded-button px-4 text-sm font-black transition ${
+                        !hasExistingTenants
+                          ? "bg-white text-primary shadow-sm"
+                          : "text-text-muted hover:text-primary"
+                      }`}
+                    >
+                      No
+                    </button>
+                  </div>
+                </section>
+
+                <div className="flex flex-col gap-3 border-t border-border-soft pt-4 sm:flex-row sm:items-center sm:justify-between">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setStep("rules")}
+                  >
+                    Back
+                  </Button>
+
+                  <Button type="button" onClick={() => setStep("review")}>
+                    Review
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <section className="space-y-4">
+                  <div>
+                    <h2 className="text-lg font-black tracking-tight text-text-strong">
+                      Review and create
+                    </h2>
+                    <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                      Confirm the property setup before adding units.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <SummaryItem label="Landlord" value={landlordSummary} />
+                    <SummaryItem
+                      label="Property"
+                      value={propertyName.trim() || "Not set"}
+                    />
+                    <SummaryItem
+                      label="Service charges"
+                      value={
+                        effectiveServiceCharges.length === 0
+                          ? "No service charges"
+                          : `${effectiveServiceCharges.length} items - ${formatNaira(
+                              String(serviceChargeTotal),
+                            )}`
+                      }
+                    />
+                    <SummaryItem
+                      label="Property rules"
+                      value={
+                        propertyRules.length === 0
+                          ? "No special property rules"
+                          : `${propertyRules.length} rules`
+                      }
+                    />
+                  </div>
+                </section>
+
+                <div className="flex flex-col gap-3 border-t border-border-soft pt-4 sm:flex-row sm:items-center sm:justify-between">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setStep("existing")}
+                  >
+                    Back
+                  </Button>
+
                   <Button type="submit" isLoading={isPending}>
                     Save property
                   </Button>
@@ -721,6 +1303,22 @@ export function ManagerPropertyForm({
             />
             <SummaryItem label="Paystack charge" value="Tenant pays" />
             <SummaryItem label="Management fee" value={managementFeeSummary} />
+            <SummaryItem
+              label="Service charges"
+              value={
+                effectiveServiceCharges.length === 0
+                  ? "None"
+                  : formatNaira(String(serviceChargeTotal))
+              }
+            />
+            <SummaryItem
+              label="Property rules"
+              value={
+                propertyRules.length === 0
+                  ? "None"
+                  : `${propertyRules.length} added`
+              }
+            />
           </div>
         </aside>
       </div>

@@ -6,6 +6,11 @@ import {
   calculateManagerPaymentBreakdown,
   roundMoney,
 } from "@/lib/manager-automation";
+import {
+  buildManagerAgreementRequirementSnapshots,
+  getManagerAgreementGuarantors,
+  getManagerAgreementRequirementSnapshots,
+} from "@/lib/manager-tenancy-agreement-snapshots";
 import { AppError } from "@/server/errors/app-error";
 import {
   createManagerTenant as createManagerTenantRecord,
@@ -13,7 +18,12 @@ import {
   getManagerPropertyById,
   getManagerUnitById,
   hasCurrentManagerTenantForUnit,
+  listManagerPropertyRules,
+  listManagerPropertyServiceCharges,
+  type ManagerPropertyRuleRow,
+  type ManagerServiceChargePaymentSnapshotItem,
 } from "@/server/repositories/manager.repository";
+import { listManagerPropertyTenantRequirements } from "@/server/repositories/manager-property-requirements.repository";
 import {
   acceptManagerTenantAgreement,
   cancelManagerOnboardingAfterAgreementDecline,
@@ -40,6 +50,17 @@ import {
 import { getActiveManagerPaystackAccount } from "@/server/repositories/manager-paystack-accounts.repository";
 import { ensureManagerTenancyAgreementPdf } from "@/server/services/manager-tenancy-agreement-pdf.service";
 import { buildManagerTenancyAgreementTemplate } from "@/server/services/manager-tenancy-agreement-template.service";
+import {
+  buildManagerTenantRequirementsSnapshot,
+  evaluateManagerTenantRequirementAnswers,
+} from "@/server/services/manager-tenant-screening.service";
+import { verifyExistingTenantPaymentEvidenceUpload } from "@/server/services/storage.service";
+import {
+  assertRequiredManagerTenantGuarantorsConfirmed,
+  cancelPendingManagerTenantGuarantors,
+  prepareManagerTenantGuarantors,
+  removePreparedManagerTenantGuarantors,
+} from "@/server/services/manager-tenant-guarantor.service";
 import {
   convertNairaToKobo,
   initializePaystackTransaction,
@@ -79,6 +100,8 @@ type ManagerAcceptedAgreementPaymentRow = {
 type ManagerTenantPaymentBreakdownResult = {
   currencyCode: "NGN";
   rentAmount: number;
+  serviceChargeItems: ManagerServiceChargePaymentSnapshotItem[];
+  serviceChargeTotal: number;
   bopaPlatformFee: number;
   paystackCharge: number;
   otherCharges: number;
@@ -87,6 +110,15 @@ type ManagerTenantPaymentBreakdownResult = {
   totalPayable: number;
   collectionMode: "manager_collects";
   paystackChargeBearer: "tenant" | "landlord" | "manager" | "bopa";
+};
+
+type ManagerAgreementRuleSnapshotItem = {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  appliesTo: "all_tenants" | "new_tenants" | "renewing_tenants";
+  requiresTenantAcknowledgement: boolean;
 };
 
 const OPEN_UNIT_REQUEST_STATUSES = [
@@ -279,24 +311,105 @@ function formatNaira(amount: number) {
 
 function buildManagerTenantPaymentBreakdownResult(params: {
   rentAmount: number;
+  serviceChargeItems?: ManagerServiceChargePaymentSnapshotItem[];
   bopaPlatformFee: number;
   paystackCharge: number;
   managerCommission: number;
   landlordShare: number;
   paystackChargeBearer: "tenant" | "landlord" | "manager" | "bopa";
 }): ManagerTenantPaymentBreakdownResult {
+  const serviceChargeItems = params.serviceChargeItems ?? [];
+  const serviceChargeTotal = roundMoney(
+    serviceChargeItems.reduce((total, item) => total + Number(item.amount), 0),
+  );
+  const totalPayable = roundMoney(params.rentAmount + serviceChargeTotal);
+
   return {
     currencyCode: "NGN",
     rentAmount: roundMoney(params.rentAmount),
+    serviceChargeItems,
+    serviceChargeTotal,
     bopaPlatformFee: roundMoney(params.bopaPlatformFee),
     paystackCharge: roundMoney(params.paystackCharge),
     otherCharges: 0,
     managerCommission: roundMoney(params.managerCommission),
     landlordShare: roundMoney(params.landlordShare),
-    totalPayable: roundMoney(params.rentAmount),
+    totalPayable,
     collectionMode: "manager_collects",
     paystackChargeBearer: params.paystackChargeBearer,
   };
+}
+
+function toServiceChargeSnapshotItems(
+  charges: Awaited<ReturnType<typeof listManagerPropertyServiceCharges>>,
+): ManagerServiceChargePaymentSnapshotItem[] {
+  return charges.map((charge) => ({
+    chargeId: charge.id,
+    code: charge.charge_code,
+    name: charge.charge_name,
+    amount: roundMoney(Number(charge.amount)),
+    currencyCode: "NGN",
+  }));
+}
+
+function toRuleSnapshotItems(
+  rules: ManagerPropertyRuleRow[],
+): ManagerAgreementRuleSnapshotItem[] {
+  return rules.map((rule) => ({
+    id: rule.id,
+    title: rule.title,
+    description: rule.description,
+    category: rule.category,
+    appliesTo: rule.applies_to,
+    requiresTenantAcknowledgement: rule.requires_tenant_acknowledgement,
+  }));
+}
+
+function getAgreementRuleSnapshot(
+  agreement: Pick<
+    ManagerTenantAgreementDocumentRow,
+    "property_snapshot" | "tenancy_snapshot"
+  >,
+): ManagerAgreementRuleSnapshotItem[] {
+  const rawRules =
+    agreement.property_snapshot.propertyRules ??
+    agreement.tenancy_snapshot.propertyRules;
+
+  if (!Array.isArray(rawRules)) {
+    return [];
+  }
+
+  return rawRules.flatMap((rawRule) => {
+    if (typeof rawRule !== "object" || rawRule === null) {
+      return [];
+    }
+
+    const rule = rawRule as Record<string, unknown>;
+    const title = typeof rule.title === "string" ? rule.title.trim() : "";
+    const description =
+      typeof rule.description === "string" ? rule.description.trim() : "";
+    const appliesTo =
+      rule.appliesTo === "all_tenants" ||
+      rule.appliesTo === "renewing_tenants"
+        ? rule.appliesTo
+        : "new_tenants";
+
+    if (!title || !description) {
+      return [];
+    }
+
+    return [
+      {
+        id: typeof rule.id === "string" ? rule.id : title,
+        title,
+        description,
+        category: typeof rule.category === "string" ? rule.category : "other",
+        appliesTo,
+        requiresTenantAcknowledgement:
+          rule.requiresTenantAcknowledgement !== false,
+      },
+    ];
+  });
 }
 
 function getSnapshotNullableText(
@@ -570,6 +683,9 @@ async function getActiveFirstRentPaymentLink(
         authorization_url,
         expires_at,
         amount_requested,
+        base_rent_amount,
+        service_charge_amount,
+        service_charge_items_snapshot,
         bopa_platform_fee,
         paystack_charge_amount,
         management_fee_amount,
@@ -591,6 +707,9 @@ async function getActiveFirstRentPaymentLink(
       authorization_url: string | null;
       expires_at: string | null;
       amount_requested: number;
+      base_rent_amount: number;
+      service_charge_amount: number;
+      service_charge_items_snapshot: ManagerServiceChargePaymentSnapshotItem[];
       bopa_platform_fee: number;
       paystack_charge_amount: number;
       management_fee_amount: number;
@@ -612,7 +731,8 @@ async function getActiveFirstRentPaymentLink(
     paymentExpiresAt: data.expires_at,
     amountRequested: data.amount_requested,
     paymentBreakdown: buildManagerTenantPaymentBreakdownResult({
-      rentAmount: Number(data.amount_requested),
+      rentAmount: Number(data.base_rent_amount),
+      serviceChargeItems: data.service_charge_items_snapshot ?? [],
       bopaPlatformFee: Number(data.bopa_platform_fee),
       paystackCharge: Number(data.paystack_charge_amount),
       managerCommission: Number(data.management_fee_amount),
@@ -659,8 +779,23 @@ async function initializeFirstRentPayment(params: {
     params.organizationId,
   );
 
+  const serviceChargeItems = toServiceChargeSnapshotItems(
+    await listManagerPropertyServiceCharges(params.supabase, {
+      organizationId: params.organizationId,
+      landlordClientId: params.landlordClientId,
+      propertyId: params.propertyId,
+      activeOnly: true,
+      requiredBeforeMoveInOnly: true,
+      chargeBearer: "tenant",
+    }),
+  );
+  const serviceChargeTotal = roundMoney(
+    serviceChargeItems.reduce((total, charge) => total + charge.amount, 0),
+  );
+  const totalPayable = roundMoney(params.rentAmount + serviceChargeTotal);
+
   const breakdown = calculateManagerPaymentBreakdown({
-    amountPaid: params.rentAmount,
+    amountPaid: totalPayable,
     managementFeeType: property.management_fee_type,
     managementFeeValue: Number(property.management_fee_value),
   });
@@ -686,6 +821,9 @@ async function initializeFirstRentPayment(params: {
     tenant_id: params.tenantId,
     agreement_document_id: params.agreementId,
     onboarding_request_id: params.onboardingRequestId,
+    base_rent_amount: roundMoney(params.rentAmount),
+    service_charge_amount: serviceChargeTotal,
+    service_charge_items_snapshot: serviceChargeItems,
   };
 
   const { data: pendingRequest, error } = await params.supabase
@@ -698,7 +836,10 @@ async function initializeFirstRentPayment(params: {
       tenant_id: params.tenantId,
       token,
       reference,
-      amount_requested: roundMoney(params.rentAmount),
+      amount_requested: totalPayable,
+      base_rent_amount: roundMoney(params.rentAmount),
+      service_charge_amount: serviceChargeTotal,
+      service_charge_items_snapshot: serviceChargeItems,
       currency_code: "NGN",
       collection_mode: "manager_collects",
       payment_receiver: "bopa_verified",
@@ -731,7 +872,7 @@ async function initializeFirstRentPayment(params: {
 
   const initialized = await initializePaystackTransaction({
     email: customerEmail,
-    amountKobo: convertNairaToKobo(params.rentAmount),
+    amountKobo: convertNairaToKobo(totalPayable),
     reference,
     callbackUrl: getManagerPaystackCallbackUrl(),
     subaccountCode: managerAccount.paystack_subaccount_code,
@@ -768,6 +909,7 @@ async function initializeFirstRentPayment(params: {
     paymentExpiresAt: initializedRequest.expires_at,
     paymentBreakdown: buildManagerTenantPaymentBreakdownResult({
       rentAmount: params.rentAmount,
+      serviceChargeItems,
       bopaPlatformFee: breakdown.bopaPlatformFee,
       paystackCharge: breakdown.paystackCharge,
       managerCommission: breakdown.managerCommission,
@@ -929,7 +1071,7 @@ export async function createManagerTenantOnboardingRequestForCurrentManager(
 ) {
   const { supabase, organization } = await requireManagerOrganization();
 
-  const [property, unit] = await Promise.all([
+  const [property, unit, activeRequirements] = await Promise.all([
     getManagerPropertyById(supabase, {
       organizationId: organization.id,
       landlordClientId: input.landlordClientId,
@@ -941,6 +1083,13 @@ export async function createManagerTenantOnboardingRequestForCurrentManager(
       propertyId: input.propertyId,
       unitId: input.unitId,
     }),
+    input.onboardingType === "new_incoming_tenant"
+      ? listManagerPropertyTenantRequirements(supabase, {
+          organizationId: organization.id,
+          propertyId: input.propertyId,
+          activeOnly: true,
+        })
+      : Promise.resolve([]),
   ]);
 
   if (!property || property.status !== "active") {
@@ -981,6 +1130,8 @@ export async function createManagerTenantOnboardingRequestForCurrentManager(
   const rawToken = createSecureToken();
   const tokenHash = hashToken(rawToken);
   const expiresAt = getExpiryDateFromHours(168);
+  const tenantRequirementsSnapshot =
+    buildManagerTenantRequirementsSnapshot(activeRequirements);
 
   const request = await createManagerTenantOnboardingRequest(supabase, {
     organizationId: organization.id,
@@ -994,8 +1145,10 @@ export async function createManagerTenantOnboardingRequestForCurrentManager(
     invitedTenantPhoneNumber: tenantPhone.e164,
     invitedTenantEmail: input.email?.trim().toLowerCase() ?? null,
     note: nullableText(input.note),
+    tenantRequirementsSnapshot,
     metadata: {
       source: "bopa_manager_tenant_onboarding_link",
+      tenant_requirement_count: tenantRequirementsSnapshot.length,
     },
   });
 
@@ -1016,82 +1169,6 @@ export async function createManagerTenantOnboardingRequestForCurrentManager(
       organizationName: organization.organization_name,
       propertyName: property.property_name,
       unitLabel: unit.unit_label,
-      claimUrl,
-    }),
-    expiresAt,
-  };
-}
-
-export async function resendManagerTenantOnboardingLinkForCurrentManager(
-  input: ResendManagerTenantOnboardingLinkInput,
-) {
-  const { supabase, organization } = await requireManagerOrganization();
-
-  const request = await getManagerTenantOnboardingRequestById(supabase, {
-    organizationId: organization.id,
-    requestId: input.requestId,
-  });
-
-  if (request.status !== "pending") {
-    throw new AppError(
-      "MANAGER_TENANT_LINK_NOT_PENDING",
-      "This tenant request has already moved past the details step.",
-      400,
-    );
-  }
-
-  const tenantPhone =
-    request.invited_tenant_phone_number ?? request.tenant_phone_number;
-
-  if (!tenantPhone) {
-    throw new AppError(
-      "MANAGER_TENANT_PHONE_REQUIRED",
-      "Enter the tenant phone number before sending a tenant link.",
-      400,
-    );
-  }
-
-  const rawToken = createSecureToken();
-  const tokenHash = hashToken(rawToken);
-  const expiresAt = getExpiryDateFromHours(168);
-  const requestMetadata = request.metadata ?? {};
-  const regeneratedCount =
-    typeof requestMetadata.tenant_detail_link_regenerated_count === "number"
-      ? requestMetadata.tenant_detail_link_regenerated_count + 1
-      : 1;
-
-  const updatedRequest = await updateManagerTenantOnboardingRequestToken(
-    supabase,
-    {
-      organizationId: organization.id,
-      requestId: request.id,
-      tokenHash,
-      tokenExpiresAt: expiresAt,
-      metadata: {
-        ...requestMetadata,
-        tenant_detail_link_regenerated_at: new Date().toISOString(),
-        tenant_detail_link_regenerated_count: regeneratedCount,
-      },
-    },
-  );
-
-  const claimUrl = getManagerTenantOnboardingUrl(rawToken);
-  const phone = normalisePhoneNumber(tenantPhone);
-  const tenantName =
-    updatedRequest.invited_tenant_full_name ??
-    updatedRequest.tenant_full_name ??
-    "Tenant";
-
-  return {
-    request: updatedRequest,
-    claimUrl,
-    tenantWhatsappNumber: phone.national,
-    whatsappMessage: buildTenantDetailMessage({
-      tenantName,
-      organizationName: organization.organization_name,
-      propertyName:
-        updatedRequest.manager_properties?.property_name ?? "the property",
-      unitLabel: updatedRequest.manager_units?.unit_label ?? "the unit",
       claimUrl,
     }),
     expiresAt,
@@ -1142,6 +1219,51 @@ export async function submitManagerTenantOnboardingRequestByToken(
     );
   }
 
+  let verifiedPaymentEvidence: Awaited<
+    ReturnType<typeof verifyExistingTenantPaymentEvidenceUpload>
+  > | null = null;
+
+  if (isCurrentOccupant) {
+    const evidencePath = input.lastPaymentReceiptPath;
+    const evidenceMimeType = input.lastPaymentReceiptMimeType;
+    const evidenceSizeBytes = input.lastPaymentReceiptSizeBytes;
+
+    if (
+      !input.lastPaymentAmount ||
+      !input.lastPaymentDate ||
+      !evidencePath ||
+      !evidenceMimeType ||
+      !evidenceSizeBytes
+    ) {
+      throw new AppError(
+        "MANAGER_EXISTING_PAYMENT_EVIDENCE_REQUIRED",
+        "Upload the last payment receipt and enter the last payment details.",
+        400,
+      );
+    }
+
+    verifiedPaymentEvidence =
+      await verifyExistingTenantPaymentEvidenceUpload({
+        organizationId: request.organization_id,
+        propertyId: request.property_id,
+        unitId: request.unit_id,
+        requestId: request.id,
+        path: evidencePath,
+        submittedMimeType: evidenceMimeType,
+        submittedSizeBytes: evidenceSizeBytes,
+      });
+  } else if (
+    input.lastPaymentAmount ||
+    input.lastPaymentDate ||
+    input.lastPaymentReceiptPath
+  ) {
+    throw new AppError(
+      "MANAGER_EXISTING_PAYMENT_EVIDENCE_NOT_ALLOWED",
+      "Historical payment evidence is only for current occupants.",
+      400,
+    );
+  }
+
   const paymentFrequency = input.paymentFrequency ?? "annual";
 
   const nextRentDueDate =
@@ -1153,20 +1275,95 @@ export async function submitManagerTenantOnboardingRequestByToken(
         })
       : null;
 
-  return submitManagerTenantOnboardingRequest(supabase, {
-    requestId: request.id,
-    fullName: input.fullName,
-    phoneNumber: phone.e164,
-    email: input.email?.trim().toLowerCase() ?? null,
-    occupation: nullableText(input.occupation),
-    idType: input.idType,
-    idNumber: input.idNumber,
-    moveInDate: input.moveInDate ?? null,
-    statedRentDueDate: nextRentDueDate,
-    claimedRentAmount: input.claimedRentAmount ?? null,
-    paymentFrequency,
-    tenantNotes: nullableText(input.tenantNotes),
-  });
+  const screening = isCurrentOccupant
+    ? {
+        result: "not_screened" as const,
+        reasons: [] as string[],
+        answers: [],
+      }
+    : evaluateManagerTenantRequirementAnswers({
+        requirements: request.tenant_requirements_snapshot,
+        answers: input.requirementAnswers,
+      });
+
+  const preparedGuarantors =
+    !isCurrentOccupant && screening.result !== "declined"
+      ? await prepareManagerTenantGuarantors({
+          request,
+          tenantPhoneNumber: phone.e164,
+          guarantors: input.guarantors,
+        })
+      : { rows: [], links: [] };
+
+  if (isCurrentOccupant && input.guarantors.length > 0) {
+    throw new AppError(
+      "MANAGER_GUARANTOR_NOT_ALLOWED_FOR_CURRENT_OCCUPANT",
+      "Guarantor details are only collected for new incoming tenants.",
+      400,
+    );
+  }
+
+  let submittedRequest: ManagerTenantOnboardingRequestRow;
+
+  try {
+    submittedRequest = await submitManagerTenantOnboardingRequest(supabase, {
+      requestId: request.id,
+      fullName: input.fullName,
+      phoneNumber: phone.e164,
+      email: input.email?.trim().toLowerCase() ?? null,
+      occupation: nullableText(input.occupation),
+      idType: input.idType,
+      idNumber: input.idNumber,
+      moveInDate: input.moveInDate ?? null,
+      statedRentDueDate: nextRentDueDate,
+      claimedRentAmount: input.claimedRentAmount ?? null,
+      lastPaymentAmount: isCurrentOccupant
+        ? (input.lastPaymentAmount ?? null)
+        : null,
+      lastPaymentDate: isCurrentOccupant
+        ? (input.lastPaymentDate ?? null)
+        : null,
+      lastPaymentReceiptPath:
+        verifiedPaymentEvidence?.path ?? null,
+      lastPaymentReceiptFileName:
+        verifiedPaymentEvidence?.fileName ?? null,
+      lastPaymentReceiptMimeType:
+        verifiedPaymentEvidence?.mimeType ?? null,
+      lastPaymentReceiptSizeBytes:
+        verifiedPaymentEvidence?.sizeBytes ?? null,
+      paymentFrequency,
+      tenantNotes: nullableText(input.tenantNotes),
+      requirementAnswers: screening.answers,
+      screeningResult: screening.result,
+      screeningReasons: screening.reasons,
+      status:
+        screening.result === "declined"
+          ? "rejected"
+          : "submitted",
+    });
+  } catch (error) {
+    if (preparedGuarantors.rows.length > 0) {
+      await removePreparedManagerTenantGuarantors({
+        organizationId: request.organization_id,
+        requestId: request.id,
+      });
+    }
+
+    throw error;
+  }
+
+  if (screening.result === "declined") {
+    await updateManagerUnitStatusDirect(supabase, {
+      organizationId: request.organization_id,
+      unitId: request.unit_id,
+      status: "vacant",
+    });
+  }
+
+  return {
+    request: submittedRequest,
+    guarantorLinks: preparedGuarantors.links,
+  };
 }
 
 export async function approveManagerTenantOnboardingRequestForCurrentManager(
@@ -1206,6 +1403,14 @@ export async function approveManagerTenantOnboardingRequestForCurrentManager(
       400,
     );
   }
+
+  const confirmedGuarantors =
+    request.onboarding_type === "new_incoming_tenant"
+      ? await assertRequiredManagerTenantGuarantorsConfirmed({
+          organizationId: organization.id,
+          request,
+        })
+      : [];
 
   if (request.onboarding_type === "new_incoming_tenant") {
     await getVerifiedManagerPaystackAccount(adminSupabase, organization.id);
@@ -1326,6 +1531,21 @@ export async function approveManagerTenantOnboardingRequestForCurrentManager(
   const unitLabel = request.manager_units?.unit_label ?? "the unit";
   const landlordName =
     request.manager_landlord_clients?.landlord_name ?? "the landlord";
+  const propertyRules = toRuleSnapshotItems(
+    await listManagerPropertyRules(adminSupabase, {
+      organizationId: organization.id,
+      landlordClientId: request.landlord_client_id,
+      propertyId: request.property_id,
+      activeOnly: true,
+      appliesTo: ["all_tenants", "new_tenants"],
+    }),
+  );
+  const agreementRequirements =
+    buildManagerAgreementRequirementSnapshots({
+      requirements: request.tenant_requirements_snapshot,
+      answers: request.tenant_requirement_answers,
+      screeningResult: request.tenant_screening_result,
+    });
 
   const agreementBody = buildManagerTenancyAgreementTemplate({
     organization: {
@@ -1356,6 +1576,9 @@ export async function approveManagerTenantOnboardingRequestForCurrentManager(
       nextRentDueDate,
       paymentFrequency,
       agreementNotes: nullableText(input.reviewNotes),
+      propertyRules,
+      agreementRequirements,
+      guarantors: confirmedGuarantors,
     },
   });
 
@@ -1387,6 +1610,7 @@ export async function approveManagerTenantOnboardingRequestForCurrentManager(
       fullName: tenant.full_name,
       phoneNumber: tenant.phone_number,
       email: tenant.email,
+      guarantors: confirmedGuarantors,
     },
     propertySnapshot: {
       id: request.property_id,
@@ -1394,6 +1618,9 @@ export async function approveManagerTenantOnboardingRequestForCurrentManager(
       propertyAddress,
       unitId: request.unit_id,
       unitLabel,
+      propertyRules,
+      tenantRequirements: request.tenant_requirements_snapshot,
+      agreementRequirements,
     },
     tenancySnapshot: {
       rentAmount: confirmedRentAmount,
@@ -1401,6 +1628,13 @@ export async function approveManagerTenantOnboardingRequestForCurrentManager(
       nextRentDueDate,
       openingBalance: input.openingBalance,
       paymentFrequency,
+      propertyRules,
+      tenantRequirements: request.tenant_requirements_snapshot,
+      requirementAnswers: request.tenant_requirement_answers,
+      screeningResult: request.tenant_screening_result,
+      screeningReasons: request.tenant_screening_reasons,
+      agreementRequirements,
+      guarantors: confirmedGuarantors,
     },
     metadata: {
       onboarding_request_id: request.id,
@@ -1408,6 +1642,12 @@ export async function approveManagerTenantOnboardingRequestForCurrentManager(
       collection_mode: "manager_collects",
       next_rent_due_date: nextRentDueDate,
       payment_frequency: paymentFrequency,
+      guarantor_count: confirmedGuarantors.length,
+      tenant_requirement_count:
+        request.tenant_requirements_snapshot.length,
+      agreement_requirement_count: agreementRequirements.length,
+      screening_result: request.tenant_screening_result,
+      agreement_snapshot_version: 2,
     },
   });
 
@@ -1496,7 +1736,89 @@ export async function rejectManagerTenantOnboardingRequestForCurrentManager(
     status: "vacant",
   });
 
+  await cancelPendingManagerTenantGuarantors({
+    organizationId: organization.id,
+    requestId: request.id,
+  });
+
   return rejectedRequest;
+}
+
+
+export async function resendManagerTenantOnboardingLinkForCurrentManager(
+  input: ResendManagerTenantOnboardingLinkInput,
+) {
+  const { supabase, organization } = await requireManagerOrganization();
+
+  const request = await getManagerTenantOnboardingRequestById(supabase, {
+    organizationId: organization.id,
+    requestId: input.requestId,
+  });
+
+  if (request.status !== "pending") {
+    throw new AppError(
+      "MANAGER_TENANT_LINK_NOT_PENDING",
+      "This tenant request has already moved past the details step.",
+      400,
+    );
+  }
+
+  const tenantPhone =
+    request.invited_tenant_phone_number ?? request.tenant_phone_number;
+
+  if (!tenantPhone) {
+    throw new AppError(
+      "MANAGER_TENANT_PHONE_REQUIRED",
+      "Enter the tenant phone number before sending a tenant link.",
+      400,
+    );
+  }
+
+  const rawToken = createSecureToken();
+  const tokenHash = hashToken(rawToken);
+  const expiresAt = getExpiryDateFromHours(168);
+  const requestMetadata = request.metadata ?? {};
+  const regeneratedCount =
+    typeof requestMetadata.tenant_detail_link_regenerated_count === "number"
+      ? requestMetadata.tenant_detail_link_regenerated_count + 1
+      : 1;
+
+  const updatedRequest = await updateManagerTenantOnboardingRequestToken(
+    supabase,
+    {
+      organizationId: organization.id,
+      requestId: request.id,
+      tokenHash,
+      tokenExpiresAt: expiresAt,
+      metadata: {
+        ...requestMetadata,
+        tenant_detail_link_regenerated_at: new Date().toISOString(),
+        tenant_detail_link_regenerated_count: regeneratedCount,
+      },
+    },
+  );
+
+  const claimUrl = getManagerTenantOnboardingUrl(rawToken);
+  const phone = normalisePhoneNumber(tenantPhone);
+  const tenantName =
+    updatedRequest.invited_tenant_full_name ??
+    updatedRequest.tenant_full_name ??
+    "Tenant";
+
+  return {
+    request: updatedRequest,
+    claimUrl,
+    tenantWhatsappNumber: phone.national,
+    whatsappMessage: buildTenantDetailMessage({
+      tenantName,
+      organizationName: organization.organization_name,
+      propertyName:
+        updatedRequest.manager_properties?.property_name ?? "the property",
+      unitLabel: updatedRequest.manager_units?.unit_label ?? "the unit",
+      claimUrl,
+    }),
+    expiresAt,
+  };
 }
 
 export async function resendManagerFirstRentPaymentLinkForCurrentManager(
@@ -1652,15 +1974,15 @@ export async function resendManagerFirstRentPaymentLinkForCurrentManager(
     paymentExpiresAt: payment.paymentExpiresAt,
     paymentBreakdown: payment.paymentBreakdown,
     tenantWhatsappNumber: phone.national,
-    whatsappMessage: buildFirstRentPaymentMessage({
-      tenantName,
-      organizationName: organization.organization_name,
-      propertyName,
-      unitLabel,
-      amount: payment.paymentBreakdown.rentAmount,
-      paymentUrl: payment.paymentUrl,
-      expiresAt: payment.paymentExpiresAt,
-    }),
+      whatsappMessage: buildFirstRentPaymentMessage({
+        tenantName,
+        organizationName: organization.organization_name,
+        propertyName,
+        unitLabel,
+        amount: payment.paymentBreakdown.totalPayable,
+        paymentUrl: payment.paymentUrl,
+        expiresAt: payment.paymentExpiresAt,
+      }),
   };
 }
 
@@ -1706,6 +2028,9 @@ export async function resolveManagerTenantAgreementToken(token: string) {
 export async function acceptManagerTenantAgreementAndCreatePayment(
   input: {
     token: AcceptManagerTenantAgreementInput["token"];
+    propertyRulesAcknowledgement?: string;
+    tenantRequirementsAcknowledgement?: string;
+    guarantorAcknowledgement?: string;
     ipAddress: string | null;
     userAgent: string | null;
   },
@@ -1769,10 +2094,73 @@ export async function acceptManagerTenantAgreementAndCreatePayment(
     );
   }
 
+  const agreementRules = getAgreementRuleSnapshot(agreement);
+  const requiresRuleAcknowledgement = agreementRules.some(
+    (rule) => rule.requiresTenantAcknowledgement,
+  );
+
+  if (
+    requiresRuleAcknowledgement &&
+    input.propertyRulesAcknowledgement !== "on"
+  ) {
+    throw new AppError(
+      "MANAGER_PROPERTY_RULES_ACKNOWLEDGEMENT_REQUIRED",
+      "Confirm that you have read and accepted the property rules.",
+      400,
+    );
+  }
+
+  const agreementRequirements =
+    getManagerAgreementRequirementSnapshots(agreement);
+  const agreementGuarantors =
+    getManagerAgreementGuarantors(agreement);
+
+  if (
+    agreementRequirements.length > 0 &&
+    input.tenantRequirementsAcknowledgement !== "on"
+  ) {
+    throw new AppError(
+      "MANAGER_TENANT_REQUIREMENTS_ACKNOWLEDGEMENT_REQUIRED",
+      "Confirm that you have reviewed and accepted the approved tenant requirements.",
+      400,
+    );
+  }
+
+  if (
+    agreementGuarantors.length > 0 &&
+    input.guarantorAcknowledgement !== "on"
+  ) {
+    throw new AppError(
+      "MANAGER_GUARANTOR_ACKNOWLEDGEMENT_REQUIRED",
+      "Confirm that the listed guarantor record forms part of this tenancy.",
+      400,
+    );
+  }
+
+  const acceptedAt = new Date().toISOString();
   const acceptedAgreement = await acceptManagerTenantAgreement(supabase, {
     agreementId: agreement.id,
     ipAddress: input.ipAddress,
     userAgent: input.userAgent,
+    metadata: {
+      ...agreement.metadata,
+      tenant_acceptance: {
+        accepted_at: acceptedAt,
+        agreement_acknowledged: true,
+        property_rules_acknowledged:
+          !requiresRuleAcknowledgement ||
+          input.propertyRulesAcknowledgement === "on",
+        tenant_requirements_acknowledged:
+          agreementRequirements.length === 0 ||
+          input.tenantRequirementsAcknowledgement === "on",
+        guarantor_record_acknowledged:
+          agreementGuarantors.length === 0 ||
+          input.guarantorAcknowledgement === "on",
+        agreement_requirement_count:
+          agreementRequirements.length,
+        guarantor_count: agreementGuarantors.length,
+      },
+    },
   });
 
   const agreementWithPdf = await ensureManagerTenancyAgreementPdf(
@@ -1877,6 +2265,11 @@ export async function declineManagerTenantAgreementAndCancel(
   await deactivateManagerProspectiveTenant(supabase, {
     organizationId: agreement.organization_id,
     tenantId: agreement.tenant_id,
+  });
+
+  await cancelPendingManagerTenantGuarantors({
+    organizationId: agreement.organization_id,
+    requestId: agreement.onboarding_request_id,
   });
 
   await expireManagerFirstRentPaymentRequestsForAgreement(supabase, {

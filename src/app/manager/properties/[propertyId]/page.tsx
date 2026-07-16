@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { isManagerCurrentTenantStatus } from "@/constants/manager";
 import { notFound, redirect } from "next/navigation";
 import { ManagerBankAccountGate } from "@/components/manager/manager-bank-account-gate";
 import { ManagerExistingTenantSetupCard } from "@/components/manager/manager-existing-tenant-setup-card";
@@ -47,39 +48,6 @@ const OPEN_TENANT_REQUEST_STATUSES = new Set<
   "payment_initialized",
 ]);
 
-function formatFee(params: {
-  management_fee_type: "percentage" | "flat";
-  management_fee_value: number;
-}) {
-  const value = Number(params.management_fee_value);
-
-  if (!Number.isFinite(value) || value <= 0) {
-    return "No fee";
-  }
-
-  if (params.management_fee_type === "percentage") {
-    return `${value.toLocaleString("en-NG")}%`;
-  }
-
-  return new Intl.NumberFormat("en-NG", {
-    style: "currency",
-    currency: "NGN",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-function getCollectionSummary(collectionMode: string) {
-  if (collectionMode === "manager_collects") {
-    return "Manager collects";
-  }
-
-  if (collectionMode === "landlord_direct") {
-    return "Landlord direct";
-  }
-
-  return "Automatic split";
-}
-
 function formatDate(date: string | null) {
   if (!date) {
     return "Not set";
@@ -90,6 +58,58 @@ function formatDate(date: string | null) {
     month: "short",
     year: "numeric",
   }).format(new Date(date));
+}
+
+function getDaysUntil(date: string | null) {
+  if (!date) {
+    return null;
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const target = new Date(`${date}T00:00:00`);
+  target.setHours(0, 0, 0, 0);
+
+  return Math.ceil((target.getTime() - today.getTime()) / 86_400_000);
+}
+
+function formatRentAttentionStatus(params: {
+  currentBalance: number;
+  daysUntilDue: number | null;
+}) {
+  if (params.currentBalance > 0) {
+    return {
+      label: "Owing",
+      className: "bg-danger-soft text-danger",
+    };
+  }
+
+  if (params.daysUntilDue !== null && params.daysUntilDue < 0) {
+    return {
+      label: `Overdue by ${Math.abs(params.daysUntilDue)} day${
+        Math.abs(params.daysUntilDue) === 1 ? "" : "s"
+      }`,
+      className: "bg-danger-soft text-danger",
+    };
+  }
+
+  if (params.daysUntilDue === 0) {
+    return {
+      label: "Due today",
+      className: "bg-warning-soft text-warning",
+    };
+  }
+
+  return {
+    label:
+      params.daysUntilDue === null
+        ? "Date not set"
+        : `Due in ${params.daysUntilDue} day${
+            params.daysUntilDue === 1 ? "" : "s"
+          }`,
+    className: "bg-warning-soft text-warning",
+  };
 }
 
 function getUnitSummary(params: {
@@ -235,11 +255,10 @@ export default async function ManagerPropertyDetailPage({
 
   const isManagerPayoutVerified = Boolean(
     managerPaystackAccount?.verification_status === "verified" &&
-    managerPaystackAccount.verified_at,
+      managerPaystackAccount.verified_at,
   );
 
-  const shouldShowAddUnitForm =
-    resolvedSearchParams?.addUnit === "1" || propertyUnits.length === 0;
+  const shouldShowAddUnitForm = resolvedSearchParams?.addUnit === "1";
   const needsExistingTenantSetup =
     property.existing_tenant_setup_required &&
     !property.existing_tenant_setup_completed_at;
@@ -254,6 +273,42 @@ export default async function ManagerPropertyDetailPage({
       payment.property_id === property.id &&
       (payment.status === "verified" || payment.status === "recorded"),
   );
+
+  const unitLabelById = new Map(
+    propertyUnits.map((unit) => [unit.id, unit.unit_label]),
+  );
+
+  const rentAttention = tenants
+    .filter((tenant) => isManagerCurrentTenantStatus(tenant.status))
+    .map((tenant) => {
+      const currentBalance = Number(tenant.current_balance);
+      const daysUntilDue = getDaysUntil(tenant.next_rent_due_date);
+
+      return {
+        tenant,
+        currentBalance: Number.isFinite(currentBalance) ? currentBalance : 0,
+        daysUntilDue,
+      };
+    })
+    .filter(
+      (item) =>
+        item.currentBalance > 0 ||
+        (item.daysUntilDue !== null && item.daysUntilDue <= 30),
+    )
+    .sort((first, second) => {
+      if (first.currentBalance > 0 && second.currentBalance <= 0) {
+        return -1;
+      }
+
+      if (first.currentBalance <= 0 && second.currentBalance > 0) {
+        return 1;
+      }
+
+      return (
+        (first.daysUntilDue ?? Number.MAX_SAFE_INTEGER) -
+        (second.daysUntilDue ?? Number.MAX_SAFE_INTEGER)
+      );
+    });
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -285,6 +340,14 @@ export default async function ManagerPropertyDetailPage({
               </span>
             </p>
           ) : null}
+
+          <Link
+            href={`/manager/properties/${property.id}/settings`}
+            prefetch={false}
+            className="mt-4 inline-flex min-h-10 items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+          >
+            Property settings
+          </Link>
         </div>
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:min-w-[32rem]">
@@ -326,33 +389,80 @@ export default async function ManagerPropertyDetailPage({
         </div>
       </div>
 
-      <section className="grid gap-3 md:grid-cols-3">
-        <div className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
-          <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-            Rent collection
-          </p>
-          <p className="mt-1 text-sm font-black text-text-strong">
-            {getCollectionSummary(property.collection_mode)}
-          </p>
+      <section className="rounded-card border border-border-soft bg-white shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-border-soft p-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-lg font-black tracking-tight text-text-strong">
+              Rent due and owing
+            </h2>
+            <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+              Tenants who need payment attention in this property.
+            </p>
+          </div>
+
+          <Link
+            href={`/manager/tenants?propertyId=${property.id}`}
+            prefetch={false}
+            className="text-sm font-extrabold text-primary underline-offset-4 hover:underline"
+          >
+            View all tenants
+          </Link>
         </div>
 
-        <div className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
-          <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-            Management fee
-          </p>
-          <p className="mt-1 text-sm font-black text-text-strong">
-            {formatFee(property)}
-          </p>
-        </div>
+        {rentAttention.length > 0 ? (
+          <div className="divide-y divide-border-soft">
+            {rentAttention.slice(0, 6).map(
+              ({ tenant, currentBalance, daysUntilDue }) => {
+                const status = formatRentAttentionStatus({
+                  currentBalance,
+                  daysUntilDue,
+                });
 
-        <div className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
-          <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-            Paystack charge
-          </p>
-          <p className="mt-1 text-sm font-black text-text-strong">
-            {property.paystack_charge_bearer}
-          </p>
-        </div>
+                return (
+                  <article
+                    key={tenant.id}
+                    className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div>
+                      <p className="font-black text-text-strong">
+                        {tenant.full_name}
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-text-muted">
+                        {unitLabelById.get(tenant.unit_id) ?? "Unit"} · Next due{" "}
+                        {formatDate(tenant.next_rent_due_date)}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {currentBalance > 0 ? (
+                        <span className="text-sm font-black text-danger">
+                          {new Intl.NumberFormat("en-NG", {
+                            style: "currency",
+                            currency: "NGN",
+                            maximumFractionDigits: 0,
+                          }).format(currentBalance)}
+                        </span>
+                      ) : null}
+
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${status.className}`}
+                      >
+                        {status.label}
+                      </span>
+                    </div>
+                  </article>
+                );
+              },
+            )}
+          </div>
+        ) : (
+          <div className="p-4">
+            <p className="rounded-card bg-success-soft p-4 text-sm font-semibold leading-6 text-success">
+              No tenant in this property is owing or due within the next 30
+              days.
+            </p>
+          </div>
+        )}
       </section>
 
       {submittedRequests.length > 0 ? (

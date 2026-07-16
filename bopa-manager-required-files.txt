@@ -1,0 +1,4894 @@
+
+====================================================================================================
+FILE: src\actions\manager.state.ts
+====================================================================================================
+export type ManagerActionState = {
+  ok: boolean;
+  message: string;
+  fieldErrors?: Record<string, string[]>;
+  propertyId?: string;
+  landlordClientId?: string;
+  unitId?: string;
+  nextHref?: string;
+  submissionId?: string;
+};
+
+export const initialManagerActionState: ManagerActionState = {
+  ok: false,
+  message: "",
+  fieldErrors: undefined,
+};
+
+
+====================================================================================================
+FILE: src\app\m\agreement\[token]\page.tsx
+====================================================================================================
+import Link from "next/link";
+import { PublicManagerAgreementAcceptanceForm } from "@/components/manager/public-manager-agreement-acceptance-form";
+import {
+  acceptManagerTenantAgreementAndCreatePayment,
+  resolveManagerTenantAgreementToken,
+} from "@/server/services/manager-tenant-onboarding.service";
+import type { ManagerTenantPaymentBreakdownState } from "@/actions/manager-tenant-onboarding.state";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+type ManagerAgreementPageProps = {
+  params: Promise<{
+    token: string;
+  }>;
+};
+
+type AcceptedPaymentState = {
+  paymentRequestId: string | null;
+  pdfDownloadUrl: string | null;
+  paymentUrl: string | null;
+  paymentExpiresAt: string | null;
+  paymentBreakdown: ManagerTenantPaymentBreakdownState | null;
+};
+
+type AgreementResolution =
+  | {
+      ok: true;
+      agreement: Awaited<ReturnType<typeof resolveManagerTenantAgreementToken>>;
+      acceptedPayment: AcceptedPaymentState | null;
+    }
+  | {
+      ok: false;
+      message: string;
+    };
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error
+    ? error.message
+    : "This agreement link could not be opened.";
+}
+
+async function resolveAgreementPageState(
+  token: string,
+): Promise<AgreementResolution> {
+  try {
+    const agreement = await resolveManagerTenantAgreementToken(token);
+
+    if (agreement.document_status !== "accepted") {
+      return {
+        ok: true,
+        agreement,
+        acceptedPayment: null,
+      };
+    }
+
+    const paymentResult = (await acceptManagerTenantAgreementAndCreatePayment({
+      token,
+      ipAddress: null,
+      userAgent: null,
+    })) as {
+      paymentRequestId?: string | null;
+      pdfDownloadUrl?: string | null;
+      paymentUrl?: string | null;
+      paymentExpiresAt?: string | null;
+      paymentBreakdown?: ManagerTenantPaymentBreakdownState | null;
+    };
+
+    return {
+      ok: true,
+      agreement,
+      acceptedPayment: {
+        paymentRequestId: paymentResult.paymentRequestId ?? null,
+        pdfDownloadUrl: paymentResult.pdfDownloadUrl ?? null,
+        paymentUrl: paymentResult.paymentUrl ?? null,
+        paymentExpiresAt: paymentResult.paymentExpiresAt ?? null,
+        paymentBreakdown: paymentResult.paymentBreakdown ?? null,
+      },
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: getErrorMessage(error),
+    };
+  }
+}
+
+function ManagerAgreementLogo() {
+  return (
+    <Link href="/" className="mb-8 flex w-fit items-center gap-3">
+      <div className="flex size-11 items-center justify-center rounded-2xl bg-primary text-2xl font-extrabold tracking-tight text-white shadow-soft">
+        B
+      </div>
+
+      <div>
+        <p className="text-lg font-extrabold tracking-tight text-text-strong">
+          BOPA Manager
+        </p>
+        <p className="text-xs font-semibold text-text-muted">
+          Tenancy agreement
+        </p>
+      </div>
+    </Link>
+  );
+}
+
+function AgreementUnavailable({ message }: { message: string }) {
+  return (
+    <main className="min-h-screen bg-background">
+      <section className="mx-auto max-w-3xl px-4 py-12 md:px-6">
+        <ManagerAgreementLogo />
+
+        <div className="rounded-card border border-border-soft bg-white p-5 shadow-sm">
+          <p className="w-fit rounded-full bg-danger-soft px-3 py-1 text-xs font-black uppercase tracking-wide text-danger">
+            Link unavailable
+          </p>
+
+          <h1 className="mt-4 text-2xl font-black tracking-tight text-text-strong">
+            Agreement link unavailable
+          </h1>
+
+          <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
+            {message}
+          </p>
+
+          <p className="mt-4 rounded-button bg-warning-soft p-4 text-sm font-semibold leading-6 text-text-muted">
+            Please ask the property manager to send a fresh agreement link.
+          </p>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function getSnapshotText(
+  snapshot: Record<string, unknown>,
+  key: string,
+  fallback: string,
+) {
+  const value = snapshot[key];
+
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : fallback;
+}
+
+function getSnapshotNumber(
+  snapshot: Record<string, unknown>,
+  key: string,
+  fallback = 0,
+) {
+  const value = snapshot[key];
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(/,/g, "").trim());
+
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return fallback;
+}
+
+function formatMoney(amount: number) {
+  return new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency: "NGN",
+    maximumFractionDigits: 0,
+  }).format(Number.isFinite(amount) ? amount : 0);
+}
+
+function formatDate(value: string) {
+  if (!value) {
+    return "Not stated";
+  }
+
+  return new Intl.DateTimeFormat("en-NG", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function formatAgreementBody(value: string) {
+  return value
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter((line, index, lines) => {
+      if (line.length > 0) {
+        return true;
+      }
+
+      return lines[index - 1]?.length !== 0;
+    });
+}
+
+function AgreementBodyCard({ agreementBody }: { agreementBody: string }) {
+  const lines = formatAgreementBody(agreementBody);
+
+  return (
+    <section className="border border-border-soft bg-white shadow-sm">
+      <div className="border-b border-border-soft p-4">
+        <h2 className="text-lg font-black tracking-tight text-text-strong">
+          Final agreement terms
+        </h2>
+        <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+          Read this carefully before accepting.
+        </p>
+      </div>
+
+      <div className="space-y-3 px-4 py-5 sm:px-8 sm:py-7">
+        {lines.map((line, index) => (
+          <p
+            key={`${line}-${index}`}
+            className={
+              line.length === 0
+                ? "h-2"
+                : "whitespace-pre-wrap text-sm font-semibold leading-7 text-text-strong"
+            }
+          >
+            {line}
+          </p>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SummaryItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border-b border-border-soft px-4 py-3 last:border-b-0 sm:border-r sm:last:border-r-0">
+      <p className="text-xs font-black uppercase tracking-wide text-text-muted">
+        {label}
+      </p>
+      <p className="mt-1 text-sm font-black text-text-strong">{value}</p>
+    </div>
+  );
+}
+
+export default async function ManagerAgreementPage({
+  params,
+}: ManagerAgreementPageProps) {
+  const { token } = await params;
+  const resolution = await resolveAgreementPageState(token);
+
+  if (!resolution.ok) {
+    return <AgreementUnavailable message={resolution.message} />;
+  }
+
+  const { agreement, acceptedPayment } = resolution;
+
+  const tenantName = getSnapshotText(
+    agreement.tenant_snapshot,
+    "fullName",
+    "Tenant",
+  );
+
+  const propertyName = getSnapshotText(
+    agreement.property_snapshot,
+    "propertyName",
+    "Property",
+  );
+
+  const unitLabel = getSnapshotText(
+    agreement.property_snapshot,
+    "unitLabel",
+    "Unit",
+  );
+  const managerName = getSnapshotText(
+    agreement.manager_snapshot,
+    "name",
+    "BOPA Manager",
+  );
+  const landlordName = getSnapshotText(
+    agreement.landlord_snapshot,
+    "name",
+    "Landlord",
+  );
+  const rentAmount = getSnapshotNumber(agreement.tenancy_snapshot, "rentAmount");
+  const moveInDate = getSnapshotText(
+    agreement.tenancy_snapshot,
+    "moveInDate",
+    "",
+  );
+  const nextRentDueDate = getSnapshotText(
+    agreement.tenancy_snapshot,
+    "nextRentDueDate",
+    "",
+  );
+
+  const statusLabel =
+    agreement.document_status === "accepted"
+      ? "Accepted"
+      : agreement.document_status === "voided"
+        ? "Declined"
+        : "Awaiting acceptance";
+
+  return (
+    <main className="min-h-screen bg-background">
+      <section className="mx-auto max-w-6xl px-4 py-8 md:px-6 lg:py-10">
+        <ManagerAgreementLogo />
+
+        <div className="mb-6 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-sm font-black text-primary">{managerName}</p>
+            <h1 className="mt-1 text-2xl font-black tracking-tight text-text-strong">
+              Tenancy agreement
+            </h1>
+            <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
+              {tenantName} · {unitLabel} · {propertyName}
+            </p>
+          </div>
+
+          <span className="w-fit rounded-full bg-primary-soft px-3 py-1 text-xs font-black uppercase tracking-wide text-primary">
+            {statusLabel}
+          </span>
+        </div>
+
+        <section className="mb-6 overflow-hidden rounded-card border border-border-soft bg-white shadow-sm">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4">
+            <SummaryItem label="Tenant" value={tenantName} />
+            <SummaryItem label="Property" value={propertyName} />
+            <SummaryItem label="Unit" value={unitLabel} />
+            <SummaryItem label="Annual rent" value={formatMoney(rentAmount)} />
+            <SummaryItem label="Move-in date" value={formatDate(moveInDate)} />
+            <SummaryItem
+              label="Next due date"
+              value={formatDate(nextRentDueDate)}
+            />
+            <SummaryItem label="Landlord" value={landlordName} />
+            <SummaryItem label="Manager" value={managerName} />
+          </div>
+        </section>
+
+        <div className="grid gap-5 lg:grid-cols-[1fr_24rem]">
+          <AgreementBodyCard
+            agreementBody={
+              agreement.finalized_body ??
+              agreement.agreement_body ??
+              "Agreement content is not available."
+            }
+          />
+
+          <div className="lg:sticky lg:top-6 lg:self-start">
+            <PublicManagerAgreementAcceptanceForm
+              token={token}
+              agreement={agreement}
+              pdfDownloadUrl={acceptedPayment?.pdfDownloadUrl ?? null}
+              initialPaymentRequestId={
+                acceptedPayment?.paymentRequestId ?? null
+              }
+              initialPaymentUrl={acceptedPayment?.paymentUrl ?? null}
+              initialPaymentExpiresAt={
+                acceptedPayment?.paymentExpiresAt ?? null
+              }
+              initialPaymentBreakdown={
+                acceptedPayment?.paymentBreakdown ?? null
+              }
+            />
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+
+====================================================================================================
+FILE: src\app\m\tenant-onboarding\[token]\page.tsx
+====================================================================================================
+import Link from "next/link";
+import { PublicManagerTenantOnboardingForm } from "@/components/manager/public-manager-tenant-onboarding-form";
+import { resolveManagerTenantOnboardingToken } from "@/server/services/manager-tenant-onboarding.service";
+
+type ManagerTenantOnboardingPublicPageProps = {
+  params: Promise<{
+    token: string;
+  }>;
+};
+
+type Resolution =
+  | {
+      ok: true;
+      request: Awaited<ReturnType<typeof resolveManagerTenantOnboardingToken>>;
+    }
+  | {
+      ok: false;
+      message: string;
+    };
+
+async function resolveSafely(token: string): Promise<Resolution> {
+  try {
+    const request = await resolveManagerTenantOnboardingToken(token);
+
+    return {
+      ok: true,
+      request,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message:
+        error instanceof Error
+          ? error.message
+          : "This tenant link could not be opened.",
+    };
+  }
+}
+
+function PublicLogo() {
+  return (
+    <Link href="/" className="mb-8 flex w-fit items-center gap-3">
+      <div className="flex size-11 items-center justify-center rounded-2xl bg-primary text-2xl font-extrabold tracking-tight text-white shadow-soft">
+        B
+      </div>
+      <div>
+        <p className="text-lg font-extrabold tracking-tight text-text-strong">
+          BOPA Manager
+        </p>
+        <p className="text-xs font-semibold text-text-muted">Tenant details</p>
+      </div>
+    </Link>
+  );
+}
+
+export default async function ManagerTenantOnboardingPublicPage({
+  params,
+}: ManagerTenantOnboardingPublicPageProps) {
+  const { token } = await params;
+  const resolution = await resolveSafely(token);
+
+  return (
+    <main className="min-h-screen bg-background">
+      <section className="mx-auto max-w-3xl px-4 py-10 md:px-6">
+        <PublicLogo />
+
+        {!resolution.ok ? (
+          <div className="rounded-card border border-border-soft bg-white p-5 shadow-sm">
+            <h1 className="text-xl font-black tracking-tight text-text-strong">
+              Link unavailable
+            </h1>
+            <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
+              {resolution.message}
+            </p>
+          </div>
+        ) : (
+          <PublicManagerTenantOnboardingForm
+            token={token}
+            request={resolution.request}
+          />
+        )}
+      </section>
+    </main>
+  );
+}
+
+
+====================================================================================================
+FILE: src\app\manager\reports\landlord-statement\download\route.ts
+====================================================================================================
+import { NextResponse } from "next/server";
+import { isAppError } from "@/server/errors/app-error";
+import { requireManager } from "@/server/services/auth.service";
+import { getManagerStatementDocumentDownload } from "@/server/services/manager-statement-documents.service";
+import { managerStatementDocumentQuerySchema } from "@/server/validators/manager-statement-documents.schema";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+export async function GET(request: Request) {
+  try {
+    const manager = await requireManager();
+    const url = new URL(request.url);
+
+    const input = managerStatementDocumentQuerySchema.parse({
+      landlordClientId: url.searchParams.get("landlordClientId"),
+      dateFrom: url.searchParams.get("dateFrom"),
+      dateTo: url.searchParams.get("dateTo"),
+    });
+
+    const download = await getManagerStatementDocumentDownload({
+      managerProfileId: manager.id,
+      documentType: "landlord_statement",
+      input,
+    });
+
+    return new NextResponse(download.fileBuffer, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="${download.fileName}"`,
+        "Cache-Control": "private, no-store",
+      },
+    });
+  } catch (error) {
+    if (isAppError(error)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          message: error.userMessage,
+        },
+        {
+          status: error.status,
+        },
+      );
+    }
+
+    return NextResponse.json(
+      {
+        ok: false,
+        message: "Statement could not be downloaded.",
+      },
+      {
+        status: 500,
+      },
+    );
+  }
+}
+
+
+====================================================================================================
+FILE: src\app\manager\reports\landlord-statement\share\route.ts
+====================================================================================================
+import { NextResponse } from "next/server";
+import { isAppError } from "@/server/errors/app-error";
+import { requireManager } from "@/server/services/auth.service";
+import { getManagerStatementWhatsAppLink } from "@/server/services/manager-statement-documents.service";
+import { managerStatementDocumentQuerySchema } from "@/server/validators/manager-statement-documents.schema";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+export async function GET(request: Request) {
+  try {
+    const manager = await requireManager();
+    const url = new URL(request.url);
+
+    const input = managerStatementDocumentQuerySchema.parse({
+      landlordClientId: url.searchParams.get("landlordClientId"),
+      dateFrom: url.searchParams.get("dateFrom"),
+      dateTo: url.searchParams.get("dateTo"),
+    });
+
+    const result = await getManagerStatementWhatsAppLink({
+      managerProfileId: manager.id,
+      documentType: "landlord_statement",
+      input,
+    });
+
+    return NextResponse.redirect(result.whatsappUrl);
+  } catch (error) {
+    const message = isAppError(error)
+      ? error.userMessage
+      : "Statement could not be shared.";
+
+    return NextResponse.json(
+      {
+        ok: false,
+        message,
+      },
+      {
+        status: isAppError(error) ? error.status : 500,
+      },
+    );
+  }
+}
+
+
+====================================================================================================
+FILE: src\app\manager\reports\page.tsx
+====================================================================================================
+import { redirect } from "next/navigation";
+import { ManagerLandlordStatementFilter } from "@/components/manager/manager-landlord-statement-filter";
+import { ManagerLandlordStatementList } from "@/components/manager/manager-landlord-statement-list";
+import { ManagerLandlordStatementSummary } from "@/components/manager/manager-landlord-statement-summary";
+import { PageHeader } from "@/components/ui/page-header";
+import {
+  getManagerOrganizationForCurrentUser,
+  listManagerLandlordClients,
+  listManagerLandlordRemittances,
+  listManagerProperties,
+  listManagerRentPayments,
+  listManagerTenants,
+  listManagerUnits,
+  type ManagerLandlordClientRow,
+  type ManagerLandlordRemittanceRow,
+  type ManagerRentPaymentRow,
+} from "@/server/repositories/manager.repository";
+import { requireManager } from "@/server/services/auth.service";
+import { createSupabaseServerClient } from "@/server/supabase/server";
+
+type ManagerReportsPageProps = {
+  searchParams: Promise<{
+    landlordClientId?: string;
+  }>;
+};
+
+type StatementSummary = {
+  landlordClient: ManagerLandlordClientRow;
+  totalRentRecorded: number;
+  managerCommission: number;
+  amountDueToLandlord: number;
+  amountRemitted: number;
+  pendingLandlordBalance: number;
+  pendingConfirmationAmount: number;
+  rentPaymentCount: number;
+  remittanceCount: number;
+};
+
+function isReliableRentPayment(payment: ManagerRentPaymentRow) {
+  return payment.status === "recorded" || payment.status === "verified";
+}
+
+function isVisibleRentPayment(payment: ManagerRentPaymentRow) {
+  return payment.status !== "rejected" && payment.status !== "reversed";
+}
+
+function isReliableRemittance(remittance: ManagerLandlordRemittanceRow) {
+  return remittance.status === "recorded" || remittance.status === "confirmed";
+}
+
+function buildStatementSummary(params: {
+  landlordClient: ManagerLandlordClientRow;
+  payments: ManagerRentPaymentRow[];
+  remittances: ManagerLandlordRemittanceRow[];
+}): StatementSummary {
+  const visiblePayments = params.payments.filter(isVisibleRentPayment);
+  const reliablePayments = params.payments.filter(isReliableRentPayment);
+  const reliableRemittances = params.remittances.filter(isReliableRemittance);
+
+  const totalRentRecorded = visiblePayments.reduce(
+    (total, payment) => total + Number(payment.amount_paid),
+    0,
+  );
+
+  const managerCommission = reliablePayments.reduce(
+    (total, payment) => total + Number(payment.management_fee_amount),
+    0,
+  );
+
+  const amountDueToLandlord = reliablePayments.reduce(
+    (total, payment) => total + Number(payment.landlord_net_amount),
+    0,
+  );
+
+  const amountRemitted = reliableRemittances.reduce(
+    (total, remittance) => total + Number(remittance.amount_remitted),
+    0,
+  );
+
+  const pendingConfirmationAmount = params.payments
+    .filter((payment) => payment.status === "pending_confirmation")
+    .reduce((total, payment) => total + Number(payment.landlord_net_amount), 0);
+
+  return {
+    landlordClient: params.landlordClient,
+    totalRentRecorded,
+    managerCommission,
+    amountDueToLandlord,
+    amountRemitted,
+    pendingLandlordBalance: Math.max(0, amountDueToLandlord - amountRemitted),
+    pendingConfirmationAmount,
+    rentPaymentCount: params.payments.length,
+    remittanceCount: params.remittances.length,
+  };
+}
+
+export default async function ManagerReportsPage({
+  searchParams,
+}: ManagerReportsPageProps) {
+  const resolvedSearchParams = await searchParams;
+  const manager = await requireManager();
+  const supabase = await createSupabaseServerClient();
+  const organization = await getManagerOrganizationForCurrentUser(
+    supabase,
+    manager.id,
+  );
+
+  if (!organization) {
+    redirect("/manager/onboarding");
+  }
+
+  const [
+    landlordClients,
+    properties,
+    units,
+    tenants,
+    rentPayments,
+    remittances,
+  ] = await Promise.all([
+    listManagerLandlordClients(supabase, organization.id),
+    listManagerProperties(supabase, organization.id),
+    listManagerUnits(supabase, { organizationId: organization.id }),
+    listManagerTenants(supabase, { organizationId: organization.id }),
+    listManagerRentPayments(supabase, organization.id),
+    listManagerLandlordRemittances(supabase, organization.id),
+  ]);
+
+  const selectedLandlordClientId =
+    landlordClients.find(
+      (client) => client.id === resolvedSearchParams.landlordClientId,
+    )?.id ??
+    landlordClients[0]?.id ??
+    null;
+
+  const selectedLandlordClient =
+    landlordClients.find((client) => client.id === selectedLandlordClientId) ??
+    null;
+
+  const selectedPayments = selectedLandlordClientId
+    ? rentPayments.filter(
+        (payment) => payment.landlord_client_id === selectedLandlordClientId,
+      )
+    : [];
+
+  const selectedRemittances = selectedLandlordClientId
+    ? remittances.filter(
+        (remittance) =>
+          remittance.landlord_client_id === selectedLandlordClientId,
+      )
+    : [];
+
+  const statementSummary = selectedLandlordClient
+    ? buildStatementSummary({
+        landlordClient: selectedLandlordClient,
+        payments: selectedPayments,
+        remittances: selectedRemittances,
+      })
+    : null;
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Landlord statement"
+        description="View rent recorded, manager commission, landlord amount due, remittances, and pending balance for each landlord client."
+      />
+
+      <ManagerLandlordStatementFilter
+        landlordClients={landlordClients}
+        selectedLandlordClientId={selectedLandlordClientId}
+      />
+
+      {statementSummary ? (
+        <>
+          <ManagerLandlordStatementSummary summary={statementSummary} />
+
+          <ManagerLandlordStatementList
+            payments={selectedPayments}
+            remittances={selectedRemittances}
+            properties={properties}
+            units={units}
+            tenants={tenants}
+          />
+        </>
+      ) : (
+        <section className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
+          <p className="text-sm font-semibold leading-6 text-text-muted">
+            Add a landlord client before viewing landlord statements.
+          </p>
+        </section>
+      )}
+    </div>
+  );
+}
+
+
+====================================================================================================
+FILE: src\app\pay\manager\callback\page.tsx
+====================================================================================================
+import Link from "next/link";
+import {
+  getManagerPaystackCallbackState,
+  type ManagerPaystackCallbackState,
+} from "@/server/services/manager-paystack.service";
+
+type ManagerPaystackCallbackPageProps = {
+  searchParams: Promise<{
+    reference?: string | string[];
+    trxref?: string | string[];
+  }>;
+};
+
+type CallbackQueryValue = string | string[] | undefined;
+type LocalCallbackState = {
+  ok: false;
+  kind: "invalid";
+  status: "missing_reference" | "invalid_reference";
+  message: string;
+};
+type CallbackPageState = ManagerPaystackCallbackState | LocalCallbackState;
+type ResolvedCallbackReference =
+  | {
+      reference: string;
+      status: "valid_reference";
+      message: string;
+    }
+  | {
+      reference: null;
+      status: "missing_reference" | "invalid_reference";
+      message: string;
+    };
+
+function normaliseSingleQueryValue(value: CallbackQueryValue) {
+  const values = (Array.isArray(value) ? value : [value])
+    .map((entry) => entry?.trim() ?? "")
+    .filter((entry) => entry.length > 0);
+
+  const uniqueValues = Array.from(new Set(values));
+
+  if (uniqueValues.length === 0) {
+    return {
+      isValid: true,
+      value: null,
+    };
+  }
+
+  if (uniqueValues.length === 1) {
+    return {
+      isValid: true,
+      value: uniqueValues[0],
+    };
+  }
+
+  return {
+    isValid: false,
+    value: null,
+  };
+}
+
+function resolveCallbackReference(params: {
+  reference: CallbackQueryValue;
+  trxref: CallbackQueryValue;
+}): ResolvedCallbackReference {
+  const reference = normaliseSingleQueryValue(params.reference);
+  const trxref = normaliseSingleQueryValue(params.trxref);
+
+  if (!reference.isValid || !trxref.isValid) {
+    return {
+      reference: null,
+      status: "invalid_reference" as const,
+      message:
+        "We could not confirm this payment reference. Please return to your manager workspace or contact support.",
+    };
+  }
+
+  if (reference.value && trxref.value && reference.value !== trxref.value) {
+    return {
+      reference: null,
+      status: "invalid_reference" as const,
+      message:
+        "We could not confirm this payment reference. Please return to your manager workspace or contact support.",
+    };
+  }
+
+  if (!reference.value && !trxref.value) {
+    return {
+      reference: null,
+      status: "missing_reference" as const,
+      message: "Payment reference is missing.",
+    };
+  }
+
+  const resolvedReference = reference.value ?? trxref.value;
+
+  if (!resolvedReference) {
+    return {
+      reference: null,
+      status: "missing_reference" as const,
+      message: "Payment reference is missing.",
+    };
+  }
+
+  return {
+    reference: resolvedReference,
+    status: "valid_reference" as const,
+    message: "Payment reference is missing.",
+  };
+}
+
+function getCallbackPageCopy(state: CallbackPageState) {
+  switch (state.kind) {
+    case "success":
+      return {
+        heading: "Payment confirmed",
+        message: state.message,
+      };
+
+    case "pending":
+      return {
+        heading: "Payment not confirmed yet",
+        message: state.message,
+      };
+
+    case "failed":
+      return {
+        heading: "Payment was not successful",
+        message: state.message,
+      };
+
+    case "invalid":
+      return {
+        heading: "Payment issue found",
+        message: state.message,
+      };
+  }
+}
+
+function formatNaira(amount: number) {
+  return new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency: "NGN",
+    maximumFractionDigits: 0,
+  }).format(Number.isFinite(amount) ? amount : 0);
+}
+
+function formatDate(value: string | null) {
+  if (!value) {
+    return "Not stated";
+  }
+
+  return new Intl.DateTimeFormat("en-NG", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function SummaryItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-card bg-surface p-3 text-left">
+      <p className="text-xs font-black uppercase tracking-wide text-text-muted">
+        {label}
+      </p>
+      <p className="mt-1 break-words text-sm font-black text-text-strong">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+export default async function ManagerPaystackCallbackPage({
+  searchParams,
+}: ManagerPaystackCallbackPageProps) {
+  const resolvedSearchParams = await searchParams;
+  const callbackReference = resolveCallbackReference({
+    reference: resolvedSearchParams.reference,
+    trxref: resolvedSearchParams.trxref,
+  });
+
+  const state: CallbackPageState = callbackReference.reference
+    ? await getManagerPaystackCallbackState(callbackReference.reference)
+    : {
+        ok: false,
+        kind: "invalid",
+        status: callbackReference.status,
+        message: callbackReference.message,
+      };
+  const pageCopy = getCallbackPageCopy(state);
+
+  const successState = state.kind === "success" ? state : null;
+
+  return (
+    <main className="min-h-screen bg-background px-4 py-10">
+      <section className="mx-auto max-w-2xl rounded-card border border-border-soft bg-white p-6 text-center shadow-sm">
+        <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-primary text-2xl font-black text-white">
+          B
+        </div>
+
+        <h1 className="mt-5 text-2xl font-black tracking-tight text-text-strong">
+          {pageCopy.heading}
+        </h1>
+
+        <p className="mt-3 text-sm font-semibold leading-6 text-text-muted">
+          {pageCopy.message}
+        </p>
+
+        {successState?.summary ? (
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            <SummaryItem label="Tenant" value={successState.summary.tenantName} />
+            <SummaryItem
+              label="Property and unit"
+              value={`${successState.summary.propertyName} - ${successState.summary.unitLabel}`}
+            />
+            <SummaryItem
+              label="Total paid"
+              value={formatNaira(successState.summary.totalPaid)}
+            />
+            <SummaryItem
+              label="Payment date"
+              value={formatDate(successState.summary.paymentDate)}
+            />
+            <SummaryItem
+              label="Payment reference"
+              value={successState.summary.paymentReference ?? "Not stated"}
+            />
+            <SummaryItem
+              label="Next rent due"
+              value={formatDate(successState.summary.nextRentDueDate)}
+            />
+          </div>
+        ) : null}
+
+        {successState ? (
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
+            {successState.receiptAvailable && successState.receiptDownloadUrl ? (
+              <Link
+                href={successState.receiptDownloadUrl}
+                className="inline-flex min-h-12 items-center justify-center rounded-button bg-primary px-5 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
+              >
+                Download rent receipt
+              </Link>
+            ) : (
+              <>
+                <p className="inline-flex min-h-12 items-center justify-center rounded-button bg-warning-soft px-5 text-sm font-extrabold text-warning">
+                  {successState.documentMessage ??
+                    "Your payment is confirmed, but the receipt is not ready yet."}
+                </p>
+
+                {successState.receiptDownloadUrl ? (
+                  <Link
+                    href={successState.receiptDownloadUrl}
+                    className="inline-flex min-h-12 items-center justify-center rounded-button bg-primary px-5 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
+                  >
+                    Try receipt again
+                  </Link>
+                ) : null}
+              </>
+            )}
+
+            {successState.agreementAvailable && successState.agreementDownloadUrl ? (
+              <Link
+                href={successState.agreementDownloadUrl}
+                className="inline-flex min-h-12 items-center justify-center rounded-button border border-border-soft bg-white px-5 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+              >
+                Download agreement
+              </Link>
+            ) : null}
+
+            <Link
+              href="/"
+              className="inline-flex min-h-12 items-center justify-center rounded-button border border-border-soft bg-white px-5 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+            >
+              Back to BOPA
+            </Link>
+          </div>
+        ) : (
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
+            {callbackReference.reference ? (
+              <Link
+                href={`/pay/manager/callback?reference=${encodeURIComponent(
+                  callbackReference.reference,
+                )}`}
+                className="inline-flex min-h-12 items-center justify-center rounded-button bg-primary px-5 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
+              >
+                Check again
+              </Link>
+            ) : null}
+
+            <Link
+              href="/"
+              className="inline-flex min-h-12 items-center justify-center rounded-button border border-border-soft bg-white px-5 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+            >
+              Back to BOPA
+            </Link>
+          </div>
+        )}
+      </section>
+    </main>
+  );
+}
+
+
+====================================================================================================
+FILE: src\components\manager\manager-landlord-statement-filter.tsx
+====================================================================================================
+import type { ManagerLandlordClientRow } from "@/server/repositories/manager.repository";
+
+type ManagerLandlordStatementFilterProps = {
+  landlordClients: ManagerLandlordClientRow[];
+  selectedLandlordClientId: string | null;
+};
+
+export function ManagerLandlordStatementFilter({
+  landlordClients,
+  selectedLandlordClientId,
+}: ManagerLandlordStatementFilterProps) {
+  return (
+    <section className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
+      <form method="get" className="grid gap-4 md:grid-cols-[1fr_auto]">
+        <div className="space-y-2">
+          <label
+            htmlFor="manager-statement-landlord"
+            className="text-sm font-bold text-text-strong"
+          >
+            Landlord Client
+          </label>
+          <select
+            id="manager-statement-landlord"
+            name="landlordClientId"
+            defaultValue={selectedLandlordClientId ?? ""}
+            className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
+            disabled={landlordClients.length === 0}
+          >
+            {landlordClients.length > 0 ? (
+              landlordClients.map((client) => (
+                <option key={client.id} value={client.id}>
+                  {client.landlord_name}
+                </option>
+              ))
+            ) : (
+              <option value="">No landlord client yet</option>
+            )}
+          </select>
+        </div>
+
+        <div className="flex items-end">
+          <button
+            type="submit"
+            disabled={landlordClients.length === 0}
+            className="min-h-12 w-full rounded-button bg-primary px-5 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 md:w-auto"
+          >
+            View Statement
+          </button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
+
+====================================================================================================
+FILE: src\components\manager\manager-landlord-statement-list.tsx
+====================================================================================================
+import {
+  MANAGER_COLLECTION_MODE_LABELS,
+  MANAGER_PAYMENT_RECEIVER_LABELS,
+  MANAGER_REMITTANCE_PAYMENT_METHOD_LABELS,
+  MANAGER_REMITTANCE_STATUS_LABELS,
+  MANAGER_RENT_PAYMENT_STATUS_LABELS,
+} from "@/constants/manager";
+import type {
+  ManagerLandlordRemittanceRow,
+  ManagerPropertyRow,
+  ManagerRentPaymentRow,
+  ManagerTenantRow,
+  ManagerUnitRow,
+} from "@/server/repositories/manager.repository";
+
+type ManagerLandlordStatementListProps = {
+  payments: ManagerRentPaymentRow[];
+  remittances: ManagerLandlordRemittanceRow[];
+  properties: ManagerPropertyRow[];
+  units: ManagerUnitRow[];
+  tenants: ManagerTenantRow[];
+};
+
+function formatNaira(amount: number) {
+  return new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency: "NGN",
+    maximumFractionDigits: 0,
+  }).format(Number(amount));
+}
+
+function formatDate(date: string | null) {
+  if (!date) {
+    return "Not set";
+  }
+
+  return new Intl.DateTimeFormat("en-NG", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(`${date}T00:00:00`));
+}
+
+function getMetadataString(
+  metadata: Record<string, unknown>,
+  key: string,
+): string | null {
+  const value = metadata[key];
+
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : null;
+}
+
+export function ManagerLandlordStatementList({
+  payments,
+  remittances,
+  properties,
+  units,
+  tenants,
+}: ManagerLandlordStatementListProps) {
+  const propertyNameById = new Map(
+    properties.map((property) => [property.id, property.property_name]),
+  );
+  const unitLabelById = new Map(
+    units.map((unit) => [unit.id, unit.unit_label]),
+  );
+  const tenantNameById = new Map(
+    tenants.map((tenant) => [tenant.id, tenant.full_name]),
+  );
+
+  return (
+    <section className="grid gap-6 xl:grid-cols-2">
+      <div className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
+        <div>
+          <h2 className="text-lg font-black tracking-tight text-text-strong">
+            Rent payment records
+          </h2>
+          <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+            Rent records linked to this landlord client.
+          </p>
+        </div>
+
+        {payments.length > 0 ? (
+          <div className="mt-4 divide-y divide-border-soft">
+            {payments.map((payment) => {
+              const proofUrl = getMetadataString(payment.metadata, "proof_url");
+
+              return (
+                <article key={payment.id} className="space-y-3 py-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="font-black text-text-strong">
+                        {tenantNameById.get(payment.tenant_id) ?? "Tenant"}
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-text-muted">
+                        {propertyNameById.get(payment.property_id) ??
+                          "Property"}{" "}
+                        · {unitLabelById.get(payment.unit_id) ?? "Unit"}
+                      </p>
+                    </div>
+
+                    <span className="w-fit rounded-full bg-primary-soft px-3 py-1 text-xs font-black uppercase tracking-wide text-primary">
+                      {MANAGER_RENT_PAYMENT_STATUS_LABELS[payment.status]}
+                    </span>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-card bg-surface p-3">
+                      <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+                        Amount paid
+                      </p>
+                      <p className="mt-1 text-sm font-black text-text-strong">
+                        {formatNaira(payment.amount_paid)}
+                      </p>
+                    </div>
+
+                    <div className="rounded-card bg-surface p-3">
+                      <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+                        Manager commission
+                      </p>
+                      <p className="mt-1 text-sm font-black text-text-strong">
+                        {formatNaira(payment.management_fee_amount)}
+                      </p>
+                    </div>
+
+                    <div className="rounded-card bg-surface p-3">
+                      <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+                        Amount due to landlord
+                      </p>
+                      <p className="mt-1 text-sm font-black text-text-strong">
+                        {formatNaira(payment.landlord_net_amount)}
+                      </p>
+                    </div>
+
+                    <div className="rounded-card bg-surface p-3">
+                      <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+                        Payment date
+                      </p>
+                      <p className="mt-1 text-sm font-black text-text-strong">
+                        {formatDate(payment.payment_date)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-card bg-surface p-3">
+                      <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+                        Collection mode
+                      </p>
+                      <p className="mt-1 text-sm font-black text-text-strong">
+                        {
+                          MANAGER_COLLECTION_MODE_LABELS[
+                            payment.collection_mode
+                          ]
+                        }
+                      </p>
+                    </div>
+
+                    <div className="rounded-card bg-surface p-3">
+                      <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+                        Payment receiver
+                      </p>
+                      <p className="mt-1 text-sm font-black text-text-strong">
+                        {
+                          MANAGER_PAYMENT_RECEIVER_LABELS[
+                            payment.payment_receiver
+                          ]
+                        }
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-card bg-surface p-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+                      Rent period
+                    </p>
+                    <p className="mt-1 text-sm font-black text-text-strong">
+                      {formatDate(payment.period_start)} —{" "}
+                      {formatDate(payment.period_end)}
+                    </p>
+                  </div>
+
+                  {proofUrl ? (
+                    <a
+                      href={proofUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex text-sm font-black text-primary underline-offset-4 hover:underline"
+                    >
+                      View payment proof
+                    </a>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="mt-4 rounded-card bg-surface p-4">
+            <p className="text-sm font-semibold leading-6 text-text-muted">
+              No rent payment record is linked to this landlord yet.
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
+        <div>
+          <h2 className="text-lg font-black tracking-tight text-text-strong">
+            Remittance records
+          </h2>
+          <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+            Money manually recorded as remitted to this landlord.
+          </p>
+        </div>
+
+        {remittances.length > 0 ? (
+          <div className="mt-4 divide-y divide-border-soft">
+            {remittances.map((remittance) => (
+              <article key={remittance.id} className="space-y-3 py-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="font-black text-text-strong">
+                      {formatNaira(remittance.amount_remitted)}
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-text-muted">
+                      {formatDate(remittance.remittance_date)}
+                    </p>
+                  </div>
+
+                  <span className="w-fit rounded-full bg-primary-soft px-3 py-1 text-xs font-black uppercase tracking-wide text-primary">
+                    {MANAGER_REMITTANCE_STATUS_LABELS[remittance.status]}
+                  </span>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-card bg-surface p-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+                      Method
+                    </p>
+                    <p className="mt-1 text-sm font-black text-text-strong">
+                      {
+                        MANAGER_REMITTANCE_PAYMENT_METHOD_LABELS[
+                          remittance.payment_method
+                        ]
+                      }
+                    </p>
+                  </div>
+
+                  <div className="rounded-card bg-surface p-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+                      Reference
+                    </p>
+                    <p className="mt-1 text-sm font-black text-text-strong">
+                      {remittance.payment_reference ?? "Not added"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-card bg-surface p-3">
+                  <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+                    Period
+                  </p>
+                  <p className="mt-1 text-sm font-black text-text-strong">
+                    {formatDate(remittance.period_start)} —{" "}
+                    {formatDate(remittance.period_end)}
+                  </p>
+                </div>
+
+                {remittance.proof_url ? (
+                  <a
+                    href={remittance.proof_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex text-sm font-black text-primary underline-offset-4 hover:underline"
+                  >
+                    View remittance proof
+                  </a>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-4 rounded-card bg-surface p-4">
+            <p className="text-sm font-semibold leading-6 text-text-muted">
+              No remittance record is linked to this landlord yet.
+            </p>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+
+====================================================================================================
+FILE: src\components\manager\manager-landlord-statement-summary.tsx
+====================================================================================================
+import type { ManagerLandlordClientRow } from "@/server/repositories/manager.repository";
+
+type StatementSummary = {
+  landlordClient: ManagerLandlordClientRow;
+  totalRentRecorded: number;
+  managerCommission: number;
+  amountDueToLandlord: number;
+  amountRemitted: number;
+  pendingLandlordBalance: number;
+  pendingConfirmationAmount: number;
+  rentPaymentCount: number;
+  remittanceCount: number;
+};
+
+type ManagerLandlordStatementSummaryProps = {
+  summary: StatementSummary;
+};
+
+function formatNaira(amount: number) {
+  return new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency: "NGN",
+    maximumFractionDigits: 0,
+  }).format(Number(amount));
+}
+
+export function ManagerLandlordStatementSummary({
+  summary,
+}: ManagerLandlordStatementSummaryProps) {
+  const cards = [
+    {
+      label: "Total rent recorded",
+      value: formatNaira(summary.totalRentRecorded),
+    },
+    {
+      label: "Manager commission",
+      value: formatNaira(summary.managerCommission),
+    },
+    {
+      label: "Amount due to landlord",
+      value: formatNaira(summary.amountDueToLandlord),
+    },
+    {
+      label: "Amount remitted",
+      value: formatNaira(summary.amountRemitted),
+    },
+    {
+      label: "Pending landlord balance",
+      value: formatNaira(summary.pendingLandlordBalance),
+    },
+  ];
+
+  return (
+    <section className="space-y-4">
+      <div className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
+        <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+          Statement for
+        </p>
+        <h2 className="mt-1 text-2xl font-black tracking-tight text-text-strong">
+          {summary.landlordClient.landlord_name}
+        </h2>
+
+        <div className="mt-3 grid gap-2 text-sm font-semibold text-text-muted sm:grid-cols-2">
+          <p>Phone: {summary.landlordClient.landlord_phone ?? "Not added"}</p>
+          <p>Email: {summary.landlordClient.landlord_email ?? "Not added"}</p>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        {cards.map((card) => (
+          <div
+            key={card.label}
+            className="rounded-card border border-border-soft bg-white p-4 shadow-sm"
+          >
+            <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+              {card.label}
+            </p>
+            <p className="mt-2 text-xl font-black tracking-tight text-text-strong">
+              {card.value}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {summary.pendingConfirmationAmount > 0 ? (
+        <div className="rounded-card border border-warning/20 bg-warning-soft p-4">
+          <p className="text-sm font-black text-text-strong">
+            Pending confirmation
+          </p>
+          <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+            {formatNaira(summary.pendingConfirmationAmount)} is linked to
+            payment records that are not yet reliable enough to count as amount
+            due to landlord.
+          </p>
+        </div>
+      ) : null}
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-card bg-surface p-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+            Rent payment records
+          </p>
+          <p className="mt-1 text-2xl font-black text-text-strong">
+            {summary.rentPaymentCount.toLocaleString("en-NG")}
+          </p>
+        </div>
+
+        <div className="rounded-card bg-surface p-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+            Remittance records
+          </p>
+          <p className="mt-1 text-2xl font-black text-text-strong">
+            {summary.remittanceCount.toLocaleString("en-NG")}
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+
+====================================================================================================
+FILE: src\components\manager\manager-statement-document-actions..tsx
+====================================================================================================
+import type { ManagerLandlordClientRow } from "@/server/repositories/manager.repository";
+
+type ManagerStatementDocumentActionsProps = {
+  landlordClients: ManagerLandlordClientRow[];
+  selectedLandlordClientId: string | null;
+  dateFrom?: string | null;
+  dateTo?: string | null;
+};
+
+function buildQuery(params: {
+  landlordClientId: string;
+  dateFrom?: string | null;
+  dateTo?: string | null;
+}) {
+  const searchParams = new URLSearchParams({
+    landlordClientId: params.landlordClientId,
+    dateFrom: params.dateFrom ?? "",
+    dateTo: params.dateTo ?? "",
+  });
+
+  return searchParams.toString();
+}
+
+export function ManagerStatementDocumentActions({
+  landlordClients,
+  selectedLandlordClientId,
+  dateFrom,
+  dateTo,
+}: ManagerStatementDocumentActionsProps) {
+  const activeLandlords = landlordClients.filter(
+    (client) => client.status === "active",
+  );
+
+  const query = selectedLandlordClientId
+    ? buildQuery({
+        landlordClientId: selectedLandlordClientId,
+        dateFrom,
+        dateTo,
+      })
+    : "";
+
+  return (
+    <section className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
+      <div>
+        <h2 className="text-lg font-black tracking-tight text-text-strong">
+          Share landlord documents
+        </h2>
+        <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+          Choose a landlord and date range. BOPA will create the documents from
+          saved payment and remittance records.
+        </p>
+      </div>
+
+      <form
+        className="mt-4 grid gap-4 lg:grid-cols-[1.4fr_1fr_1fr_auto]"
+        method="get"
+      >
+        <div className="space-y-2">
+          <label
+            htmlFor="manager-statement-landlord"
+            className="text-sm font-bold text-text-strong"
+          >
+            Landlord
+          </label>
+          <select
+            id="manager-statement-landlord"
+            name="landlordClientId"
+            defaultValue={selectedLandlordClientId ?? ""}
+            className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
+            required
+          >
+            <option value="" disabled>
+              Select landlord
+            </option>
+            {activeLandlords.map((client) => (
+              <option key={client.id} value={client.id}>
+                {client.landlord_name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          <label
+            htmlFor="manager-statement-date-from"
+            className="text-sm font-bold text-text-strong"
+          >
+            From
+          </label>
+          <input
+            id="manager-statement-date-from"
+            name="dateFrom"
+            type="date"
+            defaultValue={dateFrom ?? ""}
+            className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label
+            htmlFor="manager-statement-date-to"
+            className="text-sm font-bold text-text-strong"
+          >
+            To
+          </label>
+          <input
+            id="manager-statement-date-to"
+            name="dateTo"
+            type="date"
+            defaultValue={dateTo ?? ""}
+            className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
+          />
+        </div>
+
+        <div className="flex items-end">
+          <button
+            type="submit"
+            className="min-h-12 w-full rounded-button bg-primary px-5 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
+          >
+            View
+          </button>
+        </div>
+      </form>
+
+      {selectedLandlordClientId ? (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <a
+            href={`/manager/reports/landlord-statement/download?${query}`}
+            className="inline-flex min-h-11 items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+          >
+            Download Statement
+          </a>
+
+          <a
+            href={`/manager/reports/landlord-statement/share?${query}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-h-11 items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
+          >
+            Send Statement
+          </a>
+
+          <a
+            href={`/manager/remittances/summary/download?${query}`}
+            className="inline-flex min-h-11 items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+          >
+            Download Remittance
+          </a>
+
+          <a
+            href={`/manager/remittances/summary/share?${query}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-h-11 items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
+          >
+            Send Remittance
+          </a>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+
+====================================================================================================
+FILE: src\components\manager\manager-tenant-onboarding-form.tsx
+====================================================================================================
+"use client";
+
+import { useActionState, useMemo, useState } from "react";
+import {
+  createManagerTenantOnboardingRequestAction,
+  resendManagerTenantOnboardingLinkAction,
+} from "@/actions/manager-tenant-onboarding.actions";
+import { initialManagerTenantOnboardingActionState } from "@/actions/manager-tenant-onboarding.state";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { WhatsAppShareActions } from "@/components/ui/whatsapp-share-actions";
+import type { ManagerTenantOnboardingRequestRow } from "@/server/repositories/manager-tenant-onboarding.repository";
+import type {
+  ManagerPropertyRow,
+  ManagerUnitRow,
+} from "@/server/repositories/manager.repository";
+
+type ManagerTenantOnboardingFormProps = {
+  property: ManagerPropertyRow;
+  unit: ManagerUnitRow;
+  isManagerPayoutVerified: boolean;
+  managerPayoutStatus: string | null;
+  existingRequest?: ManagerTenantOnboardingRequestRow | null;
+};
+
+type TenantOnboardingType = "current_occupant" | "new_incoming_tenant";
+
+const ONBOARDING_OPTIONS: Array<{
+  value: TenantOnboardingType;
+  title: string;
+  description: string;
+  result: string;
+}> = [
+  {
+    value: "current_occupant",
+    title: "Current occupant",
+    description: "The person already lives in this unit.",
+    result: "After review, the tenant record becomes active.",
+  },
+  {
+    value: "new_incoming_tenant",
+    title: "New incoming tenant",
+    description: "The person is about to move in.",
+    result:
+      "After review, the tenant receives the agreement and first rent payment link.",
+  },
+];
+
+function getPayoutStatusLabel(status: string | null | undefined) {
+  if (!status) {
+    return "Bank account not added";
+  }
+
+  if (status === "verified") {
+    return "Bank account verified";
+  }
+
+  if (status === "unverified" || status === "pending") {
+    return "Bank verification pending";
+  }
+
+  if (status === "failed") {
+    return "Bank verification failed";
+  }
+
+  return "Bank account not ready";
+}
+
+export function ManagerTenantOnboardingForm({
+  property,
+  unit,
+  isManagerPayoutVerified,
+  managerPayoutStatus,
+  existingRequest = null,
+}: ManagerTenantOnboardingFormProps) {
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [onboardingType, setOnboardingType] =
+    useState<TenantOnboardingType>("current_occupant");
+
+  const [state, formAction, isPending] = useActionState(
+    createManagerTenantOnboardingRequestAction,
+    initialManagerTenantOnboardingActionState,
+  );
+
+  const [resendState, resendAction, isResending] = useActionState(
+    resendManagerTenantOnboardingLinkAction,
+    initialManagerTenantOnboardingActionState,
+  );
+
+  const effectiveOnboardingType =
+    !isManagerPayoutVerified && onboardingType === "new_incoming_tenant"
+      ? "current_occupant"
+      : onboardingType;
+
+  const selectedOption = useMemo(
+    () =>
+      ONBOARDING_OPTIONS.find(
+        (option) => option.value === effectiveOnboardingType,
+      ) ?? ONBOARDING_OPTIONS[0],
+    [effectiveOnboardingType],
+  );
+
+  const linkReadyState = state.ok
+    ? state
+    : resendState.ok && resendState.requestId === existingRequest?.id
+      ? resendState
+      : null;
+
+  if (linkReadyState) {
+    return (
+      <section
+        id="tenant-onboarding"
+        className="rounded-card border border-border-soft bg-white shadow-sm"
+      >
+        <div className="border-b border-border-soft p-4">
+          <p className="w-fit rounded-full bg-success-soft px-3 py-1 text-xs font-black uppercase tracking-wide text-success">
+            Link saved
+          </p>
+
+          <h2 className="mt-4 text-lg font-black tracking-tight text-text-strong">
+            Tenant link ready
+          </h2>
+
+          <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+            Send the link to the tenant to complete their details.
+          </p>
+        </div>
+
+        <div className="space-y-4 p-4">
+          <div className="rounded-card bg-surface p-4">
+            <p className="text-sm font-black text-text-strong">
+              {unit.unit_label} · {property.property_name}
+            </p>
+            <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+              Waiting for tenant details
+            </p>
+          </div>
+
+          {linkReadyState.whatsappMessage ? (
+            <WhatsAppShareActions
+              phoneNumber={linkReadyState.tenantWhatsappNumber}
+              message={linkReadyState.whatsappMessage}
+              copyText={linkReadyState.whatsappMessage}
+              whatsappLabel="Open WhatsApp"
+              copyLabel="Copy message"
+            />
+          ) : (
+            <div className="rounded-button bg-warning-soft px-4 py-3 text-sm font-semibold leading-6 text-warning">
+              WhatsApp message could not be prepared. Use Send again to prepare
+              a fresh message.
+            </div>
+          )}
+        </div>
+      </section>
+    );
+  }
+
+  if (existingRequest?.status === "pending") {
+    return (
+      <section
+        id="tenant-onboarding"
+        className="rounded-card border border-border-soft bg-white shadow-sm"
+      >
+        <div className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-lg font-black tracking-tight text-text-strong">
+              Waiting for tenant details
+            </h2>
+            <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+              The tenant has not submitted their information yet.
+            </p>
+          </div>
+
+          <form action={resendAction} className="shrink-0">
+            <input type="hidden" name="requestId" value={existingRequest.id} />
+            <Button type="submit" isLoading={isResending}>
+              Send again
+            </Button>
+          </form>
+        </div>
+
+        {resendState.message && !resendState.ok ? (
+          <div
+            role="alert"
+            className="mx-4 mb-4 rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
+          >
+            {resendState.message}
+          </div>
+        ) : null}
+      </section>
+    );
+  }
+
+  if (!isFormOpen) {
+    return (
+      <section
+        id="tenant-onboarding"
+        className="rounded-card border border-border-soft bg-white shadow-sm"
+      >
+        <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-lg font-black tracking-tight text-text-strong">
+              Add tenant to {unit.unit_label}
+            </p>
+            <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+              {property.property_name}. Open the form only when you are ready to
+              send a tenant detail link.
+            </p>
+          </div>
+
+          <Button type="button" onClick={() => setIsFormOpen(true)}>
+            Open tenant form
+          </Button>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section
+      id="tenant-onboarding"
+      className="rounded-card border border-border-soft bg-white shadow-sm"
+    >
+      <div className="flex flex-col gap-3 border-b border-border-soft p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-lg font-black tracking-tight text-text-strong">
+            Add tenant
+          </h2>
+          <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+            {unit.unit_label} · {property.property_name}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setIsFormOpen(false)}
+          className="inline-flex min-h-10 items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+        >
+          Close form
+        </button>
+      </div>
+
+      <form action={formAction}>
+        <input
+          type="hidden"
+          name="landlordClientId"
+          value={property.landlord_client_id}
+        />
+        <input type="hidden" name="propertyId" value={property.id} />
+        <input type="hidden" name="unitId" value={unit.id} />
+        <input
+          type="hidden"
+          name="onboardingType"
+          value={effectiveOnboardingType}
+        />
+
+        <div className="grid gap-5 p-4 lg:grid-cols-[1fr_18rem]">
+          <div className="space-y-5">
+            {state.message ? (
+              <div
+                role="alert"
+                className="rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
+              >
+                {state.message}
+              </div>
+            ) : null}
+
+            {!isManagerPayoutVerified ? (
+              <div className="rounded-card border border-warning/20 bg-warning-soft p-4">
+                <p className="text-sm font-black text-text-strong">
+                  New incoming tenant is disabled
+                </p>
+                <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                  {getPayoutStatusLabel(managerPayoutStatus)}. You can add a
+                  current occupant, but a new incoming tenant needs a verified
+                  manager bank account because first rent payment will go
+                  through Paystack.
+                </p>
+              </div>
+            ) : null}
+
+            <div>
+              <p className="text-sm font-black text-text-strong">
+                What type of tenant is this?
+              </p>
+
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                {ONBOARDING_OPTIONS.map((option) => {
+                  const isDisabled =
+                    option.value === "new_incoming_tenant" &&
+                    !isManagerPayoutVerified;
+
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      aria-pressed={effectiveOnboardingType === option.value}
+                      disabled={isDisabled}
+                      onClick={() => {
+                        if (!isDisabled) {
+                          setOnboardingType(option.value);
+                        }
+                      }}
+                      className={`rounded-card border p-4 text-left transition ${
+                        effectiveOnboardingType === option.value
+                          ? "border-primary bg-primary-soft"
+                          : "border-border-soft bg-white hover:border-primary/40"
+                      } ${
+                        isDisabled
+                          ? "cursor-not-allowed opacity-50 hover:border-border-soft"
+                          : ""
+                      }`}
+                    >
+                      <p className="font-black text-text-strong">
+                        {option.title}
+                      </p>
+                      <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                        {option.description}
+                      </p>
+                      {isDisabled ? (
+                        <p className="mt-2 text-xs font-black uppercase tracking-wide text-warning">
+                          Requires verified bank account
+                        </p>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="rounded-card bg-surface p-4">
+              <p className="text-sm font-black text-text-strong">
+                Send tenant detail link
+              </p>
+              <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                Enter the tenant name and phone number. BOPA will prepare a
+                WhatsApp message with the tenant detail link.
+              </p>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Input
+                label="Tenant name"
+                name="fullName"
+                placeholder="Example: Chinedu Okafor"
+                error={state.fieldErrors?.fullName?.[0]}
+                required
+              />
+
+              <Input
+                label="Tenant phone"
+                name="phoneNumber"
+                placeholder="Example: 08012345678"
+                error={state.fieldErrors?.phoneNumber?.[0]}
+                required
+              />
+            </div>
+
+            <Input
+              label="Tenant email"
+              name="email"
+              type="email"
+              placeholder="Optional"
+              error={state.fieldErrors?.email?.[0]}
+            />
+
+            <details className="rounded-card border border-border-soft bg-white p-4">
+              <summary className="cursor-pointer text-sm font-black text-primary">
+                Add internal note
+              </summary>
+
+              <div className="mt-3 space-y-2">
+                <label
+                  htmlFor="manager-onboarding-note"
+                  className="text-sm font-bold text-text-strong"
+                >
+                  Internal note
+                </label>
+                <textarea
+                  id="manager-onboarding-note"
+                  name="note"
+                  rows={3}
+                  placeholder="Optional"
+                  className="w-full rounded-button border border-border-soft bg-white px-4 py-3 text-sm font-semibold text-text-strong outline-none transition placeholder:text-text-muted focus:border-primary"
+                />
+                {state.fieldErrors?.note?.[0] ? (
+                  <p className="text-sm font-semibold text-danger">
+                    {state.fieldErrors.note[0]}
+                  </p>
+                ) : null}
+              </div>
+            </details>
+          </div>
+
+          <aside className="rounded-card border border-border-soft bg-surface p-4 lg:self-start">
+            <p className="text-sm font-black text-text-strong">Next step</p>
+
+            <div className="mt-4 space-y-3">
+              <div>
+                <p className="text-xs font-black uppercase tracking-wide text-text-muted">
+                  Tenant type
+                </p>
+                <p className="mt-1 text-sm font-black text-text-strong">
+                  {selectedOption.title}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs font-black uppercase tracking-wide text-text-muted">
+                  Tenant receives
+                </p>
+                <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                  A WhatsApp link to submit their details.
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs font-black uppercase tracking-wide text-text-muted">
+                  After review
+                </p>
+                <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                  {selectedOption.result}
+                </p>
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        <div className="border-t border-border-soft p-4">
+          <Button type="submit" isLoading={isPending} fullWidth>
+            Save tenant link
+          </Button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
+
+====================================================================================================
+FILE: src\lib\landlord-charge-presets.ts
+====================================================================================================
+import {
+  Building2,
+  ClipboardCheck,
+  FileSignature,
+  Hammer,
+  PlusCircle,
+  Scale,
+  Shield,
+  type LucideIcon,
+} from "lucide-react";
+
+export type LandlordChargePreset = {
+  id: string;
+  name: string;
+  description: string;
+  defaultDescription: string;
+  icon: LucideIcon;
+  isRefundable: boolean;
+  isRequiredBeforeMoveIn: boolean;
+};
+
+export const LANDLORD_CHARGE_PRESETS: LandlordChargePreset[] = [
+  {
+    id: "agreement_fee",
+    name: "Agreement fee",
+    description: "Tenancy agreement preparation fee",
+    defaultDescription: "Fee for preparing and processing the tenancy agreement.",
+    icon: FileSignature,
+    isRefundable: false,
+    isRequiredBeforeMoveIn: true,
+  },
+  {
+    id: "caution_deposit",
+    name: "Caution deposit",
+    description: "Refundable security deposit",
+    defaultDescription: "Refundable deposit held for the duration of the tenancy.",
+    icon: Shield,
+    isRefundable: true,
+    isRequiredBeforeMoveIn: true,
+  },
+  {
+    id: "damages_deposit",
+    name: "Damages deposit",
+    description: "Cover for property damage",
+    defaultDescription: "Deposit to cover potential damages beyond normal wear and tear.",
+    icon: Hammer,
+    isRefundable: true,
+    isRequiredBeforeMoveIn: true,
+  },
+  {
+    id: "service_charge",
+    name: "Service charge",
+    description: "Estate or building services",
+    defaultDescription: "Charge for shared services, maintenance, or estate dues.",
+    icon: Building2,
+    isRefundable: false,
+    isRequiredBeforeMoveIn: true,
+  },
+  {
+    id: "legal_fee",
+    name: "Legal fee",
+    description: "Legal documentation costs",
+    defaultDescription: "Legal review or documentation fee for this tenancy.",
+    icon: Scale,
+    isRefundable: false,
+    isRequiredBeforeMoveIn: true,
+  },
+  {
+    id: "documentation_fee",
+    name: "Documentation fee",
+    description: "ID and paperwork processing",
+    defaultDescription: "Fee for tenant documentation and onboarding paperwork.",
+    icon: ClipboardCheck,
+    isRefundable: false,
+    isRequiredBeforeMoveIn: true,
+  },
+  {
+    id: "other",
+    name: "Other charge",
+    description: "Custom landlord charge",
+    defaultDescription: "",
+    icon: PlusCircle,
+    isRefundable: false,
+    isRequiredBeforeMoveIn: true,
+  },
+];
+
+export function getLandlordChargePresetById(id: string) {
+  return LANDLORD_CHARGE_PRESETS.find((preset) => preset.id === id) ?? null;
+}
+
+export function getLandlordChargePresetForName(chargeName: string) {
+  const normalizedName = chargeName.trim().toLowerCase();
+
+  return (
+    LANDLORD_CHARGE_PRESETS.find(
+      (preset) => preset.name.toLowerCase() === normalizedName,
+    ) ?? null
+  );
+}
+
+export function getLandlordChargePresetIcon(chargeName: string): LucideIcon {
+  return getLandlordChargePresetForName(chargeName)?.icon ?? PlusCircle;
+}
+
+
+====================================================================================================
+FILE: src\lib\manager-automation.ts
+====================================================================================================
+import type {
+  ManagerCollectionMode,
+  ManagerManagementFeeType,
+  ManagerPaymentReceiver,
+  ManagerRemittanceStatus,
+  ManagerRentPaymentStatus,
+} from "@/constants/manager";
+
+export type ManagerPaymentBreakdown = {
+  amountPaid: number;
+  managerCommission: number;
+  landlordShare: number;
+  bopaPlatformFee: number;
+  paystackCharge: number;
+};
+
+export type ManagerTenantRentSignal =
+  | {
+      kind: "owing";
+      label: "Owing";
+    }
+  | {
+      kind: "due_soon";
+      label: string;
+      daysUntilDue: number;
+    }
+  | null;
+
+export type ManagerStatementPaymentInput = {
+  status: ManagerRentPaymentStatus;
+  amountPaid: number;
+  managerCommission: number;
+  landlordShare: number;
+};
+
+export type ManagerStatementRemittanceInput = {
+  status: ManagerRemittanceStatus;
+  amountRemitted: number;
+};
+
+export type ManagerStatementTotals = {
+  totalRentRecorded: number;
+  managerCommission: number;
+  amountDueToLandlord: number;
+  amountRemitted: number;
+  pendingLandlordBalance: number;
+  pendingConfirmationAmount: number;
+};
+
+export function roundMoney(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+export function calculateBopaPlatformFeePlaceholder() {
+  return 0;
+}
+
+export function calculatePaystackChargePlaceholder() {
+  return 0;
+}
+
+export function calculateManagerPaymentBreakdown(params: {
+  amountPaid: number;
+  managementFeeType: ManagerManagementFeeType;
+  managementFeeValue: number;
+}): ManagerPaymentBreakdown {
+  const amountPaid = roundMoney(Math.max(0, params.amountPaid));
+  const bopaPlatformFee = calculateBopaPlatformFeePlaceholder();
+  const paystackCharge = calculatePaystackChargePlaceholder();
+
+  const managerCommission =
+    params.managementFeeType === "percentage"
+      ? roundMoney((amountPaid * params.managementFeeValue) / 100)
+      : roundMoney(Math.min(params.managementFeeValue, amountPaid));
+
+  const landlordShare = roundMoney(
+    amountPaid - managerCommission - bopaPlatformFee - paystackCharge,
+  );
+
+  return {
+    amountPaid,
+    managerCommission,
+    landlordShare: Math.max(0, landlordShare),
+    bopaPlatformFee,
+    paystackCharge,
+  };
+}
+
+export function deriveManualManagerPaymentStatus(params: {
+  collectionMode: ManagerCollectionMode;
+  paymentReceiver: ManagerPaymentReceiver;
+}): ManagerRentPaymentStatus {
+  if (
+    params.collectionMode === "manager_collects" &&
+    params.paymentReceiver === "manager"
+  ) {
+    return "recorded";
+  }
+
+  return "pending_confirmation";
+}
+
+export function isTenantBalanceAffectingPaymentStatus(
+  status: ManagerRentPaymentStatus,
+) {
+  return status === "recorded" || status === "verified";
+}
+
+export function calculateTenantBalanceAfterPayment(params: {
+  currentBalance: number;
+  amountPaid: number;
+  paymentStatus: ManagerRentPaymentStatus;
+}) {
+  if (!isTenantBalanceAffectingPaymentStatus(params.paymentStatus)) {
+    return roundMoney(Math.max(0, params.currentBalance));
+  }
+
+  return roundMoney(Math.max(0, params.currentBalance - params.amountPaid));
+}
+
+export function calculateTenantRentSignal(params: {
+  currentBalance: number;
+  nextRentDueDate: string | null;
+  today?: Date;
+}): ManagerTenantRentSignal {
+  if (Number(params.currentBalance) > 0) {
+    return {
+      kind: "owing",
+      label: "Owing",
+    };
+  }
+
+  if (!params.nextRentDueDate) {
+    return null;
+  }
+
+  const today = params.today ? new Date(params.today) : new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const dueDate = new Date(`${params.nextRentDueDate}T00:00:00`);
+  const daysUntilDue = Math.ceil(
+    (dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+  );
+
+  if (daysUntilDue >= 0 && daysUntilDue <= 30) {
+    return {
+      kind: "due_soon",
+      label: `Due in ${daysUntilDue} day${daysUntilDue === 1 ? "" : "s"}`,
+      daysUntilDue,
+    };
+  }
+
+  return null;
+}
+
+export function isReliableManagerRentPaymentStatus(
+  status: ManagerRentPaymentStatus,
+) {
+  return status === "recorded" || status === "verified";
+}
+
+export function isVisibleManagerRentPaymentStatus(
+  status: ManagerRentPaymentStatus,
+) {
+  return status !== "rejected" && status !== "reversed";
+}
+
+export function isReliableManagerRemittanceStatus(
+  status: ManagerRemittanceStatus,
+) {
+  return status === "recorded" || status === "confirmed";
+}
+
+export function calculateLandlordStatementTotals(params: {
+  payments: ManagerStatementPaymentInput[];
+  remittances: ManagerStatementRemittanceInput[];
+}): ManagerStatementTotals {
+  const visiblePayments = params.payments.filter((payment) =>
+    isVisibleManagerRentPaymentStatus(payment.status),
+  );
+
+  const reliablePayments = params.payments.filter((payment) =>
+    isReliableManagerRentPaymentStatus(payment.status),
+  );
+
+  const reliableRemittances = params.remittances.filter((remittance) =>
+    isReliableManagerRemittanceStatus(remittance.status),
+  );
+
+  const totalRentRecorded = visiblePayments.reduce(
+    (total, payment) => total + Number(payment.amountPaid),
+    0,
+  );
+
+  const managerCommission = reliablePayments.reduce(
+    (total, payment) => total + Number(payment.managerCommission),
+    0,
+  );
+
+  const amountDueToLandlord = reliablePayments.reduce(
+    (total, payment) => total + Number(payment.landlordShare),
+    0,
+  );
+
+  const amountRemitted = reliableRemittances.reduce(
+    (total, remittance) => total + Number(remittance.amountRemitted),
+    0,
+  );
+
+  const pendingConfirmationAmount = params.payments
+    .filter((payment) => payment.status === "pending_confirmation")
+    .reduce((total, payment) => total + Number(payment.landlordShare), 0);
+
+  return {
+    totalRentRecorded: roundMoney(totalRentRecorded),
+    managerCommission: roundMoney(managerCommission),
+    amountDueToLandlord: roundMoney(amountDueToLandlord),
+    amountRemitted: roundMoney(amountRemitted),
+    pendingLandlordBalance: roundMoney(
+      Math.max(0, amountDueToLandlord - amountRemitted),
+    ),
+    pendingConfirmationAmount: roundMoney(pendingConfirmationAmount),
+  };
+}
+
+export function calculateLandlordRemittancePosition(params: {
+  payments: ManagerStatementPaymentInput[];
+  remittances: ManagerStatementRemittanceInput[];
+}) {
+  const totals = calculateLandlordStatementTotals(params);
+
+  return {
+    amountDueToLandlord: totals.amountDueToLandlord,
+    amountRemitted: totals.amountRemitted,
+    pendingBalance: totals.pendingLandlordBalance,
+  };
+}
+
+export function calculateManagerReceiptTotals(params: {
+  amountPaid: number;
+  tenantBalanceBeforePayment: number;
+  paymentStatus: ManagerRentPaymentStatus;
+}) {
+  const balanceAfterPayment = calculateTenantBalanceAfterPayment({
+    currentBalance: params.tenantBalanceBeforePayment,
+    amountPaid: params.amountPaid,
+    paymentStatus: params.paymentStatus,
+  });
+
+  return {
+    amountPaid: roundMoney(params.amountPaid),
+    previousBalance: roundMoney(params.tenantBalanceBeforePayment),
+    balanceAfterPayment,
+  };
+}
+
+
+====================================================================================================
+FILE: src\server\pdf\manager-landlord-statement-pdf.tsx
+====================================================================================================
+import { Document, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
+import type { ManagerLandlordStatementSnapshot } from "@/server/repositories/manager-statement-documents.repository";
+
+type ManagerLandlordStatementPdfProps = {
+  documentNumber: string;
+  snapshot: ManagerLandlordStatementSnapshot;
+};
+
+const styles = StyleSheet.create({
+  page: {
+    padding: 32,
+    fontSize: 9,
+    color: "#172033",
+    backgroundColor: "#FFFFFF",
+    fontFamily: "Helvetica",
+  },
+  header: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#DDE5F2",
+    paddingBottom: 14,
+    marginBottom: 14,
+  },
+  companyName: {
+    fontSize: 19,
+    fontWeight: 700,
+    color: "#0F172A",
+  },
+  companyMeta: {
+    marginTop: 5,
+    fontSize: 8,
+    color: "#516070",
+    lineHeight: 1.4,
+  },
+  titleBox: {
+    marginTop: 14,
+    padding: 12,
+    backgroundColor: "#F4F7FB",
+    borderRadius: 10,
+  },
+  title: {
+    fontSize: 15,
+    fontWeight: 700,
+    color: "#0F172A",
+  },
+  titleMeta: {
+    marginTop: 5,
+    fontSize: 8,
+    color: "#516070",
+    lineHeight: 1.4,
+  },
+  summaryGrid: {
+    marginTop: 14,
+    flexDirection: "row",
+    gap: 8,
+  },
+  summaryCard: {
+    flexGrow: 1,
+    flexBasis: 0,
+    padding: 9,
+    borderRadius: 9,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E6ECF5",
+  },
+  summaryLabel: {
+    fontSize: 7,
+    color: "#64748B",
+    textTransform: "uppercase",
+  },
+  summaryValue: {
+    marginTop: 4,
+    fontSize: 11,
+    fontWeight: 700,
+    color: "#0F172A",
+  },
+  section: {
+    marginTop: 14,
+  },
+  sectionTitle: {
+    fontSize: 11,
+    fontWeight: 700,
+    color: "#0F172A",
+    marginBottom: 7,
+  },
+  table: {
+    borderWidth: 1,
+    borderColor: "#DDE5F2",
+    borderRadius: 8,
+    overflow: "hidden",
+  },
+  tableHeader: {
+    flexDirection: "row",
+    backgroundColor: "#F8FAFC",
+    borderBottomWidth: 1,
+    borderBottomColor: "#DDE5F2",
+  },
+  tableRow: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E6ECF5",
+  },
+  cell: {
+    paddingVertical: 6,
+    paddingHorizontal: 6,
+    fontSize: 7,
+    color: "#172033",
+  },
+  headerCell: {
+    fontWeight: 700,
+    color: "#475569",
+  },
+  empty: {
+    padding: 10,
+    fontSize: 8,
+    color: "#64748B",
+  },
+  footer: {
+    position: "absolute",
+    left: 32,
+    right: 32,
+    bottom: 22,
+    paddingTop: 9,
+    borderTopWidth: 1,
+    borderTopColor: "#DDE5F2",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  footerText: {
+    fontSize: 7,
+    color: "#64748B",
+  },
+});
+
+function formatNaira(amount: number) {
+  return new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency: "NGN",
+    maximumFractionDigits: 0,
+  }).format(Number.isFinite(amount) ? amount : 0);
+}
+
+function formatDate(value: string | null) {
+  if (!value) {
+    return "Not stated";
+  }
+
+  return new Intl.DateTimeFormat("en-NG", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function statusLabel(status: string) {
+  if (status === "verified") return "Verified";
+  if (status === "recorded") return "Recorded";
+  if (status === "pending_confirmation") return "Pending";
+  if (status === "confirmed") return "Confirmed";
+  if (status === "rejected") return "Rejected";
+  return "Reversed";
+}
+
+function SummaryCard({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.summaryCard}>
+      <Text style={styles.summaryLabel}>{label}</Text>
+      <Text style={styles.summaryValue}>{value}</Text>
+    </View>
+  );
+}
+
+export function ManagerLandlordStatementPdf({
+  documentNumber,
+  snapshot,
+}: ManagerLandlordStatementPdfProps) {
+  const organizationContact = [
+    snapshot.organization.phone,
+    snapshot.organization.email,
+  ]
+    .filter(Boolean)
+    .join(" | ");
+
+  const periodLabel = `${formatDate(snapshot.dateFrom)} to ${formatDate(
+    snapshot.dateTo,
+  )}`;
+
+  return (
+    <Document
+      title={`Landlord Statement ${documentNumber}`}
+      author={snapshot.organization.name}
+      subject="Landlord Statement"
+    >
+      <Page size="A4" style={styles.page}>
+        <View style={styles.header}>
+          <Text style={styles.companyName}>{snapshot.organization.name}</Text>
+          {organizationContact ? (
+            <Text style={styles.companyMeta}>{organizationContact}</Text>
+          ) : null}
+
+          <View style={styles.titleBox}>
+            <Text style={styles.title}>Landlord Statement</Text>
+            <Text style={styles.titleMeta}>
+              Landlord: {snapshot.landlord.name}
+              {"\n"}
+              Period: {periodLabel}
+              {"\n"}
+              Statement No: {documentNumber}
+              {"\n"}
+              Generated: {formatDate(snapshot.generatedAt)}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.summaryGrid}>
+          <SummaryCard
+            label="Rent recorded"
+            value={formatNaira(snapshot.totals.totalRentRecorded)}
+          />
+          <SummaryCard
+            label="Manager fee"
+            value={formatNaira(snapshot.totals.managerCommission)}
+          />
+          <SummaryCard
+            label="Landlord amount"
+            value={formatNaira(snapshot.totals.amountDueToLandlord)}
+          />
+        </View>
+
+        <View style={styles.summaryGrid}>
+          <SummaryCard
+            label="Amount remitted"
+            value={formatNaira(snapshot.totals.amountRemitted)}
+          />
+          <SummaryCard
+            label="Balance due"
+            value={formatNaira(snapshot.totals.pendingLandlordBalance)}
+          />
+          <SummaryCard
+            label="Awaiting confirmation"
+            value={formatNaira(snapshot.totals.pendingConfirmationAmount)}
+          />
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Rent payments</Text>
+          <View style={styles.table}>
+            <View style={styles.tableHeader}>
+              <Text style={[styles.cell, styles.headerCell, { width: "15%" }]}>
+                Date
+              </Text>
+              <Text style={[styles.cell, styles.headerCell, { width: "25%" }]}>
+                Tenant
+              </Text>
+              <Text style={[styles.cell, styles.headerCell, { width: "17%" }]}>
+                Paid
+              </Text>
+              <Text style={[styles.cell, styles.headerCell, { width: "17%" }]}>
+                Manager fee
+              </Text>
+              <Text style={[styles.cell, styles.headerCell, { width: "17%" }]}>
+                Landlord
+              </Text>
+              <Text style={[styles.cell, styles.headerCell, { width: "9%" }]}>
+                Status
+              </Text>
+            </View>
+
+            {snapshot.payments.length > 0 ? (
+              snapshot.payments.map((payment) => (
+                <View key={payment.id} style={styles.tableRow}>
+                  <Text style={[styles.cell, { width: "15%" }]}>
+                    {formatDate(payment.paymentDate)}
+                  </Text>
+                  <Text style={[styles.cell, { width: "25%" }]}>
+                    {payment.tenantName}
+                    {"\n"}
+                    {payment.propertyName} - {payment.unitLabel}
+                  </Text>
+                  <Text style={[styles.cell, { width: "17%" }]}>
+                    {formatNaira(payment.amountPaid)}
+                  </Text>
+                  <Text style={[styles.cell, { width: "17%" }]}>
+                    {formatNaira(payment.managerCommission)}
+                  </Text>
+                  <Text style={[styles.cell, { width: "17%" }]}>
+                    {formatNaira(payment.landlordShare)}
+                  </Text>
+                  <Text style={[styles.cell, { width: "9%" }]}>
+                    {statusLabel(payment.status)}
+                  </Text>
+                </View>
+              ))
+            ) : (
+              <Text style={styles.empty}>
+                No rent payment found for this period.
+              </Text>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Remittances</Text>
+          <View style={styles.table}>
+            <View style={styles.tableHeader}>
+              <Text style={[styles.cell, styles.headerCell, { width: "22%" }]}>
+                Date
+              </Text>
+              <Text style={[styles.cell, styles.headerCell, { width: "25%" }]}>
+                Amount
+              </Text>
+              <Text style={[styles.cell, styles.headerCell, { width: "23%" }]}>
+                Status
+              </Text>
+              <Text style={[styles.cell, styles.headerCell, { width: "30%" }]}>
+                Reference
+              </Text>
+            </View>
+
+            {snapshot.remittances.length > 0 ? (
+              snapshot.remittances.map((remittance) => (
+                <View key={remittance.id} style={styles.tableRow}>
+                  <Text style={[styles.cell, { width: "22%" }]}>
+                    {formatDate(remittance.remittanceDate)}
+                  </Text>
+                  <Text style={[styles.cell, { width: "25%" }]}>
+                    {formatNaira(remittance.amountRemitted)}
+                  </Text>
+                  <Text style={[styles.cell, { width: "23%" }]}>
+                    {statusLabel(remittance.status)}
+                  </Text>
+                  <Text style={[styles.cell, { width: "30%" }]}>
+                    {remittance.reference ?? "Not stated"}
+                  </Text>
+                </View>
+              ))
+            ) : (
+              <Text style={styles.empty}>
+                No remittance found for this period.
+              </Text>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>
+            Powered by BOPA - Boldverse Property App
+          </Text>
+          <Text style={styles.footerText}>{documentNumber}</Text>
+        </View>
+      </Page>
+    </Document>
+  );
+}
+
+
+====================================================================================================
+FILE: src\server\repositories\manager-maintenance.repository.ts
+====================================================================================================
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type {
+  ManagerMaintenancePriority,
+  ManagerMaintenanceStatus,
+} from "@/constants/manager";
+
+export type ManagerMaintenanceRequestRow = {
+  id: string;
+  organization_id: string;
+  landlord_client_id: string;
+  property_id: string;
+  unit_id: string | null;
+  tenant_id: string | null;
+  issue_title: string;
+  issue_description: string | null;
+  priority: ManagerMaintenancePriority;
+  status: ManagerMaintenanceStatus;
+  estimated_cost: number;
+  actual_cost: number;
+  vendor_name: string | null;
+  reported_date: string;
+  resolved_date: string | null;
+  notes: string | null;
+  metadata: Record<string, unknown>;
+  created_by_profile_id: string | null;
+  updated_by_profile_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+const MANAGER_MAINTENANCE_REQUEST_SELECT = `
+  id,
+  organization_id,
+  landlord_client_id,
+  property_id,
+  unit_id,
+  tenant_id,
+  issue_title,
+  issue_description,
+  priority,
+  status,
+  estimated_cost,
+  actual_cost,
+  vendor_name,
+  reported_date,
+  resolved_date,
+  notes,
+  metadata,
+  created_by_profile_id,
+  updated_by_profile_id,
+  created_at,
+  updated_at
+`;
+
+export async function createManagerMaintenanceRequest(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    landlordClientId: string;
+    propertyId: string;
+    unitId: string | null;
+    tenantId: string | null;
+    issueTitle: string;
+    issueDescription: string | null;
+    priority: ManagerMaintenancePriority;
+    status: ManagerMaintenanceStatus;
+    estimatedCost: number;
+    actualCost: number;
+    vendorName: string | null;
+    reportedDate: string;
+    resolvedDate: string | null;
+    notes: string | null;
+    metadata: Record<string, unknown>;
+    createdByProfileId: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_maintenance_requests")
+    .insert({
+      organization_id: params.organizationId,
+      landlord_client_id: params.landlordClientId,
+      property_id: params.propertyId,
+      unit_id: params.unitId,
+      tenant_id: params.tenantId,
+      issue_title: params.issueTitle,
+      issue_description: params.issueDescription,
+      priority: params.priority,
+      status: params.status,
+      estimated_cost: params.estimatedCost,
+      actual_cost: params.actualCost,
+      vendor_name: params.vendorName,
+      reported_date: params.reportedDate,
+      resolved_date: params.resolvedDate,
+      notes: params.notes,
+      metadata: params.metadata,
+      created_by_profile_id: params.createdByProfileId,
+      updated_by_profile_id: params.createdByProfileId,
+    })
+    .select(MANAGER_MAINTENANCE_REQUEST_SELECT)
+    .single<ManagerMaintenanceRequestRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function listManagerMaintenanceRequests(
+  supabase: SupabaseClient,
+  organizationId: string,
+) {
+  const { data, error } = await supabase
+    .from("manager_maintenance_requests")
+    .select(MANAGER_MAINTENANCE_REQUEST_SELECT)
+    .eq("organization_id", organizationId)
+    .order("reported_date", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(100)
+    .returns<ManagerMaintenanceRequestRow[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+
+====================================================================================================
+FILE: src\server\repositories\manager-statement-documents.repository.ts
+====================================================================================================
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { calculateLandlordStatementTotals } from "@/lib/manager-automation";
+import type {
+  ManagerRemittanceStatus,
+  ManagerRentPaymentStatus,
+} from "@/constants/manager";
+
+export const MANAGER_STATEMENT_DOCUMENTS_BUCKET = "manager-statement-documents";
+
+export type ManagerStatementDocumentType =
+  | "landlord_statement"
+  | "remittance_summary";
+
+export type ManagerStatementDocumentRow = {
+  id: string;
+  organization_id: string;
+  landlord_client_id: string;
+  document_type: ManagerStatementDocumentType;
+  idempotency_key: string;
+  date_from: string | null;
+  date_to: string | null;
+  document_number: string;
+  storage_bucket: typeof MANAGER_STATEMENT_DOCUMENTS_BUCKET;
+  storage_path: string;
+  file_name: string;
+  generated_by_profile_id: string | null;
+  generated_at: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ManagerStatementPaymentLine = {
+  id: string;
+  tenantName: string;
+  propertyName: string;
+  unitLabel: string;
+  paymentDate: string;
+  periodStart: string | null;
+  periodEnd: string | null;
+  amountPaid: number;
+  managerCommission: number;
+  landlordShare: number;
+  paymentReference: string | null;
+  status: ManagerRentPaymentStatus;
+};
+
+export type ManagerStatementRemittanceLine = {
+  id: string;
+  remittanceDate: string;
+  amountRemitted: number;
+  reference: string | null;
+  status: ManagerRemittanceStatus;
+  notes: string | null;
+};
+
+export type ManagerLandlordStatementSnapshot = {
+  organization: {
+    id: string;
+    name: string;
+    phone: string | null;
+    email: string | null;
+  };
+  landlord: {
+    id: string;
+    name: string;
+    phone: string | null;
+    email: string | null;
+  };
+  dateFrom: string | null;
+  dateTo: string | null;
+  generatedAt: string;
+  payments: ManagerStatementPaymentLine[];
+  remittances: ManagerStatementRemittanceLine[];
+  totals: {
+    totalRentRecorded: number;
+    managerCommission: number;
+    amountDueToLandlord: number;
+    amountRemitted: number;
+    pendingLandlordBalance: number;
+    pendingConfirmationAmount: number;
+  };
+};
+
+const MANAGER_STATEMENT_DOCUMENT_SELECT = `
+  id,
+  organization_id,
+  landlord_client_id,
+  document_type,
+  idempotency_key,
+  date_from,
+  date_to,
+  document_number,
+  storage_bucket,
+  storage_path,
+  file_name,
+  generated_by_profile_id,
+  generated_at,
+  metadata,
+  created_at,
+  updated_at
+`;
+
+function toRecord(value: unknown): Record<string, unknown> {
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  return {};
+}
+
+function readText(
+  row: Record<string, unknown> | null,
+  key: string,
+): string | null {
+  const value = row?.[key];
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function readNumber(row: Record<string, unknown>, key: string) {
+  const value = row[key];
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  return 0;
+}
+
+function readRentPaymentStatus(
+  row: Record<string, unknown>,
+): ManagerRentPaymentStatus {
+  const status = readText(row, "status");
+
+  if (
+    status === "recorded" ||
+    status === "pending_confirmation" ||
+    status === "verified" ||
+    status === "rejected" ||
+    status === "reversed"
+  ) {
+    return status;
+  }
+
+  return "pending_confirmation";
+}
+
+function readRemittanceStatus(
+  row: Record<string, unknown>,
+): ManagerRemittanceStatus {
+  const status = readText(row, "status");
+
+  if (
+    status === "recorded" ||
+    status === "pending_confirmation" ||
+    status === "confirmed" ||
+    status === "rejected" ||
+    status === "reversed"
+  ) {
+    return status;
+  }
+
+  return "pending_confirmation";
+}
+
+async function getRecordById(
+  supabase: SupabaseClient,
+  table: string,
+  id: string,
+) {
+  const { data, error } = await supabase
+    .from(table)
+    .select("*")
+    .eq("id", id)
+    .maybeSingle<Record<string, unknown>>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data ? toRecord(data) : null;
+}
+
+async function listPaymentRows(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    landlordClientId: string;
+    dateFrom: string | null;
+    dateTo: string | null;
+  },
+) {
+  let query = supabase
+    .from("manager_rent_payments")
+    .select("*")
+    .eq("organization_id", params.organizationId)
+    .eq("landlord_client_id", params.landlordClientId)
+    .order("payment_date", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (params.dateFrom) {
+    query = query.gte("payment_date", params.dateFrom);
+  }
+
+  if (params.dateTo) {
+    query = query.lte("payment_date", params.dateTo);
+  }
+
+  const { data, error } = await query.returns<Record<string, unknown>[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data.map(toRecord);
+}
+
+async function listRemittanceRows(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    landlordClientId: string;
+    dateFrom: string | null;
+    dateTo: string | null;
+  },
+) {
+  let query = supabase
+    .from("manager_landlord_remittances")
+    .select("*")
+    .eq("organization_id", params.organizationId)
+    .eq("landlord_client_id", params.landlordClientId)
+    .order("remittance_date", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (params.dateFrom) {
+    query = query.gte("remittance_date", params.dateFrom);
+  }
+
+  if (params.dateTo) {
+    query = query.lte("remittance_date", params.dateTo);
+  }
+
+  const { data, error } = await query.returns<Record<string, unknown>[]>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data.map(toRecord);
+}
+
+export async function getManagerLandlordStatementSnapshot(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    landlordClientId: string;
+    dateFrom: string | null;
+    dateTo: string | null;
+  },
+): Promise<ManagerLandlordStatementSnapshot | null> {
+  const [organization, landlord, paymentRows, remittanceRows] =
+    await Promise.all([
+      getRecordById(supabase, "manager_organizations", params.organizationId),
+      getRecordById(
+        supabase,
+        "manager_landlord_clients",
+        params.landlordClientId,
+      ),
+      listPaymentRows(supabase, params),
+      listRemittanceRows(supabase, params),
+    ]);
+
+  if (!organization || !landlord) {
+    return null;
+  }
+
+  const tenantIds = Array.from(
+    new Set(
+      paymentRows
+        .map((row) => readText(row, "tenant_id"))
+        .filter((id): id is string => Boolean(id)),
+    ),
+  );
+
+  const propertyIds = Array.from(
+    new Set(
+      paymentRows
+        .map((row) => readText(row, "property_id"))
+        .filter((id): id is string => Boolean(id)),
+    ),
+  );
+
+  const unitIds = Array.from(
+    new Set(
+      paymentRows
+        .map((row) => readText(row, "unit_id"))
+        .filter((id): id is string => Boolean(id)),
+    ),
+  );
+
+  const [tenantsResult, propertiesResult, unitsResult] = await Promise.all([
+    tenantIds.length > 0
+      ? supabase
+          .from("manager_tenants")
+          .select("id, full_name")
+          .in("id", tenantIds)
+          .returns<Record<string, unknown>[]>()
+      : Promise.resolve({ data: [], error: null }),
+    propertyIds.length > 0
+      ? supabase
+          .from("manager_properties")
+          .select("id, property_name")
+          .in("id", propertyIds)
+          .returns<Record<string, unknown>[]>()
+      : Promise.resolve({ data: [], error: null }),
+    unitIds.length > 0
+      ? supabase
+          .from("manager_units")
+          .select("id, unit_label")
+          .in("id", unitIds)
+          .returns<Record<string, unknown>[]>()
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (tenantsResult.error) {
+    throw tenantsResult.error;
+  }
+
+  if (propertiesResult.error) {
+    throw propertiesResult.error;
+  }
+
+  if (unitsResult.error) {
+    throw unitsResult.error;
+  }
+
+  const tenantNameById = new Map(
+    (tenantsResult.data ?? []).map((row) => {
+      const record = toRecord(row);
+      return [
+        readText(record, "id") ?? "",
+        readText(record, "full_name") ?? "",
+      ];
+    }),
+  );
+
+  const propertyNameById = new Map(
+    (propertiesResult.data ?? []).map((row) => {
+      const record = toRecord(row);
+      return [
+        readText(record, "id") ?? "",
+        readText(record, "property_name") ?? "",
+      ];
+    }),
+  );
+
+  const unitLabelById = new Map(
+    (unitsResult.data ?? []).map((row) => {
+      const record = toRecord(row);
+      return [
+        readText(record, "id") ?? "",
+        readText(record, "unit_label") ?? "",
+      ];
+    }),
+  );
+
+  const payments: ManagerStatementPaymentLine[] = paymentRows.map((payment) => {
+    const tenantId = readText(payment, "tenant_id") ?? "";
+    const propertyId = readText(payment, "property_id") ?? "";
+    const unitId = readText(payment, "unit_id") ?? "";
+
+    return {
+      id: readText(payment, "id") ?? "",
+      tenantName: tenantNameById.get(tenantId) || "Tenant",
+      propertyName: propertyNameById.get(propertyId) || "Property",
+      unitLabel: unitLabelById.get(unitId) || "Unit",
+      paymentDate:
+        readText(payment, "payment_date") ??
+        readText(payment, "created_at") ??
+        new Date().toISOString(),
+      periodStart: readText(payment, "period_start"),
+      periodEnd: readText(payment, "period_end"),
+      amountPaid: readNumber(payment, "amount_paid"),
+      managerCommission: readNumber(payment, "management_fee_amount"),
+      landlordShare: readNumber(payment, "landlord_net_amount"),
+      paymentReference: readText(payment, "payment_reference"),
+      status: readRentPaymentStatus(payment),
+    };
+  });
+
+  const remittances: ManagerStatementRemittanceLine[] = remittanceRows.map(
+    (remittance) => ({
+      id: readText(remittance, "id") ?? "",
+      remittanceDate:
+        readText(remittance, "remittance_date") ??
+        readText(remittance, "created_at") ??
+        new Date().toISOString(),
+      amountRemitted: readNumber(remittance, "amount_remitted"),
+      reference:
+        readText(remittance, "remittance_reference") ??
+        readText(remittance, "reference"),
+      status: readRemittanceStatus(remittance),
+      notes: readText(remittance, "notes"),
+    }),
+  );
+
+  const totals = calculateLandlordStatementTotals({
+    payments: payments.map((payment) => ({
+      status: payment.status,
+      amountPaid: payment.amountPaid,
+      managerCommission: payment.managerCommission,
+      landlordShare: payment.landlordShare,
+    })),
+    remittances: remittances.map((remittance) => ({
+      status: remittance.status,
+      amountRemitted: remittance.amountRemitted,
+    })),
+  });
+
+  return {
+    organization: {
+      id: params.organizationId,
+      name: readText(organization, "organization_name") ?? "Property Manager",
+      phone: readText(organization, "organization_phone"),
+      email: readText(organization, "organization_email"),
+    },
+    landlord: {
+      id: params.landlordClientId,
+      name: readText(landlord, "landlord_name") ?? "Landlord",
+      phone: readText(landlord, "landlord_phone"),
+      email: readText(landlord, "landlord_email"),
+    },
+    dateFrom: params.dateFrom,
+    dateTo: params.dateTo,
+    generatedAt: new Date().toISOString(),
+    payments,
+    remittances,
+    totals,
+  };
+}
+
+export async function upsertManagerStatementDocument(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    landlordClientId: string;
+    documentType: ManagerStatementDocumentType;
+    idempotencyKey: string;
+    dateFrom: string | null;
+    dateTo: string | null;
+    documentNumber: string;
+    storagePath: string;
+    fileName: string;
+    generatedByProfileId: string;
+    metadata: Record<string, unknown>;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_statement_documents")
+    .upsert(
+      {
+        organization_id: params.organizationId,
+        landlord_client_id: params.landlordClientId,
+        document_type: params.documentType,
+        idempotency_key: params.idempotencyKey,
+        date_from: params.dateFrom,
+        date_to: params.dateTo,
+        document_number: params.documentNumber,
+        storage_bucket: MANAGER_STATEMENT_DOCUMENTS_BUCKET,
+        storage_path: params.storagePath,
+        file_name: params.fileName,
+        generated_by_profile_id: params.generatedByProfileId,
+        generated_at: new Date().toISOString(),
+        metadata: params.metadata,
+        updated_at: new Date().toISOString(),
+      },
+      {
+        onConflict: "idempotency_key",
+      },
+    )
+    .select(MANAGER_STATEMENT_DOCUMENT_SELECT)
+    .single<ManagerStatementDocumentRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+
+====================================================================================================
+FILE: src\server\services\manager-maintenance.service.ts
+====================================================================================================
+import "server-only";
+
+import { AppError } from "@/server/errors/app-error";
+import {
+  createManagerMaintenanceRequest as createManagerMaintenanceRequestRecord,
+  listManagerMaintenanceRequests as listManagerMaintenanceRequestRecords,
+} from "@/server/repositories/manager-maintenance.repository";
+import {
+  getManagerOrganizationForCurrentUser,
+  getManagerPropertyById,
+  getManagerTenantById,
+  getManagerUnitById,
+} from "@/server/repositories/manager.repository";
+import { createSupabaseServerClient } from "@/server/supabase/server";
+import type { CreateManagerMaintenanceRequestInput } from "@/server/validators/manager-maintenance.schema";
+
+type ManagerProfileRow = {
+  id: string;
+  role: string;
+  full_name: string;
+  phone_number: string | null;
+  email: string | null;
+  is_active: boolean;
+};
+
+function nullableText(value: string | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function nullableDate(value: string | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function roundMoney(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+async function getCurrentManagerProfile() {
+  const supabase = await createSupabaseServerClient();
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    throw new AppError(
+      "MANAGER_AUTH_REQUIRED",
+      "Please sign in to continue.",
+      401,
+    );
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("id, role, full_name, phone_number, email, is_active")
+    .eq("id", user.id)
+    .maybeSingle<ManagerProfileRow>();
+
+  if (profileError) {
+    throw profileError;
+  }
+
+  if (!profile || !profile.is_active) {
+    throw new AppError(
+      "MANAGER_PROFILE_NOT_FOUND",
+      "We could not find your active BOPA profile.",
+      403,
+    );
+  }
+
+  if (profile.role !== "manager") {
+    throw new AppError(
+      "MANAGER_ROLE_REQUIRED",
+      "This action is only available to BOPA Manager accounts.",
+      403,
+    );
+  }
+
+  return {
+    supabase,
+    profile,
+  };
+}
+
+async function requireManagerOrganization() {
+  const { supabase, profile } = await getCurrentManagerProfile();
+
+  const organization = await getManagerOrganizationForCurrentUser(
+    supabase,
+    profile.id,
+  );
+
+  if (!organization || organization.status !== "active") {
+    throw new AppError(
+      "MANAGER_ORGANIZATION_REQUIRED",
+      "Create an active BOPA Manager organization before continuing.",
+      403,
+    );
+  }
+
+  return {
+    supabase,
+    profile,
+    organization,
+  };
+}
+
+export async function createManagerMaintenanceRequest(
+  input: CreateManagerMaintenanceRequestInput,
+) {
+  const { supabase, profile, organization } =
+    await requireManagerOrganization();
+
+  const property = await getManagerPropertyById(supabase, {
+    organizationId: organization.id,
+    landlordClientId: input.landlordClientId,
+    propertyId: input.propertyId,
+  });
+
+  if (!property || property.status !== "active") {
+    throw new AppError(
+      "MANAGER_MAINTENANCE_PROPERTY_NOT_FOUND",
+      "The selected property could not be found.",
+      404,
+    );
+  }
+
+  if (input.unitId) {
+    const unit = await getManagerUnitById(supabase, {
+      organizationId: organization.id,
+      landlordClientId: input.landlordClientId,
+      propertyId: input.propertyId,
+      unitId: input.unitId,
+    });
+
+    if (!unit || unit.status === "inactive") {
+      throw new AppError(
+        "MANAGER_MAINTENANCE_UNIT_NOT_FOUND",
+        "The selected unit could not be found.",
+        404,
+      );
+    }
+  }
+
+  if (input.tenantId) {
+    if (!input.unitId) {
+      throw new AppError(
+        "MANAGER_MAINTENANCE_TENANT_UNIT_REQUIRED",
+        "Select the tenant unit before selecting the tenant.",
+        400,
+      );
+    }
+
+    const tenant = await getManagerTenantById(supabase, {
+      organizationId: organization.id,
+      landlordClientId: input.landlordClientId,
+      propertyId: input.propertyId,
+      unitId: input.unitId,
+      tenantId: input.tenantId,
+    });
+
+    if (!tenant) {
+      throw new AppError(
+        "MANAGER_MAINTENANCE_TENANT_NOT_FOUND",
+        "The selected tenant could not be found.",
+        404,
+      );
+    }
+  }
+
+  return createManagerMaintenanceRequestRecord(supabase, {
+    organizationId: organization.id,
+    landlordClientId: input.landlordClientId,
+    propertyId: input.propertyId,
+    unitId: input.unitId ?? null,
+    tenantId: input.tenantId ?? null,
+    issueTitle: input.issueTitle,
+    issueDescription: nullableText(input.issueDescription),
+    priority: input.priority,
+    status: input.status,
+    estimatedCost: roundMoney(input.estimatedCost),
+    actualCost: roundMoney(input.actualCost),
+    vendorName: nullableText(input.vendorName),
+    reportedDate: input.reportedDate,
+    resolvedDate: nullableDate(input.resolvedDate),
+    notes: nullableText(input.notes),
+    metadata: {
+      source: "bopa_manager_manual_maintenance",
+    },
+    createdByProfileId: profile.id,
+  });
+}
+
+export async function listManagerMaintenanceRequests() {
+  const { supabase, organization } = await requireManagerOrganization();
+
+  return listManagerMaintenanceRequestRecords(supabase, organization.id);
+}
+
+
+====================================================================================================
+FILE: src\server\services\manager-receipts.service.tsx
+====================================================================================================
+import "server-only";
+
+import { Readable } from "node:stream";
+import { pdf } from "@react-pdf/renderer";
+import { AppError } from "@/server/errors/app-error";
+import { ManagerRentReceiptPdf } from "@/server/pdf/manager-rent-receipt-pdf";
+import {
+  createManagerRentPaymentReceipt,
+  getManagerRentPaymentReceiptByPaymentId,
+  getManagerRentReceiptSnapshot,
+  MANAGER_RENT_RECEIPTS_BUCKET,
+  type ManagerRentPaymentReceiptRow,
+  type ManagerRentReceiptSnapshot,
+} from "@/server/repositories/manager-receipts.repository";
+import { requireManagerWorkspacePermission } from "@/server/services/manager-staff-access.service";
+import { createSupabaseAdminClient } from "@/server/supabase/admin";
+
+type ManagerReceiptDownload = {
+  receipt: ManagerRentPaymentReceiptRow;
+  fileBuffer: ArrayBuffer;
+};
+
+export const MANAGER_RECEIPT_NOT_READY_MESSAGE =
+  "Your payment is confirmed, but the receipt is not ready yet. Please try again shortly.";
+
+export type ManagerReceiptShareLink = {
+  whatsappUrl: string;
+};
+
+type WebPdfReadableStream = ReadableStream<Uint8Array<ArrayBufferLike>>;
+type PdfOutput = Buffer | Readable | WebPdfReadableStream;
+
+function createReceiptNumber(params: {
+  paymentId: string;
+  paymentDate: string;
+}) {
+  const date = new Date(params.paymentDate);
+  const safeDate = Number.isNaN(date.getTime()) ? new Date() : date;
+
+  const year = safeDate.getFullYear();
+  const month = String(safeDate.getMonth() + 1).padStart(2, "0");
+  const day = String(safeDate.getDate()).padStart(2, "0");
+  const shortId = params.paymentId
+    .replaceAll("-", "")
+    .slice(0, 8)
+    .toUpperCase();
+
+  return `BMR-${year}${month}${day}-${shortId}`;
+}
+
+function createFileName(receiptNumber: string) {
+  return `${receiptNumber}.pdf`;
+}
+
+function createStoragePath(params: {
+  organizationId: string;
+  rentPaymentId: string;
+  fileName: string;
+}) {
+  return `${params.organizationId}/${params.rentPaymentId}/${params.fileName}`;
+}
+
+function canGenerateReceipt(
+  status: ManagerRentReceiptSnapshot["payment"]["status"],
+) {
+  return status === "verified" || status === "recorded";
+}
+
+function createReceiptNotReadyError() {
+  return new AppError(
+    "MANAGER_RECEIPT_NOT_READY",
+    MANAGER_RECEIPT_NOT_READY_MESSAGE,
+    503,
+  );
+}
+
+function createReceiptMetadata(snapshot: ManagerRentReceiptSnapshot) {
+  return {
+    source: "bopa_manager_receipt_generation",
+    payment_status: snapshot.payment.status,
+    amount_paid: snapshot.payment.amountPaid,
+    tenant_name: snapshot.tenant.name,
+    landlord_name: snapshot.landlord.name,
+    property_name: snapshot.property.name,
+    unit_label: snapshot.unit.label,
+    manager_company_name: snapshot.organization.name,
+    powered_by: "BOPA - Boldverse Property App",
+  };
+}
+
+function isWebReadableStream(
+  output: PdfOutput,
+): output is WebPdfReadableStream {
+  return typeof (output as { getReader?: unknown }).getReader === "function";
+}
+
+function isNodeReadableStream(output: PdfOutput): output is Readable {
+  return output instanceof Readable;
+}
+
+async function webReadableStreamToBuffer(stream: WebPdfReadableStream) {
+  const reader = stream.getReader();
+  const chunks: Buffer[] = [];
+
+  try {
+    let done = false;
+
+    while (!done) {
+      const result = await reader.read();
+      done = result.done;
+
+      if (result.value) {
+        chunks.push(Buffer.from(result.value));
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return Buffer.concat(chunks);
+}
+
+async function nodeReadableStreamToBuffer(stream: Readable) {
+  const chunks: Buffer[] = [];
+
+  for await (const chunk of stream as AsyncIterable<unknown>) {
+    if (typeof chunk === "string") {
+      chunks.push(Buffer.from(chunk));
+      continue;
+    }
+
+    if (Buffer.isBuffer(chunk)) {
+      chunks.push(chunk);
+      continue;
+    }
+
+    if (chunk instanceof Uint8Array) {
+      chunks.push(Buffer.from(chunk));
+      continue;
+    }
+
+    chunks.push(Buffer.from(String(chunk)));
+  }
+
+  return Buffer.concat(chunks);
+}
+
+async function pdfOutputToBuffer(output: PdfOutput) {
+  if (Buffer.isBuffer(output)) {
+    return output;
+  }
+
+  if (isWebReadableStream(output)) {
+    return webReadableStreamToBuffer(output);
+  }
+
+  if (isNodeReadableStream(output)) {
+    return nodeReadableStreamToBuffer(output);
+  }
+
+  throw new AppError(
+    "MANAGER_RECEIPT_PDF_RENDER_FAILED",
+    "Receipt could not be prepared.",
+    500,
+  );
+}
+
+async function renderReceiptPdfBuffer(params: {
+  receiptNumber: string;
+  generatedAt: string;
+  snapshot: ManagerRentReceiptSnapshot;
+}) {
+  const rendered = (await pdf(
+    <ManagerRentReceiptPdf
+      receiptNumber={params.receiptNumber}
+      generatedAt={params.generatedAt}
+      snapshot={params.snapshot}
+    />,
+  ).toBuffer()) as PdfOutput;
+
+  return pdfOutputToBuffer(rendered);
+}
+
+async function renderAndUploadReceiptPdf(params: {
+  receiptNumber: string;
+  generatedAt: string;
+  snapshot: ManagerRentReceiptSnapshot;
+  storageBucket?: string;
+  storagePath: string;
+}) {
+  const fileBuffer = await renderReceiptPdfBuffer({
+    receiptNumber: params.receiptNumber,
+    generatedAt: params.generatedAt,
+    snapshot: params.snapshot,
+  });
+
+  await uploadReceiptPdf({
+    storageBucket: params.storageBucket,
+    storagePath: params.storagePath,
+    fileBuffer,
+  });
+
+  return fileBuffer;
+}
+
+async function uploadReceiptPdf(params: {
+  storageBucket?: string;
+  storagePath: string;
+  fileBuffer: Buffer;
+}) {
+  const supabase = createSupabaseAdminClient();
+
+  const { error } = await supabase.storage
+    .from(params.storageBucket || MANAGER_RENT_RECEIPTS_BUCKET)
+    .upload(params.storagePath, params.fileBuffer, {
+      contentType: "application/pdf",
+      upsert: true,
+    });
+
+  if (error) {
+    throw error;
+  }
+}
+
+async function downloadStoredReceiptPdf(params: {
+  storageBucket: string;
+  storagePath: string;
+}) {
+  const supabase = createSupabaseAdminClient();
+
+  const { data, error } = await supabase.storage
+    .from(params.storageBucket || MANAGER_RENT_RECEIPTS_BUCKET)
+    .download(params.storagePath);
+
+  if (error || !data) {
+    throw error;
+  }
+
+  return data.arrayBuffer();
+}
+
+async function getReceiptSnapshotForGeneration(params: {
+  organizationId: string;
+  rentPaymentId: string;
+}) {
+  const adminSupabase = createSupabaseAdminClient();
+  const snapshot = await getManagerRentReceiptSnapshot(adminSupabase, {
+    organizationId: params.organizationId,
+    rentPaymentId: params.rentPaymentId,
+  });
+
+  if (!snapshot) {
+    throw new AppError(
+      "MANAGER_PAYMENT_NOT_FOUND",
+      "Payment record was not found.",
+      404,
+    );
+  }
+
+  if (!canGenerateReceipt(snapshot.payment.status)) {
+    throw new AppError(
+      "MANAGER_RECEIPT_NOT_READY",
+      "Receipt can only be generated after payment is recorded or confirmed.",
+      400,
+    );
+  }
+
+  return snapshot;
+}
+
+async function regenerateStoredReceiptPdf(params: {
+  organizationId: string;
+  rentPaymentId: string;
+  receipt: ManagerRentPaymentReceiptRow;
+}) {
+  const snapshot = await getReceiptSnapshotForGeneration({
+    organizationId: params.organizationId,
+    rentPaymentId: params.rentPaymentId,
+  });
+
+  return renderAndUploadReceiptPdf({
+    receiptNumber: params.receipt.receipt_number,
+    generatedAt: params.receipt.generated_at,
+    snapshot,
+    storageBucket: params.receipt.storage_bucket,
+    storagePath: params.receipt.storage_path,
+  });
+}
+
+async function downloadOrRecoverReceiptPdf(params: {
+  organizationId: string;
+  rentPaymentId: string;
+  receipt: ManagerRentPaymentReceiptRow;
+}) {
+  try {
+    return await downloadStoredReceiptPdf({
+      storageBucket: params.receipt.storage_bucket,
+      storagePath: params.receipt.storage_path,
+    });
+  } catch (downloadError) {
+    console.error("manager receipt PDF download failed; attempting recovery", {
+      organizationId: params.organizationId,
+      rentPaymentId: params.rentPaymentId,
+      receiptId: params.receipt.id,
+      error:
+        downloadError instanceof Error
+          ? {
+              name: downloadError.name,
+              message: downloadError.message,
+            }
+          : "Unknown receipt download error",
+    });
+  }
+
+  try {
+    const recoveredBuffer = await regenerateStoredReceiptPdf(params);
+    const fileBuffer = new ArrayBuffer(recoveredBuffer.byteLength);
+
+    new Uint8Array(fileBuffer).set(recoveredBuffer);
+
+    return fileBuffer;
+  } catch (recoveryError) {
+    console.error("manager receipt PDF recovery failed", {
+      organizationId: params.organizationId,
+      rentPaymentId: params.rentPaymentId,
+      receiptId: params.receipt.id,
+      error:
+        recoveryError instanceof Error
+          ? {
+              name: recoveryError.name,
+              message: recoveryError.message,
+            }
+          : "Unknown receipt recovery error",
+    });
+
+    throw createReceiptNotReadyError();
+  }
+}
+
+async function createReceiptSignedUrl(params: {
+  storageBucket: string;
+  storagePath: string;
+}) {
+  const supabase = createSupabaseAdminClient();
+
+  const { data, error } = await supabase.storage
+    .from(params.storageBucket || MANAGER_RENT_RECEIPTS_BUCKET)
+    .createSignedUrl(params.storagePath, 60 * 60 * 24 * 7);
+
+  if (error || !data?.signedUrl) {
+    throw error;
+  }
+
+  return data.signedUrl;
+}
+
+function normalizeWhatsAppPhone(phoneNumber: string | null) {
+  if (!phoneNumber) {
+    return null;
+  }
+
+  const cleaned = phoneNumber.replace(/\D/g, "");
+
+  if (!cleaned) {
+    return null;
+  }
+
+  if (cleaned.startsWith("234")) {
+    return cleaned;
+  }
+
+  if (cleaned.startsWith("0")) {
+    return `234${cleaned.slice(1)}`;
+  }
+
+  return cleaned;
+}
+
+function buildWhatsAppUrl(params: { phoneNumber: string; message: string }) {
+  return `https://wa.me/${params.phoneNumber}?text=${encodeURIComponent(
+    params.message,
+  )}`;
+}
+
+async function requireManagerReceiptAccess(managerProfileId: string) {
+  const { manager, access } =
+    await requireManagerWorkspacePermission("payment.manage");
+
+  if (manager.id !== managerProfileId) {
+    throw new AppError(
+      "MANAGER_SESSION_MISMATCH",
+      "Please sign in again to continue.",
+      401,
+    );
+  }
+
+  if (!access.organization || access.organization.status !== "active") {
+    throw new AppError(
+      "MANAGER_ORGANIZATION_REQUIRED",
+      "Create or join an active BOPA Manager organization before continuing.",
+      403,
+    );
+  }
+
+  return access.organization;
+}
+
+export async function getOrCreateManagerRentReceipt(params: {
+  managerProfileId: string;
+  rentPaymentId: string;
+}) {
+  const organization = await requireManagerReceiptAccess(
+    params.managerProfileId,
+  );
+
+  return getOrCreateManagerRentReceiptForPayment({
+    organizationId: organization.id,
+    rentPaymentId: params.rentPaymentId,
+    generatedByProfileId: params.managerProfileId,
+  });
+}
+
+export async function getOrCreateManagerRentReceiptForPayment(params: {
+  organizationId: string;
+  rentPaymentId: string;
+  generatedByProfileId: string | null;
+}) {
+  const adminSupabase = createSupabaseAdminClient();
+  const snapshot = await getReceiptSnapshotForGeneration({
+    organizationId: params.organizationId,
+    rentPaymentId: params.rentPaymentId,
+  });
+  const existingReceipt = await getManagerRentPaymentReceiptByPaymentId(
+    adminSupabase,
+    {
+      organizationId: params.organizationId,
+      rentPaymentId: params.rentPaymentId,
+    },
+  );
+
+  if (existingReceipt) {
+    return existingReceipt;
+  }
+
+  const generatedAt = new Date().toISOString();
+  const receiptNumber = createReceiptNumber({
+    paymentId: snapshot.payment.id,
+    paymentDate: snapshot.payment.paymentDate,
+  });
+  const fileName = createFileName(receiptNumber);
+  const storagePath = createStoragePath({
+    organizationId: params.organizationId,
+    rentPaymentId: snapshot.payment.id,
+    fileName,
+  });
+
+  let storedPdfExists = false;
+
+  try {
+    await downloadStoredReceiptPdf({
+      storageBucket: MANAGER_RENT_RECEIPTS_BUCKET,
+      storagePath,
+    });
+
+    storedPdfExists = true;
+  } catch {
+    storedPdfExists = false;
+  }
+
+  if (storedPdfExists) {
+    return createManagerRentPaymentReceipt(adminSupabase, {
+      organizationId: params.organizationId,
+      rentPaymentId: snapshot.payment.id,
+      receiptNumber,
+      storagePath,
+      fileName,
+      generatedByProfileId: params.generatedByProfileId,
+      metadata: createReceiptMetadata(snapshot),
+    });
+  }
+
+  await renderAndUploadReceiptPdf({
+    receiptNumber,
+    generatedAt,
+    snapshot,
+    storagePath,
+  });
+
+  return createManagerRentPaymentReceipt(adminSupabase, {
+    organizationId: params.organizationId,
+    rentPaymentId: snapshot.payment.id,
+    receiptNumber,
+    storagePath,
+    fileName,
+    generatedByProfileId: params.generatedByProfileId,
+    metadata: createReceiptMetadata(snapshot),
+  });
+}
+
+export async function getManagerRentReceiptDownload(params: {
+  managerProfileId: string;
+  rentPaymentId: string;
+}): Promise<ManagerReceiptDownload> {
+  const organization = await requireManagerReceiptAccess(
+    params.managerProfileId,
+  );
+  const receipt = await getOrCreateManagerRentReceiptForPayment({
+    organizationId: organization.id,
+    rentPaymentId: params.rentPaymentId,
+    generatedByProfileId: params.managerProfileId,
+  });
+  const fileBuffer = await downloadOrRecoverReceiptPdf({
+    organizationId: organization.id,
+    rentPaymentId: params.rentPaymentId,
+    receipt,
+  });
+
+  return {
+    receipt,
+    fileBuffer,
+  };
+}
+
+export async function getManagerRentReceiptDownloadForPayment(params: {
+  organizationId: string;
+  rentPaymentId: string;
+  generatedByProfileId: string | null;
+}): Promise<ManagerReceiptDownload> {
+  const receipt = await getOrCreateManagerRentReceiptForPayment(params);
+  const fileBuffer = await downloadOrRecoverReceiptPdf({
+    organizationId: params.organizationId,
+    rentPaymentId: params.rentPaymentId,
+    receipt,
+  });
+
+  return {
+    receipt,
+    fileBuffer,
+  };
+}
+
+export async function ensureManagerRentReceiptPdfForPayment(params: {
+  organizationId: string;
+  rentPaymentId: string;
+  generatedByProfileId: string | null;
+}) {
+  const receipt = await getOrCreateManagerRentReceiptForPayment(params);
+
+  await downloadOrRecoverReceiptPdf({
+    organizationId: params.organizationId,
+    rentPaymentId: params.rentPaymentId,
+    receipt,
+  });
+
+  return receipt;
+}
+
+export async function getManagerRentReceiptWhatsAppLink(params: {
+  managerProfileId: string;
+  rentPaymentId: string;
+}): Promise<ManagerReceiptShareLink> {
+  const organization = await requireManagerReceiptAccess(
+    params.managerProfileId,
+  );
+  const adminSupabase = createSupabaseAdminClient();
+
+  const snapshot = await getManagerRentReceiptSnapshot(adminSupabase, {
+    organizationId: organization.id,
+    rentPaymentId: params.rentPaymentId,
+  });
+
+  if (!snapshot) {
+    throw new AppError(
+      "MANAGER_PAYMENT_NOT_FOUND",
+      "Payment record was not found.",
+      404,
+    );
+  }
+
+  const receipt = await getOrCreateManagerRentReceipt(params);
+  await downloadOrRecoverReceiptPdf({
+    organizationId: organization.id,
+    rentPaymentId: params.rentPaymentId,
+    receipt,
+  });
+  const signedUrl = await createReceiptSignedUrl({
+    storageBucket: receipt.storage_bucket,
+    storagePath: receipt.storage_path,
+  });
+  const phoneNumber = normalizeWhatsAppPhone(snapshot.tenant.phone);
+
+  if (!phoneNumber) {
+    throw new AppError(
+      "MANAGER_RECEIPT_PHONE_MISSING",
+      "Tenant phone number is missing.",
+      400,
+    );
+  }
+
+  const message = [
+    `Hello ${snapshot.tenant.name},`,
+    "",
+    `Your rent receipt from ${snapshot.organization.name} is ready.`,
+    "",
+    `Receipt number: ${receipt.receipt_number}`,
+    `Property: ${snapshot.property.name}`,
+    `Unit: ${snapshot.unit.label}`,
+    "",
+    `Download receipt: ${signedUrl}`,
+  ].join("\n");
+
+  return {
+    whatsappUrl: buildWhatsAppUrl({
+      phoneNumber,
+      message,
+    }),
+  };
+}
+
+
+====================================================================================================
+FILE: src\server\services\manager-statement-documents.service.tsx
+====================================================================================================
+import "server-only";
+
+import crypto from "node:crypto";
+import { Readable } from "node:stream";
+import { pdf } from "@react-pdf/renderer";
+import { AppError } from "@/server/errors/app-error";
+import { ManagerLandlordStatementPdf } from "@/server/pdf/manager-landlord-statement-pdf";
+import { ManagerRemittanceSummaryPdf } from "@/server/pdf/manager-remittance-summary-pdf";
+import {
+  getManagerLandlordStatementSnapshot,
+  MANAGER_STATEMENT_DOCUMENTS_BUCKET,
+  upsertManagerStatementDocument,
+  type ManagerStatementDocumentType,
+} from "@/server/repositories/manager-statement-documents.repository";
+import { requireManagerWorkspacePermission } from "@/server/services/manager-staff-access.service";
+import { createSupabaseAdminClient } from "@/server/supabase/admin";
+import type { ManagerStatementDocumentQueryInput } from "@/server/validators/manager-statement-documents.schema";
+
+type ManagerStatementDownload = {
+  fileName: string;
+  fileBuffer: ArrayBuffer;
+};
+
+export type ManagerStatementShareLink = {
+  whatsappUrl: string;
+};
+
+type WebPdfReadableStream = ReadableStream<Uint8Array<ArrayBufferLike>>;
+type PdfOutput = Buffer | Readable | WebPdfReadableStream;
+
+function createHash(value: string) {
+  return crypto.createHash("sha256").update(value).digest("hex").slice(0, 16);
+}
+
+function createDocumentNumber(params: {
+  documentType: ManagerStatementDocumentType;
+  landlordClientId: string;
+  dateFrom: string | null;
+  dateTo: string | null;
+}) {
+  const prefix = params.documentType === "landlord_statement" ? "BMS" : "BMR";
+  const dateScope = `${params.dateFrom ?? "start"}-${params.dateTo ?? "today"}`;
+  const shortHash = createHash(
+    `${params.landlordClientId}:${dateScope}`,
+  ).toUpperCase();
+
+  return `${prefix}-${shortHash}`;
+}
+
+function createIdempotencyKey(params: {
+  organizationId: string;
+  landlordClientId: string;
+  documentType: ManagerStatementDocumentType;
+  dateFrom: string | null;
+  dateTo: string | null;
+}) {
+  return [
+    "manager-statement-document",
+    params.documentType,
+    params.organizationId,
+    params.landlordClientId,
+    params.dateFrom ?? "start",
+    params.dateTo ?? "today",
+  ].join(":");
+}
+
+function createFileName(params: {
+  documentType: ManagerStatementDocumentType;
+  documentNumber: string;
+}) {
+  const label =
+    params.documentType === "landlord_statement"
+      ? "landlord-statement"
+      : "remittance-summary";
+
+  return `${label}-${params.documentNumber}.pdf`;
+}
+
+function createStoragePath(params: {
+  organizationId: string;
+  landlordClientId: string;
+  documentType: ManagerStatementDocumentType;
+  fileName: string;
+}) {
+  return `${params.organizationId}/${params.landlordClientId}/${params.documentType}/${params.fileName}`;
+}
+
+function isWebReadableStream(
+  output: PdfOutput,
+): output is WebPdfReadableStream {
+  return typeof (output as { getReader?: unknown }).getReader === "function";
+}
+
+function isNodeReadableStream(output: PdfOutput): output is Readable {
+  return output instanceof Readable;
+}
+
+async function webReadableStreamToBuffer(stream: WebPdfReadableStream) {
+  const reader = stream.getReader();
+  const chunks: Buffer[] = [];
+
+  try {
+    let done = false;
+
+    while (!done) {
+      const result = await reader.read();
+      done = result.done;
+
+      if (result.value) {
+        chunks.push(Buffer.from(result.value));
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return Buffer.concat(chunks);
+}
+
+async function nodeReadableStreamToBuffer(stream: Readable) {
+  const chunks: Buffer[] = [];
+
+  for await (const chunk of stream as AsyncIterable<unknown>) {
+    if (typeof chunk === "string") {
+      chunks.push(Buffer.from(chunk));
+      continue;
+    }
+
+    if (Buffer.isBuffer(chunk)) {
+      chunks.push(chunk);
+      continue;
+    }
+
+    if (chunk instanceof Uint8Array) {
+      chunks.push(Buffer.from(chunk));
+      continue;
+    }
+
+    chunks.push(Buffer.from(String(chunk)));
+  }
+
+  return Buffer.concat(chunks);
+}
+
+async function pdfOutputToBuffer(output: PdfOutput) {
+  if (Buffer.isBuffer(output)) {
+    return output;
+  }
+
+  if (isWebReadableStream(output)) {
+    return webReadableStreamToBuffer(output);
+  }
+
+  if (isNodeReadableStream(output)) {
+    return nodeReadableStreamToBuffer(output);
+  }
+
+  throw new AppError(
+    "MANAGER_STATEMENT_PDF_RENDER_FAILED",
+    "Document could not be prepared.",
+    500,
+  );
+}
+
+async function renderDocumentBuffer(params: {
+  documentType: ManagerStatementDocumentType;
+  documentNumber: string;
+  snapshot: Awaited<ReturnType<typeof getManagerLandlordStatementSnapshot>>;
+}) {
+  if (!params.snapshot) {
+    throw new AppError(
+      "MANAGER_STATEMENT_NOT_FOUND",
+      "Statement details could not be found.",
+      404,
+    );
+  }
+
+  const document =
+    params.documentType === "landlord_statement" ? (
+      <ManagerLandlordStatementPdf
+        documentNumber={params.documentNumber}
+        snapshot={params.snapshot}
+      />
+    ) : (
+      <ManagerRemittanceSummaryPdf
+        documentNumber={params.documentNumber}
+        snapshot={params.snapshot}
+      />
+    );
+
+  const rendered = (await pdf(document).toBuffer()) as PdfOutput;
+
+  return pdfOutputToBuffer(rendered);
+}
+
+async function uploadPdf(params: { storagePath: string; fileBuffer: Buffer }) {
+  const supabase = createSupabaseAdminClient();
+
+  const { error } = await supabase.storage
+    .from(MANAGER_STATEMENT_DOCUMENTS_BUCKET)
+    .upload(params.storagePath, params.fileBuffer, {
+      contentType: "application/pdf",
+      upsert: true,
+    });
+
+  if (error) {
+    throw error;
+  }
+}
+
+async function downloadPdf(storagePath: string) {
+  const supabase = createSupabaseAdminClient();
+
+  const { data, error } = await supabase.storage
+    .from(MANAGER_STATEMENT_DOCUMENTS_BUCKET)
+    .download(storagePath);
+
+  if (error || !data) {
+    throw error;
+  }
+
+  return data.arrayBuffer();
+}
+
+async function createStatementSignedUrl(storagePath: string) {
+  const supabase = createSupabaseAdminClient();
+
+  const { data, error } = await supabase.storage
+    .from(MANAGER_STATEMENT_DOCUMENTS_BUCKET)
+    .createSignedUrl(storagePath, 60 * 60 * 24 * 7);
+
+  if (error || !data?.signedUrl) {
+    throw error;
+  }
+
+  return data.signedUrl;
+}
+
+function normalizeWhatsAppPhone(phoneNumber: string | null) {
+  if (!phoneNumber) {
+    return null;
+  }
+
+  const cleaned = phoneNumber.replace(/\D/g, "");
+
+  if (!cleaned) {
+    return null;
+  }
+
+  if (cleaned.startsWith("234")) {
+    return cleaned;
+  }
+
+  if (cleaned.startsWith("0")) {
+    return `234${cleaned.slice(1)}`;
+  }
+
+  return cleaned;
+}
+
+function buildWhatsAppUrl(params: { phoneNumber: string; message: string }) {
+  return `https://wa.me/${params.phoneNumber}?text=${encodeURIComponent(
+    params.message,
+  )}`;
+}
+
+async function requireManagerStatementAccess(managerProfileId: string) {
+  const { manager, access } =
+    await requireManagerWorkspacePermission("reports.view");
+
+  if (manager.id !== managerProfileId) {
+    throw new AppError(
+      "MANAGER_SESSION_MISMATCH",
+      "Please sign in again to continue.",
+      401,
+    );
+  }
+
+  if (!access.organization || access.organization.status !== "active") {
+    throw new AppError(
+      "MANAGER_ORGANIZATION_REQUIRED",
+      "Create or join an active BOPA Manager organization before continuing.",
+      403,
+    );
+  }
+
+  return access.organization;
+}
+
+export async function generateManagerStatementDocument(params: {
+  managerProfileId: string;
+  documentType: ManagerStatementDocumentType;
+  input: ManagerStatementDocumentQueryInput;
+}) {
+  const organization = await requireManagerStatementAccess(
+    params.managerProfileId,
+  );
+  const adminSupabase = createSupabaseAdminClient();
+
+  const snapshot = await getManagerLandlordStatementSnapshot(adminSupabase, {
+    organizationId: organization.id,
+    landlordClientId: params.input.landlordClientId,
+    dateFrom: params.input.dateFrom,
+    dateTo: params.input.dateTo,
+  });
+
+  if (!snapshot) {
+    throw new AppError(
+      "MANAGER_STATEMENT_NOT_FOUND",
+      "Statement details could not be found.",
+      404,
+    );
+  }
+
+  const documentNumber = createDocumentNumber({
+    documentType: params.documentType,
+    landlordClientId: params.input.landlordClientId,
+    dateFrom: params.input.dateFrom,
+    dateTo: params.input.dateTo,
+  });
+
+  const fileName = createFileName({
+    documentType: params.documentType,
+    documentNumber,
+  });
+
+  const storagePath = createStoragePath({
+    organizationId: organization.id,
+    landlordClientId: params.input.landlordClientId,
+    documentType: params.documentType,
+    fileName,
+  });
+
+  const idempotencyKey = createIdempotencyKey({
+    organizationId: organization.id,
+    landlordClientId: params.input.landlordClientId,
+    documentType: params.documentType,
+    dateFrom: params.input.dateFrom,
+    dateTo: params.input.dateTo,
+  });
+
+  const fileBuffer = await renderDocumentBuffer({
+    documentType: params.documentType,
+    documentNumber,
+    snapshot,
+  });
+
+  await uploadPdf({
+    storagePath,
+    fileBuffer,
+  });
+
+  const document = await upsertManagerStatementDocument(adminSupabase, {
+    organizationId: organization.id,
+    landlordClientId: params.input.landlordClientId,
+    documentType: params.documentType,
+    idempotencyKey,
+    dateFrom: params.input.dateFrom,
+    dateTo: params.input.dateTo,
+    documentNumber,
+    storagePath,
+    fileName,
+    generatedByProfileId: params.managerProfileId,
+    metadata: {
+      source: "bopa_manager_statement_generation",
+      document_type: params.documentType,
+      landlord_name: snapshot.landlord.name,
+      manager_company_name: snapshot.organization.name,
+      date_from: params.input.dateFrom,
+      date_to: params.input.dateTo,
+      total_rent_recorded: snapshot.totals.totalRentRecorded,
+      manager_commission: snapshot.totals.managerCommission,
+      amount_due_to_landlord: snapshot.totals.amountDueToLandlord,
+      amount_remitted: snapshot.totals.amountRemitted,
+      balance_due: snapshot.totals.pendingLandlordBalance,
+      powered_by: "BOPA - Boldverse Property App",
+    },
+  });
+
+  return document;
+}
+
+export async function getManagerStatementDocumentDownload(params: {
+  managerProfileId: string;
+  documentType: ManagerStatementDocumentType;
+  input: ManagerStatementDocumentQueryInput;
+}): Promise<ManagerStatementDownload> {
+  const document = await generateManagerStatementDocument(params);
+  const fileBuffer = await downloadPdf(document.storage_path);
+
+  return {
+    fileName: document.file_name,
+    fileBuffer,
+  };
+}
+
+export async function getManagerStatementWhatsAppLink(params: {
+  managerProfileId: string;
+  documentType: ManagerStatementDocumentType;
+  input: ManagerStatementDocumentQueryInput;
+}): Promise<ManagerStatementShareLink> {
+  const organization = await requireManagerStatementAccess(
+    params.managerProfileId,
+  );
+  const adminSupabase = createSupabaseAdminClient();
+
+  const snapshot = await getManagerLandlordStatementSnapshot(adminSupabase, {
+    organizationId: organization.id,
+    landlordClientId: params.input.landlordClientId,
+    dateFrom: params.input.dateFrom,
+    dateTo: params.input.dateTo,
+  });
+
+  if (!snapshot) {
+    throw new AppError(
+      "MANAGER_STATEMENT_NOT_FOUND",
+      "Statement details could not be found.",
+      404,
+    );
+  }
+
+  const document = await generateManagerStatementDocument(params);
+  const signedUrl = await createStatementSignedUrl(document.storage_path);
+  const phoneNumber = normalizeWhatsAppPhone(snapshot.landlord.phone);
+
+  if (!phoneNumber) {
+    throw new AppError(
+      "MANAGER_LANDLORD_PHONE_MISSING",
+      "Landlord phone number is missing.",
+      400,
+    );
+  }
+
+  const label =
+    params.documentType === "landlord_statement"
+      ? "landlord statement"
+      : "remittance summary";
+
+  const message = [
+    `Hello ${snapshot.landlord.name},`,
+    "",
+    `Your ${label} from ${snapshot.organization.name} is ready.`,
+    "",
+    `Document number: ${document.document_number}`,
+    `Amount remitted: ${new Intl.NumberFormat("en-NG", {
+      style: "currency",
+      currency: "NGN",
+      maximumFractionDigits: 0,
+    }).format(snapshot.totals.amountRemitted)}`,
+    `Balance due: ${new Intl.NumberFormat("en-NG", {
+      style: "currency",
+      currency: "NGN",
+      maximumFractionDigits: 0,
+    }).format(snapshot.totals.pendingLandlordBalance)}`,
+    "",
+    `Download document: ${signedUrl}`,
+  ].join("\n");
+
+  return {
+    whatsappUrl: buildWhatsAppUrl({
+      phoneNumber,
+      message,
+    }),
+  };
+}
+
+
+====================================================================================================
+FILE: src\server\validators\manager-statement-documents.schema.ts
+====================================================================================================
+import { z } from "zod";
+
+function emptyStringToNull(value: unknown) {
+  if (typeof value === "string" && value.trim().length === 0) {
+    return null;
+  }
+
+  return value;
+}
+
+const optionalDateSchema = z.preprocess(
+  emptyStringToNull,
+  z.string().trim().date().nullable(),
+);
+
+export const managerStatementDocumentQuerySchema = z.object({
+  landlordClientId: z.string().trim().uuid("Select a valid landlord."),
+  dateFrom: optionalDateSchema,
+  dateTo: optionalDateSchema,
+});
+
+export type ManagerStatementDocumentQueryInput = z.infer<
+  typeof managerStatementDocumentQuerySchema
+>;
+

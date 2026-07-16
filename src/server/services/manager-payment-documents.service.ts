@@ -29,17 +29,19 @@ async function getPaidManagerPaymentRequest(reference: string) {
   return {
     supabase,
     paymentRequest,
+    processedPaymentId: paymentRequest.processed_payment_id,
   };
 }
 
 export async function getManagerReceiptDownloadByPaymentReference(
   reference: string,
 ) {
-  const { paymentRequest } = await getPaidManagerPaymentRequest(reference);
+  const { paymentRequest, processedPaymentId } =
+    await getPaidManagerPaymentRequest(reference);
 
   return getManagerRentReceiptDownloadForPayment({
     organizationId: paymentRequest.organization_id,
-    rentPaymentId: paymentRequest.processed_payment_id,
+    rentPaymentId: processedPaymentId,
     generatedByProfileId: paymentRequest.created_by_profile_id,
   });
 }

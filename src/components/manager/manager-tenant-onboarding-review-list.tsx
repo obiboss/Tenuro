@@ -6,6 +6,7 @@ import {
   approveManagerTenantOnboardingRequestAction,
   rejectManagerTenantOnboardingRequestAction,
   resendManagerFirstRentPaymentLinkAction,
+  resendManagerTenantGuarantorLinkAction,
   resendManagerTenantOnboardingLinkAction,
 } from "@/actions/manager-tenant-onboarding.actions";
 import { initialManagerTenantOnboardingActionState } from "@/actions/manager-tenant-onboarding.state";
@@ -21,6 +22,12 @@ type ManagerTenantOnboardingReviewListProps = {
 };
 
 type ReviewKycDocument = {
+  label: string;
+  path: string | null;
+  signedUrl: string | null;
+};
+
+type ExistingTenantPaymentEvidence = {
   label: string;
   path: string | null;
   signedUrl: string | null;
@@ -172,6 +179,174 @@ function getMetadataText(metadata: Record<string, unknown>, key: string) {
     : null;
 }
 
+function getScreeningLabel(
+  result: ManagerTenantOnboardingRequestRow["tenant_screening_result"],
+) {
+  if (result === "eligible") {
+    return "Meets requirements";
+  }
+
+  if (result === "review") {
+    return "Manager review required";
+  }
+
+  if (result === "declined") {
+    return "Does not meet requirements";
+  }
+
+  return "Not screened";
+}
+
+function getScreeningClassName(
+  result: ManagerTenantOnboardingRequestRow["tenant_screening_result"],
+) {
+  if (result === "eligible") {
+    return "bg-success-soft text-success";
+  }
+
+  if (result === "review") {
+    return "bg-warning-soft text-warning";
+  }
+
+  if (result === "declined") {
+    return "bg-danger-soft text-danger";
+  }
+
+  return "bg-surface text-text-muted";
+}
+
+function formatRequirementAnswer(
+  answer: ManagerTenantOnboardingRequestRow["tenant_requirement_answers"][number],
+) {
+  if (answer.answerType === "yes_no") {
+    return answer.booleanAnswer ? "Yes" : "No";
+  }
+
+  if (answer.answerType === "money") {
+    return formatNaira(answer.numberAnswer);
+  }
+
+  return answer.numberAnswer === null
+    ? "Not provided"
+    : String(answer.numberAnswer);
+}
+
+function ScreeningResultCard({
+  request,
+}: {
+  request: ManagerTenantOnboardingRequestRow;
+}) {
+  if (
+    request.onboarding_type !== "new_incoming_tenant" ||
+    request.tenant_screening_result === "not_screened"
+  ) {
+    return null;
+  }
+
+  return (
+    <section className="rounded-card border border-border-soft bg-white p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-sm font-black text-text-strong">
+            Tenant requirement check
+          </p>
+          <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+            Answers were checked against the requirements saved when this
+            tenant link was created.
+          </p>
+        </div>
+
+        <span
+          className={`w-fit rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${getScreeningClassName(
+            request.tenant_screening_result,
+          )}`}
+        >
+          {getScreeningLabel(request.tenant_screening_result)}
+        </span>
+      </div>
+
+      {request.tenant_requirement_answers.length > 0 ? (
+        <div className="mt-4 divide-y divide-border-soft overflow-hidden rounded-card border border-border-soft">
+          {request.tenant_requirement_answers.map((answer) => (
+            <article
+              key={answer.requirementId}
+              className="bg-surface p-4"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-sm font-black text-text-strong">
+                    {answer.questionText}
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-text-muted">
+                    Answer:{" "}
+                    <span className="font-black text-text-strong">
+                      {formatRequirementAnswer(answer)}
+                    </span>
+                  </p>
+                </div>
+
+                <span
+                  className={
+                    answer.qualifies
+                      ? "w-fit rounded-full bg-success-soft px-3 py-1 text-xs font-black uppercase tracking-wide text-success"
+                      : "w-fit rounded-full bg-danger-soft px-3 py-1 text-xs font-black uppercase tracking-wide text-danger"
+                  }
+                >
+                  {answer.qualifies ? "Meets requirement" : "Does not qualify"}
+                </span>
+              </div>
+
+              {answer.reason ? (
+                <p className="mt-2 text-sm font-semibold leading-6 text-danger">
+                  {answer.reason}
+                </p>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      ) : null}
+
+      {request.tenant_screening_result === "declined" ? (
+        <p className="mt-4 rounded-card bg-danger-soft p-4 text-sm font-semibold leading-6 text-danger">
+          This application was closed and the unit was released because at
+          least one answer was marked as a decline condition.
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function getRequiredGuarantorCount(
+  request: ManagerTenantOnboardingRequestRow,
+) {
+  const requirement = request.tenant_requirements_snapshot.find(
+    (item) =>
+      item.requirementCode === "guarantor_required" &&
+      item.expectedBoolean === true,
+  );
+
+  if (!requirement) {
+    return 0;
+  }
+
+  return requirement.requiredGuarantorCount === 2 ? 2 : 1;
+}
+
+function getGuarantorStatusLabel(status: string) {
+  if (status === "confirmed") return "Confirmed";
+  if (status === "declined") return "Declined";
+  if (status === "cancelled") return "Cancelled";
+  return "Waiting for confirmation";
+}
+
+function getGuarantorStatusClassName(status: string) {
+  if (status === "confirmed") return "bg-success-soft text-success";
+  if (status === "declined" || status === "cancelled") {
+    return "bg-danger-soft text-danger";
+  }
+  return "bg-warning-soft text-warning";
+}
+
 function DetailItem({
   label,
   value,
@@ -234,9 +409,11 @@ function WhatsAppActionCard({
 export function ManagerTenantOnboardingReviewDetail({
   request,
   kycDocuments = [],
+  existingTenantPaymentEvidence = null,
 }: {
   request: ManagerTenantOnboardingRequestRow;
   kycDocuments?: ReviewKycDocument[];
+  existingTenantPaymentEvidence?: ExistingTenantPaymentEvidence | null;
 }) {
   const [showReject, setShowReject] = useState(false);
   const [dismissedToastIds, setDismissedToastIds] = useState<string[]>([]);
@@ -259,6 +436,15 @@ export function ManagerTenantOnboardingReviewDetail({
 
   const [resendState, resendAction, isResendingPayment] = useActionState(
     resendManagerFirstRentPaymentLinkAction,
+    initialManagerTenantOnboardingActionState,
+  );
+
+  const [
+    guarantorLinkState,
+    guarantorLinkAction,
+    isPreparingGuarantorLink,
+  ] = useActionState(
+    resendManagerTenantGuarantorLinkAction,
     initialManagerTenantOnboardingActionState,
   );
 
@@ -341,11 +527,33 @@ export function ManagerTenantOnboardingReviewDetail({
       }
     }
 
+    if (guarantorLinkState.message) {
+      const id = buildToastId({
+        requestId: request.id,
+        action: "guarantor-link",
+        ok: guarantorLinkState.ok,
+        message: guarantorLinkState.message,
+      });
+
+      if (!dismissedToastIds.includes(id)) {
+        nextToasts.push({
+          id,
+          tone: guarantorLinkState.ok ? "success" : "error",
+          title: guarantorLinkState.ok
+            ? "Guarantor link ready"
+            : "Could not prepare guarantor link",
+          description: guarantorLinkState.message,
+        });
+      }
+    }
+
     return nextToasts;
   }, [
     approveState.message,
     approveState.ok,
     dismissedToastIds,
+    guarantorLinkState.message,
+    guarantorLinkState.ok,
     rejectState.message,
     rejectState.ok,
     request.id,
@@ -362,6 +570,17 @@ export function ManagerTenantOnboardingReviewDetail({
   }
 
   const canReview = request.status === "submitted";
+  const requiredGuarantorCount = getRequiredGuarantorCount(request);
+  const guarantors = (request.manager_tenant_guarantors ?? [])
+    .filter((guarantor) => guarantor.status !== "cancelled")
+    .sort((first, second) => first.position - second.position);
+  const confirmedGuarantorCount = guarantors.filter(
+    (guarantor) => guarantor.status === "confirmed",
+  ).length;
+  const guarantorsReady =
+    requiredGuarantorCount === 0 ||
+    (guarantors.length === requiredGuarantorCount &&
+      confirmedGuarantorCount === requiredGuarantorCount);
   const canResendTenantLink = request.status === "pending";
   const canResendPayment =
     request.onboarding_type === "new_incoming_tenant" &&
@@ -535,6 +754,8 @@ export function ManagerTenantOnboardingReviewDetail({
             />
           ) : null}
 
+          <ScreeningResultCard request={request} />
+
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <DetailItem label="Full name" value={request.tenant_full_name} />
             <DetailItem label="Phone" value={request.tenant_phone_number} />
@@ -564,6 +785,152 @@ export function ManagerTenantOnboardingReviewDetail({
               <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
                 {request.tenant_notes}
               </p>
+            </div>
+          ) : null}
+
+          {request.onboarding_type === "current_occupant" &&
+          request.existing_tenant_last_payment_amount ? (
+            <div className="rounded-card border border-border-soft bg-white p-4">
+              <p className="text-sm font-black text-text-strong">
+                Last payment evidence
+              </p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                <DetailItem
+                  label="Amount last paid"
+                  value={formatNaira(
+                    request.existing_tenant_last_payment_amount,
+                  )}
+                />
+                <DetailItem
+                  label="Payment date"
+                  value={formatDate(
+                    request.existing_tenant_last_payment_date,
+                  )}
+                />
+                <DetailItem
+                  label="Receipt file"
+                  value={
+                    request.existing_tenant_last_payment_receipt_file_name ??
+                    "Uploaded receipt"
+                  }
+                />
+              </div>
+
+              {existingTenantPaymentEvidence?.signedUrl ? (
+                <Link
+                  href={existingTenantPaymentEvidence.signedUrl}
+                  target="_blank"
+                  className="mt-3 inline-flex min-h-10 items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+                >
+                  View receipt
+                </Link>
+              ) : null}
+            </div>
+          ) : null}
+
+          {requiredGuarantorCount > 0 ? (
+            <div className="rounded-card border border-border-soft bg-white p-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-sm font-black text-text-strong">
+                    Guarantors
+                  </p>
+                  <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                    {confirmedGuarantorCount} of {requiredGuarantorCount} confirmed.
+                  </p>
+                </div>
+                <span
+                  className={
+                    guarantorsReady
+                      ? "w-fit rounded-full bg-success-soft px-3 py-1 text-xs font-black uppercase tracking-wide text-success"
+                      : "w-fit rounded-full bg-warning-soft px-3 py-1 text-xs font-black uppercase tracking-wide text-warning"
+                  }
+                >
+                  {guarantorsReady ? "Ready" : "Confirmation pending"}
+                </span>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {guarantors.map((guarantor) => {
+                  const preparedLink =
+                    guarantorLinkState.guarantorId === guarantor.id
+                      ? guarantorLinkState.guarantorLinks?.[0]
+                      : null;
+
+                  return (
+                    <article
+                      key={guarantor.id}
+                      className="rounded-card bg-surface p-4"
+                    >
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <p className="font-black text-text-strong">
+                            {guarantor.full_name}
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-text-muted">
+                            {guarantor.relationship_to_tenant} · {guarantor.phone_number}
+                          </p>
+                        </div>
+                        <span
+                          className={`w-fit rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${getGuarantorStatusClassName(
+                            guarantor.status,
+                          )}`}
+                        >
+                          {getGuarantorStatusLabel(guarantor.status)}
+                        </span>
+                      </div>
+
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                        <DetailItem label="Email" value={guarantor.email} />
+                        <DetailItem label="Occupation" value={guarantor.occupation} />
+                        <DetailItem
+                          label="Employer / business"
+                          value={guarantor.employer_or_business}
+                        />
+                        <DetailItem
+                          label="Residential address"
+                          value={guarantor.residential_address}
+                        />
+                        <DetailItem
+                          label="Means of ID"
+                          value={getIdTypeLabel(guarantor.id_type)}
+                        />
+                        <DetailItem
+                          label="ID number"
+                          value={guarantor.id_number}
+                        />
+                      </div>
+
+                      {preparedLink?.whatsappMessage ? (
+                        <WhatsAppActionCard
+                          title="Guarantor link ready"
+                          description="Send this private confirmation link to the guarantor."
+                          phoneNumber={preparedLink.phoneNumber}
+                          message={preparedLink.whatsappMessage}
+                        />
+                      ) : guarantor.status === "pending_confirmation" ? (
+                        <form action={guarantorLinkAction} className="mt-3">
+                          <input
+                            type="hidden"
+                            name="guarantorId"
+                            value={guarantor.id}
+                          />
+                          <Button
+                            type="submit"
+                            variant="secondary"
+                            isLoading={
+                              isPreparingGuarantorLink &&
+                              guarantorLinkState.guarantorId === guarantor.id
+                            }
+                          >
+                            Prepare confirmation link
+                          </Button>
+                        </form>
+                      ) : null}
+                    </article>
+                  );
+                })}
+              </div>
             </div>
           ) : null}
 
@@ -621,6 +988,17 @@ export function ManagerTenantOnboardingReviewDetail({
               </p>
               <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
                 Waiting for the tenant to review and accept the agreement.
+              </p>
+            </div>
+          ) : null}
+
+          {canReview && !guarantorsReady ? (
+            <div className="rounded-card bg-warning-soft p-4">
+              <p className="text-sm font-black text-text-strong">
+                Guarantor confirmation is still pending
+              </p>
+              <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                The tenant cannot be approved until every required guarantor confirms their details and responsibility.
               </p>
             </div>
           ) : null}
@@ -691,7 +1069,12 @@ export function ManagerTenantOnboardingReviewDetail({
                   </div>
                 </details>
 
-                <Button type="submit" isLoading={isApproving} fullWidth>
+                <Button
+                  type="submit"
+                  isLoading={isApproving}
+                  disabled={!guarantorsReady}
+                  fullWidth
+                >
                   {request.onboarding_type === "new_incoming_tenant"
                     ? "Approve and Create Agreement Link"
                     : "Approve Current Occupant"}
@@ -790,8 +1173,11 @@ export function ManagerTenantOnboardingReviewList({
   requests,
   initialSelectedRequestId = null,
 }: ManagerTenantOnboardingReviewListProps) {
-  const activeRequests = requests.filter((request) =>
-    ACTIVE_REVIEW_STATUSES.has(request.status),
+  const activeRequests = requests.filter(
+    (request) =>
+      ACTIVE_REVIEW_STATUSES.has(request.status) ||
+      (request.status === "rejected" &&
+        request.tenant_screening_result === "declined"),
   );
 
   const initialSelectedActiveRequestId =
@@ -805,13 +1191,6 @@ export function ManagerTenantOnboardingReviewList({
   );
   const detailRef = useRef<HTMLDivElement | null>(null);
   const shouldScrollToDetailRef = useRef(false);
-
-  useEffect(() => {
-    if (initialSelectedActiveRequestId) {
-      setSelectedRequestId(initialSelectedActiveRequestId);
-    }
-  }, [initialSelectedActiveRequestId]);
-
   useEffect(() => {
     if (!selectedRequestId || !shouldScrollToDetailRef.current) {
       return;

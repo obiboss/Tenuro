@@ -39,6 +39,16 @@ function toActionError(error: unknown): ManagerActionState {
   };
 }
 
+function parseJsonArray(value: FormDataEntryValue | null) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return [];
+  }
+
+  const parsed = JSON.parse(value) as unknown;
+
+  return Array.isArray(parsed) ? parsed : [];
+}
+
 function getOwnerMode(formData: FormData) {
   return formData.get("ownerMode") === "new" ? "new" : "existing";
 }
@@ -166,6 +176,8 @@ export async function createManagerPropertyAction(
       paystackChargeBearer: formData.get("paystackChargeBearer"),
       paymentReceiver: formData.get("paymentReceiver"),
       hasExistingTenants: formData.get("hasExistingTenants"),
+      serviceCharges: parseJsonArray(formData.get("serviceChargesJson")),
+      propertyRules: parseJsonArray(formData.get("propertyRulesJson")),
       notes: formData.get("notes"),
     });
 

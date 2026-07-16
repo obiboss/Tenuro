@@ -6,7 +6,10 @@ import {
 } from "@/server/repositories/manager.repository";
 import { getManagerTenantOnboardingRequestById } from "@/server/repositories/manager-tenant-onboarding.repository";
 import { requireManager } from "@/server/services/auth.service";
-import { createTenantKycDocumentLinks } from "@/server/services/storage.service";
+import {
+  createExistingTenantPaymentEvidenceLink,
+  createTenantKycDocumentLinks,
+} from "@/server/services/storage.service";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 
 type ManagerTenantReviewPageProps = {
@@ -59,6 +62,11 @@ export default async function ManagerTenantReviewPage({
       getMetadataText(request.metadata, "guarantorIdDocumentPath"),
   });
   const kycDocumentList = Object.values(kycDocuments);
+  const existingTenantPaymentEvidence =
+    await createExistingTenantPaymentEvidenceLink({
+      path: request.existing_tenant_last_payment_receipt_path,
+      fileName: request.existing_tenant_last_payment_receipt_file_name,
+    });
 
   return (
     <div className="mx-auto max-w-5xl space-y-5">
@@ -93,6 +101,7 @@ export default async function ManagerTenantReviewPage({
       <ManagerTenantOnboardingReviewDetail
         request={request}
         kycDocuments={kycDocumentList}
+        existingTenantPaymentEvidence={existingTenantPaymentEvidence}
       />
     </div>
   );
