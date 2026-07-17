@@ -1,6 +1,5 @@
 import Dexie, {
   type EntityTable,
-  type Table,
 } from "dexie";
 import type {
   OfflineConflictRecord,
@@ -140,7 +139,10 @@ export async function openOfflineDatabase() {
 export function getOfflineEntityTable(
   db: BopaOfflineDatabase,
   entityType: OfflineEntityRecord["entityType"],
-): Table<OfflineEntityRecord, string> {
+): EntityTable<
+  OfflineEntityRecord,
+  "localKey"
+> {
   switch (entityType) {
     case "manager_property":
       return db.managerProperties;
