@@ -1,11 +1,10 @@
 import Link from "next/link";
 import {
   Building2,
-  CheckCircle2,
+  ChevronRight,
+  Clock3,
   CreditCard,
-  Map,
-  ShoppingBag,
-  Users,
+  MapPin,
 } from "lucide-react";
 import { DeveloperDocumentTemplateForm } from "@/components/developer/developer-document-template-form";
 import { DeveloperPayoutSetupForm } from "@/components/developer/developer-payout-setup-form";
@@ -35,9 +34,34 @@ type DashboardMetric = {
   estates: number;
   plots: number;
   availablePlots: number;
-  reservedPlots: number;
   activeSales: number;
-  buyers: number;
+};
+
+type DashboardAttentionItem = {
+  id: string;
+  kind: "payment" | "reservation" | "estate";
+  title: string;
+  description: string;
+  href: string;
+};
+
+type DashboardData = {
+  metrics: DashboardMetric;
+  attentionItems: DashboardAttentionItem[];
+};
+
+type DashboardEstateRow = {
+  id: string;
+  estate_name: string;
+  status: string;
+};
+
+type DashboardPurchaseLinkRow = {
+  id: string;
+  estate_id: string;
+  plot_id: string;
+  status: string;
+  expires_at: string | null;
 };
 
 function getSingleSearchParam(
@@ -134,61 +158,313 @@ async function getExactCount(
   return result.count ?? 0;
 }
 
-async function getDashboardMetrics(params: {
+function pluralize(
+  count: number,
+  singular: string,
+  plural = `${singular}s`,
+) {
+  return count === 1 ? singular : plural;
+}
+
+function formatEstateNames(
+  estateIds: string[],
+  estateNameById: Map<string, string>,
+) {
+  const names = Array.from(
+    new Set(
+      estateIds
+        .map((estateId) => estateNameById.get(estateId))
+        .filter((name): name is string => Boolean(name)),
+    ),
+  );
+
+  if (names.length === 0) {
+    return "Across your estates";
+  }
+
+  if (names.length === 1) {
+    return `At ${names[0]}`;
+  }
+
+  if (names.length === 2) {
+    return `Across ${names[0]} and ${names[1]}`;
+  }
+
+  return `Across ${names[0]}, ${names[1]}, and other estates`;
+}
+
+function getReservationExpiryCopy(
+  purchaseLinks: DashboardPurchaseLinkRow[],
+) {
+  const futureExpiryTimes = purchaseLinks
+    .map((link) =>
+      link.expires_at
+        ? new Date(link.expires_at).getTime()
+        : Number.NaN,
+    )
+    .filter(
+      (value) =>
+        Number.isFinite(value) && value > Date.now(),
+    )
+    .sort((first, second) => first - second);
+
+  const nextExpiry = futureExpiryTimes[0];
+
+  if (!nextExpiry) {
+    return "Review the plots awaiting buyer confirmation.";
+  }
+
+  const hoursRemaining = Math.max(
+    1,
+    Math.ceil(
+      (nextExpiry - Date.now()) / (60 * 60 * 1000),
+    ),
+  );
+
+  if (hoursRemaining <= 48) {
+    return `The next reservation expires in ${hoursRemaining} ${pluralize(
+      hoursRemaining,
+      "hour",
+    )}.`;
+  }
+
+  const daysRemaining = Math.ceil(hoursRemaining / 24);
+
+  return `The next reservation expires in ${daysRemaining} ${pluralize(
+    daysRemaining,
+    "day",
+  )}.`;
+}
+
+async function getDashboardData(params: {
   developerAccountId: string;
-}): Promise<DashboardMetric> {
+}): Promise<DashboardData> {
   const supabase = createSupabaseAdminClient();
+  const now = new Date().toISOString();
 
-  const [estates, plots, availablePlots, reservedPlots, activeSales, buyers] =
-    await Promise.all([
-      getExactCount(
-        supabase
-          .from("developer_estates")
-          .select("id", { count: "exact", head: true })
-          .eq("developer_account_id", params.developerAccountId),
-      ),
-      getExactCount(
-        supabase
-          .from("developer_plots")
-          .select("id", { count: "exact", head: true })
-          .eq("developer_account_id", params.developerAccountId),
-      ),
-      getExactCount(
-        supabase
-          .from("developer_plots")
-          .select("id", { count: "exact", head: true })
-          .eq("developer_account_id", params.developerAccountId)
-          .eq("status", "available"),
-      ),
-      getExactCount(
-        supabase
-          .from("developer_plots")
-          .select("id", { count: "exact", head: true })
-          .eq("developer_account_id", params.developerAccountId)
-          .eq("status", "reserved"),
-      ),
-      getExactCount(
-        supabase
-          .from("developer_sales")
-          .select("id", { count: "exact", head: true })
-          .eq("developer_account_id", params.developerAccountId)
-          .eq("status", "active"),
-      ),
-      getExactCount(
-        supabase
-          .from("developer_buyers")
-          .select("id", { count: "exact", head: true })
-          .eq("developer_account_id", params.developerAccountId),
-      ),
-    ]);
-
-  return {
+  const [
     estates,
     plots,
     availablePlots,
     reservedPlots,
     activeSales,
-    buyers,
+    estatesResult,
+    pendingPaymentResult,
+    activeReservationResult,
+  ] = await Promise.all([
+    getExactCount(
+      supabase
+        .from("developer_estates")
+        .select("id", { count: "exact", head: true })
+        .eq(
+          "developer_account_id",
+          params.developerAccountId,
+        ),
+    ),
+    getExactCount(
+      supabase
+        .from("developer_plots")
+        .select("id", { count: "exact", head: true })
+        .eq(
+          "developer_account_id",
+          params.developerAccountId,
+        ),
+    ),
+    getExactCount(
+      supabase
+        .from("developer_plots")
+        .select("id", { count: "exact", head: true })
+        .eq(
+          "developer_account_id",
+          params.developerAccountId,
+        )
+        .eq("status", "available"),
+    ),
+    getExactCount(
+      supabase
+        .from("developer_plots")
+        .select("id", { count: "exact", head: true })
+        .eq(
+          "developer_account_id",
+          params.developerAccountId,
+        )
+        .eq("status", "reserved"),
+    ),
+    getExactCount(
+      supabase
+        .from("developer_sales")
+        .select("id", { count: "exact", head: true })
+        .eq(
+          "developer_account_id",
+          params.developerAccountId,
+        )
+        .eq("status", "active"),
+    ),
+    supabase
+      .from("developer_estates")
+      .select("id, estate_name, status")
+      .eq(
+        "developer_account_id",
+        params.developerAccountId,
+      )
+      .neq("status", "archived")
+      .order("created_at", { ascending: false })
+      .limit(200)
+      .returns<DashboardEstateRow[]>(),
+    supabase
+      .from("developer_buyer_purchase_links")
+      .select("id, estate_id, plot_id, status, expires_at", {
+        count: "exact",
+      })
+      .eq(
+        "developer_account_id",
+        params.developerAccountId,
+      )
+      .eq("status", "payment_started")
+      .gt("expires_at", now)
+      .order("created_at", { ascending: false })
+      .limit(100)
+      .returns<DashboardPurchaseLinkRow[]>(),
+    supabase
+      .from("developer_buyer_purchase_links")
+      .select("id, estate_id, plot_id, status, expires_at")
+      .eq(
+        "developer_account_id",
+        params.developerAccountId,
+      )
+      .in("status", [
+        "pending",
+        "details_submitted",
+        "payment_started",
+      ])
+      .gt("expires_at", now)
+      .order("expires_at", { ascending: true })
+      .limit(200)
+      .returns<DashboardPurchaseLinkRow[]>(),
+  ]);
+
+  if (estatesResult.error) {
+    throw estatesResult.error;
+  }
+
+  if (pendingPaymentResult.error) {
+    throw pendingPaymentResult.error;
+  }
+
+  if (activeReservationResult.error) {
+    throw activeReservationResult.error;
+  }
+
+  const estateRows = estatesResult.data ?? [];
+  const pendingPaymentLinks =
+    pendingPaymentResult.data ?? [];
+  const activeReservationLinks =
+    activeReservationResult.data ?? [];
+  const pendingPaymentCount =
+    pendingPaymentResult.count ??
+    pendingPaymentLinks.length;
+
+  const estateNameById = new Map(
+    estateRows.map((estate) => [
+      estate.id,
+      estate.estate_name,
+    ]),
+  );
+
+  const attentionItems: DashboardAttentionItem[] = [];
+
+  if (estates === 0) {
+    attentionItems.push({
+      id: "create-first-estate",
+      kind: "estate",
+      title: "Create your first estate",
+      description:
+        "Add the estate details and generate its plot inventory.",
+      href: "/developer/estates/new",
+    });
+  }
+
+  if (pendingPaymentCount > 0) {
+    attentionItems.push({
+      id: "pending-first-payments",
+      kind: "payment",
+      title: `${pendingPaymentCount} ${pluralize(
+        pendingPaymentCount,
+        "buyer",
+      )} ${pluralize(
+        pendingPaymentCount,
+        "has",
+        "have",
+      )} a pending first payment`,
+      description: formatEstateNames(
+        pendingPaymentLinks.map(
+          (link) => link.estate_id,
+        ),
+        estateNameById,
+      ),
+      href: "/developer/sales",
+    });
+  }
+
+  if (reservedPlots > 0) {
+    attentionItems.push({
+      id: "reserved-plots",
+      kind: "reservation",
+      title: `${reservedPlots} ${pluralize(
+        reservedPlots,
+        "plot",
+      )} reserved, awaiting confirmation`,
+      description: getReservationExpiryCopy(
+        activeReservationLinks,
+      ),
+      href: "/developer/estates",
+    });
+  }
+
+  const planningEstateCandidates = estateRows
+    .filter((estate) => estate.status === "planning")
+    .slice(0, 12);
+
+  const planningEstatePlotCounts = await Promise.all(
+    planningEstateCandidates.map(async (estate) => ({
+      estate,
+      plotCount: await getExactCount(
+        supabase
+          .from("developer_plots")
+          .select("id", { count: "exact", head: true })
+          .eq(
+            "developer_account_id",
+            params.developerAccountId,
+          )
+          .eq("estate_id", estate.id),
+      ),
+    })),
+  );
+
+  const planningEstatesWithoutPlots =
+    planningEstatePlotCounts
+      .filter((item) => item.plotCount === 0)
+      .map((item) => item.estate)
+      .slice(0, 3);
+
+  for (const estate of planningEstatesWithoutPlots) {
+    attentionItems.push({
+      id: `planning-estate-${estate.id}`,
+      kind: "estate",
+      title: `${estate.estate_name} is still in planning`,
+      description: "No plots have been generated yet.",
+      href: `/developer/estates/${estate.id}`,
+    });
+  }
+
+  return {
+    metrics: {
+      estates,
+      plots,
+      availablePlots,
+      activeSales,
+    },
+    attentionItems,
   };
 }
 
@@ -283,22 +559,34 @@ export default async function DeveloperDashboardPage({
   const isSettingsSection = activeSection === "settings";
   const payoutCopy = getPayoutCopy(payoutState.state);
 
-  const [banks, documentSettings, metrics] = await Promise.all([
+  const [banks, documentSettings, dashboardData] = await Promise.all([
     shouldShowBankForm ? getPaystackBanksForDeveloperSetup() : [],
     isSettingsSection
       ? getDeveloperDocumentTemplateSettingsForCurrentDeveloper()
       : null,
     account
-      ? getDashboardMetrics({ developerAccountId: account.id })
+      ? getDashboardData({ developerAccountId: account.id })
       : Promise.resolve({
-          estates: 0,
-          plots: 0,
-          availablePlots: 0,
-          reservedPlots: 0,
-          activeSales: 0,
-          buyers: 0,
+          metrics: {
+            estates: 0,
+            plots: 0,
+            availablePlots: 0,
+            activeSales: 0,
+          },
+          attentionItems: [
+            {
+              id: "create-first-estate",
+              kind: "estate" as const,
+              title: "Create your first estate",
+              description:
+                "Add the estate details and generate its plot inventory.",
+              href: "/developer/estates/new",
+            },
+          ],
         }),
   ]);
+
+  const { metrics, attentionItems } = dashboardData;
 
   if (isSettingsSection) {
     return (
@@ -430,6 +718,12 @@ export default async function DeveloperDashboardPage({
     );
   }
 
+  const attentionIconByKind = {
+    payment: CreditCard,
+    reservation: Clock3,
+    estate: Building2,
+  } as const;
+
   return (
     <div className="space-y-7">
       <PageHeader
@@ -437,266 +731,157 @@ export default async function DeveloperDashboardPage({
         description="Track your estates, plots, buyers, and active sales from one real estate workspace."
       />
 
-      <section className="overflow-hidden rounded-card border border-border-soft bg-white shadow-card">
-        <div className="grid gap-0 lg:grid-cols-[1.25fr_0.75fr]">
-          <div className="p-5 sm:p-7">
-            <p className="text-sm font-black uppercase tracking-wide text-primary">
-              Estate sales workspace
-            </p>
-            <h1 className="mt-2 text-2xl font-black tracking-tight text-text-strong sm:text-3xl">
-              {account?.company_name ?? "Your real estate portfolio"}
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm font-semibold leading-6 text-text-muted">
-              Manage estates, organize plot inventory, track buyer activity, and
-              keep every sale record connected.
-            </p>
-
-            <div className="mt-5 flex flex-wrap gap-3">
-              <Link
-                href="/developer/estates"
-                className="inline-flex min-h-11 items-center justify-center rounded-button bg-primary px-5 py-2.5 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary-hover"
-              >
-                Manage estates
-              </Link>
-
-              <Link
-                href="/developer/sales"
-                className="inline-flex min-h-11 items-center justify-center rounded-button bg-surface px-5 py-2.5 text-sm font-extrabold text-text-strong shadow-soft ring-1 ring-border-soft transition hover:bg-primary-soft hover:text-primary"
-              >
-                View sales
-              </Link>
-            </div>
-          </div>
-
-          <div className="border-t border-border-soft bg-primary-soft p-5 sm:p-7 lg:border-l lg:border-t-0">
-            <p className="text-sm font-black text-text-strong">
-              Portfolio readiness
-            </p>
-
-            <div className="mt-4 space-y-3">
-              {[
-                {
-                  label: `${metrics.estates} estate${metrics.estates === 1 ? "" : "s"} created`,
-                  ready: metrics.estates > 0,
-                },
-                {
-                  label: `${metrics.plots} plot${metrics.plots === 1 ? "" : "s"} recorded`,
-                  ready: metrics.plots > 0,
-                },
-                {
-                  label:
-                    payoutState.state === "verified"
-                      ? "Buyer payment links ready"
-                      : "Bank approval needed for buyer payment links",
-                  ready: payoutState.state === "verified",
-                },
-              ].map((item) => (
-                <div key={item.label} className="flex items-start gap-3">
-                  <div
-                    className={
-                      item.ready
-                        ? "flex size-7 shrink-0 items-center justify-center rounded-full bg-success text-white"
-                        : "flex size-7 shrink-0 items-center justify-center rounded-full bg-white text-warning"
-                    }
-                  >
-                    <CheckCircle2
-                      aria-hidden="true"
-                      size={17}
-                      strokeWidth={2.8}
-                    />
-                  </div>
-
-                  <p className="pt-1 text-sm font-bold leading-6 text-text-strong">
-                    {item.label}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Card>
-          <CardHeader>
+          <CardHeader className="mb-2">
             <CardTitle>Estates</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-black text-text-strong">
               {metrics.estates}
             </p>
-            <p className="mt-2 text-sm font-semibold text-text-muted">
-              Estate projects in your workspace.
-            </p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="mb-2">
             <CardTitle>Total plots</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-black text-text-strong">
               {metrics.plots}
             </p>
-            <p className="mt-2 text-sm font-semibold text-text-muted">
-              Plots created across all estates.
-            </p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="mb-2">
             <CardTitle>Available plots</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-black text-text-strong">
+            <p className="text-3xl font-black text-success">
               {metrics.availablePlots}
-            </p>
-            <p className="mt-2 text-sm font-semibold text-text-muted">
-              Plots still open for buyers.
             </p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="mb-2">
             <CardTitle>Active sales</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-black text-text-strong">
+            <p className="text-3xl font-black text-primary">
               {metrics.activeSales}
-            </p>
-            <p className="mt-2 text-sm font-semibold text-text-muted">
-              Buyer sales currently in progress.
             </p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
-        <SectionCard
-          title="Sales activity"
-          description="A quick view of where buyer activity stands across your portfolio."
-        >
-          <div className="grid gap-3 sm:grid-cols-3">
-            {[
-              {
-                label: "Reserved plots",
-                value: metrics.reservedPlots,
-                icon: Map,
-              },
-              {
-                label: "Buyers",
-                value: metrics.buyers,
-                icon: Users,
-              },
-              {
-                label: "Active sales",
-                value: metrics.activeSales,
-                icon: ShoppingBag,
-              },
-            ].map((item) => {
-              const Icon = item.icon;
+      <section className="overflow-hidden rounded-card border border-border-soft bg-white shadow-card">
+        <div className="border-b border-border-soft p-5 sm:p-6">
+          <h2 className="text-lg font-black tracking-tight text-text-strong">
+            Needs your attention
+          </h2>
+          <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+            Items across your portfolio that are waiting on you.
+          </p>
+        </div>
+
+        {attentionItems.length > 0 ? (
+          <div className="divide-y divide-border-soft">
+            {attentionItems.map((item) => {
+              const Icon = attentionIconByKind[item.kind];
 
               return (
-                <div
-                  key={item.label}
-                  className="rounded-card border border-border-soft bg-background p-4"
+                <Link
+                  key={item.id}
+                  href={item.href}
+                  className="group flex items-center gap-4 px-5 py-4 transition hover:bg-primary-soft/50 sm:px-6"
                 >
-                  <div className="flex size-10 items-center justify-center rounded-2xl bg-white text-primary shadow-soft">
-                    <Icon aria-hidden="true" size={21} strokeWidth={2.6} />
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+                    <Icon
+                      aria-hidden="true"
+                      size={21}
+                      strokeWidth={2.6}
+                    />
                   </div>
 
-                  <p className="mt-4 text-2xl font-black text-text-strong">
-                    {item.value}
-                  </p>
-                  <p className="mt-1 text-sm font-semibold text-text-muted">
-                    {item.label}
-                  </p>
-                </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-black text-text-strong">
+                      {item.title}
+                    </p>
+                    <p className="mt-1 text-sm font-semibold leading-5 text-text-muted">
+                      {item.description}
+                    </p>
+                  </div>
+
+                  <ChevronRight
+                    aria-hidden="true"
+                    size={20}
+                    strokeWidth={2.6}
+                    className="shrink-0 text-text-muted transition group-hover:translate-x-0.5 group-hover:text-primary"
+                  />
+                </Link>
               );
             })}
           </div>
-        </SectionCard>
-
-        <section className="rounded-card border border-border-soft bg-white p-5 shadow-card">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-start gap-4">
-              <div
-                className={`flex size-11 shrink-0 items-center justify-center rounded-2xl ${payoutCopy.iconTone}`}
-              >
-                <CreditCard aria-hidden="true" size={22} strokeWidth={2.6} />
-              </div>
-
-              <div>
-                <h2 className="font-black text-text-strong">
-                  {payoutCopy.title}
-                </h2>
-                <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
-                  {payoutCopy.description}
-                </p>
-              </div>
+        ) : (
+          <div className="flex items-start gap-4 p-5 sm:p-6">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-success-soft text-success">
+              <MapPin
+                aria-hidden="true"
+                size={21}
+                strokeWidth={2.6}
+              />
             </div>
 
-            <Badge tone={payoutCopy.badgeTone}>{payoutCopy.badge}</Badge>
+            <div>
+              <p className="font-black text-text-strong">
+                Nothing needs your attention right now
+              </p>
+              <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                New buyer, reservation, and estate tasks will appear here.
+              </p>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="flex flex-col gap-4 rounded-card border border-border-soft bg-white p-5 shadow-card sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="flex min-w-0 items-start gap-4">
+          <div
+            className={`flex size-11 shrink-0 items-center justify-center rounded-2xl ${payoutCopy.iconTone}`}
+          >
+            <CreditCard
+              aria-hidden="true"
+              size={22}
+              strokeWidth={2.6}
+            />
           </div>
 
-          <Link
-            href="/developer?section=settings#payout-account"
-            className="mt-5 inline-flex min-h-11 w-full items-center justify-center rounded-button bg-primary px-5 py-2.5 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary-hover"
-          >
-            {payoutCopy.actionLabel}
-          </Link>
-        </section>
-      </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="font-black text-text-strong">
+                {payoutCopy.title}
+              </h2>
+              <Badge tone={payoutCopy.badgeTone}>
+                {payoutCopy.badge}
+              </Badge>
+            </div>
 
-      <SectionCard
-        title="Quick actions"
-        description="Jump into the main areas of your real estate sales workflow."
-      >
-        <div className="grid gap-3 md:grid-cols-3">
-          {[
-            {
-              title: "Estates",
-              description: "Create estates and organize plot inventory.",
-              href: "/developer/estates",
-              icon: Building2,
-            },
-            {
-              title: "Buyers",
-              description: "Review buyers connected to your sales.",
-              href: "/developer/buyers",
-              icon: Users,
-            },
-            {
-              title: "Bank account",
-              description: "Add or review your payment account.",
-              href: "/developer?section=settings#payout-account",
-              icon: CreditCard,
-            },
-          ].map((item) => {
-            const Icon = item.icon;
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="rounded-card border border-border-soft bg-background p-4 transition hover:border-primary/40 hover:bg-primary-soft"
-              >
-                <div className="flex size-10 items-center justify-center rounded-2xl bg-white text-primary shadow-soft">
-                  <Icon aria-hidden="true" size={21} strokeWidth={2.6} />
-                </div>
-
-                <p className="mt-4 font-black text-text-strong">{item.title}</p>
-                <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-                  {item.description}
-                </p>
-              </Link>
-            );
-          })}
+            <p className="mt-1 max-w-3xl text-sm font-semibold leading-6 text-text-muted">
+              {payoutCopy.description}
+            </p>
+          </div>
         </div>
-      </SectionCard>
+
+        <Link
+          href="/developer?section=settings#payout-account"
+          className="inline-flex min-h-11 shrink-0 items-center justify-center self-start rounded-button border border-border-soft bg-white px-5 py-2.5 text-sm font-extrabold text-text-strong transition hover:bg-primary-soft hover:text-primary sm:self-auto"
+        >
+          {payoutCopy.actionLabel}
+        </Link>
+      </section>
     </div>
   );
 }

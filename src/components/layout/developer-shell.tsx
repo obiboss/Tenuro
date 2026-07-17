@@ -257,9 +257,6 @@ export function DeveloperShell({
                   <p className="text-sm font-extrabold text-text-strong">
                     {companyName ?? "Developer account"}
                   </p>
-                  <p className="text-xs font-semibold text-text-muted">
-                    Estate sales workspace
-                  </p>
                 </div>
 
                 <Badge tone="primary">Developer</Badge>

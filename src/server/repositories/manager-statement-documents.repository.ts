@@ -720,8 +720,7 @@ export async function getManagerLandlordStatementSnapshot(
     return null;
   }
 
-  const names = await getRelatedNames({
-    supabase,
+  const names = await getRelatedNames(supabase, {
     organizationId: params.organizationId,
     paymentRows,
   });
@@ -908,8 +907,7 @@ export async function getManagerPropertyReportSnapshot(
   const propertyName =
     readText(property, "property_name") ?? "Property";
 
-  const paymentNames = await getRelatedNames({
-    supabase,
+  const paymentNames = await getRelatedNames(supabase, {
     organizationId: params.organizationId,
     paymentRows,
   });
