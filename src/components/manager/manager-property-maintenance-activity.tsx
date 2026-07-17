@@ -21,7 +21,11 @@ function formatMoney(amount: number) {
     style: "currency",
     currency: "NGN",
     maximumFractionDigits: 0,
-  }).format(Number.isFinite(Number(amount)) ? Number(amount) : 0);
+  }).format(
+    Number.isFinite(Number(amount))
+      ? Number(amount)
+      : 0,
+  );
 }
 
 function formatDate(value: string | null) {
@@ -85,13 +89,20 @@ export function ManagerPropertyMaintenanceActivity({
   maintenanceRequests,
 }: Props) {
   const unitLabelById = new Map(
-    units.map((unit) => [unit.id, unit.unit_label]),
+    units.map((unit) => [
+      unit.id,
+      unit.unit_label,
+    ]),
   );
   const tenantNameById = new Map(
-    tenants.map((tenant) => [tenant.id, tenant.full_name]),
+    tenants.map((tenant) => [
+      tenant.id,
+      tenant.full_name,
+    ]),
   );
 
-  const openRequests = maintenanceRequests.filter(isOpenRequest);
+  const openRequests =
+    maintenanceRequests.filter(isOpenRequest);
   const urgentRequests = openRequests.filter(
     (request) =>
       request.priority === "urgent" ||
@@ -99,20 +110,22 @@ export function ManagerPropertyMaintenanceActivity({
   );
   const expectedOpenCost = openRequests.reduce(
     (total, request) =>
-      total + Number(request.estimated_cost || 0),
+      total +
+      Number(request.estimated_cost || 0),
     0,
   );
-  const recentRequests = maintenanceRequests.slice(0, 5);
+  const recentRequests =
+    maintenanceRequests.slice(0, 5);
 
   return (
     <section className="rounded-card border border-border-soft bg-white shadow-sm">
       <div className="flex flex-col gap-3 border-b border-border-soft p-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-lg font-black tracking-tight text-text-strong">
-            Maintenance activity
+            Maintenance
           </h2>
           <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-            Recent property issues and expected repair costs.
+            Property issues and expected repair costs.
           </p>
         </div>
 
@@ -125,40 +138,48 @@ export function ManagerPropertyMaintenanceActivity({
         </Link>
       </div>
 
-      <div className="grid border-b border-border-soft sm:grid-cols-3 sm:divide-x sm:divide-border-soft">
-        <div className="p-4">
-          <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-            Open issues
-          </p>
-          <p className="mt-1 text-xl font-black text-text-strong">
-            {openRequests.length}
-          </p>
-        </div>
+      {openRequests.length > 0 ? (
+        <div className="grid border-b border-border-soft sm:grid-cols-3 sm:divide-x sm:divide-border-soft">
+          <div className="p-4">
+            <p className="text-xs font-black uppercase tracking-wide text-text-muted">
+              Open issues
+            </p>
+            <p className="mt-1 text-xl font-black text-text-strong">
+              {openRequests.length}
+            </p>
+          </div>
 
-        <div className="border-t border-border-soft p-4 sm:border-t-0">
-          <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-            Urgent or high
-          </p>
-          <p
-            className={`mt-1 text-xl font-black ${
-              urgentRequests.length > 0
-                ? "text-danger"
-                : "text-text-strong"
-            }`}
-          >
-            {urgentRequests.length}
-          </p>
-        </div>
+          <div className="border-t border-border-soft p-4 sm:border-t-0">
+            <p className="text-xs font-black uppercase tracking-wide text-text-muted">
+              Urgent or high
+            </p>
+            <p
+              className={`mt-1 text-xl font-black ${
+                urgentRequests.length > 0
+                  ? "text-danger"
+                  : "text-text-strong"
+              }`}
+            >
+              {urgentRequests.length}
+            </p>
+          </div>
 
-        <div className="border-t border-border-soft p-4 sm:border-t-0">
-          <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-            Expected open cost
-          </p>
-          <p className="mt-1 text-xl font-black text-text-strong">
-            {formatMoney(expectedOpenCost)}
+          <div className="border-t border-border-soft p-4 sm:border-t-0">
+            <p className="text-xs font-black uppercase tracking-wide text-text-muted">
+              Expected open cost
+            </p>
+            <p className="mt-1 text-xl font-black text-text-strong">
+              {formatMoney(expectedOpenCost)}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="border-b border-border-soft p-4">
+          <p className="text-sm font-semibold text-text-muted">
+            No open issues
           </p>
         </div>
-      </div>
+      )}
 
       {recentRequests.length > 0 ? (
         <div className="divide-y divide-border-soft">
@@ -174,7 +195,7 @@ export function ManagerPropertyMaintenanceActivity({
                   </p>
 
                   <span
-                    className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${getPriorityClass(
+                    className={`rounded-full px-3 py-1 text-xs font-black ${getPriorityClass(
                       request.priority,
                     )}`}
                   >
@@ -186,7 +207,7 @@ export function ManagerPropertyMaintenanceActivity({
                   </span>
 
                   <span
-                    className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${getStatusClass(
+                    className={`rounded-full px-3 py-1 text-xs font-black ${getStatusClass(
                       request.status,
                     )}`}
                   >
@@ -200,16 +221,20 @@ export function ManagerPropertyMaintenanceActivity({
 
                 <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
                   {request.unit_id
-                    ? unitLabelById.get(request.unit_id) ?? "Unit"
+                    ? unitLabelById.get(
+                        request.unit_id,
+                      ) ?? "Unit"
                     : "Property-wide"}
                   {request.tenant_id
                     ? ` · ${
-                        tenantNameById.get(request.tenant_id) ??
-                        "Tenant"
+                        tenantNameById.get(
+                          request.tenant_id,
+                        ) ?? "Tenant"
                       }`
                     : ""}
                   {" · "}
-                  Reported {formatDate(request.reported_date)}
+                  Reported{" "}
+                  {formatDate(request.reported_date)}
                 </p>
               </div>
 
@@ -218,28 +243,27 @@ export function ManagerPropertyMaintenanceActivity({
                   Expected amount
                 </p>
                 <p className="mt-1 font-black text-text-strong">
-                  {formatMoney(request.estimated_cost)}
+                  {formatMoney(
+                    request.estimated_cost,
+                  )}
                 </p>
               </div>
             </article>
           ))}
         </div>
-      ) : (
-        <div className="p-4">
-          <p className="rounded-card bg-success-soft p-4 text-sm font-semibold leading-6 text-success">
-            No maintenance issue has been recorded for this property.
-          </p>
-        </div>
-      )}
+      ) : null}
 
-      {maintenanceRequests.length > recentRequests.length ? (
+      {maintenanceRequests.length >
+      recentRequests.length ? (
         <div className="border-t border-border-soft p-4">
           <Link
             href={`/manager/maintenance?propertyId=${propertyId}`}
             prefetch={false}
             className="text-sm font-extrabold text-primary underline-offset-4 hover:underline"
           >
-            View all {maintenanceRequests.length} maintenance records
+            View all{" "}
+            {maintenanceRequests.length} maintenance
+            records
           </Link>
         </div>
       ) : null}

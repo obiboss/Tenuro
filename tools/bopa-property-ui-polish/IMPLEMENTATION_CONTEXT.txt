@@ -1,0 +1,15 @@
+BOPA Property Page and Settings UI Polish
+
+Scope:
+- Property detail page URL tabs: Overview, Units, Payments, Maintenance, Documents.
+- Settings gear stays outside the tabs.
+- Overview uses compact rent and maintenance summaries.
+- Full maintenance metrics only appear when open issues exist.
+- Settings uses independent Charges and Requirements URL sub-tabs.
+- Saved charges and requirements render as collapsed rows.
+- Only one editor can be open at a time.
+- Added pills are checked and open the existing record instead of duplicating it.
+- Requirement editors group tenant-facing, internal, and agreement fields.
+- Currency display removes trailing .00 for round values.
+- No database migration or dependency is introduced.
+- Sidebar, property stat cards, payment setup content, and existing business rules are preserved.

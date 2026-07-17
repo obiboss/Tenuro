@@ -1,9 +1,21 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import {
+  useActionState,
+  useMemo,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
+import {
+  Check,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import { saveManagerPropertyServiceChargesAction } from "@/actions/manager-property-settings.actions";
-import { initialManagerActionState } from "@/actions/manager.state";
+import {
+  initialManagerActionState,
+  type ManagerActionState,
+} from "@/actions/manager.state";
 import { Button } from "@/components/ui/button";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Input } from "@/components/ui/input";
@@ -35,12 +47,33 @@ type ChargeDraft = {
 const BILLING_CYCLES: Array<{
   value: ManagerPropertyChargeBillingCycle;
   label: string;
+  summaryLabel: string;
 }> = [
-  { value: "one_time", label: "One-time charge" },
-  { value: "monthly", label: "Monthly" },
-  { value: "quarterly", label: "Every 3 months" },
-  { value: "biannual", label: "Every 6 months" },
-  { value: "annual", label: "Yearly" },
+  {
+    value: "one_time",
+    label: "One-time charge",
+    summaryLabel: "One-time",
+  },
+  {
+    value: "monthly",
+    label: "Monthly",
+    summaryLabel: "Monthly",
+  },
+  {
+    value: "quarterly",
+    label: "Every 3 months",
+    summaryLabel: "Every 3 months",
+  },
+  {
+    value: "biannual",
+    label: "Every 6 months",
+    summaryLabel: "Every 6 months",
+  },
+  {
+    value: "annual",
+    label: "Yearly",
+    summaryLabel: "Yearly",
+  },
 ];
 
 function createDraftId() {
@@ -65,8 +98,9 @@ function fromStoredCharge(
 
 function createChargeDraft(presetId: string): ChargeDraft {
   const preset =
-    LANDLORD_CHARGE_PRESETS.find((item) => item.id === presetId) ??
-    LANDLORD_CHARGE_PRESETS[0];
+    LANDLORD_CHARGE_PRESETS.find(
+      (item) => item.id === presetId,
+    ) ?? LANDLORD_CHARGE_PRESETS[0];
 
   return {
     id: createDraftId(),
@@ -76,8 +110,13 @@ function createChargeDraft(presetId: string): ChargeDraft {
     amount: "",
     chargeBearer: "tenant",
     billingCycle: "one_time",
-    isRequiredBeforeMoveIn: preset.isRequiredBeforeMoveIn,
+    isRequiredBeforeMoveIn:
+      preset.isRequiredBeforeMoveIn,
   };
+}
+
+function cloneCharges(charges: ChargeDraft[]) {
+  return charges.map((charge) => ({ ...charge }));
 }
 
 function formatMoney(amount: number) {
@@ -88,35 +127,90 @@ function formatMoney(amount: number) {
   }).format(Number.isFinite(amount) ? amount : 0);
 }
 
+function getBillingCycleSummary(
+  value: ManagerPropertyChargeBillingCycle,
+) {
+  return (
+    BILLING_CYCLES.find((cycle) => cycle.value === value)
+      ?.summaryLabel ?? "One-time"
+  );
+}
+
+function getChargeSummary(charge: ChargeDraft) {
+  const amount = Number(charge.amount);
+  const payer =
+    charge.chargeBearer === "tenant"
+      ? "Tenant pays"
+      : "Landlord pays";
+
+  return [
+    formatMoney(Number.isFinite(amount) ? amount : 0),
+    payer,
+    getBillingCycleSummary(charge.billingCycle),
+  ].join(" · ");
+}
+
+function matchesPreset(
+  charge: ChargeDraft,
+  presetId: string,
+) {
+  return presetId === "other"
+    ? charge.chargeCode === null
+    : charge.chargeCode === presetId;
+}
+
 export function ManagerPropertyServiceChargeSettings({
   propertyId,
   landlordClientId,
   initialCharges,
 }: Props) {
   const router = useRouter();
-  const [charges, setCharges] = useState<ChargeDraft[]>(
-    initialCharges.map(fromStoredCharge),
+  const initialDrafts = useMemo(
+    () => initialCharges.map(fromStoredCharge),
+    [initialCharges],
   );
+  const [charges, setCharges] = useState<ChargeDraft[]>(
+    initialDrafts,
+  );
+  const [savedCharges, setSavedCharges] =
+    useState<ChargeDraft[]>(initialDrafts);
+  const [editingChargeId, setEditingChargeId] =
+    useState<string | null>(null);
   const [dismissedToastId, setDismissedToastId] =
     useState<string | null>(null);
 
   const [state, formAction, isPending] = useActionState(
-    saveManagerPropertyServiceChargesAction,
+    async (
+      previousState: ManagerActionState,
+      formData: FormData,
+    ) => {
+      const result =
+        await saveManagerPropertyServiceChargesAction(
+          previousState,
+          formData,
+        );
+
+      if (result.ok) {
+        const savedSnapshot = cloneCharges(charges);
+        setSavedCharges(savedSnapshot);
+        setCharges(savedSnapshot);
+        setEditingChargeId(null);
+        router.refresh();
+      }
+
+      return result;
+    },
     initialManagerActionState,
   );
-
-  useEffect(() => {
-    if (state.ok) {
-      router.refresh();
-    }
-  }, [router, state.ok, state.submissionId]);
 
   const total = useMemo(
     () =>
       charges.reduce((sum, charge) => {
         const amount = Number(charge.amount);
 
-        return Number.isFinite(amount) ? sum + amount : sum;
+        return Number.isFinite(amount)
+          ? sum + amount
+          : sum;
       }, 0),
     [charges],
   );
@@ -169,11 +263,33 @@ export function ManagerPropertyServiceChargeSettings({
     state.submissionId,
   ]);
 
-  function addCharge(presetId: string) {
-    setCharges((current) => [
-      ...current,
-      createChargeDraft(presetId),
-    ]);
+  function openChargeEditor(id: string) {
+    setEditingChargeId(id);
+
+    window.requestAnimationFrame(() => {
+      document
+        .getElementById(`property-charge-${id}`)
+        ?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+    });
+  }
+
+  function handlePresetClick(presetId: string) {
+    const existingCharge = charges.find((charge) =>
+      matchesPreset(charge, presetId),
+    );
+
+    if (existingCharge) {
+      openChargeEditor(existingCharge.id);
+      return;
+    }
+
+    const newCharge = createChargeDraft(presetId);
+
+    setCharges((current) => [...current, newCharge]);
+    openChargeEditor(newCharge.id);
   }
 
   function updateCharge(
@@ -191,6 +307,15 @@ export function ManagerPropertyServiceChargeSettings({
     setCharges((current) =>
       current.filter((charge) => charge.id !== id),
     );
+
+    if (editingChargeId === id) {
+      setEditingChargeId(null);
+    }
+  }
+
+  function cancelChanges() {
+    setCharges(cloneCharges(savedCharges));
+    setEditingChargeId(null);
   }
 
   return (
@@ -208,13 +333,21 @@ export function ManagerPropertyServiceChargeSettings({
         action={formAction}
         className="rounded-card border border-border-soft bg-white shadow-sm"
       >
-        <input type="hidden" name="propertyId" value={propertyId} />
+        <input
+          type="hidden"
+          name="propertyId"
+          value={propertyId}
+        />
         <input
           type="hidden"
           name="landlordClientId"
           value={landlordClientId}
         />
-        <input type="hidden" name="chargesJson" value={chargesJson} />
+        <input
+          type="hidden"
+          name="chargesJson"
+          value={chargesJson}
+        />
 
         <div className="flex flex-col gap-3 border-b border-border-soft p-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -238,192 +371,313 @@ export function ManagerPropertyServiceChargeSettings({
             </p>
 
             <div className="mt-3 flex flex-wrap gap-2">
-              {LANDLORD_CHARGE_PRESETS.map((preset) => (
-                <button
-                  key={preset.id}
-                  type="button"
-                  onClick={() => addCharge(preset.id)}
-                  className="inline-flex min-h-10 items-center rounded-button border border-border-soft bg-white px-3 text-sm font-extrabold text-text-strong transition hover:bg-surface"
-                >
-                  {preset.name}
-                </button>
-              ))}
+              {LANDLORD_CHARGE_PRESETS.map((preset) => {
+                const existingCharge = charges.find(
+                  (charge) =>
+                    matchesPreset(charge, preset.id),
+                );
+                const alreadyAdded = Boolean(existingCharge);
+
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    aria-pressed={alreadyAdded}
+                    onClick={() =>
+                      handlePresetClick(preset.id)
+                    }
+                    className={
+                      alreadyAdded
+                        ? "inline-flex min-h-10 items-center gap-2 rounded-button border border-primary/30 bg-primary-soft px-3 text-sm font-extrabold text-primary transition hover:bg-primary-soft/70"
+                        : "inline-flex min-h-10 items-center rounded-button border border-border-soft bg-white px-3 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+                    }
+                  >
+                    {alreadyAdded ? (
+                      <Check
+                        className="size-4"
+                        aria-hidden="true"
+                      />
+                    ) : null}
+                    {preset.name}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           {charges.length > 0 ? (
-            <div className="space-y-4">
-              {charges.map((charge, index) => (
-                <article
-                  key={charge.id}
-                  className="space-y-4 rounded-card border border-border-soft bg-surface p-4"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-sm font-black text-text-strong">
-                        Charge {index + 1}
-                      </p>
-                      <p className="mt-1 text-xs font-semibold text-text-muted">
-                        This affects new payment requests only.
-                      </p>
-                    </div>
+            <div className="overflow-hidden rounded-card border border-border-soft">
+              {charges.map((charge) => {
+                const isEditing =
+                  editingChargeId === charge.id;
 
-                    <button
-                      type="button"
-                      onClick={() => removeCharge(charge.id)}
-                      className="text-sm font-black text-danger underline-offset-4 hover:underline"
-                    >
-                      Remove
-                    </button>
-                  </div>
+                return (
+                  <article
+                    id={`property-charge-${charge.id}`}
+                    key={charge.id}
+                    className="border-b border-border-soft bg-white last:border-b-0"
+                  >
+                    {!isEditing ? (
+                      <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="font-black text-text-strong">
+                            {charge.chargeName ||
+                              "Other charge"}
+                          </p>
+                          <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                            {getChargeSummary(charge)}
+                          </p>
+                        </div>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <Input
-                      label="Charge name"
-                      value={charge.chargeName}
-                      onChange={(event) =>
-                        updateCharge(charge.id, (current) => ({
-                          ...current,
-                          chargeName: event.target.value,
-                        }))
-                      }
-                      placeholder="Example: Estate security"
-                      required
-                    />
-
-                    <CurrencyInput
-                      label="Amount"
-                      name={`charge-amount-${charge.id}`}
-                      value={charge.amount}
-                      onValueChange={(value) =>
-                        updateCharge(charge.id, (current) => ({
-                          ...current,
-                          amount: value,
-                        }))
-                      }
-                      placeholder="0.00"
-                      required
-                    />
-                  </div>
-
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <label
-                        htmlFor={`charge-bearer-${charge.id}`}
-                        className="text-sm font-bold text-text-strong"
-                      >
-                        Who pays?
-                      </label>
-
-                      <select
-                        id={`charge-bearer-${charge.id}`}
-                        value={charge.chargeBearer}
-                        onChange={(event) =>
-                          updateCharge(charge.id, (current) => {
-                            const chargeBearer =
-                              event.target
-                                .value as ManagerPropertyChargeBearer;
-
-                            return {
-                              ...current,
-                              chargeBearer,
-                              isRequiredBeforeMoveIn:
-                                chargeBearer === "tenant"
-                                  ? current.isRequiredBeforeMoveIn
-                                  : false,
-                            };
-                          })
-                        }
-                        className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
-                      >
-                        <option value="tenant">Tenant</option>
-                        <option value="landlord">Landlord</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label
-                        htmlFor={`billing-cycle-${charge.id}`}
-                        className="text-sm font-bold text-text-strong"
-                      >
-                        How often?
-                      </label>
-
-                      <select
-                        id={`billing-cycle-${charge.id}`}
-                        value={charge.billingCycle}
-                        onChange={(event) =>
-                          updateCharge(charge.id, (current) => ({
-                            ...current,
-                            billingCycle:
-                              event.target
-                                .value as ManagerPropertyChargeBillingCycle,
-                          }))
-                        }
-                        className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
-                      >
-                        {BILLING_CYCLES.map((option) => (
-                          <option
-                            key={option.value}
-                            value={option.value}
+                        <div className="flex shrink-0 items-center gap-2">
+                          <button
+                            type="button"
+                            aria-label={`Edit ${
+                              charge.chargeName ||
+                              "other charge"
+                            }`}
+                            title="Edit charge"
+                            onClick={() =>
+                              openChargeEditor(charge.id)
+                            }
+                            className="inline-flex size-10 items-center justify-center rounded-button border border-border-soft bg-white text-text-strong transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                           >
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
+                            <Pencil
+                              className="size-4"
+                              aria-hidden="true"
+                            />
+                          </button>
 
-                  {charge.chargeBearer === "tenant" ? (
-                    <label className="flex gap-3 rounded-card border border-border-soft bg-white p-4 text-sm font-semibold leading-6 text-text-strong">
-                      <input
-                        type="checkbox"
-                        checked={charge.isRequiredBeforeMoveIn}
-                        onChange={(event) =>
-                          updateCharge(charge.id, (current) => ({
-                            ...current,
-                            isRequiredBeforeMoveIn:
-                              event.target.checked,
-                          }))
-                        }
-                        className="mt-1 size-4 shrink-0 rounded border-border-soft text-primary focus:ring-primary"
-                      />
-                      <span>
-                        Add this charge to the tenant&apos;s first payment
-                        before move-in.
-                      </span>
-                    </label>
-                  ) : (
-                    <p className="rounded-card bg-warning-soft p-4 text-sm font-semibold leading-6 text-text-muted">
-                      Landlord-paid charges are not added to the tenant&apos;s
-                      Paystack payment.
-                    </p>
-                  )}
+                          <button
+                            type="button"
+                            aria-label={`Delete ${
+                              charge.chargeName ||
+                              "other charge"
+                            }`}
+                            title="Delete charge"
+                            onClick={() =>
+                              removeCharge(charge.id)
+                            }
+                            className="inline-flex size-10 items-center justify-center rounded-button border border-border-soft bg-white text-danger transition hover:bg-danger-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
+                          >
+                            <Trash2
+                              className="size-4"
+                              aria-hidden="true"
+                            />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-4 bg-surface/50 p-4">
+                        <div className="flex items-center justify-between gap-4">
+                          <div>
+                            <p className="font-black text-text-strong">
+                              {charge.chargeName ||
+                                "New charge"}
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-text-muted">
+                              Editing
+                            </p>
+                          </div>
 
-                  <div className="space-y-2">
-                    <label
-                      htmlFor={`charge-description-${charge.id}`}
-                      className="text-sm font-bold text-text-strong"
-                    >
-                      Description
-                    </label>
+                          <button
+                            type="button"
+                            aria-label="Delete charge"
+                            title="Delete charge"
+                            onClick={() =>
+                              removeCharge(charge.id)
+                            }
+                            className="inline-flex size-10 items-center justify-center rounded-button border border-border-soft bg-white text-danger transition hover:bg-danger-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
+                          >
+                            <Trash2
+                              className="size-4"
+                              aria-hidden="true"
+                            />
+                          </button>
+                        </div>
 
-                    <textarea
-                      id={`charge-description-${charge.id}`}
-                      value={charge.description}
-                      onChange={(event) =>
-                        updateCharge(charge.id, (current) => ({
-                          ...current,
-                          description: event.target.value,
-                        }))
-                      }
-                      rows={2}
-                      placeholder="Optional explanation"
-                      className="w-full rounded-button border border-border-soft bg-white px-4 py-3 text-sm font-semibold text-text-strong outline-none transition placeholder:text-text-muted focus:border-primary"
-                    />
-                  </div>
-                </article>
-              ))}
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <Input
+                            label="Charge name"
+                            value={charge.chargeName}
+                            onChange={(event) =>
+                              updateCharge(
+                                charge.id,
+                                (current) => ({
+                                  ...current,
+                                  chargeName:
+                                    event.target.value,
+                                }),
+                              )
+                            }
+                            placeholder="Example: Estate security"
+                            required
+                          />
+
+                          <CurrencyInput
+                            label="Amount"
+                            name={`charge-amount-${charge.id}`}
+                            value={charge.amount}
+                            onValueChange={(value) =>
+                              updateCharge(
+                                charge.id,
+                                (current) => ({
+                                  ...current,
+                                  amount: value,
+                                }),
+                              )
+                            }
+                            placeholder="0"
+                            required
+                          />
+                        </div>
+
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <label
+                              htmlFor={`charge-bearer-${charge.id}`}
+                              className="text-sm font-bold text-text-strong"
+                            >
+                              Who pays?
+                            </label>
+
+                            <select
+                              id={`charge-bearer-${charge.id}`}
+                              value={charge.chargeBearer}
+                              onChange={(event) =>
+                                updateCharge(
+                                  charge.id,
+                                  (current) => {
+                                    const chargeBearer =
+                                      event.target
+                                        .value as ManagerPropertyChargeBearer;
+
+                                    return {
+                                      ...current,
+                                      chargeBearer,
+                                      isRequiredBeforeMoveIn:
+                                        chargeBearer ===
+                                        "tenant"
+                                          ? current.isRequiredBeforeMoveIn
+                                          : false,
+                                    };
+                                  },
+                                )
+                              }
+                              className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary focus:ring-2 focus:ring-primary-soft"
+                            >
+                              <option value="tenant">
+                                Tenant
+                              </option>
+                              <option value="landlord">
+                                Landlord
+                              </option>
+                            </select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label
+                              htmlFor={`billing-cycle-${charge.id}`}
+                              className="text-sm font-bold text-text-strong"
+                            >
+                              How often?
+                            </label>
+
+                            <select
+                              id={`billing-cycle-${charge.id}`}
+                              value={charge.billingCycle}
+                              onChange={(event) =>
+                                updateCharge(
+                                  charge.id,
+                                  (current) => ({
+                                    ...current,
+                                    billingCycle:
+                                      event.target
+                                        .value as ManagerPropertyChargeBillingCycle,
+                                  }),
+                                )
+                              }
+                              className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary focus:ring-2 focus:ring-primary-soft"
+                            >
+                              {BILLING_CYCLES.map(
+                                (option) => (
+                                  <option
+                                    key={option.value}
+                                    value={option.value}
+                                  >
+                                    {option.label}
+                                  </option>
+                                ),
+                              )}
+                            </select>
+                          </div>
+                        </div>
+
+                        {charge.chargeBearer ===
+                        "tenant" ? (
+                          <label className="flex gap-3 rounded-card border border-border-soft bg-white p-4 text-sm font-semibold leading-6 text-text-strong">
+                            <input
+                              type="checkbox"
+                              checked={
+                                charge.isRequiredBeforeMoveIn
+                              }
+                              onChange={(event) =>
+                                updateCharge(
+                                  charge.id,
+                                  (current) => ({
+                                    ...current,
+                                    isRequiredBeforeMoveIn:
+                                      event.target.checked,
+                                  }),
+                                )
+                              }
+                              className="mt-1 size-4 shrink-0 rounded border-border-soft text-primary focus:ring-primary"
+                            />
+                            <span>
+                              Add this charge to the
+                              tenant&apos;s first payment
+                              before move-in.
+                            </span>
+                          </label>
+                        ) : (
+                          <p className="rounded-card bg-warning-soft p-4 text-sm font-semibold leading-6 text-text-muted">
+                            Landlord-paid charges are not
+                            added to the tenant&apos;s
+                            Paystack payment.
+                          </p>
+                        )}
+
+                        <div className="space-y-2">
+                          <label
+                            htmlFor={`charge-description-${charge.id}`}
+                            className="text-sm font-bold text-text-strong"
+                          >
+                            Description
+                          </label>
+
+                          <textarea
+                            id={`charge-description-${charge.id}`}
+                            value={charge.description}
+                            onChange={(event) =>
+                              updateCharge(
+                                charge.id,
+                                (current) => ({
+                                  ...current,
+                                  description:
+                                    event.target.value,
+                                }),
+                              )
+                            }
+                            rows={2}
+                            placeholder="Optional explanation"
+                            className="w-full rounded-button border border-border-soft bg-white px-4 py-3 text-sm font-semibold text-text-strong outline-none transition placeholder:text-text-muted focus:border-primary focus:ring-2 focus:ring-primary-soft"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
             </div>
           ) : (
             <div className="rounded-card bg-surface p-4">
@@ -447,14 +701,28 @@ export function ManagerPropertyServiceChargeSettings({
               Existing payment links remain unchanged
             </p>
             <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-              Saved payment requests keep their original charge snapshot.
-              These changes apply only to payment requests created afterward.
+              Saved payment requests keep their original
+              charge snapshot. These changes apply only to
+              payment requests created afterward.
             </p>
           </div>
         </div>
 
-        <div className="border-t border-border-soft p-4">
-          <Button type="submit" isLoading={isPending} fullWidth>
+        <div className="flex items-center justify-end gap-3 border-t border-border-soft p-4">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={cancelChanges}
+            disabled={isPending}
+          >
+            Cancel
+          </Button>
+
+          <Button
+            type="submit"
+            isLoading={isPending}
+            className="min-w-40"
+          >
             Save property charges
           </Button>
         </div>

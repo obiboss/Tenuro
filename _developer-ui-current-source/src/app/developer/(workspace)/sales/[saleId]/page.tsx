@@ -1,0 +1,96 @@
+import { notFound } from "next/navigation";
+import { DeveloperSaleDetail } from "@/components/developer/developer-sale-detail";
+import { PageHeader } from "@/components/ui/page-header";
+import { getDeveloperAccountByOwnerProfileId } from "@/server/repositories/developer.repository";
+import {
+  getActiveDeveloperPaymentPlanForSale,
+  listDeveloperPaymentScheduleItemsForSale,
+} from "@/server/repositories/developer-payment-plans.repository";
+import { listDeveloperSalePaymentsForSale } from "@/server/repositories/developer-sale-payments.repository";
+import { getDeveloperSaleById } from "@/server/repositories/developer-sales.repository";
+import { requireDeveloper } from "@/server/services/auth.service";
+import {
+  getAllocationLetterDocumentForCurrentDeveloper,
+  getSalesAgreementDocumentForCurrentDeveloper,
+} from "@/server/services/developer-sale-documents.service";
+import { createSupabaseAdminClient } from "@/server/supabase/admin";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+type DeveloperSalePageProps = {
+  params: Promise<{
+    saleId: string;
+  }>;
+};
+
+export default async function DeveloperSalePage({
+  params,
+}: DeveloperSalePageProps) {
+  const { saleId } = await params;
+  const developer = await requireDeveloper();
+  const supabase = createSupabaseAdminClient();
+
+  const account = await getDeveloperAccountByOwnerProfileId(
+    supabase,
+    developer.id,
+  );
+
+  if (!account) {
+    notFound();
+  }
+
+  const sale = await getDeveloperSaleById(supabase, {
+    developerAccountId: account.id,
+    saleId,
+  });
+
+  if (!sale) {
+    notFound();
+  }
+
+  const [
+    paymentPlan,
+    scheduleItems,
+    payments,
+    salesAgreementDocument,
+    allocationLetterDocument,
+  ] = await Promise.all([
+    getActiveDeveloperPaymentPlanForSale(supabase, {
+      developerAccountId: account.id,
+      saleId: sale.id,
+    }),
+    listDeveloperPaymentScheduleItemsForSale(supabase, {
+      developerAccountId: account.id,
+      saleId: sale.id,
+    }),
+    listDeveloperSalePaymentsForSale(supabase, {
+      developerAccountId: account.id,
+      saleId: sale.id,
+    }),
+    getSalesAgreementDocumentForCurrentDeveloper({
+      saleId: sale.id,
+    }),
+    getAllocationLetterDocumentForCurrentDeveloper({
+      saleId: sale.id,
+    }),
+  ]);
+
+  return (
+    <div className="space-y-8">
+      <PageHeader
+        title={sale.developer_buyers?.full_name ?? sale.sale_reference}
+        description={`Sale ${sale.sale_reference} · buyer, plot, payment schedule, transactions, and receipts.`}
+      />
+
+      <DeveloperSaleDetail
+        sale={sale}
+        paymentPlan={paymentPlan}
+        scheduleItems={scheduleItems}
+        payments={payments}
+        salesAgreementDocument={salesAgreementDocument}
+        allocationLetterDocument={allocationLetterDocument}
+      />
+    </div>
+  );
+}

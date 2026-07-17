@@ -14,6 +14,7 @@ type ManagerUnitListProps = {
   onboardingRequests?: ManagerTenantOnboardingRequestRow[];
   showTenantActions?: boolean;
   addUnitHref?: string;
+  propertyDetailTab?: string;
 };
 
 type UnitStatus = "vacant" | "reserved" | "occupied" | "inactive";
@@ -180,12 +181,37 @@ function getRequestActionLabel(request: ManagerTenantOnboardingRequestRow) {
   return "View request";
 }
 
-function getRequestDetailHref(request: ManagerTenantOnboardingRequestRow) {
+function buildPropertyDetailHref(params: {
+  propertyId: string;
+  propertyDetailTab?: string;
+  query: Record<string, string>;
+  hash: string;
+}) {
+  const searchParams = new URLSearchParams(params.query);
+
+  if (params.propertyDetailTab) {
+    searchParams.set("tab", params.propertyDetailTab);
+  }
+
+  return `/manager/properties/${params.propertyId}?${searchParams.toString()}#${params.hash}`;
+}
+
+function getRequestDetailHref(
+  request: ManagerTenantOnboardingRequestRow,
+  propertyDetailTab?: string,
+) {
   if (request.status === "submitted") {
     return `/manager/tenants/review/${request.id}`;
   }
 
-  return `/manager/properties/${request.property_id}?tenantRequest=${request.id}#tenant-review-detail`;
+  return buildPropertyDetailHref({
+    propertyId: request.property_id,
+    propertyDetailTab,
+    query: {
+      tenantRequest: request.id,
+    },
+    hash: "tenant-review-detail",
+  });
 }
 
 function getReservedUnitMessage(tenant: ManagerTenantRow | undefined) {
@@ -214,6 +240,7 @@ export function ManagerUnitList({
   onboardingRequests = [],
   showTenantActions = false,
   addUnitHref = "#add-unit",
+  propertyDetailTab,
 }: ManagerUnitListProps) {
   const propertyNameById = new Map(
     properties.map((property) => [property.id, property.property_name]),
@@ -352,7 +379,7 @@ export function ManagerUnitList({
                         <td className="px-4 py-4 text-right">
                           {request ? (
                             <Link
-                              href={getRequestDetailHref(request)}
+                              href={getRequestDetailHref(request, propertyDetailTab)}
                               prefetch={false}
                               className="inline-flex min-h-10 items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
                             >
@@ -360,7 +387,14 @@ export function ManagerUnitList({
                             </Link>
                           ) : unit.status === "vacant" ? (
                             <Link
-                              href={`/manager/properties/${unit.property_id}?onboardUnit=${unit.id}#tenant-onboarding`}
+                              href={buildPropertyDetailHref({
+                                propertyId: unit.property_id,
+                                propertyDetailTab,
+                                query: {
+                                  onboardUnit: unit.id,
+                                },
+                                hash: "tenant-onboarding",
+                              })}
                               prefetch={false}
                               className="inline-flex min-h-10 items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
                             >
@@ -443,7 +477,7 @@ export function ManagerUnitList({
                     <div className="mt-4">
                       {request ? (
                         <Link
-                          href={getRequestDetailHref(request)}
+                          href={getRequestDetailHref(request, propertyDetailTab)}
                           prefetch={false}
                           className="inline-flex min-h-10 w-full items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
                         >
@@ -451,7 +485,14 @@ export function ManagerUnitList({
                         </Link>
                       ) : unit.status === "vacant" ? (
                         <Link
-                          href={`/manager/properties/${unit.property_id}?onboardUnit=${unit.id}#tenant-onboarding`}
+                          href={buildPropertyDetailHref({
+                                propertyId: unit.property_id,
+                                propertyDetailTab,
+                                query: {
+                                  onboardUnit: unit.id,
+                                },
+                                hash: "tenant-onboarding",
+                              })}
                           prefetch={false}
                           className="inline-flex min-h-10 w-full items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
                         >
