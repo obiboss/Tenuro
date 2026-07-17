@@ -1,0 +1,2147 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1"
+    />
+    <meta name="theme-color" content="#1B4FD8" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>BOPA offline workspace</title>
+    <link
+      rel="stylesheet"
+      href="/offline-write.css"
+    />
+    <style>
+      :root {
+        color-scheme: light;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system,
+          BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --page: #f7f7f3;
+        --card: #ffffff;
+        --ink: #172033;
+        --muted: #687083;
+        --line: #e5e7eb;
+        --primary: #1b4fd8;
+        --primary-soft: #eaf0ff;
+        --gold: #f6b73c;
+        --success: #137a4f;
+        --success-soft: #e8f7ef;
+        --warning: #9a5b06;
+        --warning-soft: #fff3df;
+        --danger: #b42318;
+        --danger-soft: #feeceb;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        background:
+          radial-gradient(
+            circle at top right,
+            rgba(27, 79, 216, 0.08),
+            transparent 28rem
+          ),
+          radial-gradient(
+            circle at bottom left,
+            rgba(246, 183, 60, 0.12),
+            transparent 30rem
+          ),
+          var(--page);
+        color: var(--ink);
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      .shell {
+        width: min(1180px, 100%);
+        margin: 0 auto;
+        padding: 20px 16px 44px;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 8px 0 22px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .logo {
+        width: 48px;
+        height: 48px;
+        display: grid;
+        place-items: center;
+        border-radius: 16px;
+        background: var(--primary);
+        color: white;
+        font-size: 21px;
+        font-weight: 950;
+        box-shadow:
+          0 12px 28px rgba(27, 79, 216, 0.22);
+      }
+
+      .brand-name {
+        font-size: 17px;
+        font-weight: 950;
+        letter-spacing: -0.02em;
+      }
+
+      .brand-context {
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 750;
+      }
+
+      .connection {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid rgba(154, 91, 6, 0.16);
+        border-radius: 999px;
+        background: var(--warning-soft);
+        padding: 8px 12px;
+        color: var(--warning);
+        font-size: 12px;
+        font-weight: 900;
+      }
+
+      .connection-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: currentColor;
+      }
+
+      .hero {
+        overflow: hidden;
+        position: relative;
+        border: 1px solid rgba(27, 79, 216, 0.14);
+        border-radius: 26px;
+        background: linear-gradient(
+          135deg,
+          #ffffff 0%,
+          #f3f6ff 100%
+        );
+        padding: clamp(22px, 4vw, 36px);
+        box-shadow:
+          0 24px 60px rgba(23, 32, 51, 0.08);
+      }
+
+      .hero::after {
+        content: "";
+        position: absolute;
+        right: -80px;
+        top: -100px;
+        width: 260px;
+        height: 260px;
+        border-radius: 50%;
+        background: rgba(27, 79, 216, 0.07);
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border-radius: 999px;
+        background: var(--primary-soft);
+        padding: 7px 11px;
+        color: var(--primary);
+        font-size: 11px;
+        font-weight: 950;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        position: relative;
+        z-index: 1;
+        max-width: 760px;
+        margin: 16px 0 0;
+        font-size: clamp(30px, 6vw, 52px);
+        line-height: 1;
+        letter-spacing: -0.055em;
+      }
+
+      .hero-copy {
+        position: relative;
+        z-index: 1;
+        max-width: 680px;
+        margin: 14px 0 0;
+        color: var(--muted);
+        font-size: 15px;
+        font-weight: 650;
+        line-height: 1.7;
+      }
+
+      .hero-meta {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px 18px;
+        margin-top: 22px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .retry {
+        min-height: 42px;
+        border: 0;
+        border-radius: 12px;
+        background: var(--primary);
+        padding: 0 17px;
+        color: white;
+        font-size: 13px;
+        font-weight: 950;
+        box-shadow:
+          0 10px 20px rgba(27, 79, 216, 0.18);
+      }
+
+      .content {
+        margin-top: 22px;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns:
+          repeat(4, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .stat {
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--card);
+        padding: 18px;
+        box-shadow:
+          0 10px 28px rgba(23, 32, 51, 0.05);
+      }
+
+      .stat-label {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 850;
+      }
+
+      .stat-value {
+        margin-top: 8px;
+        font-size: 30px;
+        font-weight: 950;
+        letter-spacing: -0.04em;
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 20px;
+      }
+
+      .tabs {
+        display: inline-flex;
+        gap: 5px;
+        overflow-x: auto;
+        max-width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--card);
+        padding: 5px;
+      }
+
+      .tab {
+        min-height: 38px;
+        white-space: nowrap;
+        border: 0;
+        border-radius: 10px;
+        background: transparent;
+        padding: 0 14px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 900;
+      }
+
+      .tab.active {
+        background: var(--primary);
+        color: white;
+      }
+
+      .search {
+        width: min(100%, 320px);
+        min-height: 46px;
+        border: 1px solid var(--line);
+        border-radius: 13px;
+        background: var(--card);
+        padding: 0 15px;
+        color: var(--ink);
+        font-size: 14px;
+        font-weight: 700;
+        outline: none;
+      }
+
+      .search:focus {
+        border-color: var(--primary);
+        box-shadow:
+          0 0 0 3px var(--primary-soft);
+      }
+
+      .panel {
+        margin-top: 14px;
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: var(--card);
+        box-shadow:
+          0 16px 40px rgba(23, 32, 51, 0.06);
+      }
+
+      .panel-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 20px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .panel-title {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 950;
+        letter-spacing: -0.025em;
+      }
+
+      .panel-description {
+        margin: 5px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1.6;
+      }
+
+      .list {
+        display: grid;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns:
+          minmax(0, 1.6fr)
+          minmax(120px, 0.8fr)
+          minmax(120px, 0.8fr);
+        gap: 16px;
+        align-items: center;
+        padding: 17px 20px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .row:last-child {
+        border-bottom: 0;
+      }
+
+      .primary {
+        min-width: 0;
+      }
+
+      .primary-title {
+        overflow: hidden;
+        margin: 0;
+        font-size: 14px;
+        font-weight: 950;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .primary-copy,
+      .cell-copy {
+        margin: 5px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1.5;
+      }
+
+      .cell-label {
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 950;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .cell-value {
+        margin-top: 5px;
+        font-size: 13px;
+        font-weight: 900;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        max-width: 100%;
+        border-radius: 999px;
+        background: var(--primary-soft);
+        padding: 6px 10px;
+        color: var(--primary);
+        font-size: 11px;
+        font-weight: 950;
+        text-transform: capitalize;
+      }
+
+      .pill.success {
+        background: var(--success-soft);
+        color: var(--success);
+      }
+
+      .pill.warning {
+        background: var(--warning-soft);
+        color: var(--warning);
+      }
+
+      .pill.danger {
+        background: var(--danger-soft);
+        color: var(--danger);
+      }
+
+      .empty {
+        padding: 38px 20px;
+        text-align: center;
+      }
+
+      .empty-mark {
+        width: 52px;
+        height: 52px;
+        display: grid;
+        place-items: center;
+        margin: 0 auto;
+        border-radius: 17px;
+        background: var(--primary-soft);
+        color: var(--primary);
+        font-size: 22px;
+        font-weight: 950;
+      }
+
+      .empty-title {
+        margin: 15px 0 0;
+        font-size: 16px;
+        font-weight: 950;
+      }
+
+      .empty-copy {
+        max-width: 460px;
+        margin: 7px auto 0;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1.6;
+      }
+
+      .security {
+        margin-top: 18px;
+        border-radius: 16px;
+        background: #eef1f5;
+        padding: 14px 16px;
+        color: #596273;
+        font-size: 12px;
+        font-weight: 750;
+        line-height: 1.6;
+      }
+
+      @media (max-width: 820px) {
+        .stats {
+          grid-template-columns:
+            repeat(2, minmax(0, 1fr));
+        }
+
+        .row {
+          grid-template-columns: 1fr;
+          gap: 10px;
+        }
+
+        .row .cell {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 14px;
+        }
+
+        .cell-value {
+          margin-top: 0;
+          text-align: right;
+        }
+      }
+
+      @media (max-width: 520px) {
+        .shell {
+          padding: 14px 12px 36px;
+        }
+
+        .topbar {
+          align-items: flex-start;
+        }
+
+        .connection {
+          padding: 7px 9px;
+        }
+
+        .hero {
+          border-radius: 22px;
+          padding: 22px 18px;
+        }
+
+        .stats {
+          gap: 10px;
+        }
+
+        .stat {
+          padding: 15px;
+        }
+
+        .stat-value {
+          font-size: 26px;
+        }
+
+        .toolbar {
+          align-items: stretch;
+        }
+
+        .tabs,
+        .search {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="logo" aria-hidden="true">B</div>
+          <div>
+            <div class="brand-name">BOPA</div>
+            <div class="brand-context">
+              Boldverse Property App
+            </div>
+          </div>
+        </div>
+
+        <div class="connection">
+          <span class="connection-dot"></span>
+          Offline copy
+        </div>
+      </header>
+
+      <section class="hero">
+        <span class="eyebrow" id="workspace-type">
+          Offline workspace
+        </span>
+        <h1 id="workspace-name">
+          Loading your last refreshed workspace…
+        </h1>
+        <p class="hero-copy" id="workspace-copy">
+          Your operational records remain available while
+          the internet connection is unavailable.
+        </p>
+        <div class="hero-meta">
+          <span id="last-refreshed">
+            Checking last refresh…
+          </span>
+          <span
+            class="local-status"
+            id="local-change-status"
+          >
+            <span class="local-status-dot"></span>
+            Offline copy ready
+          </span>
+          <span
+            class="stale-notice"
+            id="stale-notice"
+            hidden
+          ></span>
+          <button
+            class="offline-action secondary"
+            type="button"
+            data-manage-offline-storage
+          >
+            Offline storage
+          </button>
+          <button
+            class="retry"
+            type="button"
+            onclick="window.location.reload()"
+          >
+            Try online again
+          </button>
+        </div>
+      </section>
+
+      <section class="content" id="content" hidden>
+        <div class="stats" id="stats"></div>
+
+        <div class="toolbar">
+          <div
+            class="tabs"
+            id="tabs"
+            aria-label="Offline workspace sections"
+          ></div>
+          <input
+            class="search"
+            id="search"
+            type="search"
+            placeholder="Search this offline copy"
+            autocomplete="off"
+          />
+        </div>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 class="panel-title" id="panel-title">
+                Workspace
+              </h2>
+              <p
+                class="panel-description"
+                id="panel-description"
+              ></p>
+            </div>
+            <div
+              class="panel-actions"
+              id="panel-actions"
+            ></div>
+          </div>
+          <div class="list" id="list"></div>
+        </section>
+
+        <div class="security">
+          Only approved maintenance and descriptive/contact
+          details can be saved offline. Payments, bank
+          details, identity checks, agreements, receipts,
+          reports, document access, allocations, and final
+          confirmations always require a secure connection.
+        </div>
+      </section>
+
+      <section class="panel" id="empty-state">
+        <div class="empty">
+          <div class="empty-mark">B</div>
+          <h2 class="empty-title">
+            Preparing your offline workspace
+          </h2>
+          <p class="empty-copy">
+            Reconnect to the internet and open your BOPA
+            workspace once. BOPA will then keep a recent
+            read-only copy on this device.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const DB_NAME = "bopa-offline";
+      const META_OWNER_KEY = "ownerProfileId";
+      const MANAGER_CURRENT_TENANT_STATUSES = new Set([
+        "active",
+        "eviction_notice",
+      ]);
+      const CLOSED_MAINTENANCE_STATUSES = new Set([
+        "resolved",
+        "completed",
+        "cancelled",
+      ]);
+
+      const requestedWorkspace =
+        new URLSearchParams(
+          window.location.search,
+        ).get("workspace");
+
+      const state = {
+        workspaceType:
+          requestedWorkspace === "developer" ||
+          window.location.pathname.startsWith(
+            "/developer",
+          )
+            ? "developer"
+            : "manager",
+        workspace: null,
+        cursor: null,
+        activeTab: "overview",
+        search: "",
+        records: {},
+      };
+
+      let offlineDbConnection = null;
+      let offlineDbPromise = null;
+
+      function openDatabase() {
+        if (offlineDbConnection) {
+          return Promise.resolve(
+            offlineDbConnection,
+          );
+        }
+
+        if (offlineDbPromise) {
+          return offlineDbPromise;
+        }
+
+        offlineDbPromise =
+          new Promise((resolve, reject) => {
+            const request =
+              indexedDB.open(DB_NAME);
+
+            request.onerror = () => {
+              offlineDbPromise = null;
+              reject(request.error);
+            };
+
+            request.onsuccess = () => {
+              offlineDbConnection =
+                request.result;
+              offlineDbPromise = null;
+
+              offlineDbConnection.onversionchange =
+                () => {
+                  offlineDbConnection?.close();
+                  offlineDbConnection = null;
+                };
+
+              resolve(
+                offlineDbConnection,
+              );
+            };
+          });
+
+        return offlineDbPromise;
+      }
+
+      function readAll(db, storeName) {
+        return new Promise((resolve, reject) => {
+          if (
+            !db.objectStoreNames.contains(storeName)
+          ) {
+            resolve([]);
+            return;
+          }
+
+          const transaction = db.transaction(
+            storeName,
+            "readonly",
+          );
+          const request = transaction
+            .objectStore(storeName)
+            .getAll();
+
+          request.onerror = () =>
+            reject(request.error);
+          request.onsuccess = () =>
+            resolve(request.result || []);
+        });
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      function normalize(value) {
+        return String(value ?? "")
+          .trim()
+          .toLowerCase();
+      }
+
+      function formatDate(value) {
+        if (!value) {
+          return "Not set";
+        }
+
+        const date = new Date(value);
+
+        if (Number.isNaN(date.getTime())) {
+          return "Not set";
+        }
+
+        return new Intl.DateTimeFormat("en-NG", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        }).format(date);
+      }
+
+      function formatDateTime(value) {
+        if (!value) {
+          return "Not refreshed";
+        }
+
+        const date = new Date(value);
+
+        if (Number.isNaN(date.getTime())) {
+          return "Not refreshed";
+        }
+
+        return new Intl.DateTimeFormat("en-NG", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        }).format(date);
+      }
+
+      function formatMoney(value) {
+        const amount = Number(value ?? 0);
+
+        return new Intl.NumberFormat("en-NG", {
+          style: "currency",
+          currency: "NGN",
+          maximumFractionDigits: 0,
+        }).format(
+          Number.isFinite(amount) ? amount : 0,
+        );
+      }
+
+      function titleCase(value) {
+        return String(value ?? "")
+          .replaceAll("_", " ")
+          .replace(/\b\w/g, (character) =>
+            character.toUpperCase(),
+          );
+      }
+
+      function pillClass(status) {
+        const normalized = normalize(status);
+
+        if (
+          [
+            "active",
+            "available",
+            "selling",
+            "completed",
+            "resolved",
+            "occupied",
+          ].includes(normalized)
+        ) {
+          return "pill success";
+        }
+
+        if (
+          [
+            "owing",
+            "overdue",
+            "cancelled",
+            "defaulting",
+            "inactive",
+            "archived",
+          ].includes(normalized)
+        ) {
+          return "pill danger";
+        }
+
+        return "pill warning";
+      }
+
+      function createStat(label, value) {
+        return `
+          <article class="stat">
+            <div class="stat-label">
+              ${escapeHtml(label)}
+            </div>
+            <div class="stat-value">
+              ${escapeHtml(value)}
+            </div>
+          </article>
+        `;
+      }
+
+      function filterBySearch(items, getText) {
+        const query = normalize(state.search);
+
+        if (!query) {
+          return items;
+        }
+
+        return items.filter((item) =>
+          normalize(getText(item)).includes(query),
+        );
+      }
+
+      function getData(record) {
+        return record && record.data
+          ? record.data
+          : {};
+      }
+
+      function renderEmpty(
+        title,
+        copy,
+      ) {
+        return `
+          <div class="empty">
+            <div class="empty-mark">B</div>
+            <h3 class="empty-title">
+              ${escapeHtml(title)}
+            </h3>
+            <p class="empty-copy">
+              ${escapeHtml(copy)}
+            </p>
+          </div>
+        `;
+      }
+
+      function renderManager() {
+        const properties = (
+          state.records.managerProperties || []
+        )
+          .map(getData)
+          .filter(
+            (property) =>
+              normalize(property.status) !==
+              "archived",
+          );
+        const units = (
+          state.records.managerUnits || []
+        )
+          .map(getData)
+          .filter(
+            (unit) =>
+              normalize(unit.status) !==
+              "inactive",
+          );
+        const tenants = (
+          state.records.managerTenants || []
+        )
+          .map(getData)
+          .filter((tenant) =>
+            MANAGER_CURRENT_TENANT_STATUSES.has(
+              normalize(tenant.status),
+            ),
+          );
+        const maintenance = (
+          state.records.managerMaintenance || []
+        )
+          .map(getData);
+
+        const openMaintenance = maintenance.filter(
+          (item) =>
+            !CLOSED_MAINTENANCE_STATUSES.has(
+              normalize(item.status),
+            ),
+        );
+
+        document.getElementById("stats").innerHTML = [
+          createStat("Properties", properties.length),
+          createStat("Units", units.length),
+          createStat(
+            "Current tenants",
+            tenants.length,
+          ),
+          createStat(
+            "Open maintenance",
+            openMaintenance.length,
+          ),
+        ].join("");
+
+        const tabs = [
+          ["overview", "Properties"],
+          ["people", "Tenants"],
+          ["activity", "Maintenance"],
+        ];
+
+        renderTabs(tabs);
+
+        if (state.activeTab === "people") {
+          renderManagerTenants(
+            tenants,
+            properties,
+            units,
+          );
+          return;
+        }
+
+        if (state.activeTab === "activity") {
+          renderManagerMaintenance(
+            maintenance,
+            properties,
+            units,
+          );
+          return;
+        }
+
+        renderManagerProperties(
+          properties,
+          units,
+          tenants,
+          openMaintenance,
+        );
+      }
+
+      function renderManagerProperties(
+        properties,
+        units,
+        tenants,
+        maintenance,
+      ) {
+        const propertyRows = filterBySearch(
+          properties,
+          (property) =>
+            [
+              property.property_name,
+              property.property_address,
+              property.city,
+              property.state,
+            ].join(" "),
+        );
+
+        document.getElementById(
+          "panel-title",
+        ).textContent = "Properties";
+        document.getElementById(
+          "panel-description",
+        ).textContent =
+          "Occupancy, rent position, and open maintenance from your last refresh.";
+
+        if (propertyRows.length === 0) {
+          document.getElementById(
+            "list",
+          ).innerHTML = renderEmpty(
+            "No matching properties",
+            "Reconnect to refresh the workspace or change your search.",
+          );
+          return;
+        }
+
+        document.getElementById(
+          "list",
+        ).innerHTML = propertyRows
+          .map((property) => {
+            const propertyUnits = units.filter(
+              (unit) =>
+                unit.property_id === property.id,
+            );
+            const propertyTenants =
+              tenants.filter(
+                (tenant) =>
+                  tenant.property_id === property.id,
+              );
+            const owingCount =
+              propertyTenants.filter(
+                (tenant) =>
+                  Number(
+                    tenant.current_balance ?? 0,
+                  ) > 0,
+              ).length;
+            const openIssues =
+              maintenance.filter(
+                (item) =>
+                  item.property_id === property.id,
+              ).length;
+            const location = [
+              property.property_address,
+              property.city,
+              property.state,
+            ]
+              .filter(Boolean)
+              .join(", ");
+
+            return `
+              <article class="row">
+                <div class="primary">
+                  <div class="primary-head">
+                    <div>
+                      <p class="primary-title">
+                        ${escapeHtml(property.property_name)}
+                      </p>
+                      <p class="primary-copy">
+                        ${escapeHtml(location || "Location not entered")}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      class="offline-edit"
+                      data-offline-edit
+                      data-offline-entity-type="manager_property"
+                      data-offline-entity-id="${escapeHtml(property.id)}"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                </div>
+                <div class="cell">
+                  <div class="cell-label">
+                    Occupancy
+                  </div>
+                  <div class="cell-value">
+                    ${propertyTenants.length} of
+                    ${propertyUnits.length} occupied
+                  </div>
+                </div>
+                <div class="cell">
+                  <div class="cell-label">
+                    Attention
+                  </div>
+                  <div class="cell-value">
+                    ${owingCount} owing ·
+                    ${openIssues} maintenance
+                  </div>
+                </div>
+              </article>
+            `;
+          })
+          .join("");
+      }
+
+      function renderManagerTenants(
+        tenants,
+        properties,
+        units,
+      ) {
+        const propertyById = new Map(
+          properties.map((property) => [
+            property.id,
+            property,
+          ]),
+        );
+        const unitById = new Map(
+          units.map((unit) => [
+            unit.id,
+            unit,
+          ]),
+        );
+        const tenantRows = filterBySearch(
+          tenants,
+          (tenant) => {
+            const property =
+              propertyById.get(
+                tenant.property_id,
+              );
+            const unit = unitById.get(
+              tenant.unit_id,
+            );
+
+            return [
+              tenant.full_name,
+              tenant.phone_number,
+              tenant.email,
+              property?.property_name,
+              unit?.unit_label,
+            ].join(" ");
+          },
+        );
+
+        document.getElementById(
+          "panel-title",
+        ).textContent = "Current tenants";
+        document.getElementById(
+          "panel-description",
+        ).textContent =
+          "Current tenancy and rent position from your last refresh.";
+
+        if (tenantRows.length === 0) {
+          document.getElementById(
+            "list",
+          ).innerHTML = renderEmpty(
+            "No matching tenants",
+            "Reconnect to refresh the workspace or change your search.",
+          );
+          return;
+        }
+
+        document.getElementById(
+          "list",
+        ).innerHTML = tenantRows
+          .map((tenant) => {
+            const property =
+              propertyById.get(
+                tenant.property_id,
+              );
+            const unit = unitById.get(
+              tenant.unit_id,
+            );
+            const balance = Number(
+              tenant.current_balance ?? 0,
+            );
+
+            return `
+              <article class="row">
+                <div class="primary">
+                  <div class="primary-head">
+                    <div>
+                      <p class="primary-title">
+                        ${escapeHtml(tenant.full_name)}
+                      </p>
+                      <p class="primary-copy">
+                        ${escapeHtml(tenant.phone_number || "No phone")}
+                        ·
+                        ${escapeHtml(property?.property_name || "Property")}
+                        ·
+                        ${escapeHtml(unit?.unit_label || "Unit")}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      class="offline-edit"
+                      data-offline-edit
+                      data-offline-entity-type="manager_tenant"
+                      data-offline-entity-id="${escapeHtml(tenant.id)}"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                </div>
+                <div class="cell">
+                  <div class="cell-label">
+                    Next rent due
+                  </div>
+                  <div class="cell-value">
+                    ${escapeHtml(formatDate(tenant.next_rent_due_date))}
+                  </div>
+                </div>
+                <div class="cell">
+                  <div class="cell-label">
+                    Rent position
+                  </div>
+                  <div class="cell-value">
+                    <span class="${balance > 0 ? "pill danger" : "pill success"}">
+                      ${balance > 0 ? `${formatMoney(balance)} owing` : "No balance"}
+                    </span>
+                  </div>
+                </div>
+              </article>
+            `;
+          })
+          .join("");
+      }
+
+      function renderManagerMaintenance(
+        maintenance,
+        properties,
+        units,
+      ) {
+        const propertyById = new Map(
+          properties.map((property) => [
+            property.id,
+            property,
+          ]),
+        );
+        const unitById = new Map(
+          units.map((unit) => [
+            unit.id,
+            unit,
+          ]),
+        );
+        const rows = filterBySearch(
+          maintenance,
+          (item) => {
+            const property =
+              propertyById.get(
+                item.property_id,
+              );
+            const unit = unitById.get(
+              item.unit_id,
+            );
+
+            return [
+              item.issue_title,
+              item.issue_description,
+              item.vendor_name,
+              item.status,
+              property?.property_name,
+              unit?.unit_label,
+            ].join(" ");
+          },
+        );
+
+        document.getElementById(
+          "panel-title",
+        ).textContent = "Maintenance";
+        document.getElementById(
+          "panel-description",
+        ).textContent =
+          "Reported issues and expected costs from your last refresh.";
+
+        if (rows.length === 0) {
+          document.getElementById(
+            "list",
+          ).innerHTML = renderEmpty(
+            "No matching maintenance records",
+            "Reconnect to refresh the workspace or change your search.",
+          );
+          return;
+        }
+
+        document.getElementById(
+          "list",
+        ).innerHTML = rows
+          .map((item) => {
+            const property =
+              propertyById.get(
+                item.property_id,
+              );
+            const unit = unitById.get(
+              item.unit_id,
+            );
+
+            return `
+              <article class="row">
+                <div class="primary">
+                  <div class="primary-head">
+                    <div>
+                      <p class="primary-title">
+                        ${escapeHtml(item.issue_title)}
+                      </p>
+                      <p class="primary-copy">
+                        ${escapeHtml(property?.property_name || "Property")}
+                        ${unit?.unit_label ? `· ${escapeHtml(unit.unit_label)}` : ""}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      class="offline-edit"
+                      data-offline-edit
+                      data-offline-entity-type="manager_maintenance_request"
+                      data-offline-entity-id="${escapeHtml(item.id)}"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                </div>
+                <div class="cell">
+                  <div class="cell-label">
+                    Expected amount
+                  </div>
+                  <div class="cell-value">
+                    ${escapeHtml(formatMoney(item.estimated_cost))}
+                  </div>
+                </div>
+                <div class="cell">
+                  <div class="cell-label">
+                    Status
+                  </div>
+                  <div class="cell-value">
+                    <span class="${pillClass(item.status)}">
+                      ${escapeHtml(titleCase(item.status))}
+                    </span>
+                  </div>
+                </div>
+              </article>
+            `;
+          })
+          .join("");
+      }
+
+      function renderDeveloper() {
+        const estates = (
+          state.records.developerEstates || []
+        )
+          .map(getData)
+          .filter(
+            (estate) =>
+              normalize(estate.status) !==
+              "archived",
+          );
+        const plots = (
+          state.records.developerPlots || []
+        ).map(getData);
+        const buyers = (
+          state.records.developerBuyers || []
+        )
+          .map(getData)
+          .filter(
+            (buyer) =>
+              normalize(buyer.status) !==
+              "cancelled",
+          );
+        const sales = (
+          state.records.developerSales || []
+        )
+          .map(getData)
+          .filter(
+            (sale) =>
+              !["cancelled", "exited"].includes(
+                normalize(sale.status),
+              ),
+          );
+
+        const availablePlots = plots.filter(
+          (plot) =>
+            normalize(plot.status) ===
+            "available",
+        ).length;
+        const activeSales = sales.filter(
+          (sale) =>
+            normalize(sale.status) ===
+            "active",
+        ).length;
+
+        document.getElementById("stats").innerHTML = [
+          createStat("Estates", estates.length),
+          createStat("Plots", plots.length),
+          createStat(
+            "Available plots",
+            availablePlots,
+          ),
+          createStat("Active sales", activeSales),
+        ].join("");
+
+        const tabs = [
+          ["overview", "Estates"],
+          ["inventory", "Plots"],
+          ["people", "Buyers"],
+          ["activity", "Sales"],
+        ];
+
+        renderTabs(tabs);
+
+        if (state.activeTab === "inventory") {
+          renderDeveloperPlots(
+            plots,
+            estates,
+          );
+          return;
+        }
+
+        if (state.activeTab === "people") {
+          renderDeveloperBuyers(buyers);
+          return;
+        }
+
+        if (state.activeTab === "activity") {
+          renderDeveloperSales(
+            sales,
+            estates,
+            plots,
+            buyers,
+          );
+          return;
+        }
+
+        renderDeveloperEstates(
+          estates,
+          plots,
+          sales,
+        );
+      }
+
+      function renderDeveloperEstates(
+        estates,
+        plots,
+        sales,
+      ) {
+        const rows = filterBySearch(
+          estates,
+          (estate) =>
+            [
+              estate.estate_name,
+              estate.location,
+              estate.city,
+              estate.state,
+              estate.status,
+            ].join(" "),
+        );
+
+        document.getElementById(
+          "panel-title",
+        ).textContent = "Estates";
+        document.getElementById(
+          "panel-description",
+        ).textContent =
+          "Plot inventory and active sales from your last refresh.";
+
+        if (rows.length === 0) {
+          document.getElementById(
+            "list",
+          ).innerHTML = renderEmpty(
+            "No matching estates",
+            "Reconnect to refresh the workspace or change your search.",
+          );
+          return;
+        }
+
+        document.getElementById(
+          "list",
+        ).innerHTML = rows
+          .map((estate) => {
+            const estatePlots = plots.filter(
+              (plot) =>
+                plot.estate_id === estate.id,
+            );
+            const available = estatePlots.filter(
+              (plot) =>
+                normalize(plot.status) ===
+                "available",
+            ).length;
+            const activeSales = sales.filter(
+              (sale) =>
+                sale.estate_id === estate.id &&
+                normalize(sale.status) ===
+                  "active",
+            ).length;
+            const location = [
+              estate.location,
+              estate.city,
+              estate.state,
+            ]
+              .filter(Boolean)
+              .join(", ");
+
+            return `
+              <article class="row">
+                <div class="primary">
+                  <div class="primary-head">
+                    <div>
+                      <p class="primary-title">
+                        ${escapeHtml(estate.estate_name)}
+                      </p>
+                      <p class="primary-copy">
+                        ${escapeHtml(location || "Location not entered")}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      class="offline-edit"
+                      data-offline-edit
+                      data-offline-entity-type="developer_estate"
+                      data-offline-entity-id="${escapeHtml(estate.id)}"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                </div>
+                <div class="cell">
+                  <div class="cell-label">
+                    Plot inventory
+                  </div>
+                  <div class="cell-value">
+                    ${available} available of
+                    ${estatePlots.length}
+                  </div>
+                </div>
+                <div class="cell">
+                  <div class="cell-label">
+                    Sales
+                  </div>
+                  <div class="cell-value">
+                    ${activeSales} active ·
+                    <span class="${pillClass(estate.status)}">
+                      ${escapeHtml(titleCase(estate.status))}
+                    </span>
+                  </div>
+                </div>
+              </article>
+            `;
+          })
+          .join("");
+      }
+
+      function renderDeveloperPlots(
+        plots,
+        estates,
+      ) {
+        const estateById = new Map(
+          estates.map((estate) => [
+            estate.id,
+            estate,
+          ]),
+        );
+        const rows = filterBySearch(
+          plots,
+          (plot) => {
+            const estate =
+              estateById.get(plot.estate_id);
+
+            return [
+              plot.plot_number,
+              plot.size_label,
+              plot.status,
+              estate?.estate_name,
+            ].join(" ");
+          },
+        );
+
+        document.getElementById(
+          "panel-title",
+        ).textContent = "Plots";
+        document.getElementById(
+          "panel-description",
+        ).textContent =
+          "Current plot availability and selling price from your last refresh.";
+
+        if (rows.length === 0) {
+          document.getElementById(
+            "list",
+          ).innerHTML = renderEmpty(
+            "No matching plots",
+            "Reconnect to refresh the workspace or change your search.",
+          );
+          return;
+        }
+
+        document.getElementById(
+          "list",
+        ).innerHTML = rows
+          .map((plot) => {
+            const estate =
+              estateById.get(plot.estate_id);
+
+            return `
+              <article class="row">
+                <div class="primary">
+                  <p class="primary-title">
+                    ${escapeHtml(plot.plot_number)}
+                  </p>
+                  <p class="primary-copy">
+                    ${escapeHtml(estate?.estate_name || "Estate")}
+                    ·
+                    ${escapeHtml(plot.size_label || "Size not entered")}
+                  </p>
+                </div>
+                <div class="cell">
+                  <div class="cell-label">
+                    Selling price
+                  </div>
+                  <div class="cell-value">
+                    ${escapeHtml(formatMoney(plot.price))}
+                  </div>
+                </div>
+                <div class="cell">
+                  <div class="cell-label">
+                    Status
+                  </div>
+                  <div class="cell-value">
+                    <span class="${pillClass(plot.status)}">
+                      ${escapeHtml(titleCase(plot.status))}
+                    </span>
+                  </div>
+                </div>
+              </article>
+            `;
+          })
+          .join("");
+      }
+
+      function renderDeveloperBuyers(buyers) {
+        const rows = filterBySearch(
+          buyers,
+          (buyer) =>
+            [
+              buyer.full_name,
+              buyer.phone_number,
+              buyer.email,
+              buyer.status,
+            ].join(" "),
+        );
+
+        document.getElementById(
+          "panel-title",
+        ).textContent = "Buyers";
+        document.getElementById(
+          "panel-description",
+        ).textContent =
+          "Buyer contact details and current stage from your last refresh.";
+
+        if (rows.length === 0) {
+          document.getElementById(
+            "list",
+          ).innerHTML = renderEmpty(
+            "No matching buyers",
+            "Reconnect to refresh the workspace or change your search.",
+          );
+          return;
+        }
+
+        document.getElementById(
+          "list",
+        ).innerHTML = rows
+          .map(
+            (buyer) => `
+              <article class="row">
+                <div class="primary">
+                  <div class="primary-head">
+                    <div>
+                      <p class="primary-title">
+                        ${escapeHtml(buyer.full_name)}
+                      </p>
+                      <p class="primary-copy">
+                        ${escapeHtml(buyer.phone_number || "No phone")}
+                        ${buyer.email ? `· ${escapeHtml(buyer.email)}` : ""}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      class="offline-edit"
+                      data-offline-edit
+                      data-offline-entity-type="developer_buyer"
+                      data-offline-entity-id="${escapeHtml(buyer.id)}"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                </div>
+                <div class="cell">
+                  <div class="cell-label">
+                    Added
+                  </div>
+                  <div class="cell-value">
+                    ${escapeHtml(formatDate(buyer.created_at))}
+                  </div>
+                </div>
+                <div class="cell">
+                  <div class="cell-label">
+                    Status
+                  </div>
+                  <div class="cell-value">
+                    <span class="${pillClass(buyer.status)}">
+                      ${escapeHtml(titleCase(buyer.status))}
+                    </span>
+                  </div>
+                </div>
+              </article>
+            `,
+          )
+          .join("");
+      }
+
+      function renderDeveloperSales(
+        sales,
+        estates,
+        plots,
+        buyers,
+      ) {
+        const estateById = new Map(
+          estates.map((estate) => [
+            estate.id,
+            estate,
+          ]),
+        );
+        const plotById = new Map(
+          plots.map((plot) => [
+            plot.id,
+            plot,
+          ]),
+        );
+        const buyerById = new Map(
+          buyers.map((buyer) => [
+            buyer.id,
+            buyer,
+          ]),
+        );
+        const rows = filterBySearch(
+          sales,
+          (sale) => {
+            const estate =
+              estateById.get(sale.estate_id);
+            const plot =
+              plotById.get(sale.plot_id);
+            const buyer =
+              buyerById.get(sale.buyer_id);
+
+            return [
+              sale.sale_reference,
+              sale.status,
+              estate?.estate_name,
+              plot?.plot_number,
+              buyer?.full_name,
+            ].join(" ");
+          },
+        );
+
+        document.getElementById(
+          "panel-title",
+        ).textContent = "Sales";
+        document.getElementById(
+          "panel-description",
+        ).textContent =
+          "Buyer, plot, and locked sale value from your last refresh.";
+
+        if (rows.length === 0) {
+          document.getElementById(
+            "list",
+          ).innerHTML = renderEmpty(
+            "No matching sales",
+            "Reconnect to refresh the workspace or change your search.",
+          );
+          return;
+        }
+
+        document.getElementById(
+          "list",
+        ).innerHTML = rows
+          .map((sale) => {
+            const estate =
+              estateById.get(sale.estate_id);
+            const plot =
+              plotById.get(sale.plot_id);
+            const buyer =
+              buyerById.get(sale.buyer_id);
+
+            return `
+              <article class="row">
+                <div class="primary">
+                  <p class="primary-title">
+                    ${escapeHtml(buyer?.full_name || sale.sale_reference)}
+                  </p>
+                  <p class="primary-copy">
+                    ${escapeHtml(estate?.estate_name || "Estate")}
+                    ·
+                    ${escapeHtml(plot?.plot_number || "Plot")}
+                    ·
+                    ${escapeHtml(sale.sale_reference)}
+                  </p>
+                </div>
+                <div class="cell">
+                  <div class="cell-label">
+                    Sale value
+                  </div>
+                  <div class="cell-value">
+                    ${escapeHtml(formatMoney(sale.total_price_locked))}
+                  </div>
+                </div>
+                <div class="cell">
+                  <div class="cell-label">
+                    Status
+                  </div>
+                  <div class="cell-value">
+                    <span class="${pillClass(sale.status)}">
+                      ${escapeHtml(titleCase(sale.status))}
+                    </span>
+                  </div>
+                </div>
+              </article>
+            `;
+          })
+          .join("");
+      }
+
+      function renderTabs(tabs) {
+        const tabsElement =
+          document.getElementById("tabs");
+
+        if (
+          !tabs.some(
+            ([value]) =>
+              value === state.activeTab,
+          )
+        ) {
+          state.activeTab = tabs[0][0];
+        }
+
+        tabsElement.innerHTML = tabs
+          .map(
+            ([value, label]) => `
+              <button
+                class="tab ${
+                  state.activeTab === value
+                    ? "active"
+                    : ""
+                }"
+                type="button"
+                data-tab="${escapeHtml(value)}"
+              >
+                ${escapeHtml(label)}
+              </button>
+            `,
+          )
+          .join("");
+
+        tabsElement
+          .querySelectorAll("[data-tab]")
+          .forEach((button) => {
+            button.addEventListener(
+              "click",
+              () => {
+                state.activeTab =
+                  button.dataset.tab;
+                renderWorkspace();
+              },
+            );
+          });
+      }
+
+      function renderWorkspace() {
+        if (state.workspaceType === "developer") {
+          renderDeveloper();
+        } else {
+          renderManager();
+        }
+      }
+
+      async function initialize() {
+        try {
+          const db = await openDatabase();
+          const [
+            metaRows,
+            workspaces,
+            cursors,
+          ] = await Promise.all([
+            readAll(db, "meta"),
+            readAll(db, "workspaces"),
+            readAll(db, "syncCursors"),
+          ]);
+
+          const ownerProfileId =
+            metaRows.find(
+              (row) =>
+                row.key === META_OWNER_KEY,
+            )?.value ?? null;
+
+          state.ownerProfileId =
+            ownerProfileId;
+
+          if (!ownerProfileId) {
+            return;
+          }
+
+          const availableWorkspaces =
+            workspaces
+              .filter(
+                (workspace) =>
+                  workspace.ownerProfileId ===
+                    ownerProfileId &&
+                  workspace.workspaceType ===
+                    state.workspaceType,
+              )
+              .sort((first, second) =>
+                String(
+                  second.lastOpenedAt,
+                ).localeCompare(
+                  String(first.lastOpenedAt),
+                ),
+              );
+
+          const workspace =
+            availableWorkspaces[0] ?? null;
+
+          if (!workspace) {
+            return;
+          }
+
+          state.workspace = workspace;
+          state.cursor =
+            cursors.find(
+              (cursor) =>
+                cursor.ownerProfileId ===
+                  ownerProfileId &&
+                cursor.workspaceId ===
+                  workspace.workspaceId &&
+                cursor.workspaceType ===
+                  workspace.workspaceType,
+            ) ?? null;
+
+          if (
+            state.workspaceType === "developer"
+          ) {
+            const [
+              estates,
+              plots,
+              buyers,
+              sales,
+            ] = await Promise.all([
+              readAll(db, "developerEstates"),
+              readAll(db, "developerPlots"),
+              readAll(db, "developerBuyers"),
+              readAll(db, "developerSales"),
+            ]);
+
+            state.records = {
+              developerEstates:
+                filterWorkspaceRecords(
+                  estates,
+                  ownerProfileId,
+                  workspace.workspaceId,
+                ),
+              developerPlots:
+                filterWorkspaceRecords(
+                  plots,
+                  ownerProfileId,
+                  workspace.workspaceId,
+                ),
+              developerBuyers:
+                filterWorkspaceRecords(
+                  buyers,
+                  ownerProfileId,
+                  workspace.workspaceId,
+                ),
+              developerSales:
+                filterWorkspaceRecords(
+                  sales,
+                  ownerProfileId,
+                  workspace.workspaceId,
+                ),
+            };
+          } else {
+            const [
+              properties,
+              units,
+              tenants,
+              maintenance,
+            ] = await Promise.all([
+              readAll(db, "managerProperties"),
+              readAll(db, "managerUnits"),
+              readAll(db, "managerTenants"),
+              readAll(
+                db,
+                "managerMaintenanceRequests",
+              ),
+            ]);
+
+            state.records = {
+              managerProperties:
+                filterWorkspaceRecords(
+                  properties,
+                  ownerProfileId,
+                  workspace.workspaceId,
+                ),
+              managerUnits:
+                filterWorkspaceRecords(
+                  units,
+                  ownerProfileId,
+                  workspace.workspaceId,
+                ),
+              managerTenants:
+                filterWorkspaceRecords(
+                  tenants,
+                  ownerProfileId,
+                  workspace.workspaceId,
+                ),
+              managerMaintenance:
+                filterWorkspaceRecords(
+                  maintenance,
+                  ownerProfileId,
+                  workspace.workspaceId,
+                ),
+            };
+          }
+
+          document.getElementById(
+            "workspace-type",
+          ).textContent =
+            state.workspaceType === "developer"
+              ? "Developer workspace"
+              : "Manager workspace";
+          document.getElementById(
+            "workspace-name",
+          ).textContent =
+            workspace.workspaceName;
+          document.getElementById(
+            "workspace-copy",
+          ).textContent =
+            state.workspaceType === "developer"
+              ? "Your estates, plots, buyers, and sales remain available as a read-only offline copy."
+              : "Your properties, units, tenants, and maintenance remain available as a read-only offline copy.";
+          document.getElementById(
+            "last-refreshed",
+          ).textContent = `Last refreshed ${formatDateTime(
+            state.cursor?.updatedAt,
+          )}`;
+
+          const staleNotice =
+            document.getElementById(
+              "stale-notice",
+            );
+          const lastRefreshTime =
+            Date.parse(
+              state.cursor?.updatedAt || "",
+            );
+          const refreshAge =
+            Number.isFinite(lastRefreshTime)
+              ? Date.now() - lastRefreshTime
+              : Number.POSITIVE_INFINITY;
+
+          if (
+            refreshAge >=
+            7 * 24 * 60 * 60 * 1000
+          ) {
+            staleNotice.hidden = false;
+            staleNotice.className =
+              "stale-notice critical";
+            staleNotice.textContent =
+              "Over 7 days old";
+          } else if (
+            refreshAge >=
+            24 * 60 * 60 * 1000
+          ) {
+            staleNotice.hidden = false;
+            staleNotice.className =
+              "stale-notice warning";
+            staleNotice.textContent =
+              "May be out of date";
+          } else {
+            staleNotice.hidden = true;
+          }
+
+          document.getElementById(
+            "empty-state",
+          ).hidden = true;
+          document.getElementById(
+            "content",
+          ).hidden = false;
+
+          renderWorkspace();
+        } catch {
+          document.querySelector(
+            "#empty-state .empty-title",
+          ).textContent =
+            "Offline workspace unavailable";
+          document.querySelector(
+            "#empty-state .empty-copy",
+          ).textContent =
+            "Reconnect and open BOPA again so this device can refresh its offline copy.";
+        }
+      }
+
+      function filterWorkspaceRecords(
+        records,
+        ownerProfileId,
+        workspaceId,
+      ) {
+        return records.filter(
+          (record) =>
+            record.ownerProfileId ===
+              ownerProfileId &&
+            record.workspaceId ===
+              workspaceId &&
+            !record.deletedAt,
+        );
+      }
+
+      document
+        .getElementById("search")
+        .addEventListener("input", (event) => {
+          state.search = event.target.value;
+          renderWorkspace();
+        });
+
+      window.addEventListener("online", () => {
+        window.location.reload();
+      });
+
+      initialize();
+    </script>
+    <script src="/offline-write.js"></script>
+  </body>
+</html>

@@ -1,0 +1,338 @@
+{
+  "reportVersion": 1,
+  "title": "BOPA PWA static production readiness",
+  "target": "C:\\Users\\HP\\Documents\\tenuro",
+  "generatedAt": "2026-07-17T16:16:53.432Z",
+  "passed": true,
+  "checks": [
+    {
+      "id": "required:package.json",
+      "name": "Required file: package.json",
+      "passed": true,
+      "severity": "error",
+      "details": "Present."
+    },
+    {
+      "id": "required:src/app/manifest.ts",
+      "name": "Required file: src/app/manifest.ts",
+      "passed": true,
+      "severity": "error",
+      "details": "Present."
+    },
+    {
+      "id": "required:src/components/pwa/pwa-runtime.tsx",
+      "name": "Required file: src/components/pwa/pwa-runtime.tsx",
+      "passed": true,
+      "severity": "error",
+      "details": "Present."
+    },
+    {
+      "id": "required:src/lib/offline/database.ts",
+      "name": "Required file: src/lib/offline/database.ts",
+      "passed": true,
+      "severity": "error",
+      "details": "Present."
+    },
+    {
+      "id": "required:src/lib/offline/read-sync.client.ts",
+      "name": "Required file: src/lib/offline/read-sync.client.ts",
+      "passed": true,
+      "severity": "error",
+      "details": "Present."
+    },
+    {
+      "id": "required:src/lib/offline/push-sync.client.ts",
+      "name": "Required file: src/lib/offline/push-sync.client.ts",
+      "passed": true,
+      "severity": "error",
+      "details": "Present."
+    },
+    {
+      "id": "required:src/server/offline/read-snapshot.service.ts",
+      "name": "Required file: src/server/offline/read-snapshot.service.ts",
+      "passed": true,
+      "severity": "error",
+      "details": "Present."
+    },
+    {
+      "id": "required:src/server/offline/safe-mutation.service.ts",
+      "name": "Required file: src/server/offline/safe-mutation.service.ts",
+      "passed": true,
+      "severity": "error",
+      "details": "Present."
+    },
+    {
+      "id": "required:src/app/api/offline/read/route.ts",
+      "name": "Required file: src/app/api/offline/read/route.ts",
+      "passed": true,
+      "severity": "error",
+      "details": "Present."
+    },
+    {
+      "id": "required:src/app/api/offline/push/route.ts",
+      "name": "Required file: src/app/api/offline/push/route.ts",
+      "passed": true,
+      "severity": "error",
+      "details": "Present."
+    },
+    {
+      "id": "required:public/sw.js",
+      "name": "Required file: public/sw.js",
+      "passed": true,
+      "severity": "error",
+      "details": "Present."
+    },
+    {
+      "id": "required:public/offline.html",
+      "name": "Required file: public/offline.html",
+      "passed": true,
+      "severity": "error",
+      "details": "Present."
+    },
+    {
+      "id": "required:public/offline-workspace.html",
+      "name": "Required file: public/offline-workspace.html",
+      "passed": true,
+      "severity": "error",
+      "details": "Present."
+    },
+    {
+      "id": "required:public/offline-write.css",
+      "name": "Required file: public/offline-write.css",
+      "passed": true,
+      "severity": "error",
+      "details": "Present."
+    },
+    {
+      "id": "required:public/offline-write.js",
+      "name": "Required file: public/offline-write.js",
+      "passed": true,
+      "severity": "error",
+      "details": "Present."
+    },
+    {
+      "id": "required:public/icons/bopa-192.png",
+      "name": "Required file: public/icons/bopa-192.png",
+      "passed": true,
+      "severity": "error",
+      "details": "Present."
+    },
+    {
+      "id": "required:public/icons/bopa-512.png",
+      "name": "Required file: public/icons/bopa-512.png",
+      "passed": true,
+      "severity": "error",
+      "details": "Present."
+    },
+    {
+      "id": "required:public/icons/bopa-maskable-512.png",
+      "name": "Required file: public/icons/bopa-maskable-512.png",
+      "passed": true,
+      "severity": "error",
+      "details": "Present."
+    },
+    {
+      "id": "required:public/apple-touch-icon.png",
+      "name": "Required file: public/apple-touch-icon.png",
+      "passed": true,
+      "severity": "error",
+      "details": "Present."
+    },
+    {
+      "id": "required:supabase/migrations/20260717000000_offline_safe_mutations.sql",
+      "name": "Required file: supabase/migrations/20260717000000_offline_safe_mutations.sql",
+      "passed": true,
+      "severity": "error",
+      "details": "Present."
+    },
+    {
+      "id": "required:supabase/migrations/20260717010000_offline_sync_hardening.sql",
+      "name": "Required file: supabase/migrations/20260717010000_offline_sync_hardening.sql",
+      "passed": true,
+      "severity": "error",
+      "details": "Present."
+    },
+    {
+      "id": "required:docs/PWA_OFFLINE_SECURITY.md",
+      "name": "Required file: docs/PWA_OFFLINE_SECURITY.md",
+      "passed": true,
+      "severity": "error",
+      "details": "Present."
+    },
+    {
+      "id": "manifest:name",
+      "name": "Manifest includes full and short names",
+      "passed": true,
+      "severity": "error",
+      "details": "Configured."
+    },
+    {
+      "id": "manifest:description",
+      "name": "Manifest includes a description",
+      "passed": true,
+      "severity": "error",
+      "details": "Configured."
+    },
+    {
+      "id": "manifest:start",
+      "name": "Manifest start URL and scope are root-scoped",
+      "passed": true,
+      "severity": "error",
+      "details": "Configured."
+    },
+    {
+      "id": "manifest:display",
+      "name": "Manifest launches in standalone display mode",
+      "passed": true,
+      "severity": "error",
+      "details": "Configured."
+    },
+    {
+      "id": "manifest:colors",
+      "name": "Manifest includes branded background and theme colors",
+      "passed": true,
+      "severity": "error",
+      "details": "Configured."
+    },
+    {
+      "id": "manifest:icons",
+      "name": "Manifest includes 192px, 512px, and maskable icons",
+      "passed": true,
+      "severity": "error",
+      "details": "Configured."
+    },
+    {
+      "id": "icon:public/icons/bopa-192.png",
+      "name": "Icon dimensions: public/icons/bopa-192.png",
+      "passed": true,
+      "severity": "error",
+      "details": "192×192; expected 192×192."
+    },
+    {
+      "id": "icon:public/icons/bopa-512.png",
+      "name": "Icon dimensions: public/icons/bopa-512.png",
+      "passed": true,
+      "severity": "error",
+      "details": "512×512; expected 512×512."
+    },
+    {
+      "id": "icon:public/icons/bopa-maskable-512.png",
+      "name": "Icon dimensions: public/icons/bopa-maskable-512.png",
+      "passed": true,
+      "severity": "error",
+      "details": "512×512; expected 512×512."
+    },
+    {
+      "id": "worker:version",
+      "name": "Service worker uses the Phase 5 bounded cache",
+      "passed": true,
+      "severity": "error",
+      "details": "Configured."
+    },
+    {
+      "id": "worker:sensitive",
+      "name": "Service worker excludes API, payment, and report paths",
+      "passed": true,
+      "severity": "error",
+      "details": "Configured."
+    },
+    {
+      "id": "worker:limits",
+      "name": "Service worker enforces entry, age, and response-size limits",
+      "passed": true,
+      "severity": "error",
+      "details": "Configured."
+    },
+    {
+      "id": "worker:private",
+      "name": "Service worker rejects private and no-store responses",
+      "passed": true,
+      "severity": "error",
+      "details": "Configured."
+    },
+    {
+      "id": "worker:update",
+      "name": "Service worker update requires an explicit skip-waiting message",
+      "passed": true,
+      "severity": "error",
+      "details": "Configured."
+    },
+    {
+      "id": "worker:offline",
+      "name": "Service worker includes public and workspace offline fallbacks",
+      "passed": true,
+      "severity": "error",
+      "details": "Configured."
+    },
+    {
+      "id": "no-store:src/app/api/offline/read/route.ts",
+      "name": "Offline API is non-cacheable: src/app/api/offline/read/route.ts",
+      "passed": true,
+      "severity": "error",
+      "details": "No-store response headers are present."
+    },
+    {
+      "id": "no-store:src/app/api/offline/push/route.ts",
+      "name": "Offline API is non-cacheable: src/app/api/offline/push/route.ts",
+      "passed": true,
+      "severity": "error",
+      "details": "No-store response headers are present."
+    },
+    {
+      "id": "sensitive-local:src/server/offline/read-snapshot.service.ts",
+      "name": "No prohibited local-data fields: src/server/offline/read-snapshot.service.ts",
+      "passed": true,
+      "severity": "error",
+      "details": "No prohibited fields detected."
+    },
+    {
+      "id": "sensitive-local:public/offline-write.js",
+      "name": "No prohibited local-data fields: public/offline-write.js",
+      "passed": true,
+      "severity": "error",
+      "details": "No prohibited fields detected."
+    },
+    {
+      "id": "sensitive-local:src/lib/offline/types.ts",
+      "name": "No prohibited local-data fields: src/lib/offline/types.ts",
+      "passed": true,
+      "severity": "error",
+      "details": "No prohibited fields detected."
+    },
+    {
+      "id": "secrets:public",
+      "name": "No server secret names in public",
+      "passed": true,
+      "severity": "error",
+      "details": "No secret identifiers detected."
+    },
+    {
+      "id": "secrets:src/components",
+      "name": "No server secret names in src/components",
+      "passed": true,
+      "severity": "error",
+      "details": "No secret identifiers detected."
+    },
+    {
+      "id": "secrets:src/lib/offline",
+      "name": "No server secret names in src/lib/offline",
+      "passed": true,
+      "severity": "error",
+      "details": "No secret identifiers detected."
+    },
+    {
+      "id": "migration:supabase/migrations/20260717000000_offline_safe_mutations.sql",
+      "name": "Offline mutation migration is RLS-protected and service-role-only",
+      "passed": true,
+      "severity": "error",
+      "details": "Required controls are present."
+    },
+    {
+      "id": "migration:supabase/migrations/20260717010000_offline_sync_hardening.sql",
+      "name": "Offline receipt retention migration is present",
+      "passed": true,
+      "severity": "error",
+      "details": "Required controls are present."
+    }
+  ]
+}
