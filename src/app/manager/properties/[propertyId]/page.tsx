@@ -3,10 +3,12 @@ import { isManagerCurrentTenantStatus } from "@/constants/manager";
 import { notFound, redirect } from "next/navigation";
 import { ManagerBankAccountGate } from "@/components/manager/manager-bank-account-gate";
 import { ManagerExistingTenantSetupCard } from "@/components/manager/manager-existing-tenant-setup-card";
+import { ManagerPropertyMaintenanceActivity } from "@/components/manager/manager-property-maintenance-activity";
 import { ManagerTenantOnboardingForm } from "@/components/manager/manager-tenant-onboarding-form";
 import { ManagerTenantOnboardingReviewList } from "@/components/manager/manager-tenant-onboarding-review-list";
 import { ManagerUnitForm } from "@/components/manager/manager-unit-form";
 import { ManagerUnitList } from "@/components/manager/manager-unit-list";
+import { listManagerMaintenanceRequests } from "@/server/repositories/manager-maintenance.repository";
 import { getActiveManagerPaystackAccount } from "@/server/repositories/manager-paystack-accounts.repository";
 import { expireManagerNewTenantPaymentRequests } from "@/server/repositories/manager-paystack.repository";
 import {
@@ -186,6 +188,7 @@ export default async function ManagerPropertyDetailPage({
     units,
     tenants,
     payments,
+    maintenanceRequests,
     onboardingRequests,
     agreementDocuments,
     managerPaystackAccount,
@@ -198,6 +201,7 @@ export default async function ManagerPropertyDetailPage({
       propertyId,
     }),
     listManagerRentPayments(supabase, organization.id),
+    listManagerMaintenanceRequests(supabase, organization.id),
     listManagerTenantOnboardingRequests(supabase, {
       organizationId: organization.id,
       propertyId,
@@ -272,6 +276,9 @@ export default async function ManagerPropertyDetailPage({
     (payment) =>
       payment.property_id === property.id &&
       (payment.status === "verified" || payment.status === "recorded"),
+  );
+  const propertyMaintenanceRequests = maintenanceRequests.filter(
+    (request) => request.property_id === property.id,
   );
 
   const unitLabelById = new Map(
@@ -510,6 +517,13 @@ export default async function ManagerPropertyDetailPage({
         onboardingRequests={onboardingRequests}
         showTenantActions
         addUnitHref={`/manager/properties/${property.id}?addUnit=1#add-unit`}
+      />
+
+      <ManagerPropertyMaintenanceActivity
+        propertyId={property.id}
+        units={propertyUnits}
+        tenants={tenants}
+        maintenanceRequests={propertyMaintenanceRequests}
       />
 
       {downloadableAgreements.length > 0 || downloadablePayments.length > 0 ? (

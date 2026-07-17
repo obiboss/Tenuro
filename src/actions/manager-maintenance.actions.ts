@@ -25,37 +25,39 @@ export async function createManagerMaintenanceRequestAction(
   formData: FormData,
 ): Promise<ManagerActionState> {
   try {
-    await requireManagerWorkspacePermission(
-      "maintenance.manage",
-    );
+    await requireManagerWorkspacePermission("maintenance.manage");
 
-    const parsed =
-      createManagerMaintenanceRequestSchema.parse({
-        landlordClientId: formData.get("landlordClientId"),
-        propertyId: formData.get("propertyId"),
-        unitId: formData.get("unitId"),
-        tenantId: formData.get("tenantId"),
-        issueTitle: formData.get("issueTitle"),
-        issueDescription: formData.get("issueDescription"),
-        priority: formData.get("priority") || "medium",
-        status: "reported",
-        estimatedCost: formData.get("estimatedCost"),
-        actualCost: "0",
-        vendorName: undefined,
-        reportedDate: formData.get("reportedDate"),
-        resolvedDate: undefined,
-        notes: formData.get("notes"),
-      });
+    const parsed = createManagerMaintenanceRequestSchema.parse({
+      landlordClientId: formData.get("landlordClientId"),
+      propertyId: formData.get("propertyId"),
+      unitId: formData.get("unitId"),
+      tenantId: formData.get("tenantId"),
+      issueTitle: formData.get("issueTitle"),
+      issueDescription: formData.get("issueDescription"),
+      priority: formData.get("priority") || "medium",
+      status: "reported",
+      estimatedCost: formData.get("estimatedCost"),
+      actualCost: "0",
+      vendorName: null,
+      reportedDate: formData.get("reportedDate"),
+      resolvedDate: null,
+      notes: formData.get("notes"),
+    });
 
     await createManagerMaintenanceRequest(parsed);
 
     revalidatePath("/manager");
     revalidatePath("/manager/overview");
+    revalidatePath("/manager/attention");
     revalidatePath("/manager/maintenance");
+    revalidatePath("/manager/properties");
+    revalidatePath(`/manager/properties/${parsed.propertyId}`);
+    revalidatePath("/manager/reports");
 
     return {
       ok: true,
       message: "Maintenance issue recorded.",
+      propertyId: parsed.propertyId,
       submissionId: `${Date.now()}`,
     };
   } catch (error) {
