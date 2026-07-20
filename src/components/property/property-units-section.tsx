@@ -25,10 +25,14 @@ export function PropertyUnitsSection({
 }: PropertyUnitsSectionProps) {
   const [isAddUnitOpen, setIsAddUnitOpen] = useState(false);
 
+  function closeAddUnitPanel() {
+    setIsAddUnitOpen(false);
+  }
+
   function handleUnitSaved() {
     const wasFirstUnit = initialUnitCount === 0;
 
-    setIsAddUnitOpen(false);
+    closeAddUnitPanel();
     onUnitSaved?.({ wasFirstUnit });
   }
 
@@ -42,7 +46,7 @@ export function PropertyUnitsSection({
             <Button type="button" onClick={() => setIsAddUnitOpen(true)}>
               <span className="inline-flex items-center gap-2">
                 <Plus aria-hidden="true" size={18} strokeWidth={2.6} />
-                Add Unit
+                Add unit
               </span>
             </Button>
           ) : undefined
@@ -71,14 +75,16 @@ export function PropertyUnitsSection({
 
       <SlideOverPanel
         open={isAddUnitOpen}
-        onClose={() => setIsAddUnitOpen(false)}
-        title="Add Unit"
-        description="Create a rentable space under this property."
+        onClose={closeAddUnitPanel}
+        title="Add unit"
+        description="Create one rentable space under this property."
+        contentClassName="p-0"
       >
         <UnitForm
           propertyId={propertyId}
           layout="embedded"
           onSuccess={handleUnitSaved}
+          onCancel={closeAddUnitPanel}
         />
       </SlideOverPanel>
     </>

@@ -76,6 +76,7 @@ type UnitFormProps = {
   propertyId: string;
   layout?: "card" | "embedded";
   onSuccess?: () => void;
+  onCancel?: () => void;
 };
 
 const defaultUnitType = "single_room";
@@ -94,10 +95,36 @@ function setFormNumberValue(
   field.value = String(value);
 }
 
+function SectionHeading({
+  step,
+  title,
+  description,
+}: {
+  step: number;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="flex items-start gap-3">
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary-soft text-sm font-black text-primary">
+        {step}
+      </span>
+
+      <div>
+        <h3 className="font-black text-text-strong">{title}</h3>
+        <p className="mt-0.5 text-sm font-semibold leading-5 text-text-muted">
+          {description}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function UnitForm({
   propertyId,
   layout = "card",
   onSuccess,
+  onCancel,
 }: UnitFormProps) {
   const formRef = useRef<HTMLFormElement | null>(null);
   const handledSuccessMessageRef = useRef<string | null>(null);
@@ -121,8 +148,16 @@ export function UnitForm({
     handledSuccessMessageRef.current = state.message;
     formRef.current?.reset();
     setFormResetKey((currentKey) => currentKey + 1);
-    setFormNumberValue(formRef.current, "bedrooms", unitTypeDefaults[defaultUnitType].bedrooms);
-    setFormNumberValue(formRef.current, "bathrooms", unitTypeDefaults[defaultUnitType].bathrooms);
+    setFormNumberValue(
+      formRef.current,
+      "bedrooms",
+      unitTypeDefaults[defaultUnitType].bedrooms,
+    );
+    setFormNumberValue(
+      formRef.current,
+      "bathrooms",
+      unitTypeDefaults[defaultUnitType].bathrooms,
+    );
     onSuccess?.();
   }, [onSuccess, state.message, state.ok]);
 
@@ -138,96 +173,130 @@ export function UnitForm({
   }
 
   const formFields = (
-    <div className="space-y-5">
-      {state.message ? (
+    <div className="space-y-7">
+      {state.message && !state.ok ? (
         <div
           role="alert"
-          className={
-            state.ok
-              ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
-              : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
-          }
+          className="rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
         >
-          {state.ok
-            ? "Unit saved. The form is ready for the next unit."
-            : state.message}
+          {state.message}
         </div>
       ) : null}
 
-      <Input
-        label="Building or block"
-        name="buildingName"
-        placeholder="Example: Block A, Back Building, Landlord House"
-        helperText="Use this if the property has more than one building or block."
-        key={`building-${formResetKey}`}
-      />
+      <section className="space-y-4" aria-labelledby="unit-details-heading">
+        <SectionHeading
+          step={1}
+          title="Unit details"
+          description="Name the rentable space and choose the closest unit type."
+        />
 
-      <Input
-        label="Unit name"
-        name="unitIdentifier"
-        placeholder="Example: Flat 3, Room 2A, Shop 1"
-        error={state.fieldErrors?.unitIdentifier?.[0]}
-        key={`unit-identifier-${formResetKey}`}
-        required
-      />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Input
+            label="Unit name"
+            name="unitIdentifier"
+            placeholder="Example: Flat 3 or Shop 1"
+            error={state.fieldErrors?.unitIdentifier?.[0]}
+            key={`unit-identifier-${formResetKey}`}
+            required
+          />
 
-      <Select
-        label="Unit type"
-        name="unitType"
-        options={unitTypeOptions}
-        defaultValue={defaultUnitType}
-        key={`unit-type-${formResetKey}`}
-        onChange={handleUnitTypeChange}
-        error={state.fieldErrors?.unitType?.[0]}
-        required
-      />
+          <Select
+            label="Unit type"
+            name="unitType"
+            options={unitTypeOptions}
+            defaultValue={defaultUnitType}
+            key={`unit-type-${formResetKey}`}
+            onChange={handleUnitTypeChange}
+            error={state.fieldErrors?.unitType?.[0]}
+            required
+          />
+        </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Input
-          label="Bedrooms"
-          name="bedrooms"
-          type="number"
-          min={0}
-          defaultValue={unitTypeDefaults[defaultUnitType].bedrooms}
-          key={`bedrooms-${formResetKey}`}
-          error={state.fieldErrors?.bedrooms?.[0]}
-          helperText="Auto-filled from unit type. You can adjust it."
+        <div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input
+              label="Bedrooms"
+              name="bedrooms"
+              type="number"
+              min={0}
+              defaultValue={unitTypeDefaults[defaultUnitType].bedrooms}
+              key={`bedrooms-${formResetKey}`}
+              error={state.fieldErrors?.bedrooms?.[0]}
+            />
+
+            <Input
+              label="Bathrooms"
+              name="bathrooms"
+              type="number"
+              min={0}
+              defaultValue={unitTypeDefaults[defaultUnitType].bathrooms}
+              key={`bathrooms-${formResetKey}`}
+              error={state.fieldErrors?.bathrooms?.[0]}
+            />
+          </div>
+
+          <p className="mt-2 text-xs font-semibold leading-5 text-text-muted">
+            These values follow the selected unit type. Adjust them only when
+            needed.
+          </p>
+        </div>
+      </section>
+
+      <div className="h-px bg-border-soft" />
+
+      <section className="space-y-4" aria-labelledby="unit-rent-heading">
+        <SectionHeading
+          step={2}
+          title="Rent"
+          description="Enter the amount this tenant will normally pay."
+        />
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <CurrencyInput
+            label="Annual rent"
+            name="annualRent"
+            placeholder="0.00"
+            resetKey={formResetKey}
+            error={state.fieldErrors?.annualRent?.[0]}
+            helperText="Use this for yearly rent."
+          />
+
+          <CurrencyInput
+            label="Monthly rent"
+            name="monthlyRent"
+            placeholder="0.00"
+            resetKey={formResetKey}
+            error={state.fieldErrors?.monthlyRent?.[0]}
+            helperText="Optional. Use only for monthly rent."
+          />
+        </div>
+      </section>
+
+      <div className="h-px bg-border-soft" />
+
+      <section className="space-y-4" aria-labelledby="unit-location-heading">
+        <SectionHeading
+          step={3}
+          title="Location within the property"
+          description="Add this only when the property has multiple buildings or blocks."
         />
 
         <Input
-          label="Bathrooms"
-          name="bathrooms"
-          type="number"
-          min={0}
-          defaultValue={unitTypeDefaults[defaultUnitType].bathrooms}
-          key={`bathrooms-${formResetKey}`}
-          error={state.fieldErrors?.bathrooms?.[0]}
-          helperText="Auto-filled from unit type. You can adjust it."
+          label="Building or block"
+          name="buildingName"
+          placeholder="Example: Block A or Back Building"
+          key={`building-${formResetKey}`}
         />
-      </div>
-
-      <CurrencyInput
-        label="Annual rent"
-        name="annualRent"
-        placeholder="0.00"
-        resetKey={formResetKey}
-        error={state.fieldErrors?.annualRent?.[0]}
-        helperText="Most Nigerian landlords collect rent yearly, so this is the main rent amount."
-      />
-
-      <CurrencyInput
-        label="Monthly rent"
-        name="monthlyRent"
-        placeholder="0.00"
-        resetKey={formResetKey}
-        error={state.fieldErrors?.monthlyRent?.[0]}
-        helperText="Use only if this unit is rented monthly."
-      />
+      </section>
     </div>
   );
 
   return (
-    <form ref={formRef} action={formAction}>
+    <form
+      ref={formRef}
+      action={formAction}
+      className={layout === "embedded" ? "min-h-full" : undefined}
+    >
       <ActionResultToast
         ok={state.ok}
         message={state.message}
@@ -237,11 +306,24 @@ export function UnitForm({
 
       {layout === "embedded" ? (
         <>
-          {formFields}
-          <div className="mt-6">
-            <Button type="submit" isLoading={isPending} fullWidth>
-              Save Unit
-            </Button>
+          <div className="px-5 py-5 sm:px-6 sm:py-6">{formFields}</div>
+
+          <div className="sticky bottom-0 z-10 border-t border-border-soft bg-white/95 px-5 py-4 backdrop-blur sm:px-6">
+            <div className="grid gap-3 sm:grid-cols-[minmax(7rem,auto)_minmax(9rem,auto)] sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={onCancel}
+                disabled={isPending}
+                fullWidth
+              >
+                Cancel
+              </Button>
+
+              <Button type="submit" isLoading={isPending} fullWidth>
+                Add unit
+              </Button>
+            </div>
           </div>
         </>
       ) : (
@@ -250,7 +332,7 @@ export function UnitForm({
 
           <CardFooter>
             <Button type="submit" isLoading={isPending}>
-              Save Unit
+              Add unit
             </Button>
           </CardFooter>
         </Card>
