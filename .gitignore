@@ -39,3 +39,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+/artifacts/pwa-production/
+/current-platform-admin-dashboard-files.txt
+/free-tool-admin-audit-source.txt
+/password-reveal-source.txt
+/tools/bopa-platform-admin-free-tool-usage/
+/tools/bopa-platform-admin-free-tool-usage-v2/
+/tools/bopa-pwa-lint-fix/
+/tools/bopa-landlord-overview-property-first/
