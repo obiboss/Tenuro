@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   BellRing,
+  Building2,
   CreditCard,
   ReceiptText,
   UserPlus,
@@ -10,6 +11,10 @@ import type { OverviewPrimaryAction } from "@/server/services/rent-control-overv
 
 type OverviewActionButtonsProps = {
   primaryAction: OverviewPrimaryAction;
+};
+
+type OverviewEmptyStateActionsProps = {
+  step: "property" | "tenant";
 };
 
 const actions = [
@@ -75,14 +80,22 @@ export function OverviewActionButtons({
   );
 }
 
-export function OverviewEmptyStateActions() {
+export function OverviewEmptyStateActions({
+  step,
+}: OverviewEmptyStateActionsProps) {
+  const isPropertyStep = step === "property";
+  const href = isPropertyStep ? "/properties/new" : "/tenants/new";
+  const label = isPropertyStep ? "Add property" : "Add tenant";
+  const Icon = isPropertyStep ? Building2 : UserPlus;
+
   return (
     <div className="flex flex-wrap gap-2">
       <Link
-        href="/tenants/new"
-        className="inline-flex min-h-10 items-center justify-center rounded-button bg-primary px-4 py-2 text-sm font-extrabold text-white shadow-soft"
+        href={href}
+        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-button bg-primary px-4 py-2 text-sm font-extrabold text-white shadow-soft"
       >
-        Add tenant
+        <Icon aria-hidden="true" size={17} strokeWidth={2.6} />
+        {label}
       </Link>
     </div>
   );

@@ -29,13 +29,29 @@ function PropertyFilterFallback() {
   );
 }
 
+function NoPropertyLabel() {
+  return (
+    <span className="inline-flex h-8 items-center rounded-full border border-border-soft bg-white px-3 text-xs font-bold text-text-muted">
+      No property yet
+    </span>
+  );
+}
+
 export default async function OverviewPage({ searchParams }: OverviewPageProps) {
   const resolvedSearchParams = await searchParams;
   const overview = await getCurrentLandlordRentControlOverview(
     resolvedSearchParams.property ?? null,
   );
 
+  const hasProperties = overview.properties.length > 0;
   const showEmptyOnboarding = !overview.hasTenants;
+  const onboardingStep = hasProperties ? "tenant" : "property";
+  const onboardingTitle = hasProperties
+    ? "Add your first tenant to start tracking rent"
+    : "Add your first property to get started";
+  const onboardingDescription = hasProperties
+    ? "Track rent, receipts, and reminders from here."
+    : "Set up the property first. You can add its units and tenants next.";
 
   return (
     <div className="space-y-3">
@@ -43,13 +59,17 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
         <LandlordGreeting landlordName={overview.landlordName} />
 
         <div className="flex shrink-0 items-center gap-2 pt-0.5">
-          <Suspense fallback={<PropertyFilterFallback />}>
-            <OverviewPropertyFilter
-              properties={overview.properties}
-              selectedPropertyId={overview.selectedPropertyId}
-              filterLabel={overview.propertyFilterLabel}
-            />
-          </Suspense>
+          {hasProperties ? (
+            <Suspense fallback={<PropertyFilterFallback />}>
+              <OverviewPropertyFilter
+                properties={overview.properties}
+                selectedPropertyId={overview.selectedPropertyId}
+                filterLabel={overview.propertyFilterLabel}
+              />
+            </Suspense>
+          ) : (
+            <NoPropertyLabel />
+          )}
 
           <Link
             href="/notifications"
@@ -64,13 +84,13 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
       {showEmptyOnboarding ? (
         <div className="rounded-card border border-primary/15 bg-linear-to-br from-primary-soft to-white p-4 shadow-card">
           <p className="text-base font-extrabold text-text-strong">
-            Add your first tenant to start tracking rent
+            {onboardingTitle}
           </p>
           <p className="mt-1 text-sm leading-5 text-text-muted">
-            Track rent, receipts, and reminders from here.
+            {onboardingDescription}
           </p>
           <div className="mt-3">
-            <OverviewEmptyStateActions />
+            <OverviewEmptyStateActions step={onboardingStep} />
           </div>
         </div>
       ) : (
