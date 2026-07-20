@@ -18,7 +18,7 @@ import {
   getDeveloperSaleById,
   type DeveloperSaleWithDetails,
 } from "@/server/repositories/developer-sales.repository";
-import { requireDeveloper } from "@/server/services/auth.service";
+import { requireDeveloperWorkspaceOperator } from "@/server/services/auth.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { formatNaira } from "@/server/utils/money";
 
@@ -377,7 +377,7 @@ export async function getDeveloperDocumentAutofillPreviewForCurrentDeveloper(par
   templateType: DeveloperEditableTemplateType;
   templateBody?: string | null;
 }): Promise<DeveloperDocumentAutofillPreview> {
-  const developer = await requireDeveloper();
+  const developer = await requireDeveloperWorkspaceOperator();
   const supabase = createSupabaseAdminClient();
 
   const account = await getDeveloperAccountOrThrow({

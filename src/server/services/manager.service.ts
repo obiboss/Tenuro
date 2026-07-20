@@ -27,6 +27,7 @@ import {
 } from "@/server/repositories/manager.repository";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
+import { assertBusinessSubscriptionAccessForProfile } from "@/server/services/business-subscription.service";
 import type {
   CreateManagerLandlordClientInput,
   CreateManagerOrganizationInput,
@@ -149,6 +150,11 @@ async function requireManagerOrganization() {
       403,
     );
   }
+
+  await assertBusinessSubscriptionAccessForProfile({
+    profileId: profile.id,
+    workspaceType: "manager",
+  });
 
   return {
     supabase,

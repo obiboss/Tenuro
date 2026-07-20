@@ -12,6 +12,7 @@ import {
   getManagerUnitById,
 } from "@/server/repositories/manager.repository";
 import { createSupabaseServerClient } from "@/server/supabase/server";
+import { assertBusinessSubscriptionAccessForProfile } from "@/server/services/business-subscription.service";
 import type { CreateManagerMaintenanceRequestInput } from "@/server/validators/manager-maintenance.schema";
 
 type ManagerProfileRow = {
@@ -110,6 +111,11 @@ async function requireManagerOrganization() {
       403,
     );
   }
+
+  await assertBusinessSubscriptionAccessForProfile({
+    profileId: profile.id,
+    workspaceType: "manager",
+  });
 
   return {
     supabase,

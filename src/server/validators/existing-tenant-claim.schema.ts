@@ -40,6 +40,40 @@ export const createExistingTenantClaimSchema = z.object({
   note: z.string().trim().max(1000).optional().or(z.literal("")),
 });
 
+export const createManualExistingTenantSchema = z
+  .object({
+    unitId: uuidSchema,
+    fullName: z.string().trim().min(2, "Enter the tenant name.").max(120),
+    phoneNumber: phoneSchema,
+    occupation: z
+      .string()
+      .trim()
+      .min(2, "Enter the tenant occupation.")
+      .max(120),
+    tenancyStartDate: dateStringSchema,
+    currentRentCycleStartDate: dateStringSchema,
+    paymentFrequency: z.enum(["annual", "monthly", "quarterly", "biannual"]),
+    lastPaymentAmount: positiveMoneySchema,
+    lastPaymentDate: dateStringSchema,
+  })
+  .superRefine((value, context) => {
+    if (value.currentRentCycleStartDate < value.tenancyStartDate) {
+      context.addIssue({
+        code: "custom",
+        path: ["currentRentCycleStartDate"],
+        message: "The current rent cycle cannot start before the tenancy.",
+      });
+    }
+
+    if (value.lastPaymentDate < value.tenancyStartDate) {
+      context.addIssue({
+        code: "custom",
+        path: ["lastPaymentDate"],
+        message: "The last payment cannot be before the tenancy started.",
+      });
+    }
+  });
+
 export const submitExistingTenantClaimSchema = z.object({
   token: z.string().trim().min(20, "Invalid claim link."),
   fullName: z.string().trim().min(2, "Enter your full name.").max(120),
@@ -90,6 +124,10 @@ export type ExistingTenantRentCycleInput = z.infer<
 
 export type CreateExistingTenantClaimInput = z.infer<
   typeof createExistingTenantClaimSchema
+>;
+
+export type CreateManualExistingTenantInput = z.infer<
+  typeof createManualExistingTenantSchema
 >;
 
 export type SubmitExistingTenantClaimInput = z.infer<

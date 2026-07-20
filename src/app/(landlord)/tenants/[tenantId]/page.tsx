@@ -8,6 +8,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { AgreementDraftPreview } from "@/components/tenancy/agreement-draft-preview";
+import { RequestPaymentProofPanel } from "@/components/caretaker/request-payment-proof-panel";
 import { MoveOutConfirmationCard } from "@/components/quit-notices/move-out-confirmation-card";
 import { PayoutPaymentGateNotice } from "@/components/payment/payout-payment-gate-notice";
 import { RentPaymentModal } from "@/components/payment/rent-payment-modal";
@@ -87,15 +88,10 @@ function resolveAgreementStep(params: {
     isTenancyInAgreementSetup(params.setupTenancy) &&
     params.setupTenancy.charges_confirmed_at
   ) {
-    return params.requestedStep === "charges"
-      ? "charges"
-      : "agreement-draft";
+    return params.requestedStep === "charges" ? "charges" : "agreement-draft";
   }
 
-  if (
-    params.setupTenancy &&
-    isTenancyInAgreementSetup(params.setupTenancy)
-  ) {
+  if (params.setupTenancy && isTenancyInAgreementSetup(params.setupTenancy)) {
     return "charges";
   }
 
@@ -224,26 +220,27 @@ export default async function TenantDetailPage({
     ? "This tenant already has an active tenant account."
     : isSubmittedForLandlordReview(tenant.onboarding_status)
       ? "Review the tenant KYC submission and approve the tenant to start agreement setup."
-      : tenant.onboarding_status === TENANT_ONBOARDING_STATUSES.documentsSubmitted
+      : tenant.onboarding_status ===
+          TENANT_ONBOARDING_STATUSES.documentsSubmitted
         ? "The tenant has saved their application and must complete verification payment before you can review."
         : !isTenantApproved
-        ? "Send the tenant onboarding link so they can complete their profile, ID document, and guarantor details."
-        : agreementStep === "agreement-setup"
-          ? "Confirm rent, tenancy dates, and renewal reminder interval to begin agreement setup."
-          : agreementStep === "charges"
-            ? "Add landlord charges, review the running total, and confirm before generating the agreement."
-            : agreementStep === "agreement-draft"
-              ? "Review the agreement draft preview and generate the tenancy agreement document."
-              : !agreementDocument
-                ? "Generate the tenancy agreement draft before sending it to the tenant."
-                : !isAgreementAccepted
-                  ? "Send the agreement acceptance link to the tenant."
-                  : hasOutstandingBalance
-                    ? payoutVerification.isVerified
-                      ? "Send the tenant rent payment link before account activation."
-                      : paymentGate?.description ??
-                        "Online rent payment links are unavailable until payout verification is approved. You can still record manual payments."
-                    : "Send the tenant activation link so they can set their password and access their dashboard.";
+          ? "Send the tenant onboarding link so they can complete their profile, ID document, and guarantor details."
+          : agreementStep === "agreement-setup"
+            ? "Confirm rent, tenancy dates, and renewal reminder interval to begin agreement setup."
+            : agreementStep === "charges"
+              ? "Add landlord charges, review the running total, and confirm before generating the agreement."
+              : agreementStep === "agreement-draft"
+                ? "Review the agreement draft preview and generate the tenancy agreement document."
+                : !agreementDocument
+                  ? "Generate the tenancy agreement draft before sending it to the tenant."
+                  : !isAgreementAccepted
+                    ? "Send the agreement acceptance link to the tenant."
+                    : hasOutstandingBalance
+                      ? payoutVerification.isVerified
+                        ? "Send the tenant rent payment link before account activation."
+                        : (paymentGate?.description ??
+                          "Online rent payment links are unavailable until payout verification is approved. You can still record manual payments.")
+                      : "Send the tenant activation link so they can set their password and access their dashboard.";
 
   return (
     <div>
@@ -257,15 +254,17 @@ export default async function TenantDetailPage({
 
       <PageHeader
         title={tenant.full_name}
-        description="Tenant record, assigned unit, documents, tenancy record, and payment history."
-        action={<Badge tone={pipelineStatus.tone}>{pipelineStatus.label}</Badge>}
+        description={`${tenant.units?.properties?.property_name ?? "Property"} · ${tenant.units?.unit_identifier ?? "Unit"}`}
+        action={
+          <Badge tone={pipelineStatus.tone}>{pipelineStatus.label}</Badge>
+        }
       />
 
       <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Tenant Summary</CardTitle>
+              <CardTitle>Tenant details</CardTitle>
             </CardHeader>
 
             <CardContent>
@@ -319,12 +318,12 @@ export default async function TenantDetailPage({
             />
           ) : isTenantApproved ? (
             <SectionCard
-              title="Tenant Approved"
-              description="KYC review is complete. Continue with agreement setup below."
+              title="Tenant accepted"
+              description="The tenant’s details have been accepted. Continue with the agreement below."
             >
               <TrustNotice
-                title="Approval confirmed"
-                description="The tenant profile, documents, and guarantor details were approved. Agreement setup is now unlocked."
+                title="Tenant details accepted"
+                description="You can now confirm the rent details and prepare the tenancy agreement."
                 icon={
                   <FileCheck2 aria-hidden="true" size={22} strokeWidth={2.6} />
                 }
@@ -338,26 +337,26 @@ export default async function TenantDetailPage({
                 title="Create Tenancy and Agreement Setup"
                 description="Confirm rent, tenancy dates, renewal reminder interval, and agreement notes."
               >
-              <TrustNotice
-                title="Landlord confirmation required"
-                description="The tenant has been approved. Confirm the tenancy terms before adding landlord charges and generating the agreement."
-                icon={
-                  <FileSignature
-                    aria-hidden="true"
-                    size={22}
-                    strokeWidth={2.6}
-                  />
-                }
-              />
-
-              <div className="mt-5">
-                <TenancyForm
-                  tenantId={tenant.id}
-                  unitId={tenant.unit_id}
-                  defaultAnnualRent={tenant.units?.annual_rent ?? null}
+                <TrustNotice
+                  title="Landlord confirmation required"
+                  description="The tenant has been approved. Confirm the tenancy terms before adding landlord charges and generating the agreement."
+                  icon={
+                    <FileSignature
+                      aria-hidden="true"
+                      size={22}
+                      strokeWidth={2.6}
+                    />
+                  }
                 />
-              </div>
-            </SectionCard>
+
+                <div className="mt-5">
+                  <TenancyForm
+                    tenantId={tenant.id}
+                    unitId={tenant.unit_id}
+                    defaultAnnualRent={tenant.units?.annual_rent ?? null}
+                  />
+                </div>
+              </SectionCard>
             </div>
           ) : null}
 
@@ -370,12 +369,14 @@ export default async function TenantDetailPage({
                   title="Review Landlord Charges"
                   description="Add move-in charges, review the running total, remove any mistakes, then confirm to continue."
                 >
-                <LandlordTenancyChargePanel
-                  tenancyId={setupTenancy.id}
-                  charges={landlordCharges}
-                  chargesConfirmed={Boolean(setupTenancy.charges_confirmed_at)}
-                />
-              </SectionCard>
+                  <LandlordTenancyChargePanel
+                    tenancyId={setupTenancy.id}
+                    charges={landlordCharges}
+                    chargesConfirmed={Boolean(
+                      setupTenancy.charges_confirmed_at,
+                    )}
+                  />
+                </SectionCard>
               </div>
             </>
           ) : null}
@@ -444,6 +445,22 @@ export default async function TenantDetailPage({
               />
             </SectionCard>
           )}
+
+          {activeTenancy ? (
+            <SectionCard
+              title="Payment made outside BOPA?"
+              description="Use this when the tenant paid by bank transfer, cash, or another method outside the app."
+            >
+              <RequestPaymentProofPanel
+                requester="landlord"
+                tenancyId={activeTenancy.id}
+                tenantName={tenant.full_name}
+                tenantPhone={tenant.phone_number}
+                propertyUnitLabel={`${tenant.units?.properties?.property_name ?? "Property"} · ${tenant.units?.unit_identifier ?? "Unit"}`}
+                rentAmount={Number(activeTenancy.rent_amount)}
+              />
+            </SectionCard>
+          ) : null}
 
           {shouldShowPaymentLockedNotice ? (
             <SectionCard

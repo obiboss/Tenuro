@@ -6,11 +6,11 @@ import {
   getManagerOverview,
   getManagerOrganizationForCurrentUser,
 } from "@/server/repositories/manager.repository";
-import { requireManager } from "@/server/services/auth.service";
+import { requireManagerWorkspaceOperator } from "@/server/services/auth.service";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 
 export default async function ManagerOverviewPage() {
-  const manager = await requireManager();
+  const manager = await requireManagerWorkspaceOperator();
   const supabase = await createSupabaseServerClient();
 
   const organization = await getManagerOrganizationForCurrentUser(

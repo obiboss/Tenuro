@@ -7,7 +7,7 @@ import {
   getManagerPropertyById,
 } from "@/server/repositories/manager.repository";
 import { replaceManagerPropertyTenantRequirements } from "@/server/repositories/manager-property-requirements.repository";
-import { requireManager } from "@/server/services/auth.service";
+import { requireManagerWorkspaceOperator } from "@/server/services/auth.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import type { SaveManagerPropertyTenantRequirementsInput } from "@/server/validators/manager-property-requirements.schema";
@@ -25,7 +25,7 @@ function nullableText(value: string | undefined) {
 export async function saveManagerPropertyTenantRequirements(
   input: SaveManagerPropertyTenantRequirementsInput,
 ) {
-  const manager = await requireManager();
+  const manager = await requireManagerWorkspaceOperator();
   const supabase = await createSupabaseServerClient();
 
   const organization = await getManagerOrganizationForCurrentUser(

@@ -31,6 +31,7 @@ import {
   verifyAndPostManagerPaystackPaymentReference,
 } from "@/server/services/manager-paystack.service";
 import { verifyTenantApplicationProcessingFeeReference } from "@/server/services/tenant-application-processing-fees.service";
+import { processBusinessSubscriptionPaystackWebhook } from "@/server/services/business-subscription-webhook.service";
 import {
   auditGatewayPaymentReplayIgnored,
   buildPaystackRentPaymentIdempotencyKey,
@@ -716,6 +717,16 @@ export async function processGatewayPaystackWebhook(params: {
     rawBody: params.rawBody,
     signature: params.signature,
   });
+
+  const businessSubscriptionResult =
+    await processBusinessSubscriptionPaystackWebhook(params.rawBody);
+
+  if (businessSubscriptionResult) {
+    return {
+      status: businessSubscriptionResult.status,
+      message: businessSubscriptionResult.message,
+    };
+  }
 
   const webhook = parsePaystackWebhook(params.rawBody);
   const rawPayload = JSON.parse(params.rawBody) as Record<string, unknown>;

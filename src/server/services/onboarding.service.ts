@@ -23,10 +23,14 @@ import {
   updateTenantOnboardingToken,
 } from "@/server/repositories/onboarding.repository";
 import { getActivePropertyRulesForOnboarding } from "@/server/repositories/property-rules.repository";
+import { replaceTenantGuarantor } from "@/server/repositories/guarantors.repository";
 import { evaluateTenantKycAgainstPropertyRules } from "@/server/services/property-rule-kyc.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { normalisePhoneNumber } from "@/server/utils/phone";
-import type { SubmitTenantOnboardingInput } from "@/server/validators/onboarding.schema";
+import {
+  landlordTenantAdditionalDetailsSchema,
+  type SubmitTenantOnboardingInput,
+} from "@/server/validators/onboarding.schema";
 import { requireLandlordPlatformOperator } from "./auth.service";
 
 const TENANT_ONBOARDING_TOKEN_BYTES = 32;
@@ -70,6 +74,8 @@ function buildKycAnswers(input: SubmitTenantOnboardingInput) {
     property_use: input.propertyUse ?? null,
     has_children_under_five: input.hasChildrenUnderFive ?? null,
     monthly_income_range: input.monthlyIncomeRange ?? null,
+    work_mode: input.workMode ?? null,
+    office_address: input.officeAddress?.trim() || null,
     can_provide_guarantor: input.canProvideGuarantor ?? null,
     will_use_shortlet: input.willUseShortlet ?? null,
     will_sublet: input.willSublet ?? null,
@@ -173,13 +179,13 @@ async function prepareTenantOnboardingSubmission(
   const kycAnswers = buildKycAnswers(normalizedInput);
 
   const propertyId = tenant.unit_id
-    ? (
+    ? ((
         await supabase
           .from("units")
           .select("property_id")
           .eq("id", tenant.unit_id)
           .maybeSingle<{ property_id: string }>()
-      ).data?.property_id ?? null
+      ).data?.property_id ?? null)
     : null;
 
   const propertyRules = propertyId
@@ -359,6 +365,32 @@ export async function submitTenantOnboarding(
   }
 
   if (landlordSourced) {
+    const additionalDetails = landlordTenantAdditionalDetailsSchema.parse({
+      workMode: normalizedInput.workMode,
+      officeAddress: normalizedInput.officeAddress,
+      guarantorFullName: normalizedInput.guarantorFullName,
+      guarantorPhoneNumber: normalizedInput.guarantorPhoneNumber,
+      guarantorEmail: normalizedInput.guarantorEmail,
+      guarantorAddress: normalizedInput.guarantorAddress,
+      guarantorRelationship: normalizedInput.guarantorRelationship,
+      guarantorIdDocumentPath: normalizedInput.guarantorIdDocumentPath,
+    });
+    const guarantorPhone = normalisePhoneNumber(
+      additionalDetails.guarantorPhoneNumber,
+    );
+
+    await replaceTenantGuarantor(supabase, {
+      tenantId: tenant.id,
+      fullName: additionalDetails.guarantorFullName,
+      phoneNumber: guarantorPhone.e164,
+      email: additionalDetails.guarantorEmail?.trim()
+        ? additionalDetails.guarantorEmail.trim().toLowerCase()
+        : null,
+      address: additionalDetails.guarantorAddress,
+      relationshipToTenant: additionalDetails.guarantorRelationship,
+      idDocumentPath: additionalDetails.guarantorIdDocumentPath || null,
+    });
+
     const updatedTenant = await submitTenantOnboardingProfile(supabase, {
       tenantId: tenant.id,
       input: normalizedInput,
@@ -374,8 +406,7 @@ export async function submitTenantOnboarding(
       actorRole: "tenant",
       actorProfileId: null,
       eventType: AUDIT_EVENT_TYPES.tenantKycSubmitted,
-      description:
-        "Landlord-sourced tenant submitted KYC for landlord review.",
+      description: "Landlord-sourced tenant submitted KYC for landlord review.",
       metadata: {
         full_name: updatedTenant.full_name,
         phone_number: updatedTenant.phone_number,
@@ -383,6 +414,12 @@ export async function submitTenantOnboarding(
         id_type: normalizedInput.idType,
         id_document_uploaded: Boolean(normalizedInput.idDocumentPath),
         passport_photo_uploaded: Boolean(normalizedInput.passportPhotoPath),
+        work_mode: additionalDetails.workMode,
+        office_address_provided: Boolean(additionalDetails.officeAddress),
+        guarantor_provided: true,
+        guarantor_id_document_uploaded: Boolean(
+          additionalDetails.guarantorIdDocumentPath,
+        ),
         kyc_review_flags: kycReviewFlags,
         agent_property_listing_id: tenant.agent_property_listing_id,
         invited_by_agent_id: tenant.invited_by_agent_id,

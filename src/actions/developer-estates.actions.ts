@@ -10,7 +10,7 @@ import { errorResult } from "@/server/errors/result";
 import { getDeveloperAccountByOwnerProfileId } from "@/server/repositories/developer.repository";
 import { createDeveloperEstate } from "@/server/repositories/developer-estates.repository";
 import { createDeveloperPlotsBulk } from "@/server/repositories/developer-plots.repository";
-import { requireDeveloper } from "@/server/services/auth.service";
+import { requireDeveloperWorkspaceOperator } from "@/server/services/auth.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import type { AuthActionState } from "@/server/types/auth.types";
 import {
@@ -137,7 +137,7 @@ export async function createDeveloperEstateAction(
   let developerAccountId: string | null = null;
 
   try {
-    const developer = await requireDeveloper();
+    const developer = await requireDeveloperWorkspaceOperator();
 
     const parsed = createDeveloperEstateSchema.parse({
       estateName: formData.get("estateName"),

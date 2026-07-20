@@ -15,6 +15,7 @@ import {
   verifyBankAccount,
 } from "@/server/services/paystack.service";
 import { createSupabaseServerClient } from "@/server/supabase/server";
+import { assertBusinessSubscriptionAccessForProfile } from "@/server/services/business-subscription.service";
 import type {
   SaveManagerLandlordPaystackAccountInput,
   SaveManagerOrganizationPaystackAccountInput,
@@ -98,6 +99,11 @@ async function requireManagerOrganization() {
       403,
     );
   }
+
+  await assertBusinessSubscriptionAccessForProfile({
+    profileId: profile.id,
+    workspaceType: "manager",
+  });
 
   return {
     supabase,

@@ -6,7 +6,7 @@ import { errorResult } from "@/server/errors/result";
 import { getDeveloperAccountByOwnerProfileId } from "@/server/repositories/developer.repository";
 import { createDeveloperPaymentPlan } from "@/server/repositories/developer-payment-plans.repository";
 import { getDeveloperSaleById } from "@/server/repositories/developer-sales.repository";
-import { requireDeveloper } from "@/server/services/auth.service";
+import { requireDeveloperWorkspaceOperator } from "@/server/services/auth.service";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import type { AuthActionState } from "@/server/types/auth.types";
 import { createDeveloperPaymentPlanSchema } from "@/server/validators/developer-payment-plan.schema";
@@ -33,7 +33,7 @@ export async function createDeveloperPaymentPlanAction(
   let saleId: string | null = null;
 
   try {
-    const developer = await requireDeveloper();
+    const developer = await requireDeveloperWorkspaceOperator();
     const parsed = createDeveloperPaymentPlanSchema.parse({
       saleId: formData.get("saleId"),
       paymentPlanMode: formData.get("paymentPlanMode"),

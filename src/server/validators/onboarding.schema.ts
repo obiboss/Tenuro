@@ -26,6 +26,8 @@ export const submitTenantOnboardingSchema = z.object({
     .min(2, "Enter your occupation.")
     .max(120, "Occupation is too long."),
   employer: z.string().trim().max(120).optional().or(z.literal("")),
+  workMode: z.enum(["remote", "hybrid", "on_site"]).optional(),
+  officeAddress: z.string().trim().max(300).optional().or(z.literal("")),
   homeAddress: z
     .string()
     .trim()
@@ -51,6 +53,18 @@ export const submitTenantOnboardingSchema = z.object({
     .min(3, "Upload your passport photo.")
     .max(500, "Invalid passport photo path."),
 
+  guarantorFullName: z.string().trim().max(120).optional().or(z.literal("")),
+  guarantorPhoneNumber: z.string().trim().max(20).optional().or(z.literal("")),
+  guarantorEmail: optionalEmailSchema,
+  guarantorAddress: z.string().trim().max(300).optional().or(z.literal("")),
+  guarantorRelationship: z.string().trim().max(80).optional().or(z.literal("")),
+  guarantorIdDocumentPath: z
+    .string()
+    .trim()
+    .max(500)
+    .optional()
+    .or(z.literal("")),
+
   hasPets: yesNoSchema,
   occupantCount: z.coerce.number().int().min(1).max(50).optional(),
   propertyUse: z.enum(["residential", "commercial"]).optional(),
@@ -73,6 +87,44 @@ export const submitTenantOnboardingSchema = z.object({
   willHostLargeGatherings: yesNoSchema,
 });
 
+export const landlordTenantAdditionalDetailsSchema = z.object({
+  workMode: z.enum(["remote", "hybrid", "on_site"], {
+    message: "Select how you normally work.",
+  }),
+  officeAddress: z
+    .string()
+    .trim()
+    .min(5, "Enter your office or business address.")
+    .max(300, "Office address is too long."),
+  guarantorFullName: z
+    .string()
+    .trim()
+    .min(2, "Enter the guarantor's full name.")
+    .max(120, "Guarantor name is too long."),
+  guarantorPhoneNumber: phoneSchema,
+  guarantorEmail: optionalEmailSchema,
+  guarantorAddress: z
+    .string()
+    .trim()
+    .min(5, "Enter the guarantor's address.")
+    .max(300, "Guarantor address is too long."),
+  guarantorRelationship: z
+    .string()
+    .trim()
+    .min(2, "Enter the guarantor's relationship to you.")
+    .max(80, "Relationship is too long."),
+  guarantorIdDocumentPath: z
+    .string()
+    .trim()
+    .max(500, "Invalid guarantor ID document path.")
+    .optional()
+    .or(z.literal("")),
+});
+
 export type SubmitTenantOnboardingInput = z.infer<
   typeof submitTenantOnboardingSchema
+>;
+
+export type LandlordTenantAdditionalDetailsInput = z.infer<
+  typeof landlordTenantAdditionalDetailsSchema
 >;

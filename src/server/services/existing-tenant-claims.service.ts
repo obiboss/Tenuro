@@ -10,6 +10,7 @@ import { AppError } from "@/server/errors/app-error";
 import {
   approveExistingTenantClaim,
   createExistingTenantClaim,
+  createManualExistingTenantClaim,
   getExistingTenantClaimById,
   getExistingTenantClaimByTokenHash,
   listExistingTenantClaimsForLandlord,
@@ -56,6 +57,7 @@ import { normalisePhoneNumber } from "@/server/utils/phone";
 import type {
   ApproveExistingTenantClaimInput,
   CreateExistingTenantClaimInput,
+  CreateManualExistingTenantInput,
   ExistingTenantRentCycleInput,
   RejectExistingTenantClaimInput,
   SubmitExistingTenantClaimInput,
@@ -148,6 +150,28 @@ function calculateCurrentPeriodEnd(params: {
       getFrequencyMonths(params.paymentFrequency),
     ),
   );
+}
+
+function resolveManualExistingTenantRentAmount(params: {
+  annualRent: number | null;
+  monthlyRent: number | null;
+  paymentFrequency: ExistingTenantClaimPaymentFrequency;
+}) {
+  const annualRent = Number(params.annualRent ?? 0);
+  const monthlyRent = Number(params.monthlyRent ?? 0);
+  let amount = 0;
+
+  if (params.paymentFrequency === "annual") {
+    amount = annualRent > 0 ? annualRent : monthlyRent * 12;
+  } else if (params.paymentFrequency === "biannual") {
+    amount = annualRent > 0 ? annualRent / 2 : monthlyRent * 6;
+  } else if (params.paymentFrequency === "quarterly") {
+    amount = annualRent > 0 ? annualRent / 4 : monthlyRent * 3;
+  } else {
+    amount = monthlyRent > 0 ? monthlyRent : annualRent / 12;
+  }
+
+  return Math.round(amount * 100) / 100;
 }
 
 function mapCycleInputToRentCycle(
@@ -448,6 +472,121 @@ export async function createExistingTenantClaimForCurrentLandlord(
   };
 }
 
+export async function createManualExistingTenantForCurrentLandlord(
+  input: CreateManualExistingTenantInput,
+) {
+  const landlord = await requireLandlordPlatformOperator();
+  const supabase = await createSupabaseServerClient();
+  const adminSupabase = createSupabaseAdminClient();
+
+  const [unit, unitWithProperty, activeTenancy, pendingTenancy] =
+    await Promise.all([
+      getUnitById(supabase, input.unitId),
+      getUnitWithPropertyById(supabase, input.unitId),
+      getActiveTenancyForUnit(supabase, input.unitId),
+      getPendingAgreementTenancyForUnit(supabase, input.unitId),
+    ]);
+
+  const property = resolveUnitProperty(unitWithProperty);
+
+  if (!property || property.landlord_id !== landlord.id) {
+    throw new AppError(
+      "FORBIDDEN",
+      "You do not have permission to add a tenant to this unit.",
+      403,
+    );
+  }
+
+  if (activeTenancy || pendingTenancy) {
+    throw new AppError(
+      "UNIT_ALREADY_HAS_TENANCY",
+      "This unit already has a tenancy record.",
+      400,
+    );
+  }
+
+  if (
+    unit.status === "archived" ||
+    unit.status === "unavailable" ||
+    unit.status === "under_renovation"
+  ) {
+    throw new AppError(
+      "UNIT_NOT_AVAILABLE",
+      "This unit is not available for an existing tenant.",
+      400,
+    );
+  }
+
+  const rentAmount = resolveManualExistingTenantRentAmount({
+    annualRent: unit.annual_rent,
+    monthlyRent: unit.monthly_rent,
+    paymentFrequency: input.paymentFrequency,
+  });
+
+  if (rentAmount <= 0) {
+    throw new AppError(
+      "UNIT_RENT_MISSING",
+      "Add the rent amount to this unit before setting up the tenant.",
+      400,
+    );
+  }
+
+  const normalizedPhone = normalisePhoneNumber(input.phoneNumber);
+  const token = createSecureToken();
+  const currentRentCycleStartDate = input.currentRentCycleStartDate;
+  const nextRentDueDate = calculateCurrentPeriodEnd({
+    currentPeriodStart: currentRentCycleStartDate,
+    paymentFrequency: input.paymentFrequency,
+  });
+
+  const claim = await createManualExistingTenantClaim(adminSupabase, {
+    landlordId: landlord.id,
+    unitId: input.unitId,
+    tokenHash: hashToken(token),
+    tokenExpiresAt: getTokenExpiry(),
+    fullName: input.fullName,
+    phoneNumber: normalizedPhone.e164,
+    occupation: input.occupation,
+    tenancyStartDate: input.tenancyStartDate,
+    currentRentCycleStartDate,
+    nextRentDueDate,
+    rentAmount,
+    paymentFrequency: input.paymentFrequency,
+    lastPaymentAmount: input.lastPaymentAmount,
+    lastPaymentDate: input.lastPaymentDate,
+  });
+
+  await writeExistingTenantClaimAudit({
+    landlordId: landlord.id,
+    unitId: unit.id,
+    propertyId: property.id,
+    actorProfileId: landlord.id,
+    actorRole: AUDIT_ACTOR_ROLES.landlord,
+    eventType: AUDIT_EVENT_TYPES.tenantKycSubmitted,
+    entityId: claim.id,
+    description: "Existing tenant details entered by landlord.",
+    metadata: {
+      source: "landlord_manual_entry",
+      existing_tenant_claim_id: claim.id,
+      tenant_full_name: input.fullName,
+      tenant_phone_number: normalizedPhone.e164,
+      tenant_occupation: input.occupation,
+      property_name: property.property_name,
+      unit_identifier: unitWithProperty.unit_identifier,
+      tenancy_start_date: input.tenancyStartDate,
+      current_rent_cycle_start_date: currentRentCycleStartDate,
+      next_rent_due_date: nextRentDueDate,
+      payment_frequency: input.paymentFrequency,
+      last_payment_amount: input.lastPaymentAmount,
+      last_payment_date: input.lastPaymentDate,
+    },
+  });
+
+  return {
+    claim,
+  };
+}
+
 export async function resolveExistingTenantClaimToken(token: string) {
   const supabase = createSupabaseAdminClient();
   const tokenHash = hashToken(token);
@@ -679,8 +818,7 @@ export async function approveExistingTenantClaimForCurrentLandlord(
     !claim.tenant_full_name ||
     !claim.tenant_phone_number ||
     !claim.tenant_move_in_date ||
-    !claim.tenant_claimed_rent_amount ||
-    !claim.tenant_id_type
+    !claim.tenant_claimed_rent_amount
   ) {
     throw new AppError(
       "CLAIM_DETAILS_INCOMPLETE",

@@ -67,6 +67,7 @@ import {
 } from "@/server/services/paystack.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
+import { assertBusinessSubscriptionAccessForProfile } from "@/server/services/business-subscription.service";
 import { normalisePhoneNumber } from "@/server/utils/phone";
 import type {
   AcceptManagerTenantAgreementInput,
@@ -612,6 +613,11 @@ async function requireManagerOrganization() {
       403,
     );
   }
+
+  await assertBusinessSubscriptionAccessForProfile({
+    profileId: profile.id,
+    workspaceType: "manager",
+  });
 
   return {
     supabase,

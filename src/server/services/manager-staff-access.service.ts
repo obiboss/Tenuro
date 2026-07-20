@@ -80,6 +80,14 @@ export async function requireManagerWorkspacePermission(
     );
   }
 
+  const { assertBusinessSubscriptionAccessForProfile } =
+    await import("@/server/services/business-subscription.service");
+
+  await assertBusinessSubscriptionAccessForProfile({
+    profileId: manager.id,
+    workspaceType: "manager",
+  });
+
   if (!managerRoleHasPermission(access.staffRole, permission)) {
     throw new AppError(
       "MANAGER_PERMISSION_DENIED",
@@ -183,6 +191,15 @@ export async function acceptManagerStaffInvite(token: string) {
       400,
     );
   }
+
+  const { assertBusinessSubscriptionAccessForWorkspace } = await import(
+    "@/server/services/business-subscription.service"
+  );
+
+  await assertBusinessSubscriptionAccessForWorkspace({
+    workspaceType: "manager",
+    workspaceId: invite.organization_id,
+  });
 
   if (
     !manager.email ||

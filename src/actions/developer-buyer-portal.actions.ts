@@ -6,7 +6,7 @@ import { errorResult } from "@/server/errors/result";
 import { getDeveloperAccountByOwnerProfileId } from "@/server/repositories/developer.repository";
 import { createBuyerSalePortalLink } from "@/server/services/developer-buyer-portal.service";
 import { createBuyerPortalSchedulePaymentRequest } from "@/server/services/developer-payment.service";
-import { requireDeveloper } from "@/server/services/auth.service";
+import { requireDeveloperWorkspaceOperator } from "@/server/services/auth.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 
 function toActionError(error: unknown): DeveloperBuyerPortalActionState {
@@ -33,7 +33,7 @@ export async function createBuyerSalePortalLinkAction(
       };
     }
 
-    const developer = await requireDeveloper();
+    const developer = await requireDeveloperWorkspaceOperator();
     const supabase = createSupabaseAdminClient();
     const account = await getDeveloperAccountByOwnerProfileId(
       supabase,

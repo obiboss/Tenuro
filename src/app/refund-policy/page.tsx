@@ -21,6 +21,7 @@ const bulletItems = {
     "The ₦5,000 BOPA portion is non-refundable once the onboarding process is complete",
   ],
   subscription: [
+    "Property manager and real estate developer subscriptions renew automatically at ₦70,000 monthly or ₦600,000 yearly after the two-month free period",
     "Cancellation within 7 days of payment with no premium features used: full refund",
     "Cancellation within 7 days of payment with premium features used: no refund",
     "Cancellation after 7 days: no refund, access continues until the end of the subscription period",
@@ -125,7 +126,7 @@ export default function RefundPolicyPage() {
           </h1>
 
           <p className="mt-3 text-sm text-text-muted">
-            Boldverse Property (BOPA) &mdash; Last updated: May 2026
+            Boldverse Property (BOPA) &mdash; Last updated: July 2026
           </p>
         </div>
 
@@ -172,9 +173,12 @@ export default function RefundPolicyPage() {
             </p>
           </PolicySection>
 
-          <PolicySection title="3. BOPA Pro Subscription">
+          <PolicySection title="3. Subscriptions">
             <p className="mb-4">
-              BOPA Pro annual subscriptions may be cancelled at any time.
+              BOPA subscriptions, including manager and developer company
+              subscriptions, may be cancelled at any time. Stopping automatic
+              renewal does not remove access already paid for during the current
+              subscription period.
             </p>
 
             <BulletList items={bulletItems.subscription} />
@@ -187,7 +191,7 @@ export default function RefundPolicyPage() {
               >
                 hello@boldverseproperty.com
               </a>{" "}
-              or use the cancellation option in your account settings.
+              or use the secure billing option on your subscription page.
             </p>
           </PolicySection>
 

@@ -13,6 +13,7 @@ import {
   Users,
 } from "lucide-react";
 import { Developer3DShowcase } from "@/components/developer/developer-3d-showcase";
+import { BusinessSubscriptionPricing } from "@/components/subscription/business-subscription-pricing";
 import { LandingHeaderLogin } from "@/components/landing/landing-header-login";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -144,7 +145,9 @@ export default function DevelopersLandingPage() {
           <Developer3DShowcase />
         </div>
 
-        <section className="rounded-4xl bg-surface px-5 py-8 shadow-card md:px-8 lg:px-10">
+        <BusinessSubscriptionPricing signupHref="/developer/register" />
+
+        <section className="mt-8 rounded-4xl bg-surface px-5 py-8 shadow-card md:px-8 lg:px-10">
           <div className="max-w-3xl">
             <Badge tone="primary">Operational problems</Badge>
 
@@ -285,7 +288,7 @@ export default function DevelopersLandingPage() {
                 </Button>
               </Link>
 
-              <Link href="/contact">
+              <Link href="/contact?workspace=developer">
                 <Button type="button" variant="secondary" fullWidth>
                   Book a Demo
                 </Button>
@@ -329,3 +332,4 @@ export default function DevelopersLandingPage() {
     </main>
   );
 }
+

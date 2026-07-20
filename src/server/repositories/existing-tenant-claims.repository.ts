@@ -197,6 +197,77 @@ export async function createExistingTenantClaim(
   return data;
 }
 
+export async function createManualExistingTenantClaim(
+  supabase: SupabaseClient,
+  params: {
+    landlordId: string;
+    unitId: string;
+    tokenHash: string;
+    tokenExpiresAt: string;
+    fullName: string;
+    phoneNumber: string;
+    occupation: string;
+    tenancyStartDate: string;
+    currentRentCycleStartDate: string;
+    nextRentDueDate: string;
+    rentAmount: number;
+    paymentFrequency: ExistingTenantClaimPaymentFrequency;
+    lastPaymentAmount: number;
+    lastPaymentDate: string;
+  },
+) {
+  const now = new Date().toISOString();
+  const paymentHistory: ExistingTenantPaymentHistoryItem[] = [
+    {
+      amount: params.lastPaymentAmount,
+      paidAt: params.lastPaymentDate,
+      note: "Last payment entered by landlord.",
+    },
+  ];
+
+  const { data, error } = await supabase
+    .from("existing_tenant_claims")
+    .insert({
+      landlord_id: params.landlordId,
+      unit_id: params.unitId,
+      token_hash: params.tokenHash,
+      token_expires_at: params.tokenExpiresAt,
+      token_used_at: now,
+      status: "submitted",
+      invited_tenant_full_name: params.fullName,
+      invited_tenant_phone_number: params.phoneNumber,
+      tenant_full_name: params.fullName,
+      tenant_phone_number: params.phoneNumber,
+      tenant_occupation: params.occupation,
+      tenant_move_in_date: params.tenancyStartDate,
+      tenant_claimed_rent_amount: params.rentAmount,
+      tenant_claimed_next_rent_due_date: params.nextRentDueDate,
+      tenant_payment_frequency: params.paymentFrequency,
+      landlord_confirmed_rent_amount: params.rentAmount,
+      landlord_confirmed_move_in_date: params.tenancyStartDate,
+      landlord_confirmed_current_due_date: params.currentRentCycleStartDate,
+      landlord_last_payment_amount: params.lastPaymentAmount,
+      landlord_last_payment_date: params.lastPaymentDate,
+      landlord_payment_history: paymentHistory,
+      bopa_calculated_current_due_date: params.currentRentCycleStartDate,
+      arrears_calculation_metadata: {
+        source: "landlord_manual_entry",
+        current_rent_cycle_start_date: params.currentRentCycleStartDate,
+        next_rent_due_date: params.nextRentDueDate,
+      },
+      submitted_at: now,
+      landlord_review_notes: null,
+    })
+    .select(EXISTING_TENANT_CLAIM_DETAIL_SELECT)
+    .single<ExistingTenantClaimDetailRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 export async function getExistingTenantClaimByTokenHash(
   supabase: SupabaseClient,
   tokenHash: string,

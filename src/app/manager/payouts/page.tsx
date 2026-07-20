@@ -11,12 +11,12 @@ import {
   getManagerOrganizationForCurrentUser,
   listManagerLandlordClients,
 } from "@/server/repositories/manager.repository";
-import { requireManager } from "@/server/services/auth.service";
+import { requireManagerWorkspaceOperator } from "@/server/services/auth.service";
 import { getPaystackBanksForManagerSetup } from "@/server/services/manager-bank.service";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 
 export default async function ManagerPayoutsPage() {
-  const manager = await requireManager();
+  const manager = await requireManagerWorkspaceOperator();
   const supabase = await createSupabaseServerClient();
 
   const organization = await getManagerOrganizationForCurrentUser(

@@ -6,6 +6,7 @@ import { errorResult } from "@/server/errors/result";
 import {
   approveExistingTenantClaimForCurrentLandlord,
   createExistingTenantClaimForCurrentLandlord,
+  createManualExistingTenantForCurrentLandlord,
   rejectExistingTenantClaimForCurrentLandlord,
   submitExistingTenantClaimByToken,
   updateExistingTenantClaimArrearsForCurrentLandlord,
@@ -13,6 +14,7 @@ import {
 import {
   approveExistingTenantClaimSchema,
   createExistingTenantClaimSchema,
+  createManualExistingTenantSchema,
   rejectExistingTenantClaimSchema,
   submitExistingTenantClaimSchema,
   updateExistingTenantClaimArrearsSchema,
@@ -26,6 +28,46 @@ function parseRentCyclesJson(formData: FormData) {
   }
 
   return JSON.parse(raw) as unknown;
+}
+
+export async function createManualExistingTenantAction(
+  _previousState: ExistingTenantClaimActionState,
+  formData: FormData,
+): Promise<ExistingTenantClaimActionState> {
+  try {
+    const parsed = createManualExistingTenantSchema.parse({
+      unitId: formData.get("unitId"),
+      fullName: formData.get("fullName"),
+      phoneNumber: formData.get("phoneNumber"),
+      occupation: formData.get("occupation"),
+      tenancyStartDate: formData.get("tenancyStartDate"),
+      currentRentCycleStartDate: formData.get("currentRentCycleStartDate"),
+      paymentFrequency: formData.get("paymentFrequency"),
+      lastPaymentAmount: formData.get("lastPaymentAmount"),
+      lastPaymentDate: formData.get("lastPaymentDate"),
+    });
+
+    const result = await createManualExistingTenantForCurrentLandlord(parsed);
+
+    revalidatePath("/tenants");
+    revalidatePath("/tenants/existing/new");
+    revalidatePath("/existing-tenant-claims");
+    revalidatePath("/overview");
+
+    return {
+      ok: true,
+      message: "Tenant details saved. Check the rent history to continue.",
+      claimId: result.claim.id,
+    };
+  } catch (error) {
+    const result = errorResult(error);
+
+    return {
+      ok: false,
+      message: result.message,
+      fieldErrors: "fieldErrors" in result ? result.fieldErrors : undefined,
+    };
+  }
 }
 
 export async function createExistingTenantClaimAction(

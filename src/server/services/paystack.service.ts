@@ -32,14 +32,19 @@ const paystackWebhookSchema = z.object({
 const paystackTransactionResponseSchema = z.object({
   status: z.boolean(),
   message: z.string(),
-  data: z.object({
-    status: z.string(),
-    reference: z.string(),
-    amount: z.number().int().nonnegative(),
-    currency: z.string().length(3),
-    paid_at: z.string().nullable().optional(),
-    metadata: z.unknown(),
-  }),
+  data: z
+    .object({
+      id: z.number().int().optional(),
+      status: z.string(),
+      reference: z.string(),
+      amount: z.number().int().nonnegative(),
+      currency: z.string().length(3),
+      paid_at: z.string().nullable().optional(),
+      metadata: z.unknown(),
+      plan: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
+      customer: z.record(z.string(), z.unknown()).optional(),
+    })
+    .passthrough(),
 });
 
 export const paystackMetadataSchema = z.object({
@@ -468,6 +473,83 @@ export async function initializeStandardPaystackTransaction(params: {
       callback_url: params.callbackUrl,
       currency: params.currencyCode,
       metadata: params.metadata,
+    },
+  });
+}
+
+export async function initializePaystackSubscriptionTransaction(params: {
+  email: string;
+  amountKobo: number;
+  reference: string;
+  callbackUrl: string;
+  planCode: string;
+  metadata: Record<string, unknown>;
+}) {
+  if (params.amountKobo <= 0) {
+    throw new AppError(
+      "PAYSTACK_AMOUNT_INVALID",
+      "Subscription amount is not valid.",
+      400,
+    );
+  }
+
+  if (!params.planCode.trim()) {
+    throw new AppError(
+      "PAYSTACK_PLAN_MISSING",
+      "This subscription plan is not configured.",
+      500,
+    );
+  }
+
+  return paystackRequest<PaystackInitializedTransaction>({
+    path: "/transaction/initialize",
+    method: "POST",
+    body: {
+      email: params.email,
+      amount: params.amountKobo,
+      reference: params.reference,
+      callback_url: params.callbackUrl,
+      currency: "NGN",
+      plan: params.planCode,
+      metadata: params.metadata,
+    },
+  });
+}
+
+export async function getPaystackSubscriptionManageLink(
+  subscriptionCode: string,
+) {
+  if (!subscriptionCode.trim()) {
+    throw new AppError(
+      "PAYSTACK_SUBSCRIPTION_MISSING",
+      "Subscription billing is not ready yet.",
+      400,
+    );
+  }
+
+  return paystackRequest<{ link: string }>({
+    path: `/subscription/${encodeURIComponent(subscriptionCode)}/manage/link`,
+  });
+}
+
+export async function disablePaystackSubscription(params: {
+  subscriptionCode: string;
+  emailToken: string;
+}) {
+  if (!params.subscriptionCode.trim() || !params.emailToken.trim()) {
+    throw new AppError(
+      "PAYSTACK_SUBSCRIPTION_TOKEN_MISSING",
+      "This subscription cannot be changed yet. Please contact support.",
+      400,
+    );
+  }
+
+  return paystackRequest<Record<string, never>>({
+    path: "/subscription/disable",
+    method: "POST",
+    body: {
+      code: params.subscriptionCode,
+      token: params.emailToken,
     },
   });
 }

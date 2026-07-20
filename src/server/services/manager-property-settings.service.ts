@@ -7,7 +7,7 @@ import {
   getManagerPropertyById,
 } from "@/server/repositories/manager.repository";
 import { replaceManagerPropertyServiceChargeSettings } from "@/server/repositories/manager-property-settings.repository";
-import { requireManager } from "@/server/services/auth.service";
+import { requireManagerWorkspaceOperator } from "@/server/services/auth.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import type { SaveManagerPropertyServiceChargesInput } from "@/server/validators/manager-property-settings.schema";
@@ -29,7 +29,7 @@ function roundMoney(value: number) {
 export async function saveManagerPropertyServiceCharges(
   input: SaveManagerPropertyServiceChargesInput,
 ) {
-  const manager = await requireManager();
+  const manager = await requireManagerWorkspaceOperator();
   const supabase = await createSupabaseServerClient();
 
   const organization = await getManagerOrganizationForCurrentUser(

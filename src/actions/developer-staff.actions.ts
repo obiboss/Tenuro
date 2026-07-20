@@ -7,7 +7,7 @@ import {
   acceptDeveloperStaffRoleLink,
   createDeveloperStaffRoleLinkForTitle,
 } from "@/server/services/developer-staff.service";
-import { requireDeveloper } from "@/server/services/auth.service";
+import { requireDeveloperWorkspaceOperator } from "@/server/services/auth.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import type { AuthActionState } from "@/server/types/auth.types";
 import {
@@ -31,7 +31,7 @@ export async function createDeveloperStaffRoleLinkAction(
   formData: FormData,
 ): Promise<DeveloperStaffRoleLinkActionState> {
   try {
-    const developer = await requireDeveloper();
+    const developer = await requireDeveloperWorkspaceOperator();
 
     const parsed = createDeveloperStaffRoleLinkSchema.parse({
       staffTitle: formData.get("staffTitle"),

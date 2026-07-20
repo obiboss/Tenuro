@@ -50,6 +50,14 @@ const termsData = {
     "Manual payment records entered by landlords are records only. BOPA is not responsible for their accuracy.",
     "All fees charged by BOPA are as published on boldverseproperty.com at the time of transaction.",
   ],
+  businessSubscriptions: [
+    "Each property manager or real estate developer company receives two calendar months of free access. No payment method is required to begin the free period.",
+    "After the free period, the company subscription costs ₦70,000 monthly or ₦600,000 yearly.",
+    "One company subscription covers the company owner and authorised staff members who use that company workspace.",
+    "Subscriptions are processed by Paystack and renew automatically at the selected monthly or yearly interval until cancelled.",
+    "The company owner may manage or cancel automatic renewal from the subscription page. Cancellation takes effect at the end of the current paid period unless otherwise stated.",
+    "If the free period or paid period ends, or a renewal payment fails, workspace features may be restricted until payment is completed. Company records are retained subject to BOPA's data-retention obligations.",
+  ],
   tenancy: [
     "Agreements generated through BOPA are based on standard Nigerian tenancy agreement templates.",
     "BOPA does not provide legal advice. Independent legal review is recommended where necessary.",
@@ -160,7 +168,7 @@ export default function TermsPage() {
           </h1>
 
           <p className="mt-3 text-sm text-text-muted">
-            Boldverse Property (BOPA) &mdash; Last updated: May 2026
+            Boldverse Property (BOPA) &mdash; Last updated: July 2026
           </p>
         </div>
 
@@ -225,11 +233,15 @@ export default function TermsPage() {
             <BulletList items={termsData.payments} />
           </PolicySection>
 
-          <PolicySection title="8. Tenancy Agreements">
+          <PolicySection title="8. Manager and Developer Subscriptions">
+            <BulletList items={termsData.businessSubscriptions} />
+          </PolicySection>
+
+          <PolicySection title="9. Tenancy Agreements">
             <BulletList items={termsData.tenancy} />
           </PolicySection>
 
-          <PolicySection title="9. Intellectual Property">
+          <PolicySection title="10. Intellectual Property">
             <p>
               All platform content, design, and software are the property of
               Boldverse Services. You may not copy, reproduce, or distribute any
@@ -237,7 +249,7 @@ export default function TermsPage() {
             </p>
           </PolicySection>
 
-          <PolicySection title="10. Limitation of Liability">
+          <PolicySection title="11. Limitation of Liability">
             <p className="mb-4">
               To the maximum extent permitted by Nigerian law, Boldverse
               Services shall not be liable for:
@@ -251,7 +263,7 @@ export default function TermsPage() {
             </p>
           </PolicySection>
 
-          <PolicySection title="11. Termination">
+          <PolicySection title="12. Termination">
             <p>
               We may suspend or terminate your access to BOPA at any time if you
               breach these terms. You may close your account by contacting us.
@@ -260,7 +272,7 @@ export default function TermsPage() {
             </p>
           </PolicySection>
 
-          <PolicySection title="12. Governing Law">
+          <PolicySection title="13. Governing Law">
             <p>
               These Terms and Conditions are governed by the laws of the Federal
               Republic of Nigeria. Any disputes shall be subject to Nigerian
@@ -268,7 +280,7 @@ export default function TermsPage() {
             </p>
           </PolicySection>
 
-          <PolicySection title="13. Changes to These Terms">
+          <PolicySection title="14. Changes to These Terms">
             <p>
               We may update these terms from time to time. Registered users will
               be notified of material changes at least 14 days before they take
@@ -277,7 +289,7 @@ export default function TermsPage() {
             </p>
           </PolicySection>
 
-          <PolicySection title="14. Contact">
+          <PolicySection title="15. Contact">
             <p>
               Email: <ContactEmail />
             </p>

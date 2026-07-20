@@ -61,7 +61,7 @@ export function Manager3DShowcase() {
               </Button>
             </Link>
 
-            <Link href="/contact">
+            <Link href="/contact?workspace=manager">
               <Button type="button" variant="secondary" fullWidth>
                 Book a Demo
               </Button>

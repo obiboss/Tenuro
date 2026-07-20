@@ -2,13 +2,17 @@
 
 import { useActionState, useState } from "react";
 import { Copy, MessageCircle } from "lucide-react";
-import { createCaretakerProofRequestAction } from "@/actions/caretaker.actions";
+import {
+  createCaretakerProofRequestAction,
+  createLandlordProofRequestAction,
+} from "@/actions/caretaker.actions";
 import { initialCaretakerProofRequestActionState } from "@/actions/caretaker.state";
 import { Button } from "@/components/ui/button";
 import { WhatsAppSendButton } from "@/components/ui/whatsapp-send-button";
 import { formatNaira } from "@/server/utils/money";
 
 type RequestPaymentProofPanelProps = {
+  requester?: "caretaker" | "landlord";
   tenancyId: string;
   tenantName: string;
   tenantPhone: string | null;
@@ -17,14 +21,19 @@ type RequestPaymentProofPanelProps = {
 };
 
 export function RequestPaymentProofPanel({
+  requester = "caretaker",
   tenancyId,
   tenantName,
   tenantPhone,
   propertyUnitLabel,
   rentAmount,
 }: RequestPaymentProofPanelProps) {
+  const requestAction =
+    requester === "landlord"
+      ? createLandlordProofRequestAction
+      : createCaretakerProofRequestAction;
   const [state, formAction, isPending] = useActionState(
-    createCaretakerProofRequestAction,
+    requestAction,
     initialCaretakerProofRequestActionState,
   );
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
@@ -63,12 +72,12 @@ export function RequestPaymentProofPanel({
 
         <div className="space-y-2">
           <h3 className="text-base font-black text-text-strong">
-            Request payment proof
+            Ask tenant to confirm payment
           </h3>
           <p className="text-sm leading-6 text-text-muted">
-            BOPA will create a secure link for the tenant to submit amount paid,
-            payment date, method, and proof upload. The landlord must still
-            confirm before it becomes an official payment record.
+            BOPA will create a secure link for the tenant to enter the amount
+            paid, payment date and upload their bank receipt. You will confirm
+            it before BOPA records the payment and prepares the receipt.
           </p>
         </div>
 
@@ -87,7 +96,7 @@ export function RequestPaymentProofPanel({
         {!state.proofUrl ? (
           <Button type="submit" fullWidth className="mt-4" disabled={isPending}>
             <MessageCircle aria-hidden="true" size={16} strokeWidth={2.6} />
-            {isPending ? "Creating link..." : "Create proof link"}
+            {isPending ? "Creating link..." : "Create payment link"}
           </Button>
         ) : null}
       </form>

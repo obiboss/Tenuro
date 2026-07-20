@@ -68,6 +68,21 @@ const propertyUseOptions = [
   },
 ];
 
+const workModeOptions = [
+  {
+    label: "Remote — I work from home",
+    value: "remote",
+  },
+  {
+    label: "Hybrid — home and office",
+    value: "hybrid",
+  },
+  {
+    label: "On-site — I go to work",
+    value: "on_site",
+  },
+];
+
 const monthlyIncomeRangeOptions = [
   {
     label: "Below ₦100,000",
@@ -186,17 +201,6 @@ function DynamicKycChecks({
           />
         ) : null}
 
-        {hasRule(rules, "guarantor_required") ? (
-          <Select
-            label="Can you provide a guarantor if approved?"
-            name="canProvideGuarantor"
-            options={yesNoOptions}
-            helperText="You do not need to fill guarantor details now."
-            error={fieldErrors?.canProvideGuarantor?.[0]}
-            required
-          />
-        ) : null}
-
         {hasRule(rules, "shortlet_not_allowed") ? (
           <Select
             label="Will you use this place for short-let or Airbnb?"
@@ -266,8 +270,7 @@ export function TenantOnboardingForm({
     initialTenantOnboardingActionState,
   );
 
-  const submitted =
-    isSubmitted || (state.ok && state.nextStep === "submitted");
+  const submitted = isSubmitted || (state.ok && state.nextStep === "submitted");
 
   if (submitted) {
     return (
@@ -380,6 +383,36 @@ export function TenantOnboardingForm({
             error={state.fieldErrors?.employer?.[0]}
           />
 
+          {!isAgentSourced ? (
+            <div className="space-y-4 rounded-card bg-background p-5">
+              <div>
+                <h2 className="text-lg font-black text-text-strong">
+                  Work details
+                </h2>
+                <p className="mt-1 text-sm leading-6 text-text-muted">
+                  Tell the landlord where and how you normally work.
+                </p>
+              </div>
+
+              <Select
+                label="How do you work?"
+                name="workMode"
+                options={workModeOptions}
+                error={state.fieldErrors?.workMode?.[0]}
+                required
+              />
+
+              <Textarea
+                label="Office or business address"
+                name="officeAddress"
+                placeholder="Enter your employer's office or your business address"
+                helperText="If you work remotely, enter the registered address of your employer or business."
+                error={state.fieldErrors?.officeAddress?.[0]}
+                required
+              />
+            </div>
+          ) : null}
+
           <Textarea
             label="Current home address"
             name="homeAddress"
@@ -427,6 +460,74 @@ export function TenantOnboardingForm({
               error={state.fieldErrors?.passportPhotoPath?.[0]}
             />
           </div>
+
+          {!isAgentSourced ? (
+            <div className="space-y-4 rounded-card bg-background p-5">
+              <div>
+                <h2 className="text-lg font-black text-text-strong">
+                  Guarantor details
+                </h2>
+                <p className="mt-1 text-sm leading-6 text-text-muted">
+                  Add one person the landlord can contact as your guarantor.
+                </p>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <Input
+                  label="Guarantor's full name"
+                  name="guarantorFullName"
+                  error={state.fieldErrors?.guarantorFullName?.[0]}
+                  required
+                />
+
+                <Input
+                  label="Guarantor's phone number"
+                  name="guarantorPhoneNumber"
+                  type="tel"
+                  placeholder="Example: 0803 123 4567"
+                  error={state.fieldErrors?.guarantorPhoneNumber?.[0]}
+                  required
+                />
+
+                <Input
+                  label="Guarantor's email"
+                  name="guarantorEmail"
+                  type="email"
+                  placeholder="Optional"
+                  error={state.fieldErrors?.guarantorEmail?.[0]}
+                />
+
+                <Input
+                  label="Relationship to you"
+                  name="guarantorRelationship"
+                  placeholder="Example: Brother, employer, family friend"
+                  error={state.fieldErrors?.guarantorRelationship?.[0]}
+                  required
+                />
+              </div>
+
+              <Textarea
+                label="Guarantor's address"
+                name="guarantorAddress"
+                placeholder="Enter the guarantor's home or office address"
+                error={state.fieldErrors?.guarantorAddress?.[0]}
+                required
+              />
+
+              <TenantKycFileUpload
+                token={token}
+                documentType="guarantor_id_document"
+                label="Guarantor's ID document"
+                name="guarantorIdDocumentPath"
+                helperText="Optional. Upload a clear JPG, PNG, WEBP, or PDF up to 5MB."
+                error={state.fieldErrors?.guarantorIdDocumentPath?.[0]}
+              />
+            </div>
+          ) : null}
+
+          {!isAgentSourced && hasRule(propertyRules, "guarantor_required") ? (
+            <input type="hidden" name="canProvideGuarantor" value="yes" />
+          ) : null}
 
           <DynamicKycChecks
             rules={propertyRules}

@@ -69,6 +69,31 @@ function idTypeLabel(value: TenantListRow["id_type"]) {
   return "Not provided";
 }
 
+function getKycText(
+  answers: Record<string, unknown> | null | undefined,
+  key: string,
+) {
+  const value = answers?.[key];
+
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function workModeLabel(value: string | null) {
+  if (value === "remote") {
+    return "Remote — works from home";
+  }
+
+  if (value === "hybrid") {
+    return "Hybrid — home and office";
+  }
+
+  if (value === "on_site") {
+    return "On-site — goes to work";
+  }
+
+  return "Not provided";
+}
+
 function DetailItem({
   label,
   value,
@@ -148,8 +173,10 @@ export function TenantReviewCard({
   const canReview =
     isSubmittedForLandlordReview(tenant.onboarding_status) ||
     tenant.onboarding_status === TENANT_ONBOARDING_STATUSES.waitlisted;
-  const isApproved = tenant.onboarding_status === TENANT_ONBOARDING_STATUSES.approved;
-  const isRejected = tenant.onboarding_status === TENANT_ONBOARDING_STATUSES.rejected;
+  const isApproved =
+    tenant.onboarding_status === TENANT_ONBOARDING_STATUSES.approved;
+  const isRejected =
+    tenant.onboarding_status === TENANT_ONBOARDING_STATUSES.rejected;
   const isWaitlisted =
     tenant.onboarding_status === TENANT_ONBOARDING_STATUSES.waitlisted;
 
@@ -157,13 +184,13 @@ export function TenantReviewCard({
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Tenant Review</CardTitle>
+          <CardTitle>Review tenant details</CardTitle>
         </CardHeader>
 
         <CardContent>
           <div className="rounded-button bg-warning-soft p-4 text-sm font-semibold leading-6 text-warning">
-            The tenant has not submitted their KYC profile yet. Generate or send
-            the onboarding link and wait for submission.
+            The tenant has not submitted their details yet. Send the tenant link
+            and wait for their response.
           </div>
         </CardContent>
       </Card>
@@ -196,10 +223,10 @@ export function TenantReviewCard({
       <CardHeader>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <CardTitle>Tenant Review</CardTitle>
+            <CardTitle>Review tenant details</CardTitle>
             <p className="mt-1 text-sm leading-6 text-text-muted">
-              Review submitted KYC, documents, and guarantor details before
-              approving this tenant.
+              Check the information, identification and guarantor before
+              accepting the tenant.
             </p>
           </div>
 
@@ -233,7 +260,7 @@ export function TenantReviewCard({
         <div className="space-y-5">
           <div>
             <h3 className="text-sm font-extrabold text-text-strong">
-              Submitted Tenant Details
+              Tenant information
             </h3>
 
             <div className="mt-3 grid gap-4 md:grid-cols-2">
@@ -247,13 +274,23 @@ export function TenantReviewCard({
               <DetailItem label="Home address" value={tenant.home_address} />
               <DetailItem label="Occupation" value={tenant.occupation} />
               <DetailItem label="Employer" value={tenant.employer} />
+              <DetailItem
+                label="Nature of work"
+                value={workModeLabel(
+                  getKycText(tenant.kyc_answers, "work_mode"),
+                )}
+              />
+              <DetailItem
+                label="Office or business address"
+                value={getKycText(tenant.kyc_answers, "office_address")}
+              />
               <DetailItem label="ID type" value={idTypeLabel(tenant.id_type)} />
             </div>
           </div>
 
           <div>
             <h3 className="text-sm font-extrabold text-text-strong">
-              Submitted Documents
+              Identification and documents
             </h3>
 
             <div className="mt-3 grid gap-4">
@@ -265,7 +302,7 @@ export function TenantReviewCard({
 
           <div>
             <h3 className="text-sm font-extrabold text-text-strong">
-              Guarantor Details
+              Guarantor information
             </h3>
 
             {guarantor ? (
@@ -296,7 +333,7 @@ export function TenantReviewCard({
                   <input type="hidden" name="tenantId" value={tenant.id} />
 
                   <Button type="submit" isLoading={isApproving} fullWidth>
-                    Approve Tenant
+                    Accept tenant
                   </Button>
                 </form>
 
@@ -317,31 +354,36 @@ export function TenantReviewCard({
                     isLoading={isRejecting}
                     fullWidth
                   >
-                    Reject Tenant
+                    Reject tenant
                   </Button>
                 </form>
               </div>
 
-              <form action={waitlistFormAction} className="space-y-3">
-                <input type="hidden" name="tenantId" value={tenant.id} />
+              <details className="rounded-button border border-border-soft bg-background p-4">
+                <summary className="cursor-pointer font-extrabold text-text-strong">
+                  More choices
+                </summary>
+                <form action={waitlistFormAction} className="mt-4 space-y-3">
+                  <input type="hidden" name="tenantId" value={tenant.id} />
 
-                <Textarea
-                  label="Reason for waitlist"
-                  name="reason"
-                  placeholder="Example: Strong candidate, pending unit availability."
-                  error={waitlistState.fieldErrors?.reason?.[0]}
-                  required
-                />
+                  <Textarea
+                    label="Reason for waiting list"
+                    name="reason"
+                    placeholder="Example: Waiting for another apartment."
+                    error={waitlistState.fieldErrors?.reason?.[0]}
+                    required
+                  />
 
-                <Button
-                  type="submit"
-                  variant="ghost"
-                  isLoading={isWaitlisting}
-                  fullWidth
-                >
-                  Waitlist Tenant
-                </Button>
-              </form>
+                  <Button
+                    type="submit"
+                    variant="ghost"
+                    isLoading={isWaitlisting}
+                    fullWidth
+                  >
+                    Put tenant on waiting list
+                  </Button>
+                </form>
+              </details>
             </div>
           ) : null}
         </div>
@@ -349,8 +391,8 @@ export function TenantReviewCard({
 
       <CardFooter>
         <p className="text-sm leading-6 text-text-muted">
-          Approval allows the landlord to proceed with the tenancy record,
-          agreement document, and payment-link flow.
+          After you accept the tenant, BOPA will show the next step for
+          preparing and sending the agreement.
         </p>
       </CardFooter>
     </Card>

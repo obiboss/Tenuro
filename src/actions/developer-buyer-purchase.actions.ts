@@ -11,7 +11,7 @@ import {
   startDeveloperBuyerPurchase,
 } from "@/server/services/developer-buyer-purchase.service";
 import { assertDeveloperPayoutAccountVerified } from "@/server/services/developer-payout.service";
-import { requireDeveloper } from "@/server/services/auth.service";
+import { requireDeveloperWorkspaceOperator } from "@/server/services/auth.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import {
   startDeveloperBuyerPurchaseSchema,
@@ -48,7 +48,7 @@ export async function startDeveloperBuyerPurchaseAction(
       note: formData.get("note"),
     });
 
-    const developer = await requireDeveloper();
+    const developer = await requireDeveloperWorkspaceOperator();
     const supabase = createSupabaseAdminClient();
     const account = await getDeveloperAccountByOwnerProfileId(
       supabase,

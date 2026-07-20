@@ -166,8 +166,34 @@ export async function requireDeveloper() {
   return requireDeveloperUser();
 }
 
+export async function requireDeveloperWorkspaceOperator() {
+  const developer = await requireDeveloperUser();
+  const { assertBusinessSubscriptionAccessForProfile } =
+    await import("@/server/services/business-subscription.service");
+
+  await assertBusinessSubscriptionAccessForProfile({
+    profileId: developer.id,
+    workspaceType: "developer",
+  });
+
+  return developer;
+}
+
 export async function requireManager() {
   return requireManagerUser();
+}
+
+export async function requireManagerWorkspaceOperator() {
+  const manager = await requireManagerUser();
+  const { assertBusinessSubscriptionAccessForProfile } =
+    await import("@/server/services/business-subscription.service");
+
+  await assertBusinessSubscriptionAccessForProfile({
+    profileId: manager.id,
+    workspaceType: "manager",
+  });
+
+  return manager;
 }
 
 export async function requireLandlordOrCaretaker() {

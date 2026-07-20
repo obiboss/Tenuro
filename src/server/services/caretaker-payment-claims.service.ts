@@ -268,6 +268,80 @@ export async function createCaretakerProofRequestForCurrentCaretaker(
   };
 }
 
+export async function createLandlordProofRequestForCurrentLandlord(
+  input: CreateCaretakerProofRequestInput,
+) {
+  const landlord = await requireLandlordPlatformOperator();
+  const supabase = await createSupabaseServerClient();
+
+  const context = await getCaretakerPaymentClaimContext(
+    supabase,
+    input.tenancyId,
+  );
+
+  if (context.landlord_id !== landlord.id) {
+    throw new AppError(
+      "FORBIDDEN",
+      "You do not have permission to request payment proof for this tenancy.",
+      403,
+    );
+  }
+
+  assertTenancyCanReceivePaymentClaim({
+    tenancyStatus: context.tenancy_status,
+    agreementLiveAt: context.agreement_live_at,
+  });
+
+  const propertyId = context.units?.properties?.id;
+
+  if (!propertyId) {
+    throw new AppError(
+      "PROPERTY_NOT_FOUND",
+      "This tenancy is not linked to a property.",
+      400,
+    );
+  }
+
+  const rawToken = generateSecureToken();
+  const tokenHash = sha256Hex(rawToken);
+  const expiresAt = getExpiryDateFromNow(PAYMENT_PROOF_EXPIRY_HOURS);
+  const adminSupabase = createSupabaseAdminClient();
+
+  await createCaretakerPaymentClaim(adminSupabase, {
+    landlordId: landlord.id,
+    caretakerProfileId: null,
+    tenancyId: context.id,
+    tenantId: context.tenant_id,
+    propertyId,
+    unitId: context.unit_id,
+    claimSource: "tenant_proof",
+    status: "draft",
+    tokenHash,
+    tokenExpiresAt: expiresAt.toISOString(),
+    requestedByProfileId: landlord.id,
+    requestedAt: new Date().toISOString(),
+  });
+
+  const proofUrl = `${getAppBaseUrl()}/payment-proof/${rawToken}`;
+  const propertyUnitLabel = getPropertyUnitLabel({
+    propertyName: context.units?.properties?.property_name,
+    unitIdentifier: context.units?.unit_identifier,
+  });
+  const tenantName = context.tenants?.full_name ?? "Tenant";
+
+  return {
+    tenantName,
+    tenantPhone: context.tenants?.phone_number ?? null,
+    propertyUnitLabel,
+    proofUrl,
+    whatsappMessage: buildTenantProofMessage({
+      tenantName,
+      propertyUnitLabel,
+      proofUrl,
+    }),
+  };
+}
+
 export async function getCaretakerProofRequestPageContext(tenancyId: string) {
   const caretaker = await requireCaretaker();
   const supabase = await createSupabaseServerClient();

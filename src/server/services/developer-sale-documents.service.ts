@@ -9,7 +9,7 @@ import {
   type DeveloperSaleDocumentRow,
 } from "@/server/repositories/developer-sale-documents.repository";
 import { getDeveloperSaleById } from "@/server/repositories/developer-sales.repository";
-import { requireDeveloper } from "@/server/services/auth.service";
+import { requireDeveloperWorkspaceOperator } from "@/server/services/auth.service";
 import { getDeveloperDocumentAutofillPreviewForCurrentDeveloper } from "@/server/services/developer-document-autofill.service";
 import {
   createSignedDeveloperSaleDocumentPdfUrl,
@@ -25,7 +25,7 @@ const DIGITAL_COPY_NOTICE =
   "This is a digital copy generated through Boldverse Property for reference, record, printing, signing, and operational processing. It does not replace any physical original document issued by the developer.";
 
 async function getDeveloperAccountForCurrentUser() {
-  const developer = await requireDeveloper();
+  const developer = await requireDeveloperWorkspaceOperator();
   const supabase = createSupabaseAdminClient();
 
   const account = await getDeveloperAccountByOwnerProfileId(

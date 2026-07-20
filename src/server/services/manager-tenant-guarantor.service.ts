@@ -18,7 +18,7 @@ import type {
   ManagerTenantOnboardingRequestRow,
   ManagerTenantRequirementSnapshotItem,
 } from "@/server/repositories/manager-tenant-onboarding.repository";
-import { requireManager } from "@/server/services/auth.service";
+import { requireManagerWorkspaceOperator } from "@/server/services/auth.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { normalisePhoneNumber } from "@/server/utils/phone";
@@ -433,7 +433,7 @@ export async function confirmManagerTenantGuarantorByToken(
 }
 
 async function requireManagerOrganization() {
-  const manager = await requireManager();
+  const manager = await requireManagerWorkspaceOperator();
   const supabase = await createSupabaseServerClient();
   const organization = await getManagerOrganizationForCurrentUser(
     supabase,

@@ -14,7 +14,7 @@ import {
   upsertDeveloperDocumentTemplate,
   type DeveloperDocumentTemplateRow,
 } from "@/server/repositories/developer-document-templates.repository";
-import { requireDeveloper } from "@/server/services/auth.service";
+import { requireDeveloperWorkspaceOperator } from "@/server/services/auth.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 
 type DeveloperDocumentTemplateView = {
@@ -42,7 +42,7 @@ function mapTemplateRowsByType(rows: DeveloperDocumentTemplateRow[]) {
 }
 
 async function getCurrentDeveloperAccount() {
-  const developer = await requireDeveloper();
+  const developer = await requireDeveloperWorkspaceOperator();
   const supabase = createSupabaseAdminClient();
 
   const account = await getDeveloperAccountByOwnerProfileId(

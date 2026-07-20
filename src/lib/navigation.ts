@@ -1,5 +1,6 @@
 import {
   Building2,
+  CalendarCheck2,
   ClipboardList,
   CreditCard,
   History,
@@ -75,6 +76,12 @@ export const PLATFORM_ADMIN_NAVIGATION: readonly PlatformAdminNavigationItem[] =
       label: "Dashboard",
       href: "/admin",
       icon: LayoutDashboard,
+      status: "available",
+    },
+    {
+      label: "Demo Requests",
+      href: "/admin/demo-requests",
+      icon: CalendarCheck2,
       status: "available",
     },
     {

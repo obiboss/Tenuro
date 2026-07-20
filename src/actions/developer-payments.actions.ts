@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { errorResult } from "@/server/errors/result";
 import { getDeveloperAccountByOwnerProfileId } from "@/server/repositories/developer.repository";
 import { createDeveloperPaymentRequest } from "@/server/services/developer-payment.service";
-import { requireDeveloper } from "@/server/services/auth.service";
+import { requireDeveloperWorkspaceOperator } from "@/server/services/auth.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import type { AuthActionState } from "@/server/types/auth.types";
 import { createDeveloperPaymentRequestSchema } from "@/server/validators/developer-payment.schema";
@@ -30,7 +30,7 @@ export async function createDeveloperPaymentRequestAction(
   formData: FormData,
 ): Promise<AuthActionState> {
   try {
-    const developer = await requireDeveloper();
+    const developer = await requireDeveloperWorkspaceOperator();
     const parsed = createDeveloperPaymentRequestSchema.parse({
       saleId: formData.get("saleId"),
       scheduleItemId: formData.get("scheduleItemId"),

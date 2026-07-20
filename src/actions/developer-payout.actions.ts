@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { DeveloperPayoutSetupActionState } from "@/actions/developer-payout.state";
 import { errorResult } from "@/server/errors/result";
 import { getDeveloperAccountByOwnerProfileId } from "@/server/repositories/developer.repository";
-import { requireDeveloper } from "@/server/services/auth.service";
+import { requireDeveloperWorkspaceOperator } from "@/server/services/auth.service";
 import { setupDeveloperPayoutAccount } from "@/server/services/developer-payout.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 
@@ -52,7 +52,7 @@ export async function setupDeveloperPayoutAccountAction(
       accountNumber: formData.get("accountNumber"),
     });
 
-    const developer = await requireDeveloper();
+    const developer = await requireDeveloperWorkspaceOperator();
     const supabase = createSupabaseAdminClient();
 
     const account = await getDeveloperAccountByOwnerProfileId(

@@ -20,6 +20,7 @@ import {
   getDeveloperProfileByProfileId,
   type DeveloperProfileRole,
 } from "@/server/repositories/developer.repository";
+import { assertBusinessSubscriptionAccessForWorkspace } from "@/server/services/business-subscription.service";
 import { normalisePhoneNumber } from "@/server/utils/phone";
 import type { AcceptDeveloperStaffRoleLinkInput } from "@/server/validators/developer-staff.schema";
 
@@ -104,6 +105,11 @@ export async function createDeveloperStaffRoleLinkForTitle(params: {
       403,
     );
   }
+
+  await assertBusinessSubscriptionAccessForWorkspace({
+    workspaceType: "developer",
+    workspaceId: account.id,
+  });
 
   const ownerDeveloperProfile = await getDeveloperProfileByProfileId(
     params.supabase,
@@ -198,6 +204,11 @@ export async function acceptDeveloperStaffRoleLink(params: {
   }
 
   assertRoleLinkIsUsable(roleLink);
+
+  await assertBusinessSubscriptionAccessForWorkspace({
+    workspaceType: "developer",
+    workspaceId: roleLink.developer_account_id,
+  });
 
   const phone = normalisePhoneNumber(params.input.phoneNumber);
   const email =

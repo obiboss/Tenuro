@@ -131,14 +131,13 @@ export function ExistingTenantClaimReviewDetail({
   const [confirmedMoveInDate, setConfirmedMoveInDate] = useState(
     claim.landlord_confirmed_move_in_date ?? claim.tenant_move_in_date ?? "",
   );
-
-  const confirmedCurrentDueDate = useMemo(
-    () =>
+  const [confirmedCurrentDueDate, setConfirmedCurrentDueDate] = useState(
+    claim.landlord_confirmed_current_due_date ??
+      claim.bopa_calculated_current_due_date ??
       calculateCurrentDueDate({
         moveInDate: confirmedMoveInDate,
         paymentFrequency: claim.tenant_payment_frequency,
       }),
-    [claim.tenant_payment_frequency, confirmedMoveInDate],
   );
 
   const openingBalance = liveSummary.amountOwed;
@@ -305,7 +304,9 @@ export function ExistingTenantClaimReviewDetail({
 
       <section className="space-y-4 rounded-card border border-primary/15 bg-primary-soft/30 p-5">
         <div>
-          <h2 className="text-lg font-black text-text-strong">Final approval</h2>
+          <h2 className="text-lg font-black text-text-strong">
+            Final approval
+          </h2>
           <p className="mt-1 text-base leading-7 text-text-muted">
             Confirm the rent, move-in date, and due dates before creating the
             live tenancy.
@@ -321,14 +322,17 @@ export function ExistingTenantClaimReviewDetail({
           </div>
         ) : null}
 
-        <form id={`approve-claim-${claim.id}`} action={approveAction} className="space-y-4">
+        <form
+          id={`approve-claim-${claim.id}`}
+          action={approveAction}
+          className="space-y-4"
+        >
           <input type="hidden" name="claimId" value={claim.id} />
           <input
             type="hidden"
-            name="confirmedCurrentDueDate"
-            value={confirmedCurrentDueDate}
+            name="openingBalance"
+            value={String(openingBalance)}
           />
-          <input type="hidden" name="openingBalance" value={String(openingBalance)} />
 
           <div className="grid gap-4 sm:grid-cols-2">
             <CurrencyInput
@@ -339,7 +343,9 @@ export function ExistingTenantClaimReviewDetail({
               required
             />
             <div className="space-y-2">
-              <p className="text-sm font-semibold text-text-strong">Opening balance</p>
+              <p className="text-sm font-semibold text-text-strong">
+                Opening balance
+              </p>
               <p className="flex min-h-14 items-center rounded-button border border-border-soft bg-surface px-4 text-base font-black text-danger">
                 {formatNaira(openingBalance)}
               </p>
@@ -372,11 +378,15 @@ export function ExistingTenantClaimReviewDetail({
               </p>
             </div>
             <Input
-              label="Current due date (calculated)"
+              label="Current rent cycle started"
+              name="confirmedCurrentDueDate"
               type="date"
               value={confirmedCurrentDueDate}
-              readOnly
-              helperText="From the confirmed move-in date and rent frequency."
+              onChange={(event) =>
+                setConfirmedCurrentDueDate(event.target.value)
+              }
+              helperText="BOPA will calculate the next due date from this date."
+              required
             />
           </div>
 
@@ -409,7 +419,7 @@ export function ExistingTenantClaimReviewDetail({
       <ConfirmDialog
         open={showApproveConfirm}
         title="Confirm tenancy"
-        description={`You are about to confirm ${tenantName}'s tenancy at ${getPropertyUnitLabel(claim)}. The move-in date of ${formatDate(confirmedMoveInDate)} will be used to calculate all future rent due dates. This date can only be changed later from the tenancy settings page. Make sure this date is correct before continuing.`}
+        description={`You are about to confirm ${tenantName}'s tenancy at ${getPropertyUnitLabel(claim)}. The current rent cycle started on ${formatDate(confirmedCurrentDueDate)} and BOPA will use it for future rent due dates. Check this date before continuing.`}
         confirmLabel="Confirm and approve"
         cancelLabel="Go back and check"
         isLoading={approvePending}
@@ -426,7 +436,9 @@ export function ExistingTenantClaimReviewDetail({
       {showRejectConfirm ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-4 sm:items-center">
           <div className="w-full max-w-lg rounded-card border border-border-soft bg-white p-6 shadow-card">
-            <h2 className="text-lg font-black text-text-strong">Reject claim</h2>
+            <h2 className="text-lg font-black text-text-strong">
+              Reject claim
+            </h2>
             <p className="mt-2 text-base text-text-muted">
               Add an optional reason for rejecting this claim.
             </p>
@@ -447,7 +459,11 @@ export function ExistingTenantClaimReviewDetail({
                 >
                   Cancel
                 </Button>
-                <Button type="submit" variant="danger" isLoading={rejectPending}>
+                <Button
+                  type="submit"
+                  variant="danger"
+                  isLoading={rejectPending}
+                >
                   Reject claim
                 </Button>
               </div>

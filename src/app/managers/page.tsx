@@ -14,6 +14,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { Manager3DShowcase } from "@/components/manager/manager-3d-showcase";
+import { BusinessSubscriptionPricing } from "@/components/subscription/business-subscription-pricing";
 import { LandingHeaderLogin } from "@/components/landing/landing-header-login";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -169,7 +170,7 @@ export default function ManagersLandingPage() {
                 </Button>
               </Link>
 
-              <Link href="/contact">
+              <Link href="/contact?workspace=manager">
                 <Button type="button" variant="secondary" fullWidth>
                   Book a Demo
                 </Button>
@@ -177,6 +178,8 @@ export default function ManagersLandingPage() {
             </div>
           </div>
         </section>
+
+        <BusinessSubscriptionPricing signupHref="/manager/register" />
 
         <section className="mt-8 rounded-4xl bg-surface px-5 py-8 shadow-card md:px-8 lg:px-10">
           <div className="max-w-3xl">
@@ -319,7 +322,7 @@ export default function ManagersLandingPage() {
                 </Button>
               </Link>
 
-              <Link href="/contact">
+              <Link href="/contact?workspace=manager">
                 <Button type="button" variant="secondary" fullWidth>
                   Book a Demo
                 </Button>
@@ -370,3 +373,4 @@ export default function ManagersLandingPage() {
     </main>
   );
 }
+

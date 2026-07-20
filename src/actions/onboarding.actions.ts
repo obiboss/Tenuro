@@ -59,11 +59,19 @@ export async function submitTenantOnboardingAction(
       dateOfBirth: formData.get("dateOfBirth"),
       occupation: formData.get("occupation"),
       employer: formData.get("employer"),
+      workMode: formData.get("workMode") || undefined,
+      officeAddress: formData.get("officeAddress"),
       homeAddress: formData.get("homeAddress"),
       idType: formData.get("idType"),
       idNumber: formData.get("idNumber"),
       idDocumentPath: formData.get("idDocumentPath"),
       passportPhotoPath: formData.get("passportPhotoPath"),
+      guarantorFullName: formData.get("guarantorFullName"),
+      guarantorPhoneNumber: formData.get("guarantorPhoneNumber"),
+      guarantorEmail: formData.get("guarantorEmail"),
+      guarantorAddress: formData.get("guarantorAddress"),
+      guarantorRelationship: formData.get("guarantorRelationship"),
+      guarantorIdDocumentPath: formData.get("guarantorIdDocumentPath"),
       hasPets: formData.get("hasPets") || undefined,
       occupantCount: formData.get("occupantCount") || undefined,
       propertyUse: formData.get("propertyUse") || undefined,
@@ -95,7 +103,9 @@ export async function submitTenantOnboardingAction(
       message: submittedForLandlordReview
         ? "Your tenant profile has been submitted for landlord review."
         : "Your application has been saved. Continue to verification and processing.",
-      nextStep: submittedForLandlordReview ? "submitted" : "verification_summary",
+      nextStep: submittedForLandlordReview
+        ? "submitted"
+        : "verification_summary",
     };
   } catch (error) {
     const result = errorResult(error);

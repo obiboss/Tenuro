@@ -7,7 +7,7 @@ import { createDeveloperBuyer } from "@/server/repositories/developer-buyers.rep
 import { getDeveloperAccountByOwnerProfileId } from "@/server/repositories/developer.repository";
 import { getDeveloperEstateById } from "@/server/repositories/developer-estates.repository";
 import { assignDeveloperBuyerToPlot } from "@/server/repositories/developer-plot-assignments.repository";
-import { requireDeveloper } from "@/server/services/auth.service";
+import { requireDeveloperWorkspaceOperator } from "@/server/services/auth.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import type { AuthActionState } from "@/server/types/auth.types";
@@ -33,7 +33,7 @@ function nullableText(value: string) {
 }
 
 async function getActiveDeveloperAccount() {
-  const developer = await requireDeveloper();
+  const developer = await requireDeveloperWorkspaceOperator();
   const adminSupabase = createSupabaseAdminClient();
   const account = await getDeveloperAccountByOwnerProfileId(
     adminSupabase,

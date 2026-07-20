@@ -6,7 +6,7 @@ import {
   getActiveManagerPaystackAccount,
 } from "@/server/repositories/manager-paystack-accounts.repository";
 import { getManagerOrganizationForCurrentUser } from "@/server/repositories/manager.repository";
-import { requireManager } from "@/server/services/auth.service";
+import { requireManagerWorkspaceOperator } from "@/server/services/auth.service";
 import {
   createLandlordSubaccount,
   getSupportedBanks,
@@ -16,7 +16,7 @@ import { createSupabaseServerClient } from "@/server/supabase/server";
 import type { SetupManagerBankAccountInput } from "@/server/validators/manager-paystack-accounts.schema";
 
 async function requireCurrentManagerOrganization() {
-  const manager = await requireManager();
+  const manager = await requireManagerWorkspaceOperator();
   const supabase = await createSupabaseServerClient();
 
   const organization = await getManagerOrganizationForCurrentUser(

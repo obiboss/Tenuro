@@ -32,6 +32,12 @@ const privacyData = {
     "Business name where applicable",
     "Bank account details for Paystack subaccount setup",
   ],
+  businessEnquiries: [
+    "Full name, company name, work email address, and phone number",
+    "Whether you want to see BOPA Manager or BOPA Developer",
+    "Your preferred demonstration date and time period",
+    "Any information you choose to provide about what you want to discuss",
+  ],
   automatic: [
     "IP address at the time of account activity and document acceptance",
     "Device type and browser information",
@@ -44,6 +50,7 @@ const privacyData = {
     "Maintain rental records and payment history",
     "Send notifications via WhatsApp about rent due dates, receipts, and renewals",
     "Verify identity for tenant KYC purposes",
+    "Respond to demonstration requests and arrange a suitable meeting time",
     "Comply with legal and regulatory obligations",
     "Investigate disputes and provide audit records where required",
   ],
@@ -64,6 +71,7 @@ const privacyData = {
     "Tenant records are retained for 3 years after the tenancy ends",
     "Payment records and receipts are retained for 7 years in compliance with Nigerian financial record-keeping requirements",
     "Audit logs are retained permanently as part of the legal record of transactions",
+    "Demo request records are retained for up to 2 years for customer service and business follow-up",
   ],
   rights: [
     "Access the personal information we hold about you",
@@ -79,6 +87,10 @@ const privacyData = {
     {
       title: "Supabase",
       desc: "Our database and file storage infrastructure is provided by Supabase. Data is stored on their servers under our control.",
+    },
+    {
+      title: "Resend",
+      desc: "When demo email alerts are enabled, we use Resend to notify the BOPA team that a new demo request has been received.",
     },
     {
       title: "Between platform users",
@@ -187,7 +199,7 @@ export default function PrivacyPolicyPage() {
           </h1>
 
           <p className="mt-3 text-sm text-text-muted">
-            Boldverse Property (BOPA) &mdash; Last updated: May 2026
+            Boldverse Property (BOPA) &mdash; Last updated: July 2026
           </p>
         </div>
 
@@ -197,8 +209,8 @@ export default function PrivacyPolicyPage() {
             <p>
               Boldverse Property (BOPA) is a property management platform
               operated by Boldverse Services in Nigeria. BOPA helps landlords,
-              tenants, and agents manage rental properties, tenancy agreements,
-              rent payments, and related records.
+              tenants, agents, property managers, and real estate developers
+              manage property records, payments, and related work.
             </p>
 
             <p className="mt-4">
@@ -225,6 +237,13 @@ export default function PrivacyPolicyPage() {
               <div>
                 <h3 className="mb-3 font-bold text-text-strong">From Agents</h3>
                 <BulletList items={privacyData.agents} />
+              </div>
+
+              <div>
+                <h3 className="mb-3 font-bold text-text-strong">
+                  From Demo Requests
+                </h3>
+                <BulletList items={privacyData.businessEnquiries} />
               </div>
 
               <div>

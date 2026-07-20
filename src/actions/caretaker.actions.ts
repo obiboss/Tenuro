@@ -12,6 +12,7 @@ import {
 import {
   confirmCaretakerPaymentClaimForCurrentLandlord,
   createCaretakerProofRequestForCurrentCaretaker,
+  createLandlordProofRequestForCurrentLandlord,
   rejectCaretakerPaymentClaimForCurrentLandlord,
   reportCaretakerPaymentForCurrentCaretaker,
   submitTenantPaymentProof,
@@ -247,6 +248,34 @@ export async function createCaretakerProofRequestAction(
     return {
       ok: true,
       message: "Proof link created. Send it to the tenant on WhatsApp.",
+      proofUrl: result.proofUrl,
+      whatsappMessage: result.whatsappMessage,
+      tenantPhone: result.tenantPhone,
+    };
+  } catch (error) {
+    return toProofRequestError(error);
+  }
+}
+
+export async function createLandlordProofRequestAction(
+  _previousState: CaretakerProofRequestActionState,
+  formData: FormData,
+): Promise<CaretakerProofRequestActionState> {
+  try {
+    const parsed = createCaretakerProofRequestSchema.parse({
+      tenancyId: formData.get("tenancyId"),
+    });
+
+    const result = await createLandlordProofRequestForCurrentLandlord(parsed);
+
+    revalidatePath("/overview");
+    revalidatePath("/payments");
+    revalidatePath("/payments/claims");
+    revalidatePath("/tenants");
+
+    return {
+      ok: true,
+      message: "Payment proof link created. Send it to the tenant.",
       proofUrl: result.proofUrl,
       whatsappMessage: result.whatsappMessage,
       tenantPhone: result.tenantPhone,
