@@ -1,0 +1,13 @@
+{
+  "changed_files": [
+    "src/app/(platform-admin)/admin/page.tsx",
+    "src/server/repositories/platform-admin-dashboard.repository.ts",
+    "src/server/services/platform-admin-dashboard.service.ts"
+  ],
+  "created_files": [
+    "src/components/platform-admin/admin-free-tool-usage.tsx"
+  ],
+  "migration_required": false,
+  "dependency_required": false,
+  "syntax_validation": "passed"
+}

@@ -28,7 +28,7 @@ export default async function PlatformAdminDashboardPage({
       <PageHeader
         eyebrow="Platform Operations"
         title="Admin dashboard"
-        description="Monitor onboarding volume, payout verification activity, and platform health."
+        description="Monitor onboarding, free tool usage, payout verification activity, and platform health."
         action={<Badge tone="success">Protected</Badge>}
       />
 

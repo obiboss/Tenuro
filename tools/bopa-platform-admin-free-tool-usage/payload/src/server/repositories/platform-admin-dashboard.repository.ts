@@ -19,6 +19,27 @@ export type PlatformAdminPayoutAuditRow = {
   created_at: string;
 };
 
+export type PlatformAdminFreeToolUsageEventRow = {
+  id: string;
+  lead_id: string | null;
+  document_id: string | null;
+  profile_id: string | null;
+  event_type: string;
+  source_path: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+export type PlatformAdminPublicToolLeadRow = {
+  id: string;
+  owner_profile_id: string | null;
+  landlord_full_name: string;
+  landlord_phone_number: string;
+  landlord_email: string | null;
+  source_tool: "receipt" | "agreement";
+  signup_status: "anonymous" | "account_created" | "attached" | "discarded";
+};
+
 const PAYOUT_AUDIT_EVENT_TYPES = [
   AUDIT_EVENT_TYPES.payoutVerificationPending,
   AUDIT_EVENT_TYPES.payoutAccountCreated,
@@ -248,99 +269,52 @@ export async function getProfileNamesByIds(
   );
 }
 
-export type PlatformAdminReceiptUsageEventRow = {
-  id: string;
-  lead_id: string | null;
-  receipt_id: string | null;
-  profile_id: string | null;
-  event_type: string;
-  source_path: string;
-  metadata: Record<string, unknown>;
-  created_at: string;
-};
-
-export type PlatformAdminAgreementUsageEventRow = {
-  id: string;
-  lead_id: string | null;
-  agreement_id: string | null;
-  profile_id: string | null;
-  event_type: string;
-  source_path: string;
-  metadata: Record<string, unknown>;
-  created_at: string;
-};
-
-export type PlatformAdminPublicToolLeadRow = {
-  id: string;
-  owner_profile_id: string | null;
-  landlord_full_name: string;
-  landlord_phone_number: string;
-  landlord_email: string | null;
-  source_tool: "receipt" | "agreement";
-  signup_status: "anonymous" | "account_created" | "attached" | "discarded";
-};
-
-export type PlatformAdminGeneratedReceiptSummaryRow = {
-  id: string;
-  lead_id: string | null;
-  owner_profile_id: string | null;
-  landlord_full_name: string;
-  landlord_phone_number: string;
-  landlord_email: string | null;
-  receipt_number: string;
-};
-
-export type PlatformAdminGeneratedAgreementSummaryRow = {
-  id: string;
-  lead_id: string | null;
-  owner_profile_id: string | null;
-  landlord_full_name: string;
-  landlord_phone_number: string;
-  landlord_email: string | null;
-  agreement_title: string;
-};
-
-function getSafeUsageLimit(limit: number) {
-  return Math.min(Math.max(limit, 1), 200);
-}
-
-function getUniqueIds(values: Array<string | null>) {
-  return [...new Set(values.filter((value): value is string => Boolean(value)))];
-}
-
 export async function listReceiptUsageEventsBetween(
   supabase: SupabaseClient,
   params: {
     startInclusive: string;
     endExclusive: string;
-    limit?: number;
+    limit: number;
   },
-) {
+): Promise<PlatformAdminFreeToolUsageEventRow[]> {
+  const safeLimit = Math.min(Math.max(params.limit, 1), 100);
+
   const { data, error } = await supabase
     .from("receipt_usage_events")
     .select(
-      [
-        "id",
-        "lead_id",
-        "receipt_id",
-        "profile_id",
-        "event_type",
-        "source_path",
-        "metadata",
-        "created_at",
-      ].join(","),
+      "id, lead_id, receipt_id, profile_id, event_type, source_path, metadata, created_at",
     )
     .gte("created_at", params.startInclusive)
     .lt("created_at", params.endExclusive)
     .order("created_at", { ascending: false })
-    .limit(getSafeUsageLimit(params.limit ?? 100))
-    .returns<PlatformAdminReceiptUsageEventRow[]>();
+    .limit(safeLimit)
+    .returns<
+      Array<{
+        id: string;
+        lead_id: string | null;
+        receipt_id: string | null;
+        profile_id: string | null;
+        event_type: string;
+        source_path: string;
+        metadata: Record<string, unknown> | null;
+        created_at: string;
+      }>
+    >();
 
   if (error) {
     throw error;
   }
 
-  return data ?? [];
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    lead_id: row.lead_id,
+    document_id: row.receipt_id,
+    profile_id: row.profile_id,
+    event_type: row.event_type,
+    source_path: row.source_path,
+    metadata: row.metadata ?? {},
+    created_at: row.created_at,
+  }));
 }
 
 export async function listAgreementUsageEventsBetween(
@@ -348,43 +322,56 @@ export async function listAgreementUsageEventsBetween(
   params: {
     startInclusive: string;
     endExclusive: string;
-    limit?: number;
+    limit: number;
   },
-) {
+): Promise<PlatformAdminFreeToolUsageEventRow[]> {
+  const safeLimit = Math.min(Math.max(params.limit, 1), 100);
+
   const { data, error } = await supabase
     .from("agreement_usage_events")
     .select(
-      [
-        "id",
-        "lead_id",
-        "agreement_id",
-        "profile_id",
-        "event_type",
-        "source_path",
-        "metadata",
-        "created_at",
-      ].join(","),
+      "id, lead_id, agreement_id, profile_id, event_type, source_path, metadata, created_at",
     )
     .gte("created_at", params.startInclusive)
     .lt("created_at", params.endExclusive)
     .order("created_at", { ascending: false })
-    .limit(getSafeUsageLimit(params.limit ?? 100))
-    .returns<PlatformAdminAgreementUsageEventRow[]>();
+    .limit(safeLimit)
+    .returns<
+      Array<{
+        id: string;
+        lead_id: string | null;
+        agreement_id: string | null;
+        profile_id: string | null;
+        event_type: string;
+        source_path: string;
+        metadata: Record<string, unknown> | null;
+        created_at: string;
+      }>
+    >();
 
   if (error) {
     throw error;
   }
 
-  return data ?? [];
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    lead_id: row.lead_id,
+    document_id: row.agreement_id,
+    profile_id: row.profile_id,
+    event_type: row.event_type,
+    source_path: row.source_path,
+    metadata: row.metadata ?? {},
+    created_at: row.created_at,
+  }));
 }
 
-export async function getPublicToolLeadsByIds(
+export async function listPublicToolLeadsByIds(
   supabase: SupabaseClient,
-  leadIds: Array<string | null>,
-) {
-  const uniqueIds = getUniqueIds(leadIds);
+  leadIds: string[],
+): Promise<PlatformAdminPublicToolLeadRow[]> {
+  const uniqueLeadIds = [...new Set(leadIds.filter(Boolean))];
 
-  if (uniqueIds.length === 0) {
+  if (uniqueLeadIds.length === 0) {
     return [];
   }
 
@@ -401,74 +388,8 @@ export async function getPublicToolLeadsByIds(
         "signup_status",
       ].join(","),
     )
-    .in("id", uniqueIds)
+    .in("id", uniqueLeadIds)
     .returns<PlatformAdminPublicToolLeadRow[]>();
-
-  if (error) {
-    throw error;
-  }
-
-  return data ?? [];
-}
-
-export async function getGeneratedReceiptSummariesByIds(
-  supabase: SupabaseClient,
-  receiptIds: Array<string | null>,
-) {
-  const uniqueIds = getUniqueIds(receiptIds);
-
-  if (uniqueIds.length === 0) {
-    return [];
-  }
-
-  const { data, error } = await supabase
-    .from("public_generated_receipts")
-    .select(
-      [
-        "id",
-        "lead_id",
-        "owner_profile_id",
-        "landlord_full_name",
-        "landlord_phone_number",
-        "landlord_email",
-        "receipt_number",
-      ].join(","),
-    )
-    .in("id", uniqueIds)
-    .returns<PlatformAdminGeneratedReceiptSummaryRow[]>();
-
-  if (error) {
-    throw error;
-  }
-
-  return data ?? [];
-}
-
-export async function getGeneratedAgreementSummariesByIds(
-  supabase: SupabaseClient,
-  agreementIds: Array<string | null>,
-) {
-  const uniqueIds = getUniqueIds(agreementIds);
-
-  if (uniqueIds.length === 0) {
-    return [];
-  }
-
-  const { data, error } = await supabase
-    .from("public_generated_agreements")
-    .select(
-      [
-        "id",
-        "lead_id",
-        "owner_profile_id",
-        "landlord_full_name",
-        "landlord_phone_number",
-        "landlord_email",
-        "agreement_title",
-      ].join(","),
-    )
-    .in("id", uniqueIds)
-    .returns<PlatformAdminGeneratedAgreementSummaryRow[]>();
 
   if (error) {
     throw error;

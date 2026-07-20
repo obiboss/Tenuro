@@ -7,14 +7,14 @@ import {
   countProfilesCreatedBetween,
   countVerifiedPayoutAccounts,
   countVerifiedPayoutAccountsBetween,
-  getGeneratedAgreementSummariesByIds,
-  getGeneratedReceiptSummariesByIds,
   getProfileNamesByIds,
-  getPublicToolLeadsByIds,
   listAgreementUsageEventsBetween,
+  listPublicToolLeadsByIds,
   listReceiptUsageEventsBetween,
   listRecentPayoutAuditEvents,
   listRecentProfileSignups,
+  type PlatformAdminFreeToolUsageEventRow,
+  type PlatformAdminPublicToolLeadRow,
 } from "@/server/repositories/platform-admin-dashboard.repository";
 import { requirePlatformAdmin } from "@/server/services/platform-admin.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
@@ -45,11 +45,11 @@ export type PlatformAdminFreeToolUsageItem = {
   tool: "receipt" | "agreement";
   eventType: string;
   actionLabel: string;
-  personName: string;
+  userName: string;
   phoneNumber: string | null;
   email: string | null;
-  accountStatus: "visitor" | "bopa_account";
-  documentReference: string;
+  accountLabel: string;
+  documentId: string | null;
   sourcePath: string;
   createdAt: string;
 };
@@ -220,133 +220,66 @@ function mapPayoutAuditActivity(params: {
   };
 }
 
-
-const FREE_TOOL_ACTION_LABELS: Record<string, string> = {
-  receipt_generated: "Generated a free receipt",
-  receipt_downloaded: "Downloaded a free receipt",
-  receipt_whatsapp_shared: "Shared a free receipt on WhatsApp",
-  receipt_attached_to_account: "Saved a free receipt to BOPA",
+const FREE_TOOL_EVENT_LABELS: Record<string, string> = {
+  receipt_generated: "Generated a rent receipt",
+  receipt_downloaded: "Downloaded a rent receipt",
+  receipt_whatsapp_shared: "Shared a rent receipt on WhatsApp",
+  receipt_attached_to_account: "Saved a rent receipt to a BOPA account",
   agreement_generated: "Generated a tenancy agreement",
   agreement_previewed: "Viewed a tenancy agreement preview",
   agreement_downloaded: "Downloaded a tenancy agreement",
   agreement_whatsapp_shared: "Shared a tenancy agreement on WhatsApp",
-  agreement_attached_to_account: "Saved a tenancy agreement to BOPA",
-  signup_prompt_viewed: "Viewed the account invitation",
+  agreement_attached_to_account:
+    "Saved a tenancy agreement to a BOPA account",
+  signup_prompt_viewed: "Viewed the BOPA account prompt",
   signup_started: "Started creating a BOPA account",
   signup_completed: "Created a BOPA account",
 };
 
-function getFreeToolActionLabel(eventType: string, tool: "receipt" | "agreement") {
+function getFreeToolActionLabel(eventType: string) {
   return (
-    FREE_TOOL_ACTION_LABELS[eventType] ??
-    (tool === "receipt"
-      ? "Used the free receipt generator"
-      : "Used the tenancy agreement generator")
+    FREE_TOOL_EVENT_LABELS[eventType] ??
+    eventType
+      .replaceAll("_", " ")
+      .replace(/\b\w/g, (character) => character.toUpperCase())
   );
 }
 
-function getShortDocumentReference(params: {
-  tool: "receipt" | "agreement";
-  documentId: string | null;
-  storedReference: string | null;
-}) {
-  if (params.storedReference?.trim()) {
-    return params.storedReference.trim();
+function getPublicToolAccountLabel(
+  lead: PlatformAdminPublicToolLeadRow | undefined,
+) {
+  if (
+    lead?.owner_profile_id ||
+    lead?.signup_status === "account_created" ||
+    lead?.signup_status === "attached"
+  ) {
+    return "BOPA account";
   }
 
-  if (!params.documentId) {
-    return params.tool === "receipt" ? "Receipt" : "Tenancy Agreement";
-  }
-
-  const shortId = params.documentId.slice(0, 8).toUpperCase();
-
-  return params.tool === "receipt"
-    ? `Receipt ${shortId}`
-    : `Agreement ${shortId}`;
+  return "Visitor";
 }
 
-function mapFreeToolUsage(params: {
+function mapFreeToolUsageItem(params: {
   tool: "receipt" | "agreement";
-  event: {
-    id: string;
-    lead_id: string | null;
-    profile_id: string | null;
-    event_type: string;
-    source_path: string;
-    created_at: string;
-  };
-  documentId: string | null;
-  document:
-    | {
-        owner_profile_id: string | null;
-        landlord_full_name: string;
-        landlord_phone_number: string;
-        landlord_email: string | null;
-      }
-    | null;
-  storedReference: string | null;
-  lead:
-    | {
-        owner_profile_id: string | null;
-        landlord_full_name: string;
-        landlord_phone_number: string;
-        landlord_email: string | null;
-      }
-    | null;
+  event: PlatformAdminFreeToolUsageEventRow;
+  leadById: Map<string, PlatformAdminPublicToolLeadRow>;
 }): PlatformAdminFreeToolUsageItem {
-  const personName =
-    params.lead?.landlord_full_name?.trim() ||
-    params.document?.landlord_full_name?.trim() ||
-    "Unknown visitor";
-  const phoneNumber =
-    params.lead?.landlord_phone_number?.trim() ||
-    params.document?.landlord_phone_number?.trim() ||
-    null;
-  const email =
-    params.lead?.landlord_email?.trim() ||
-    params.document?.landlord_email?.trim() ||
-    null;
-  const accountStatus =
-    params.event.profile_id ||
-    params.lead?.owner_profile_id ||
-    params.document?.owner_profile_id
-      ? ("bopa_account" as const)
-      : ("visitor" as const);
+  const lead = params.event.lead_id
+    ? params.leadById.get(params.event.lead_id)
+    : undefined;
 
   return {
     id: `${params.tool}-${params.event.id}`,
     tool: params.tool,
     eventType: params.event.event_type,
-    actionLabel: getFreeToolActionLabel(params.event.event_type, params.tool),
-    personName,
-    phoneNumber,
-    email,
-    accountStatus,
-    documentReference: getShortDocumentReference({
-      tool: params.tool,
-      documentId: params.documentId,
-      storedReference: params.storedReference,
-    }),
+    actionLabel: getFreeToolActionLabel(params.event.event_type),
+    userName: lead?.landlord_full_name?.trim() || "Unknown visitor",
+    phoneNumber: lead?.landlord_phone_number?.trim() || null,
+    email: lead?.landlord_email?.trim() || null,
+    accountLabel: getPublicToolAccountLabel(lead),
+    documentId: params.event.document_id,
     sourcePath: params.event.source_path,
     createdAt: params.event.created_at ?? "",
-  };
-}
-
-function mapFreeToolActivity(
-  item: PlatformAdminFreeToolUsageItem,
-): PlatformAdminDashboardActivityItem {
-  const toolLabel =
-    item.tool === "receipt"
-      ? "Free receipt generator"
-      : "Tenancy agreement generator";
-
-  return {
-    id: `free-tool-${item.id}`,
-    eventType: `public_tool.${item.eventType}`,
-    title: item.actionLabel,
-    description: `${toolLabel} · ${item.documentReference}`,
-    actorName: item.personName,
-    createdAt: item.createdAt,
   };
 }
 
@@ -372,8 +305,8 @@ export async function getPlatformAdminDashboard(params: {
     pendingPayoutCreatedPrevious,
     recentSignups,
     recentPayoutEvents,
-    receiptUsageEvents,
-    agreementUsageEvents,
+    recentReceiptUsageEvents,
+    recentAgreementUsageEvents,
   ] = await Promise.all([
     countActiveProfiles(supabase),
     countActiveProfiles(supabase, {
@@ -410,12 +343,12 @@ export async function getPlatformAdminDashboard(params: {
     listReceiptUsageEventsBetween(supabase, {
       startInclusive: bounds.currentStart,
       endExclusive: bounds.currentEnd,
-      limit: 100,
+      limit: 30,
     }),
     listAgreementUsageEventsBetween(supabase, {
       startInclusive: bounds.currentStart,
       endExclusive: bounds.currentEnd,
-      limit: 100,
+      limit: 30,
     }),
   ]);
 
@@ -436,67 +369,38 @@ export async function getPlatformAdminDashboard(params: {
   const actorIds = payoutEvents
     .map((event) => event.actor_profile_id)
     .filter((value): value is string => Boolean(value));
-  const actorNames = await getProfileNamesByIds(supabase, actorIds);
 
-  const [publicToolLeads, generatedReceipts, generatedAgreements] =
-    await Promise.all([
-      getPublicToolLeadsByIds(supabase, [
-        ...receiptUsageEvents.map((event) => event.lead_id),
-        ...agreementUsageEvents.map((event) => event.lead_id),
-      ]),
-      getGeneratedReceiptSummariesByIds(
-        supabase,
-        receiptUsageEvents.map((event) => event.receipt_id),
-      ),
-      getGeneratedAgreementSummariesByIds(
-        supabase,
-        agreementUsageEvents.map((event) => event.agreement_id),
-      ),
-    ]);
+  const leadIds = [
+    ...recentReceiptUsageEvents,
+    ...recentAgreementUsageEvents,
+  ]
+    .map((event) => event.lead_id)
+    .filter((value): value is string => Boolean(value));
+
+  const [actorNames, publicToolLeads] = await Promise.all([
+    getProfileNamesByIds(supabase, actorIds),
+    listPublicToolLeadsByIds(supabase, leadIds),
+  ]);
 
   const leadById = new Map(
     publicToolLeads.map((lead) => [lead.id, lead]),
   );
-  const receiptById = new Map(
-    generatedReceipts.map((receipt) => [receipt.id, receipt]),
-  );
-  const agreementById = new Map(
-    generatedAgreements.map((agreement) => [agreement.id, agreement]),
-  );
 
   const freeToolUsage = [
-    ...receiptUsageEvents.map((event) => {
-      const receipt = event.receipt_id
-        ? receiptById.get(event.receipt_id) ?? null
-        : null;
-
-      return mapFreeToolUsage({
+    ...recentReceiptUsageEvents.map((event) =>
+      mapFreeToolUsageItem({
         tool: "receipt",
         event,
-        documentId: event.receipt_id,
-        document: receipt,
-        storedReference: receipt?.receipt_number ?? null,
-        lead: event.lead_id
-          ? leadById.get(event.lead_id) ?? null
-          : null,
-      });
-    }),
-    ...agreementUsageEvents.map((event) => {
-      const agreement = event.agreement_id
-        ? agreementById.get(event.agreement_id) ?? null
-        : null;
-
-      return mapFreeToolUsage({
+        leadById,
+      }),
+    ),
+    ...recentAgreementUsageEvents.map((event) =>
+      mapFreeToolUsageItem({
         tool: "agreement",
         event,
-        documentId: event.agreement_id,
-        document: agreement,
-        storedReference: agreement?.agreement_title ?? null,
-        lead: event.lead_id
-          ? leadById.get(event.lead_id) ?? null
-          : null,
-      });
-    }),
+        leadById,
+      }),
+    ),
   ]
     .sort((left, right) => {
       const rightTime = Date.parse(right.createdAt);
@@ -507,14 +411,13 @@ export async function getPlatformAdminDashboard(params: {
         (Number.isFinite(leftTime) ? leftTime : 0)
       );
     })
-    .slice(0, 50);
+    .slice(0, 30);
 
   const recentActivity = [
     ...signups.map(mapSignupActivity),
     ...payoutEvents.map((event) =>
       mapPayoutAuditActivity({ event, actorNames }),
     ),
-    ...freeToolUsage.map(mapFreeToolActivity),
   ]
     .sort((left, right) => {
       const rightTime = Date.parse(right.createdAt);
