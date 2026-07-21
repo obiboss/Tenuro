@@ -3,15 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  BarChart3,
-  Bell,
   Building2,
   CreditCard,
   FileText,
-  History,
   Home,
   LockKeyhole,
-  RefreshCcw,
   Settings,
   ShieldCheck,
   Users,
@@ -73,40 +69,14 @@ const desktopNavItems = [
 
 const desktopMoreItems = [
   {
-    label: "Rent alerts",
-    href: "/notifications",
-    icon: Bell,
-    status: "available",
-  },
-  {
-    label: "Renewals",
-    href: "/renewals",
-    icon: RefreshCcw,
-    status: "available",
-  },
-  {
-    label: "Activity",
-    href: "/activity",
-    icon: History,
-    status: "available",
-  },
-  {
     label: "Caretakers",
     href: "/caretakers",
     icon: ShieldCheck,
-    status: "available",
-  },
-  {
-    label: "Reports",
-    href: "/reports",
-    icon: BarChart3,
-    status: "coming_soon",
   },
   {
     label: "Settings",
     href: "/settings",
     icon: Settings,
-    status: "available",
   },
 ] as const;
 
@@ -265,16 +235,8 @@ export function LandlordShell({
 
         <div className="lg:pl-60">
           <header className="sticky top-0 z-30 border-b border-border-soft bg-white px-4 py-3 md:px-6 lg:hidden">
-            <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
+            <div className="mx-auto max-w-7xl">
               <BoldverseBrand subtitle="My property" />
-
-              <Link
-                href="/notifications"
-                aria-label="Rent alerts"
-                className="flex size-11 shrink-0 items-center justify-center rounded-full border border-border-soft bg-white text-primary"
-              >
-                <Bell aria-hidden="true" size={21} strokeWidth={2.6} />
-              </Link>
             </div>
           </header>
 
