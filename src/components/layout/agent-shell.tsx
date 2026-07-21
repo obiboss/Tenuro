@@ -7,6 +7,7 @@ import { LogoutButton } from "@/components/auth/logout-button";
 import { Badge } from "@/components/ui/badge";
 import { ToastProvider } from "@/components/ui/toast-provider";
 import { cn } from "@/lib/cn";
+import { isAggressiveWorkflowPrefetchAllowed } from "@/lib/workflow-prefetch-policy";
 
 type AgentShellProps = {
   children: React.ReactNode;
@@ -48,7 +49,15 @@ export function AgentShell({ children, agentName }: AgentShellProps) {
     <ToastProvider>
       <div className="min-h-screen bg-background">
         <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-border-soft bg-white px-5 py-6 lg:block">
-          <Link href="/agent/overview" className="flex items-center gap-3">
+          <Link
+            href="/agent/overview"
+            prefetch={
+              isAggressiveWorkflowPrefetchAllowed("/agent/overview")
+                ? true
+                : false
+            }
+            className="flex items-center gap-3"
+          >
             <div className="flex size-11 items-center justify-center rounded-2xl bg-primary text-white shadow-soft">
               <BadgeCheck aria-hidden="true" size={23} strokeWidth={2.7} />
             </div>
@@ -73,6 +82,11 @@ export function AgentShell({ children, agentName }: AgentShellProps) {
                 <Link
                   key={item.href}
                   href={item.href}
+                  prefetch={
+                    isAggressiveWorkflowPrefetchAllowed(item.href)
+                      ? true
+                      : false
+                  }
                   className={cn(
                     "flex min-h-12 items-center gap-3 rounded-button px-4 text-sm font-extrabold transition",
                     active

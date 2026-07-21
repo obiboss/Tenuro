@@ -25,9 +25,7 @@ import {
   MANAGER_STAFF_ROLE_LABELS,
   canManagerRoleAccessPath,
 } from "@/lib/manager-staff-permission";
-import {
-  isAggressiveWorkflowPrefetchAllowed,
-} from "@/lib/workflow-prefetch-policy";
+import { isAggressiveWorkflowPrefetchAllowed } from "@/lib/workflow-prefetch-policy";
 import type { ManagerWorkspaceRole } from "@/server/repositories/manager-staff.repository";
 
 type ManagerShellProps = {
@@ -125,7 +123,7 @@ function BoldverseManagerBrand() {
   return (
     <Link
       href="/manager/overview"
-      prefetch={false}
+      prefetch={true}
       className="flex min-w-0 items-center gap-3"
     >
       <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-xl font-extrabold tracking-tight text-white shadow-soft">
@@ -189,10 +187,8 @@ export function ManagerShell({
                         key={item.href}
                         href={item.href}
                         prefetch={
-                          isAggressiveWorkflowPrefetchAllowed(
-                            item.href,
-                          )
-                            ? undefined
+                          isAggressiveWorkflowPrefetchAllowed(item.href)
+                            ? true
                             : false
                         }
                         aria-current={active ? "page" : undefined}
@@ -273,10 +269,8 @@ export function ManagerShell({
                   key={item.href}
                   href={item.href}
                   prefetch={
-                    isAggressiveWorkflowPrefetchAllowed(
-                      item.href,
-                    )
-                      ? undefined
+                    isAggressiveWorkflowPrefetchAllowed(item.href)
+                      ? true
                       : false
                   }
                   aria-current={active ? "page" : undefined}

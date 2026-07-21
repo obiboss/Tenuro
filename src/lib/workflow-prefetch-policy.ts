@@ -1,4 +1,5 @@
 const ONLINE_ONLY_ROUTE_PREFIXES = [
+  "/documents",
   "/reports",
   "/settings",
   "/agreements",
@@ -20,37 +21,26 @@ const ONLINE_ONLY_ROUTE_PREFIXES = [
   "/admin/payout-verifications",
   "/admin/payment-settings",
   "/pay",
+  "/payment-proof",
   "/dev/pay",
+  "/dev/buyer/payment",
 ] as const;
 
-function matchesPrefix(
-  pathname: string,
-  prefix: string,
-) {
-  return (
-    pathname === prefix ||
-    pathname.startsWith(`${prefix}/`)
-  );
+function matchesPrefix(pathname: string, prefix: string) {
+  return pathname === prefix || pathname.startsWith(`${prefix}/`);
 }
 
-export function isAggressiveWorkflowPrefetchAllowed(
-  href: string,
-) {
-  const url = new URL(
-    href,
-    "https://bopa.local",
-  );
+export function isAggressiveWorkflowPrefetchAllowed(href: string) {
+  const url = new URL(href, "https://bopa.local");
 
   if (
     url.pathname === "/developer" &&
-    url.searchParams.get("section") ===
-      "settings"
+    url.searchParams.get("section") === "settings"
   ) {
     return false;
   }
 
-  return !ONLINE_ONLY_ROUTE_PREFIXES.some(
-    (prefix) =>
-      matchesPrefix(url.pathname, prefix),
+  return !ONLINE_ONLY_ROUTE_PREFIXES.some((prefix) =>
+    matchesPrefix(url.pathname, prefix),
   );
 }

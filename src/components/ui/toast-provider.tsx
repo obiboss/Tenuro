@@ -4,11 +4,16 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
 import { Toast, type ToastItem, type ToastTone } from "@/components/ui/toast";
+import {
+  OFFLINE_SAVED_EVENT,
+  type OfflineSavedEventDetail,
+} from "@/lib/offline/offline-save-notification";
 
 type ShowToastInput = {
   title: string;
@@ -60,6 +65,28 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     },
     [dismissToast],
   );
+
+  useEffect(() => {
+    const handleOfflineSaved = (event: Event) => {
+      const detail = (event as CustomEvent<OfflineSavedEventDetail>).detail;
+
+      if (!detail?.message) {
+        return;
+      }
+
+      showToast({
+        title: "Saved offline",
+        description: detail.message,
+        tone: "success",
+      });
+    };
+
+    window.addEventListener(OFFLINE_SAVED_EVENT, handleOfflineSaved);
+
+    return () => {
+      window.removeEventListener(OFFLINE_SAVED_EVENT, handleOfflineSaved);
+    };
+  }, [showToast]);
 
   const value = useMemo(
     () => ({

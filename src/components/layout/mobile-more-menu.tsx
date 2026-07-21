@@ -91,10 +91,8 @@ export function MobileMoreMenu({
                     key={item.href}
                     href={item.href}
                     prefetch={
-                      isAggressiveWorkflowPrefetchAllowed(
-                        item.href,
-                      )
-                        ? undefined
+                      isAggressiveWorkflowPrefetchAllowed(item.href)
+                        ? true
                         : false
                     }
                     onClick={() => setIsOpen(false)}

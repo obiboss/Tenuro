@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useToast } from "@/components/ui/use-toast";
+import { OFFLINE_SAVED_MESSAGE } from "@/lib/offline/offline-save-notification";
 
 type ActionResultToastProps = {
   ok: boolean;
@@ -20,7 +21,11 @@ export function ActionResultToast({
   const previousMessageRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!message || previousMessageRef.current === message) {
+    if (
+      !message ||
+      message === OFFLINE_SAVED_MESSAGE ||
+      previousMessageRef.current === message
+    ) {
       return;
     }
 

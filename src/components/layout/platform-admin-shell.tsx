@@ -9,9 +9,7 @@ import { ToastProvider } from "@/components/ui/toast-provider";
 import { cn } from "@/lib/cn";
 import { isPlatformAdminNavItemActive } from "@/lib/platform-admin-navigation";
 import { PLATFORM_ADMIN_NAVIGATION } from "@/lib/navigation";
-import {
-  isAggressiveWorkflowPrefetchAllowed,
-} from "@/lib/workflow-prefetch-policy";
+import { isAggressiveWorkflowPrefetchAllowed } from "@/lib/workflow-prefetch-policy";
 
 type PlatformAdminShellProps = {
   children: React.ReactNode;
@@ -108,10 +106,8 @@ export function PlatformAdminShell({
                   key={item.href}
                   href={item.href}
                   prefetch={
-                    isAggressiveWorkflowPrefetchAllowed(
-                      item.href,
-                    )
-                      ? undefined
+                    isAggressiveWorkflowPrefetchAllowed(item.href)
+                      ? true
                       : false
                   }
                   className={className}
@@ -156,7 +152,10 @@ export function PlatformAdminShell({
               >
                 {PLATFORM_ADMIN_NAVIGATION.map((item) => {
                   const Icon = item.icon;
-                  const active = isPlatformAdminNavItemActive(pathname, item.href);
+                  const active = isPlatformAdminNavItemActive(
+                    pathname,
+                    item.href,
+                  );
                   const comingSoon = item.status === "coming_soon";
                   const className = cn(
                     "flex min-h-12 items-center justify-between rounded-button px-4 text-sm font-extrabold transition",
@@ -199,10 +198,8 @@ export function PlatformAdminShell({
                       key={item.href}
                       href={item.href}
                       prefetch={
-                        isAggressiveWorkflowPrefetchAllowed(
-                          item.href,
-                        )
-                          ? undefined
+                        isAggressiveWorkflowPrefetchAllowed(item.href)
+                          ? true
                           : false
                       }
                       className={className}

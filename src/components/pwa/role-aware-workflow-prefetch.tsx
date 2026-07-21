@@ -2,9 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  isAggressiveWorkflowPrefetchAllowed,
-} from "@/lib/workflow-prefetch-policy";
+import { isAggressiveWorkflowPrefetchAllowed } from "@/lib/workflow-prefetch-policy";
 
 const PREFETCH_STAGGER_MS = 120;
 const prefetchedRoutes = new Set<string>();
@@ -22,31 +20,17 @@ const LANDLORD_WORKSPACE_PREFIXES = [
   "/settings",
 ] as const;
 
-function matchesRoutePrefix(
-  pathname: string,
-  prefix: string,
-) {
-  return (
-    pathname === prefix ||
-    pathname.startsWith(`${prefix}/`)
-  );
+function matchesRoutePrefix(pathname: string, prefix: string) {
+  return pathname === prefix || pathname.startsWith(`${prefix}/`);
 }
 
-function getWorkspaceNavigationLabels(
-  pathname: string,
-) {
+function getWorkspaceNavigationLabels(pathname: string) {
   if (pathname.startsWith("/manager")) {
-    return [
-      "Manager navigation",
-      "Mobile manager navigation",
-    ];
+    return ["Manager navigation", "Mobile manager navigation"];
   }
 
   if (pathname.startsWith("/developer")) {
-    return [
-      "Developer navigation",
-      "Mobile developer navigation",
-    ];
+    return ["Developer navigation", "Mobile developer navigation"];
   }
 
   if (pathname.startsWith("/agent")) {
@@ -58,38 +42,23 @@ function getWorkspaceNavigationLabels(
   }
 
   if (pathname.startsWith("/admin")) {
-    return [
-      "Platform admin navigation",
-      "Mobile platform admin navigation",
-    ];
+    return ["Platform admin navigation", "Mobile platform admin navigation"];
   }
 
   if (
-    LANDLORD_WORKSPACE_PREFIXES.some(
-      (prefix) =>
-        matchesRoutePrefix(
-          pathname,
-          prefix,
-        ),
+    LANDLORD_WORKSPACE_PREFIXES.some((prefix) =>
+      matchesRoutePrefix(pathname, prefix),
     )
   ) {
-    return [
-      "Landlord navigation",
-      "Mobile landlord navigation",
-    ];
+    return ["Landlord navigation", "Mobile landlord navigation"];
   }
 
   return [];
 }
 
-function getVisibleWorkflowRoutes(
-  labels: string[],
-) {
+function getVisibleWorkflowRoutes(labels: string[]) {
   const selector = labels
-    .map(
-      (label) =>
-        `nav[aria-label="${label}"] a[href]`,
-    )
+    .map((label) => `nav[aria-label="${label}"] a[href]`)
     .join(",");
 
   if (!selector) {
@@ -105,23 +74,16 @@ function getVisibleWorkflowRoutes(
       continue;
     }
 
-    const url = new URL(
-      rawHref,
-      window.location.href,
-    );
+    const url = new URL(rawHref, window.location.href);
 
     if (
       url.origin !== window.location.origin ||
-      !isAggressiveWorkflowPrefetchAllowed(
-        `${url.pathname}${url.search}`,
-      )
+      !isAggressiveWorkflowPrefetchAllowed(`${url.pathname}${url.search}`)
     ) {
       continue;
     }
 
-    routes.add(
-      `${url.pathname}${url.search}`,
-    );
+    routes.add(`${url.pathname}${url.search}`);
   }
 
   return [...routes];
@@ -136,8 +98,7 @@ export function RoleAwareWorkflowPrefetch() {
       return;
     }
 
-    const navigationLabels =
-      getWorkspaceNavigationLabels(pathname);
+    const navigationLabels = getWorkspaceNavigationLabels(pathname);
 
     if (navigationLabels.length === 0) {
       prefetchedRoutes.clear();
@@ -156,28 +117,20 @@ export function RoleAwareWorkflowPrefetch() {
     const routeTimers: number[] = [];
 
     const prefetch = () => {
-      const currentRoute =
-        `${window.location.pathname}${window.location.search}`;
-      const routes = getVisibleWorkflowRoutes(
-        navigationLabels,
-      ).filter(
-        (route) =>
-          route !== currentRoute &&
-          !prefetchedRoutes.has(route),
+      const currentRoute = `${window.location.pathname}${window.location.search}`;
+      const routes = getVisibleWorkflowRoutes(navigationLabels).filter(
+        (route) => route !== currentRoute && !prefetchedRoutes.has(route),
       );
 
       routes.forEach((route, index) => {
-        const timerId = window.setTimeout(
-          () => {
-            if (cancelled) {
-              return;
-            }
+        const timerId = window.setTimeout(() => {
+          if (cancelled) {
+            return;
+          }
 
-            router.prefetch(route);
-            prefetchedRoutes.add(route);
-          },
-          index * PREFETCH_STAGGER_MS,
-        );
+          router.prefetch(route);
+          prefetchedRoutes.add(route);
+        }, index * PREFETCH_STAGGER_MS);
 
         routeTimers.push(timerId);
       });
@@ -200,12 +153,9 @@ export function RoleAwareWorkflowPrefetch() {
     };
 
     if (idleWindow.requestIdleCallback) {
-      const idleId = idleWindow.requestIdleCallback(
-        prefetch,
-        {
-          timeout: 2_000,
-        },
-      );
+      const idleId = idleWindow.requestIdleCallback(prefetch, {
+        timeout: 2_000,
+      });
 
       return () => {
         idleWindow.cancelIdleCallback?.(idleId);
@@ -213,10 +163,7 @@ export function RoleAwareWorkflowPrefetch() {
       };
     }
 
-    const timerId = window.setTimeout(
-      prefetch,
-      500,
-    );
+    const timerId = window.setTimeout(prefetch, 500);
 
     return () => {
       window.clearTimeout(timerId);

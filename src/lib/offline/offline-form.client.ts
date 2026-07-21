@@ -4,6 +4,10 @@ import type { ZodError } from "zod";
 import { putOfflineEntity } from "@/lib/offline/entity.repository";
 import { getOfflineOwnerProfileId } from "@/lib/offline/meta.repository";
 import { enqueueOfflineMutation } from "@/lib/offline/outbox.repository";
+import {
+  announceOfflineSaved,
+  OFFLINE_SAVED_MESSAGE,
+} from "@/lib/offline/offline-save-notification";
 import type {
   OfflineEntityPayload,
   OfflineEntityType,
@@ -11,8 +15,9 @@ import type {
 } from "@/lib/offline/types";
 import { listOfflineWorkspaces } from "@/lib/offline/workspace.repository";
 
-export const OFFLINE_SAVED_MESSAGE =
-  "Saved on this device. BOPA will sync it automatically when your internet returns.";
+export { OFFLINE_SAVED_MESSAGE } from "@/lib/offline/offline-save-notification";
+
+const CONNECTIVITY_PROBE_TIMEOUT_MS = 3_000;
 
 export type OfflineFormResult = {
   ok: boolean;
@@ -57,6 +62,33 @@ export function toOfflineFormError(error: unknown): OfflineFormResult {
         ? error.message
         : "This form could not be saved on this device.",
   };
+}
+
+async function canReachBopa() {
+  if (!navigator.onLine) {
+    return false;
+  }
+
+  const controller = new AbortController();
+  const timeout = window.setTimeout(
+    () => controller.abort(),
+    CONNECTIVITY_PROBE_TIMEOUT_MS,
+  );
+
+  try {
+    const response = await fetch("/api/offline/read?probe=1", {
+      method: "GET",
+      credentials: "same-origin",
+      cache: "no-store",
+      signal: controller.signal,
+    });
+
+    return response.status === 204;
+  } catch {
+    return false;
+  } finally {
+    window.clearTimeout(timeout);
+  }
 }
 
 async function getOfflineFormWorkspace(workspaceType: OfflineWorkspaceType) {
@@ -126,22 +158,19 @@ export async function queueOfflineFormMutation(input: {
   return queued;
 }
 
-export async function runOfflineCapableFormAction<TState extends OfflineFormResult>(
-  input: {
-    previousState: TState;
-    formData: FormData;
-    onlineAction: (
-      previousState: TState,
-      formData: FormData,
-    ) => Promise<TState>;
-    saveOffline: (formData: FormData) => Promise<Partial<TState>>;
-  },
-): Promise<TState> {
-  if (navigator.onLine) {
+export async function runOfflineCapableFormAction<
+  TState extends OfflineFormResult,
+>(input: {
+  previousState: TState;
+  formData: FormData;
+  onlineAction: (previousState: TState, formData: FormData) => Promise<TState>;
+  saveOffline: (formData: FormData) => Promise<Partial<TState>>;
+}): Promise<TState> {
+  if (await canReachBopa()) {
     try {
       return await input.onlineAction(input.previousState, input.formData);
     } catch (error) {
-      if (navigator.onLine) {
+      if (await canReachBopa()) {
         throw error;
       }
     }
@@ -149,6 +178,12 @@ export async function runOfflineCapableFormAction<TState extends OfflineFormResu
 
   try {
     const offlineResult = await input.saveOffline(input.formData);
+    const submissionId = crypto.randomUUID();
+
+    announceOfflineSaved({
+      message: OFFLINE_SAVED_MESSAGE,
+      submissionId,
+    });
 
     return {
       ...input.previousState,
@@ -157,7 +192,7 @@ export async function runOfflineCapableFormAction<TState extends OfflineFormResu
       message: OFFLINE_SAVED_MESSAGE,
       fieldErrors: undefined,
       offlineSaved: true,
-      submissionId: crypto.randomUUID(),
+      submissionId,
     } as TState;
   } catch (error) {
     return {
