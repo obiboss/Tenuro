@@ -212,7 +212,6 @@ type LandlordRentPaymentOfflineRow = {
   receipt_status: string;
   status: string;
   created_at: string;
-  updated_at: string;
 };
 
 type DeveloperEstateOfflineRow = {
@@ -756,8 +755,7 @@ async function loadLandlordSnapshot(params: {
           payment_date,
           receipt_status,
           status,
-          created_at,
-          updated_at
+          created_at
         `)
         .eq("landlord_id", params.landlordId)
         .lte("created_at", params.generatedAt)
@@ -773,7 +771,12 @@ async function loadLandlordSnapshot(params: {
     ...units.map((row) => toOfflineEntity("landlord_unit", row)),
     ...tenancies.map((row) => toOfflineEntity("landlord_tenancy", row)),
     ...rentPayments.map((row) =>
-      toOfflineEntity("landlord_rent_payment", row),
+      toOfflineEntity("landlord_rent_payment", {
+        ...row,
+        // Rent payments are append-only and do not have an updated_at column.
+        // Use their creation time as the stable offline revision timestamp.
+        updated_at: row.created_at,
+      }),
     ),
   ];
 }
