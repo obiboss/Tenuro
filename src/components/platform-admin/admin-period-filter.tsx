@@ -26,16 +26,16 @@ function buildHref(period: PlatformAdminDashboardPeriod) {
 
 export function AdminPeriodFilter({ activePeriod }: AdminPeriodFilterProps) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="grid w-full grid-cols-4 gap-1 rounded-button bg-white p-1 shadow-soft sm:w-auto">
       {periodOptions.map((option) => (
         <Link
           key={option.value}
           href={buildHref(option.value)}
           className={cn(
-            "rounded-button px-3 py-2 text-sm font-bold transition-colors",
+            "flex min-h-10 items-center justify-center rounded-lg px-3 py-2 text-sm font-bold transition-colors",
             activePeriod === option.value
               ? "bg-primary text-white"
-              : "bg-background text-text-muted hover:text-text-strong",
+              : "text-text-muted hover:bg-primary-soft hover:text-primary",
           )}
         >
           {option.label}

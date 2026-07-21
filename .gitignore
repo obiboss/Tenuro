@@ -47,3 +47,6 @@ next-env.d.ts
 /tools/bopa-platform-admin-free-tool-usage-v2/
 /tools/bopa-pwa-lint-fix/
 /tools/bopa-landlord-overview-property-first/
+.bopa-backups/
+BOPA_Patch_Backups/
+BOPA_*Implementation*/

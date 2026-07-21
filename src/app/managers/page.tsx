@@ -170,7 +170,7 @@ export default function ManagersLandingPage() {
                 </Button>
               </Link>
 
-              <Link href="/contact?workspace=manager">
+              <Link href="/contact">
                 <Button type="button" variant="secondary" fullWidth>
                   Book a Demo
                 </Button>
@@ -322,7 +322,7 @@ export default function ManagersLandingPage() {
                 </Button>
               </Link>
 
-              <Link href="/contact?workspace=manager">
+              <Link href="/contact">
                 <Button type="button" variant="secondary" fullWidth>
                   Book a Demo
                 </Button>
@@ -373,4 +373,3 @@ export default function ManagersLandingPage() {
     </main>
   );
 }
-

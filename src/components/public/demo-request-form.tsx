@@ -2,13 +2,18 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import { CheckCircle2, Send } from "lucide-react";
+import { CheckCircle2, MessageCircle, Send } from "lucide-react";
 import { submitDemoRequestAction } from "@/actions/demo-request.actions";
 import { initialDemoRequestActionState } from "@/actions/demo-request.state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  BOPA_WHATSAPP_NUMBER,
+  BOPA_WHATSAPP_NUMBER_DISPLAY,
+} from "@/constants/bopa-contact";
+import { buildWaMeUrl } from "@/lib/whatsapp";
 import type { DemoWorkspaceType } from "@/server/validators/demo-request.schema";
 
 const workspaceOptions = [
@@ -57,6 +62,17 @@ export function DemoRequestForm({
   );
 
   if (state.ok) {
+    const workspaceLabel =
+      defaultWorkspace === "manager" ? "BOPA Manager" : "BOPA Developer";
+    const whatsappUrl = buildWaMeUrl({
+      phoneNumber: BOPA_WHATSAPP_NUMBER,
+      message: [
+        "Hello BOPA,",
+        "",
+        `I have submitted a request for a ${workspaceLabel} demonstration${state.requestId ? ` (request ${state.requestId})` : ""}.`,
+      ].join("\n"),
+    });
+
     return (
       <div
         role="status"
@@ -79,7 +95,22 @@ export function DemoRequestForm({
           Your requested time is not confirmed until the BOPA team contacts you.
         </p>
 
+        <p className="mt-3 text-sm font-semibold leading-6 text-text-normal">
+          You may also send BOPA a WhatsApp message on{" "}
+          {BOPA_WHATSAPP_NUMBER_DISPLAY}.
+        </p>
+
         <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+          <a
+            href={whatsappUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-button bg-success px-5 py-3 text-base font-bold text-white shadow-soft transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success focus-visible:ring-offset-2"
+          >
+            <MessageCircle aria-hidden="true" size={18} strokeWidth={2.6} />
+            WhatsApp BOPA
+          </a>
+
           <Link
             href={defaultWorkspace === "manager" ? "/managers" : "/developers"}
             className="inline-flex min-h-12 items-center justify-center rounded-button bg-primary px-5 py-3 text-base font-bold text-white shadow-soft transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
@@ -88,12 +119,6 @@ export function DemoRequestForm({
             {defaultWorkspace === "manager" ? "Manager" : "Developer"}
           </Link>
 
-          <Link
-            href="/"
-            className="inline-flex min-h-12 items-center justify-center rounded-button bg-surface px-5 py-3 text-base font-bold text-text-strong shadow-soft ring-1 ring-border-soft transition hover:bg-primary-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-          >
-            Go to BOPA home
-          </Link>
         </div>
       </div>
     );

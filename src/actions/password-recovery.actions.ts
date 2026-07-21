@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { getTrustedAuthOrigin } from "@/lib/auth/safe-auth-redirect";
 import { errorResult } from "@/server/errors/result";
+import { recordActivityEventSafely } from "@/server/services/activity.service";
 import { getProfileById } from "@/server/repositories/profiles.repository";
 import {
   clearPhoneRecoveryCookies,
@@ -129,11 +130,34 @@ export async function requestManagerPasswordResetAction(
     });
 
     if (isRateLimitError(error)) {
+      await recordActivityEventSafely({
+        module: "auth",
+        eventName: "auth.password_recovery.rate_limited",
+        eventCategory: "authentication",
+        outcome: "failed",
+        actorRole: "manager",
+        description: "Manager password recovery was rate limited.",
+        metadata: {
+          recovery_method: "email",
+          email: parsed.email.toLowerCase(),
+        },
+      });
+
       return {
         ok: false,
         message: "Too many attempts. Please wait before trying again.",
       };
     }
+
+    await recordActivityEventSafely({
+      module: "auth",
+      eventName: "auth.password_recovery.requested",
+      eventCategory: "authentication",
+      outcome: error ? "failed" : "succeeded",
+      actorRole: "manager",
+      description: "Manager password recovery was requested.",
+      metadata: { recovery_method: "email", email: parsed.email.toLowerCase() },
+    });
 
     if (error && !isAccountEnumerationSensitiveError(error)) {
       return {
@@ -174,11 +198,37 @@ export async function requestPhonePasswordRecoveryAction(
     });
 
     if (isRateLimitError(error)) {
+      await recordActivityEventSafely({
+        module: "auth",
+        eventName: "auth.password_recovery.rate_limited",
+        eventCategory: "authentication",
+        outcome: "failed",
+        actorRole: "unknown",
+        description: "Phone password recovery was rate limited.",
+        metadata: {
+          recovery_method: "phone",
+          phone_number: normalizedPhone.e164,
+        },
+      });
+
       return {
         ok: false,
         message: "Too many attempts. Please wait before trying again.",
       };
     }
+
+    await recordActivityEventSafely({
+      module: "auth",
+      eventName: "auth.password_recovery.requested",
+      eventCategory: "authentication",
+      outcome: error ? "failed" : "succeeded",
+      actorRole: "unknown",
+      description: "Phone password recovery was requested.",
+      metadata: {
+        recovery_method: "phone",
+        phone_number: normalizedPhone.e164,
+      },
+    });
 
     if (error && !isAccountEnumerationSensitiveError(error)) {
       return {
@@ -281,6 +331,16 @@ export async function verifyPhoneRecoveryOtpAction(
     }
 
     if (error || !data.user) {
+      await recordActivityEventSafely({
+        module: "auth",
+        eventName: "auth.password_recovery.code_failed",
+        eventCategory: "authentication",
+        outcome: "failed",
+        actorRole: "unknown",
+        description: "A password recovery code could not be verified.",
+        metadata: { recovery_method: "phone", phone_number: phoneNumber },
+      });
+
       return {
         ok: false,
         message: isInvalidOtpError(error)
@@ -309,6 +369,19 @@ export async function verifyPhoneRecoveryOtpAction(
     }
 
     await setVerifiedPhoneRecoveryPhoneNumber(phoneNumber);
+
+    await recordActivityEventSafely({
+      module: "auth",
+      eventName: "auth.password_recovery.code_verified",
+      eventCategory: "authentication",
+      outcome: "succeeded",
+      actorProfileId: profile.id,
+      actorRole: profile.role,
+      subjectType: "profiles",
+      subjectId: profile.id,
+      description: "A password recovery code was verified.",
+      metadata: { recovery_method: "phone" },
+    });
 
     return {
       ok: true,
@@ -362,6 +435,18 @@ export async function updateManagerRecoveredPasswordAction(
     });
 
     if (error) {
+      await recordActivityEventSafely({
+        module: "auth",
+        eventName: "auth.password_recovery.update_failed",
+        eventCategory: "authentication",
+        outcome: "failed",
+        actorProfileId: profile.id,
+        actorRole: "manager",
+        subjectType: "profiles",
+        subjectId: profile.id,
+        description: "Manager password update failed.",
+      });
+
       return {
         ok: false,
         message: "Password could not be changed. Please try again.",
@@ -369,6 +454,18 @@ export async function updateManagerRecoveredPasswordAction(
     }
 
     await signOutRecoverySession(supabase);
+
+    await recordActivityEventSafely({
+      module: "auth",
+      eventName: "auth.password_recovery.completed",
+      eventCategory: "authentication",
+      outcome: "succeeded",
+      actorProfileId: profile.id,
+      actorRole: "manager",
+      subjectType: "profiles",
+      subjectId: profile.id,
+      description: "Manager password recovery completed.",
+    });
 
     return {
       ok: true,
@@ -437,6 +534,18 @@ export async function updatePhoneRecoveredPasswordAction(
     });
 
     if (error) {
+      await recordActivityEventSafely({
+        module: "auth",
+        eventName: "auth.password_recovery.update_failed",
+        eventCategory: "authentication",
+        outcome: "failed",
+        actorProfileId: profile.id,
+        actorRole: profile.role,
+        subjectType: "profiles",
+        subjectId: profile.id,
+        description: `${profile.role} password update failed.`,
+      });
+
       return {
         ok: false,
         message: "Password could not be changed. Please try again.",
@@ -447,6 +556,18 @@ export async function updatePhoneRecoveredPasswordAction(
 
     await clearPhoneRecoveryCookies();
     await signOutRecoverySession(supabase);
+
+    await recordActivityEventSafely({
+      module: "auth",
+      eventName: "auth.password_recovery.completed",
+      eventCategory: "authentication",
+      outcome: "succeeded",
+      actorProfileId: profile.id,
+      actorRole: profile.role,
+      subjectType: "profiles",
+      subjectId: profile.id,
+      description: `${profile.role} password recovery completed.`,
+    });
 
     return {
       ok: true,

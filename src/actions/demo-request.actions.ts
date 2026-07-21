@@ -8,6 +8,10 @@ import type {
 } from "@/actions/demo-request.state";
 import { errorResult } from "@/server/errors/result";
 import {
+  getActivityErrorDetails,
+  recordActivityEventSafely,
+} from "@/server/services/activity.service";
+import {
   buildDemoRequestFingerprint,
   changePlatformAdminDemoRequestStatus,
   submitPublicDemoRequest,
@@ -58,6 +62,26 @@ export async function submitDemoRequestAction(
       requestId: result.requestId,
     };
   } catch (error) {
+    const details = getActivityErrorDetails(error);
+    const workspaceType = readFormText(formData, "workspaceType");
+
+    await recordActivityEventSafely({
+      module: "demo",
+      eventName: "demo.request.failed",
+      eventCategory: "onboarding",
+      outcome: "failed",
+      actorRole: "visitor",
+      description: "A public demo request could not be completed.",
+      metadata: {
+        workspace_type:
+          workspaceType === "manager" || workspaceType === "developer"
+            ? workspaceType
+            : "unknown",
+        error_code: details.code,
+        error_message: details.message,
+      },
+    });
+
     const result = errorResult(error);
 
     return {

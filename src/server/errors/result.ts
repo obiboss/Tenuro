@@ -35,6 +35,12 @@ const DATABASE_ERROR_MESSAGES: Record<string, string> = {
   "23502": "Some required information is missing.",
   "23514": "Some information does not meet the required rule.",
   "42501": "You do not have permission to perform this action.",
+  "42P01":
+    "A required database table is missing. Please run the latest migration.",
+  PGRST204:
+    "A required database column is missing. Please run the latest migration.",
+  PGRST205:
+    "A required database table is missing. Please run the latest migration.",
   PGRST116: "We could not find the record you are trying to access.",
 };
 

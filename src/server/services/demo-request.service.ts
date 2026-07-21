@@ -28,10 +28,17 @@ type DemoRequestFingerprintInput = {
 };
 
 function getFingerprintSecret() {
-  const secret = process.env.TENURO_SESSION_SECRET;
+  const secret =
+    process.env.DEMO_REQUEST_FINGERPRINT_SECRET ??
+    process.env.TENURO_SESSION_SECRET ??
+    process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!secret || secret.length < 32) {
-    throw new Error("Missing or weak TENURO_SESSION_SECRET.");
+    throw new AppError(
+      "DEMO_REQUEST_CONFIGURATION_MISSING",
+      "Demo requests are temporarily unavailable. Please WhatsApp BOPA on 0802 512 7875.",
+      503,
+    );
   }
 
   return secret;

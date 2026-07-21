@@ -1,17 +1,15 @@
-import Link from "next/link";
 import {
   CalendarCheck2,
   Mail,
-  MessageCircle,
   Phone,
   Users,
 } from "lucide-react";
+import { DemoRequestWhatsAppComposer } from "@/components/platform-admin/demo-request-whatsapp-composer";
 import { DemoRequestStatusControls } from "@/components/platform-admin/demo-request-status-controls";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionCard } from "@/components/ui/section-card";
 import { StatusPill } from "@/components/ui/status-pill";
-import { buildWaMeUrl } from "@/lib/whatsapp";
 import type { DemoRequestRow } from "@/server/repositories/demo-requests.repository";
 
 const statusCopy = {
@@ -63,16 +61,6 @@ function DemoRequestCard({ request }: { request: DemoRequestRow }) {
   const status = statusCopy[request.status];
   const workspaceLabel =
     request.workspace_type === "manager" ? "BOPA Manager" : "BOPA Developer";
-  const whatsappMessage = [
-    `Hello ${request.full_name},`,
-    "",
-    `Thank you for requesting a ${workspaceLabel} demonstration. This is the BOPA team contacting you to confirm a suitable time.`,
-  ].join("\n");
-  const whatsappUrl = buildWaMeUrl({
-    phoneNumber: request.phone_number,
-    message: whatsappMessage,
-  });
-
   return (
     <article className="rounded-card border border-border-soft bg-background p-5">
       <div className="grid gap-6 xl:grid-cols-[1fr_15rem]">
@@ -109,17 +97,15 @@ function DemoRequestCard({ request }: { request: DemoRequestRow }) {
             </div>
           </div>
 
-          <div className="mt-5 flex flex-wrap gap-3">
-            <Link
-              href={whatsappUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex min-h-11 items-center gap-2 rounded-button bg-success px-4 text-sm font-black text-white transition hover:opacity-90"
-            >
-              <MessageCircle aria-hidden="true" size={18} strokeWidth={2.6} />
-              WhatsApp
-            </Link>
+          <div className="mt-5">
+            <DemoRequestWhatsAppComposer
+              requesterName={request.full_name}
+              requesterPhoneNumber={request.phone_number}
+              workspaceLabel={workspaceLabel}
+            />
+          </div>
 
+          <div className="mt-4 flex flex-wrap gap-3">
             <a
               href={`tel:${request.phone_number}`}
               className="inline-flex min-h-11 items-center gap-2 rounded-button border border-border-soft bg-white px-4 text-sm font-black text-text-strong transition hover:border-primary"

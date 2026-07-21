@@ -1,12 +1,12 @@
 import { AdminDashboardMetrics } from "@/components/platform-admin/admin-dashboard-metrics";
-import { AdminFreeToolUsage } from "@/components/platform-admin/admin-free-tool-usage";
+import { AdminPayoutVerificationPreview } from "@/components/platform-admin/admin-payout-verification-preview";
 import { AdminPeriodFilter } from "@/components/platform-admin/admin-period-filter";
 import { AdminRecentActivity } from "@/components/platform-admin/admin-recent-activity";
-import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/ui/page-header";
 import { parsePlatformAdminDashboardPeriod } from "@/lib/platform-admin-navigation";
-import { requirePlatformAdminPage } from "@/server/services/platform-admin.service";
 import { getPlatformAdminDashboard } from "@/server/services/platform-admin-dashboard.service";
+import { getPlatformAdminPayoutVerificationQueue } from "@/server/services/platform-admin-payout-verification.service";
+import { requirePlatformAdminPage } from "@/server/services/platform-admin.service";
 
 type PlatformAdminDashboardPageProps = {
   searchParams: Promise<{
@@ -21,21 +21,25 @@ export default async function PlatformAdminDashboardPage({
 
   const resolvedSearchParams = await searchParams;
   const period = parsePlatformAdminDashboardPeriod(resolvedSearchParams.period);
-  const dashboard = await getPlatformAdminDashboard({ period });
+  const [dashboard, payoutVerifications] = await Promise.all([
+    getPlatformAdminDashboard({ period }),
+    getPlatformAdminPayoutVerificationQueue(),
+  ]);
 
   return (
     <div>
       <PageHeader
-        eyebrow="Platform Operations"
         title="Admin dashboard"
-        description="Monitor onboarding volume, payout verification activity, and platform health."
-        action={<Badge tone="success">Protected</Badge>}
+        description="See what needs your attention across BOPA."
+        compact
       />
 
-      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-sm font-bold text-text-muted">Reporting period</p>
-          <p className="mt-1 font-black text-text-strong">
+          <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+            Reporting period
+          </p>
+          <p className="mt-0.5 text-sm font-black text-text-strong">
             {dashboard.periodLabel}
           </p>
         </div>
@@ -48,14 +52,14 @@ export default async function PlatformAdminDashboardPage({
         periodLabel={dashboard.periodLabel}
       />
 
-      <div className="mt-6">
-        <AdminFreeToolUsage
-          usage={dashboard.freeToolUsage}
-          periodLabel={dashboard.periodLabel}
+      <div className="mt-5 md:mt-6">
+        <AdminPayoutVerificationPreview
+          accounts={payoutVerifications.pending}
+          total={payoutVerifications.totals.pending}
         />
       </div>
 
-      <div className="mt-6">
+      <div className="mt-5 md:mt-6">
         <AdminRecentActivity
           activity={dashboard.recentActivity}
           periodLabel={dashboard.periodLabel}

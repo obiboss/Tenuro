@@ -40,6 +40,15 @@ The result should be `demo_requests`, not `null`.
 Email alerts are optional. Demo requests are stored and visible in BOPA Admin
 even when email alerts have not been configured.
 
+The anti-spam fingerprint uses the existing server-side Supabase service-role
+secret when a separate secret is not configured. No extra environment variable
+is required for the form to work. To keep it on a dedicated secret, optionally
+set a random value of at least 32 characters:
+
+```env
+DEMO_REQUEST_FINGERPRINT_SECRET=replace_with_a_long_random_server_secret
+```
+
 To enable email alerts, create a Resend account, verify a sending domain that
 you control, and add these environment variables:
 
@@ -67,5 +76,9 @@ Redeploy Vercel after adding or changing production variables.
 5. Submit a test request.
 6. Confirm the success message appears.
 7. Sign in as a platform administrator and open `/admin/demo-requests`.
-8. Confirm the request appears with WhatsApp, call, email, and status controls.
-9. If email alerts are enabled, confirm the alert reaches the configured inbox.
+8. Confirm the request appears with an editable WhatsApp message, call, email,
+   and status controls.
+9. Edit the message and confirm it opens the requester's WhatsApp conversation.
+   The administrator should be signed into BOPA's WhatsApp account on
+   `0802 512 7875` before sending.
+10. If email alerts are enabled, confirm the alert reaches the configured inbox.

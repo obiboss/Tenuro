@@ -11,6 +11,13 @@ import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import type { AuthActionState } from "@/server/types/auth.types";
 import { startLandlordTrialIfEligible } from "@/server/services/landlord-trial.service";
+import {
+  createActivityJourneyKey,
+  getActivityErrorDetails,
+  recordActivityEventSafely,
+  setActivityJourneySafely,
+} from "@/server/services/activity.service";
+import { getSessionUser } from "@/server/services/auth.service";
 import { normalisePhoneNumber } from "@/server/utils/phone";
 import {
   emailPasswordLoginSchema,
@@ -78,42 +85,155 @@ async function registerPhonePasswordUser(params: {
   password: string;
 }) {
   const normalizedPhone = normalisePhoneNumber(params.phoneNumber);
-  const supabase = await createSupabaseServerClient();
+  const journeyKey = createActivityJourneyKey({
+    journeyType: "signup",
+    module: "auth",
+  });
 
-  const { data, error } = await supabase.auth.signUp({
-    phone: normalizedPhone.e164,
-    password: params.password,
-    options: {
-      data: {
-        full_name: params.fullName,
-        role: params.role,
-      },
+  await setActivityJourneySafely({
+    journeyKey,
+    journeyType: "signup",
+    module: "auth",
+    status: "in_progress",
+    currentStep: "details_submitted",
+    actorRole: params.role,
+    contactName: params.fullName,
+    contactValue: normalizedPhone.e164,
+    eventName: "auth.signup.started",
+    eventCategory: "authentication",
+    eventOutcome: "started",
+    description: `${params.role} sign-up started.`,
+    metadata: {
+      signup_role: params.role,
+      signup_method: "phone_password",
     },
   });
 
-  if (error || !data.user) {
+  try {
+    const supabase = await createSupabaseServerClient();
+
+    const { data, error } = await supabase.auth.signUp({
+      phone: normalizedPhone.e164,
+      password: params.password,
+      options: {
+        data: {
+          full_name: params.fullName,
+          role: params.role,
+        },
+      },
+    });
+
+    if (error || !data.user) {
+      await setActivityJourneySafely({
+        journeyKey,
+        journeyType: "signup",
+        module: "auth",
+        status: "failed",
+        currentStep: "auth_account_not_created",
+        actorRole: params.role,
+        contactName: params.fullName,
+        contactValue: normalizedPhone.e164,
+        lastErrorCode: error?.code ?? "AUTH_SIGNUP_FAILED",
+        lastErrorMessage: error?.message ?? "Account could not be created.",
+        eventName: "auth.signup.failed",
+        eventCategory: "authentication",
+        description: `${params.role} sign-up failed before the account was created.`,
+        metadata: {
+          signup_role: params.role,
+          signup_method: "phone_password",
+        },
+      });
+
+      return {
+        ok: false,
+        message: error?.message ?? "Account could not be created.",
+      } satisfies AuthActionState;
+    }
+
+    await setActivityJourneySafely({
+      journeyKey,
+      journeyType: "signup",
+      module: "auth",
+      status: "in_progress",
+      currentStep: "auth_account_created",
+      actorProfileId: data.user.id,
+      actorRole: params.role,
+      subjectType: "profiles",
+      subjectId: data.user.id,
+      contactName: params.fullName,
+      contactValue: normalizedPhone.e164,
+      eventName: "auth.signup.auth_account_created",
+      eventCategory: "authentication",
+      description: `${params.role} authentication account created; profile setup is continuing.`,
+      metadata: {
+        signup_role: params.role,
+        signup_method: "phone_password",
+      },
+    });
+
+    await ensureProfileForUser({
+      userId: data.user.id,
+      role: params.role,
+      fullName: params.fullName,
+      phoneNumber: normalizedPhone.e164,
+      email: data.user.email?.trim() ? data.user.email.trim() : null,
+    });
+
+    if (params.role === "landlord") {
+      await startLandlordTrialIfEligible(data.user.id);
+    }
+
+    await setActivityJourneySafely({
+      journeyKey,
+      journeyType: "signup",
+      module: "auth",
+      status: "completed",
+      currentStep: "profile_ready",
+      actorProfileId: data.user.id,
+      actorRole: params.role,
+      subjectType: "profiles",
+      subjectId: data.user.id,
+      contactName: params.fullName,
+      contactValue: normalizedPhone.e164,
+      eventName: "auth.signup.completed",
+      eventCategory: "authentication",
+      description: `${params.role} sign-up completed.`,
+      metadata: {
+        signup_role: params.role,
+        signup_method: "phone_password",
+      },
+    });
+
     return {
-      ok: false,
-      message: error?.message ?? "Account could not be created.",
+      ok: true,
+      message: "Account created successfully.",
     } satisfies AuthActionState;
+  } catch (error) {
+    const details = getActivityErrorDetails(error);
+
+    await setActivityJourneySafely({
+      journeyKey,
+      journeyType: "signup",
+      module: "auth",
+      status: "failed",
+      currentStep: "profile_setup_failed",
+      actorRole: params.role,
+      contactName: params.fullName,
+      contactValue: normalizedPhone.e164,
+      lastErrorCode: details.code,
+      lastErrorMessage: details.message,
+      eventName: "auth.signup.failed",
+      eventCategory: "authentication",
+      description: `${params.role} authentication account was created, but BOPA profile setup did not finish.`,
+      metadata: {
+        signup_role: params.role,
+        signup_method: "phone_password",
+        incomplete_after: "auth_account_created",
+      },
+    });
+
+    throw error;
   }
-
-  await ensureProfileForUser({
-    userId: data.user.id,
-    role: params.role,
-    fullName: params.fullName,
-    phoneNumber: normalizedPhone.e164,
-    email: data.user.email?.trim() ? data.user.email.trim() : null,
-  });
-
-  if (params.role === "landlord") {
-    await startLandlordTrialIfEligible(data.user.id);
-  }
-
-  return {
-    ok: true,
-    message: "Account created successfully.",
-  } satisfies AuthActionState;
 }
 
 export async function phonePasswordLoginAction(
@@ -137,6 +257,19 @@ export async function phonePasswordLoginAction(
     });
 
     if (error || !data.user) {
+      await recordActivityEventSafely({
+        module: "auth",
+        eventName: "auth.login.failed",
+        eventCategory: "authentication",
+        outcome: "failed",
+        actorRole: "unknown",
+        description: "Phone and password sign-in failed.",
+        metadata: {
+          login_method: "phone_password",
+          phone_number: normalizedPhone.e164,
+        },
+      });
+
       return {
         ok: false,
         message: "That phone number or password is incorrect.",
@@ -154,6 +287,21 @@ export async function phonePasswordLoginAction(
         message: "We could not find your BOPA profile. Please contact support.",
       };
     }
+
+    await recordActivityEventSafely({
+      module: "auth",
+      eventName: "auth.login.succeeded",
+      eventCategory: "authentication",
+      outcome: "succeeded",
+      actorProfileId: profile.id,
+      actorRole: profile.role,
+      subjectType: "profiles",
+      subjectId: profile.id,
+      description: `${profile.role} signed in.`,
+      metadata: {
+        login_method: "phone_password",
+      },
+    });
 
     redirectTo = getPostLoginRedirect(profile.role);
   } catch (error) {
@@ -270,6 +418,19 @@ export async function emailPasswordLoginAction(
     });
 
     if (error || !data.user) {
+      await recordActivityEventSafely({
+        module: "auth",
+        eventName: "auth.login.failed",
+        eventCategory: "authentication",
+        outcome: "failed",
+        actorRole: "unknown",
+        description: "Email and password sign-in failed.",
+        metadata: {
+          login_method: "email_password",
+          email: parsed.email.toLowerCase(),
+        },
+      });
+
       return {
         ok: false,
         message: "That email or password is incorrect. Please try again.",
@@ -287,6 +448,21 @@ export async function emailPasswordLoginAction(
         message: "We could not find your BOPA profile. Please contact support.",
       };
     }
+
+    await recordActivityEventSafely({
+      module: "auth",
+      eventName: "auth.login.succeeded",
+      eventCategory: "authentication",
+      outcome: "succeeded",
+      actorProfileId: profile.id,
+      actorRole: profile.role,
+      subjectType: "profiles",
+      subjectId: profile.id,
+      description: `${profile.role} signed in.`,
+      metadata: {
+        login_method: "email_password",
+      },
+    });
 
     redirectTo = getPostLoginRedirect(profile.role);
   } catch (error) {
@@ -308,12 +484,36 @@ export async function emailPasswordRegisterAction(
   formData: FormData,
 ): Promise<AuthActionState> {
   let shouldRedirect = false;
+  let journeyKey: string | null = null;
 
   try {
     const parsed = emailPasswordRegisterSchema.parse({
       fullName: formData.get("fullName"),
       email: formData.get("email"),
       password: formData.get("password"),
+    });
+
+    journeyKey = createActivityJourneyKey({
+      journeyType: "signup",
+      module: "auth",
+    });
+    await setActivityJourneySafely({
+      journeyKey,
+      journeyType: "signup",
+      module: "auth",
+      status: "in_progress",
+      currentStep: "details_submitted",
+      actorRole: "landlord",
+      contactName: parsed.fullName,
+      contactValue: parsed.email.toLowerCase(),
+      eventName: "auth.signup.started",
+      eventCategory: "authentication",
+      eventOutcome: "started",
+      description: "Landlord email sign-up started.",
+      metadata: {
+        signup_role: "landlord",
+        signup_method: "email_password",
+      },
     });
 
     const supabase = await createSupabaseServerClient();
@@ -330,6 +530,23 @@ export async function emailPasswordRegisterAction(
     });
 
     if (error || !data.user) {
+      await setActivityJourneySafely({
+        journeyKey,
+        journeyType: "signup",
+        module: "auth",
+        status: "failed",
+        currentStep: "auth_account_not_created",
+        actorRole: "landlord",
+        contactName: parsed.fullName,
+        contactValue: parsed.email.toLowerCase(),
+        lastErrorCode: error?.code ?? "AUTH_SIGNUP_FAILED",
+        lastErrorMessage: error?.message ?? "Account could not be created.",
+        eventName: "auth.signup.failed",
+        eventCategory: "authentication",
+        description:
+          "Landlord email sign-up failed before the account was created.",
+      });
+
       return {
         ok: false,
         message: error?.message ?? "Account could not be created.",
@@ -344,8 +561,46 @@ export async function emailPasswordRegisterAction(
       email: parsed.email,
     });
 
+    await setActivityJourneySafely({
+      journeyKey,
+      journeyType: "signup",
+      module: "auth",
+      status: "completed",
+      currentStep: "profile_ready",
+      actorProfileId: data.user.id,
+      actorRole: "landlord",
+      subjectType: "profiles",
+      subjectId: data.user.id,
+      contactName: parsed.fullName,
+      contactValue: parsed.email.toLowerCase(),
+      eventName: "auth.signup.completed",
+      eventCategory: "authentication",
+      description: "Landlord email sign-up completed.",
+      metadata: {
+        signup_role: "landlord",
+        signup_method: "email_password",
+      },
+    });
+
     shouldRedirect = true;
   } catch (error) {
+    if (journeyKey) {
+      const details = getActivityErrorDetails(error);
+      await setActivityJourneySafely({
+        journeyKey,
+        journeyType: "signup",
+        module: "auth",
+        status: "failed",
+        currentStep: "profile_setup_failed",
+        actorRole: "landlord",
+        lastErrorCode: details.code,
+        lastErrorMessage: details.message,
+        eventName: "auth.signup.failed",
+        eventCategory: "authentication",
+        description: "Landlord email sign-up did not finish.",
+      });
+    }
+
     return toActionError(error);
   }
 
@@ -448,6 +703,22 @@ export async function verifyOTPAction(
 }
 
 export async function signOutAction() {
+  const user = await getSessionUser();
+
+  if (user) {
+    await recordActivityEventSafely({
+      module: "auth",
+      eventName: "auth.logout.succeeded",
+      eventCategory: "authentication",
+      outcome: "succeeded",
+      actorProfileId: user.id,
+      actorRole: user.role,
+      subjectType: "profiles",
+      subjectId: user.id,
+      description: `${user.role} signed out.`,
+    });
+  }
+
   const supabase = await createSupabaseServerClient();
   await supabase.auth.signOut();
 

@@ -63,60 +63,58 @@ function formatMoney(amount: number | null, currencyCode: string) {
 export function UnitCard({ unit }: UnitCardProps) {
   return (
     <Card>
-      <div className="flex items-start gap-4">
+      <div className="grid grid-cols-[2.75rem_minmax(0,1fr)] items-start gap-x-4">
         <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary">
           <Home aria-hidden="true" size={22} strokeWidth={2.6} />
         </div>
 
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h3 className="text-lg font-extrabold tracking-tight text-text-strong">
-                {unit.unit_identifier}
-              </h3>
+        <div className="flex min-w-0 items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="text-lg font-extrabold tracking-tight text-text-strong">
+              {unit.unit_identifier}
+            </h3>
 
-              <p className="mt-1 text-sm font-semibold text-text-muted">
-                {unitTypeLabel(unit.unit_type)}
-              </p>
-            </div>
-
-            {statusBadge(unit.status)}
+            <p className="mt-2 text-sm font-semibold text-text-muted">
+              {unitTypeLabel(unit.unit_type)}
+            </p>
           </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-button bg-background p-3">
-              <p className="text-xs font-bold text-text-muted">Annual Rent</p>
-              <p className="mt-1 text-sm font-extrabold text-text-strong">
-                {formatMoney(unit.annual_rent, unit.currency_code)}
-              </p>
-            </div>
+          <div className="shrink-0 pt-1">{statusBadge(unit.status)}</div>
+        </div>
 
-            <div className="rounded-button bg-background p-3">
-              <p className="text-xs font-bold text-text-muted">Monthly Rent</p>
-              <p className="mt-1 text-sm font-extrabold text-text-strong">
-                {formatMoney(unit.monthly_rent, unit.currency_code)}
-              </p>
-            </div>
+        <div className="col-span-2 mt-6 grid grid-cols-2 gap-4 sm:col-span-1 sm:col-start-2">
+          <div className="rounded-button bg-background p-3">
+            <p className="text-xs font-bold text-text-muted">Annual Rent</p>
+            <p className="mt-1 text-sm font-extrabold text-text-strong">
+              {formatMoney(unit.annual_rent, unit.currency_code)}
+            </p>
+          </div>
 
-            <div className="rounded-button bg-background p-3">
-              <div className="flex items-center gap-2 text-text-muted">
-                <BedDouble aria-hidden="true" size={17} strokeWidth={2.5} />
-                <p className="text-xs font-bold">Bedrooms</p>
-              </div>
-              <p className="mt-1 text-sm font-extrabold text-text-strong">
-                {unit.bedrooms}
-              </p>
-            </div>
+          <div className="rounded-button bg-background p-3">
+            <p className="text-xs font-bold text-text-muted">Monthly Rent</p>
+            <p className="mt-1 text-sm font-extrabold text-text-strong">
+              {formatMoney(unit.monthly_rent, unit.currency_code)}
+            </p>
+          </div>
 
-            <div className="rounded-button bg-background p-3">
-              <div className="flex items-center gap-2 text-text-muted">
-                <Bath aria-hidden="true" size={17} strokeWidth={2.5} />
-                <p className="text-xs font-bold">Bathrooms</p>
-              </div>
-              <p className="mt-1 text-sm font-extrabold text-text-strong">
-                {unit.bathrooms}
-              </p>
+          <div className="rounded-button bg-background p-3">
+            <div className="flex items-center gap-2 text-text-muted">
+              <BedDouble aria-hidden="true" size={17} strokeWidth={2.5} />
+              <p className="text-xs font-bold">Bedrooms</p>
             </div>
+            <p className="mt-1 text-sm font-extrabold text-text-strong">
+              {unit.bedrooms}
+            </p>
+          </div>
+
+          <div className="rounded-button bg-background p-3">
+            <div className="flex items-center gap-2 text-text-muted">
+              <Bath aria-hidden="true" size={17} strokeWidth={2.5} />
+              <p className="text-xs font-bold">Bathrooms</p>
+            </div>
+            <p className="mt-1 text-sm font-extrabold text-text-strong">
+              {unit.bathrooms}
+            </p>
           </div>
         </div>
       </div>

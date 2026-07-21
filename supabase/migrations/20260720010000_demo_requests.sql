@@ -99,4 +99,6 @@ from public, anon, authenticated;
 comment on table public.demo_requests is
   'Public Manager and Developer demo requests. Access is restricted to server-side service-role operations.';
 
+notify pgrst, 'reload schema';
+
 commit;

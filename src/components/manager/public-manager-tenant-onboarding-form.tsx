@@ -88,8 +88,7 @@ function getSuccessCopy(
       title: "Property requirements not met",
       description:
         "Your answers do not meet one or more requirements set for this property.",
-      next:
-        "The unit has been released. Contact the property manager only if you believe an answer was entered incorrectly.",
+      next: "The unit has been released. Contact the property manager only if you believe an answer was entered incorrectly.",
     };
   }
 
@@ -97,10 +96,8 @@ function getSuccessCopy(
     return {
       badge: "Review required",
       title: "Application sent for review",
-      description:
-        "One or more answers require the property manager's review.",
-      next:
-        "The property manager will review your information before deciding the next step.",
+      description: "One or more answers require the property manager's review.",
+      next: "The property manager will review your information before deciding the next step.",
     };
   }
 
@@ -108,8 +105,7 @@ function getSuccessCopy(
     badge: "Submitted",
     title: "Details submitted",
     description: "Your information is being reviewed.",
-    next:
-      "Once approved, you will receive the tenancy agreement through WhatsApp or email.",
+    next: "Once approved, you will receive the tenancy agreement through WhatsApp or email.",
   };
 }
 
@@ -136,9 +132,10 @@ export function PublicManagerTenantOnboardingForm({
   );
 
   const isCurrentOccupant = request.onboarding_type === "current_occupant";
-  const tenantRequirements = isCurrentOccupant
-    ? []
-    : request.tenant_requirements_snapshot;
+  const tenantRequirements = useMemo(
+    () => (isCurrentOccupant ? [] : request.tenant_requirements_snapshot),
+    [isCurrentOccupant, request.tenant_requirements_snapshot],
+  );
   const guarantorRequirement = tenantRequirements.find(
     (requirement) =>
       requirement.requirementCode === "guarantor_required" &&
@@ -150,15 +147,11 @@ export function PublicManagerTenantOnboardingForm({
       : 1
     : 0;
   const visibleTenantRequirements = tenantRequirements.filter(
-    (requirement) =>
-      requirement.requirementCode !== "guarantor_required",
+    (requirement) => requirement.requirementCode !== "guarantor_required",
   );
 
   const [guarantors, setGuarantors] = useState<GuarantorDraft[]>(
-    Array.from(
-      { length: requiredGuarantorCount },
-      createEmptyGuarantor,
-    ),
+    Array.from({ length: requiredGuarantorCount }, createEmptyGuarantor),
   );
   const [requirementAnswers, setRequirementAnswers] = useState<
     Record<string, RequirementAnswerDraft>
@@ -209,10 +202,7 @@ export function PublicManagerTenantOnboardingForm({
     try {
       const formData = new FormData();
       formData.append("managerOnboardingToken", token);
-      formData.append(
-        "documentType",
-        "existing_tenant_last_payment_receipt",
-      );
+      formData.append("documentType", "existing_tenant_last_payment_receipt");
       formData.append("file", file);
 
       const response = await fetch("/api/files/signed-upload", {
@@ -264,12 +254,8 @@ export function PublicManagerTenantOnboardingForm({
     return {
       id,
       tone: state.ok ? "success" : "error",
-      title: state.ok
-        ? successCopy.title
-        : "Could not submit details",
-      description: state.ok
-        ? successCopy.description
-        : state.message,
+      title: state.ok ? successCopy.title : "Could not submit details",
+      description: state.ok ? successCopy.description : state.message,
     };
   }, [
     dismissedToastId,
@@ -317,12 +303,12 @@ export function PublicManagerTenantOnboardingForm({
             <div className="mt-5 space-y-3 border-t border-border-soft pt-5">
               <div>
                 <p className="font-black text-text-strong">
-                  Send confirmation to your guarantor{
-                    state.guarantorLinks.length === 1 ? "" : "s"
-                  }
+                  Send confirmation to your guarantor
+                  {state.guarantorLinks.length === 1 ? "" : "s"}
                 </p>
                 <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-                  Each guarantor must confirm before the property manager can approve the application.
+                  Each guarantor must confirm before the property manager can
+                  approve the application.
                 </p>
               </div>
 
@@ -358,11 +344,7 @@ export function PublicManagerTenantOnboardingForm({
             name="requirementAnswersJson"
             value={requirementAnswersJson}
           />
-          <input
-            type="hidden"
-            name="guarantorsJson"
-            value={guarantorsJson}
-          />
+          <input type="hidden" name="guarantorsJson" value={guarantorsJson} />
 
           <div className="border-b border-border-soft p-5">
             <p className="w-fit rounded-full bg-primary-soft px-3 py-1 text-xs font-black uppercase tracking-wide text-primary">
@@ -489,8 +471,7 @@ export function PublicManagerTenantOnboardingForm({
 
                 <div className="mt-4 space-y-4">
                   {visibleTenantRequirements.map((requirement) => {
-                    const answer =
-                      requirementAnswers[requirement.id] ?? {};
+                    const answer = requirementAnswers[requirement.id] ?? {};
 
                     return (
                       <article
@@ -591,9 +572,9 @@ export function PublicManagerTenantOnboardingForm({
                   </h2>
                   <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
                     Enter complete details for {requiredGuarantorCount}{" "}
-                    guarantor{requiredGuarantorCount === 1 ? "" : "s"}.
-                    They will receive a private link to verify the details and
-                    accept the responsibility.
+                    guarantor{requiredGuarantorCount === 1 ? "" : "s"}. They
+                    will receive a private link to verify the details and accept
+                    the responsibility.
                   </p>
                 </div>
 

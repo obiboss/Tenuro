@@ -288,7 +288,7 @@ export default function DevelopersLandingPage() {
                 </Button>
               </Link>
 
-              <Link href="/contact?workspace=developer">
+              <Link href="/contact">
                 <Button type="button" variant="secondary" fullWidth>
                   Book a Demo
                 </Button>
@@ -332,4 +332,3 @@ export default function DevelopersLandingPage() {
     </main>
   );
 }
-
