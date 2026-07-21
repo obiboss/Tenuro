@@ -25,6 +25,9 @@ import {
   MANAGER_STAFF_ROLE_LABELS,
   canManagerRoleAccessPath,
 } from "@/lib/manager-staff-permission";
+import {
+  isAggressiveWorkflowPrefetchAllowed,
+} from "@/lib/workflow-prefetch-policy";
 import type { ManagerWorkspaceRole } from "@/server/repositories/manager-staff.repository";
 
 type ManagerShellProps = {
@@ -185,7 +188,13 @@ export function ManagerShell({
                       <Link
                         key={item.href}
                         href={item.href}
-                        prefetch={false}
+                        prefetch={
+                          isAggressiveWorkflowPrefetchAllowed(
+                            item.href,
+                          )
+                            ? undefined
+                            : false
+                        }
                         aria-current={active ? "page" : undefined}
                         className={cn(
                           "flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
@@ -263,7 +272,13 @@ export function ManagerShell({
                 <Link
                   key={item.href}
                   href={item.href}
-                  prefetch={false}
+                  prefetch={
+                    isAggressiveWorkflowPrefetchAllowed(
+                      item.href,
+                    )
+                      ? undefined
+                      : false
+                  }
                   aria-current={active ? "page" : undefined}
                   className={cn(
                     "flex min-w-20 flex-col items-center justify-center gap-1 rounded-lg px-2 py-2.5 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",

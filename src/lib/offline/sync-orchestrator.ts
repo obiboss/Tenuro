@@ -79,8 +79,6 @@ export async function runRegisteredOfflineSync() {
                   ? error.message
                   : "Offline changes could not be synced.",
               );
-
-              throw error;
             } finally {
               await refreshOfflineHealth();
 

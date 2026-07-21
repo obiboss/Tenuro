@@ -9,6 +9,7 @@ import { initialManagerTenantOnboardingActionState } from "@/actions/manager-ten
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { WhatsAppShareActions } from "@/components/ui/whatsapp-share-actions";
+import { ManagerTenantForm } from "@/components/manager/manager-tenant-form";
 import type { ManagerTenantOnboardingRequestRow } from "@/server/repositories/manager-tenant-onboarding.repository";
 import type {
   ManagerPropertyRow,
@@ -74,6 +75,7 @@ export function ManagerTenantOnboardingForm({
   existingRequest = null,
 }: ManagerTenantOnboardingFormProps) {
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [entryMethod, setEntryMethod] = useState<"manual" | "link">("manual");
   const [onboardingType, setOnboardingType] =
     useState<TenantOnboardingType>("current_occupant");
 
@@ -203,14 +205,69 @@ export function ManagerTenantOnboardingForm({
               Add tenant to {unit.unit_label}
             </p>
             <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-              {property.property_name}. Open the form only when you are ready to
-              send a tenant detail link.
+              {property.property_name}. Enter the occupant yourself or send a
+              secure detail link.
             </p>
           </div>
 
           <Button type="button" onClick={() => setIsFormOpen(true)}>
             Open tenant form
           </Button>
+        </div>
+      </section>
+    );
+  }
+
+  if (entryMethod === "manual") {
+    return (
+      <section
+        id="tenant-onboarding"
+        className="rounded-card border border-border-soft bg-white shadow-sm"
+      >
+        <div className="flex flex-col gap-3 border-b border-border-soft p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-black tracking-tight text-text-strong">
+              Add current occupant
+            </h2>
+            <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+              {unit.unit_label} · {property.property_name}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsFormOpen(false)}
+            className="inline-flex min-h-10 items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+          >
+            Close form
+          </button>
+        </div>
+
+        <div className="grid gap-2 border-b border-border-soft p-4 sm:grid-cols-2">
+          <button
+            type="button"
+            aria-pressed="true"
+            className="rounded-button border border-primary bg-primary-soft px-4 py-3 text-sm font-black text-primary"
+          >
+            Enter details myself
+          </button>
+          <button
+            type="button"
+            aria-pressed="false"
+            onClick={() => setEntryMethod("link")}
+            className="rounded-button border border-border-soft bg-white px-4 py-3 text-sm font-black text-text-strong transition hover:border-primary/40"
+          >
+            Send tenant a link
+          </button>
+        </div>
+
+        <div className="p-4">
+          <ManagerTenantForm
+            properties={[property]}
+            units={[unit]}
+            lockedPropertyId={property.id}
+            lockedUnitId={unit.id}
+          />
         </div>
       </section>
     );
@@ -237,6 +294,24 @@ export function ManagerTenantOnboardingForm({
           className="inline-flex min-h-10 items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
         >
           Close form
+        </button>
+      </div>
+
+      <div className="grid gap-2 border-b border-border-soft p-4 sm:grid-cols-2">
+        <button
+          type="button"
+          aria-pressed="false"
+          onClick={() => setEntryMethod("manual")}
+          className="rounded-button border border-border-soft bg-white px-4 py-3 text-sm font-black text-text-strong transition hover:border-primary/40"
+        >
+          Enter details myself
+        </button>
+        <button
+          type="button"
+          aria-pressed="true"
+          className="rounded-button border border-primary bg-primary-soft px-4 py-3 text-sm font-black text-primary"
+        >
+          Send tenant a link
         </button>
       </div>
 

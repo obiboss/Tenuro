@@ -55,7 +55,11 @@ export async function enqueueOfflineMutation(
   const record = createOutboxRecord(input);
 
   await db.outbox.add(record);
-  await requestBopaBackgroundSync();
+
+  // The mutation is already safely stored in IndexedDB. Background Sync is
+  // optional browser functionality and must never keep the form submission
+  // pending while the device is offline or has no active service worker.
+  void requestBopaBackgroundSync();
 
   return record;
 }

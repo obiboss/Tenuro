@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useCallback, useMemo, useState } from "react";
 import {
   initializeRentPaymentAction,
   recordManualPaymentAction,
@@ -14,6 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { TrustNotice } from "@/components/ui/trust-notice";
+import { runOfflineCapableFormAction } from "@/lib/offline/offline-form.client";
+import { saveLandlordPaymentOffline } from "@/lib/offline/operational-mutations.client";
 
 type ManualPaymentFormProps = {
   tenancies: {
@@ -39,6 +41,16 @@ const paymentMethodOptions = [
 ];
 
 export function ManualPaymentForm({ tenancies }: ManualPaymentFormProps) {
+  const offlinePaymentAction = useCallback(
+    (previousState: typeof initialPaymentActionState, formData: FormData) =>
+      runOfflineCapableFormAction({
+        previousState,
+        formData,
+        onlineAction: recordManualPaymentAction,
+        saveOffline: saveLandlordPaymentOffline,
+      }),
+    [],
+  );
   const negotiatedPaymentIdempotencyKey = useMemo(
     () => crypto.randomUUID(),
     [],
@@ -53,7 +65,7 @@ export function ManualPaymentForm({ tenancies }: ManualPaymentFormProps) {
   ] = useActionState(initializeRentPaymentAction, initialPaymentActionState);
 
   const [manualPaymentState, manualPaymentFormAction, isRecordingPayment] =
-    useActionState(recordManualPaymentAction, initialPaymentActionState);
+    useActionState(offlinePaymentAction, initialPaymentActionState);
 
   return (
     <div className="space-y-5">

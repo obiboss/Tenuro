@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useState, useActionState } from "react";
+import { useActionState, useCallback, useMemo, useState } from "react";
 import { createManagerTenantAction } from "@/actions/manager.actions";
 import { initialManagerActionState } from "@/actions/manager.state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { runOfflineCapableFormAction } from "@/lib/offline/offline-form.client";
+import { saveManagerTenantOffline } from "@/lib/offline/operational-mutations.client";
 import type {
   ManagerPropertyRow,
   ManagerUnitRow,
@@ -58,8 +60,18 @@ export function ManagerTenantForm({
     [selectedUnitId, vacantUnitsForProperty],
   );
 
+  const offlineCapableAction = useCallback(
+    (previousState: typeof initialManagerActionState, formData: FormData) =>
+      runOfflineCapableFormAction({
+        previousState,
+        formData,
+        onlineAction: createManagerTenantAction,
+        saveOffline: saveManagerTenantOffline,
+      }),
+    [],
+  );
   const [state, formAction, isPending] = useActionState(
-    createManagerTenantAction,
+    offlineCapableAction,
     initialManagerActionState,
   );
 
@@ -116,7 +128,9 @@ export function ManagerTenantForm({
               Tenant saved
             </h2>
             <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-              The unit will now show as occupied on this property.
+              {state.offlineSaved
+                ? "The unit will show as occupied after this record syncs."
+                : "The unit will now show as occupied on this property."}
             </p>
           </div>
         </CardContent>
@@ -273,6 +287,13 @@ export function ManagerTenantForm({
             placeholder="Optional"
             autoComplete="email"
             error={state.fieldErrors?.email?.[0]}
+          />
+
+          <Input
+            label="Occupation"
+            name="occupation"
+            placeholder="Optional"
+            error={state.fieldErrors?.occupation?.[0]}
           />
 
           <Input

@@ -37,6 +37,8 @@ export type PaymentActionState = {
   reference?: string;
   expiresAt?: string | null;
   fieldErrors?: Record<string, string[]>;
+  offlineSaved?: boolean;
+  submissionId?: string;
 };
 
 export async function setupLandlordBankAccountAction(

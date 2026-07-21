@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { ToastProvider } from "@/components/ui/toast-provider";
 import { GATED_LANDLORD_PATH_PREFIXES } from "@/server/constants/landlord-subscription-gating";
 import { cn } from "@/lib/cn";
+import { isAggressiveWorkflowPrefetchAllowed } from "@/lib/workflow-prefetch-policy";
 
 type LandlordShellProps = {
   children: React.ReactNode;
@@ -151,6 +152,11 @@ export function LandlordShell({
                 <Link
                   key={item.href}
                   href={href}
+                  prefetch={
+                    isAggressiveWorkflowPrefetchAllowed(href)
+                      ? undefined
+                      : false
+                  }
                   className={cn(
                     "flex min-h-12 items-center justify-between rounded-xl border-l-4 px-3 text-base font-bold transition",
                     active
@@ -209,6 +215,11 @@ export function LandlordShell({
                     <Link
                       key={item.href}
                       href={href}
+                      prefetch={
+                        isAggressiveWorkflowPrefetchAllowed(href)
+                          ? undefined
+                          : false
+                      }
                       className={cn(
                         "flex min-h-10 items-center gap-3 rounded-xl px-3 text-sm font-bold transition",
                         active
@@ -279,6 +290,11 @@ export function LandlordShell({
                 <Link
                   key={item.href}
                   href={href}
+                  prefetch={
+                    isAggressiveWorkflowPrefetchAllowed(href)
+                      ? undefined
+                      : false
+                  }
                   className={cn(
                     "flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[11px] font-bold transition",
                     active

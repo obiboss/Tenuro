@@ -16,6 +16,9 @@ export type UnitActionState = {
   ok: boolean;
   message: string;
   fieldErrors?: Record<string, string[]>;
+  offlineSaved?: boolean;
+  submissionId?: string;
+  unitId?: string;
 };
 
 function nullableMoney(value: FormDataEntryValue | null) {

@@ -17,9 +17,11 @@ import type {
 
 const ENTITY_TYPES_BY_WORKSPACE = {
   manager: [
+    "manager_landlord_client",
     "manager_property",
     "manager_unit",
     "manager_tenant",
+    "manager_rent_payment",
     "manager_maintenance_request",
   ],
   developer: [
@@ -28,7 +30,12 @@ const ENTITY_TYPES_BY_WORKSPACE = {
     "developer_buyer",
     "developer_sale",
   ],
-  landlord: [],
+  landlord: [
+    "landlord_property",
+    "landlord_unit",
+    "landlord_tenancy",
+    "landlord_rent_payment",
+  ],
 } as const satisfies Record<
   string,
   readonly OfflineEntityType[]

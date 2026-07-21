@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useCallback, useMemo, useState } from "react";
 import { createManagerMaintenanceRequestAction } from "@/actions/manager-maintenance.actions";
 import {
   initialManagerActionState,
@@ -15,6 +15,8 @@ import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Input } from "@/components/ui/input";
 import { Toast, type ToastItem } from "@/components/ui/toast";
+import { runOfflineCapableFormAction } from "@/lib/offline/offline-form.client";
+import { saveManagerMaintenanceOffline } from "@/lib/offline/operational-mutations.client";
 import type {
   ManagerLandlordClientRow,
   ManagerPropertyRow,
@@ -375,8 +377,19 @@ export function ManagerMaintenanceForm(
   const [dismissedToastId, setDismissedToastId] =
     useState<string | null>(null);
 
+  const offlineCapableAction = useCallback(
+    (previousState: ManagerActionState, formData: FormData) =>
+      runOfflineCapableFormAction({
+        previousState,
+        formData,
+        onlineAction: createManagerMaintenanceRequestAction,
+        saveOffline: saveManagerMaintenanceOffline,
+      }),
+    [],
+  );
+
   const [state, formAction, isPending] = useActionState(
-    createManagerMaintenanceRequestAction,
+    offlineCapableAction,
     initialManagerActionState,
   );
 

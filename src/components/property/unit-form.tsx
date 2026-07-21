@@ -1,6 +1,13 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import {
+  useActionState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createUnitAction } from "@/actions/units.actions";
 import { initialUnitActionState } from "@/actions/unit.state";
 import { ActionResultToast } from "@/components/ui/action-result-toast";
@@ -9,6 +16,8 @@ import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { runOfflineCapableFormAction } from "@/lib/offline/offline-form.client";
+import { saveLandlordUnitOffline } from "@/lib/offline/operational-mutations.client";
 
 const unitTypeOptions = [
   { label: "Single Room", value: "single_room" },
@@ -129,10 +138,23 @@ export function UnitForm({
   const formRef = useRef<HTMLFormElement | null>(null);
   const handledSuccessMessageRef = useRef<string | null>(null);
   const [formResetKey, setFormResetKey] = useState(0);
-  const createAction = createUnitAction.bind(null, propertyId);
+  const createAction = useMemo(
+    () => createUnitAction.bind(null, propertyId),
+    [propertyId],
+  );
+  const offlineCapableAction = useCallback(
+    (previousState: typeof initialUnitActionState, formData: FormData) =>
+      runOfflineCapableFormAction({
+        previousState,
+        formData,
+        onlineAction: createAction,
+        saveOffline: (data) => saveLandlordUnitOffline(propertyId, data),
+      }),
+    [createAction, propertyId],
+  );
 
   const [state, formAction, isPending] = useActionState(
-    createAction,
+    offlineCapableAction,
     initialUnitActionState,
   );
 
@@ -158,8 +180,14 @@ export function UnitForm({
       "bathrooms",
       unitTypeDefaults[defaultUnitType].bathrooms,
     );
-    onSuccess?.();
-  }, [onSuccess, state.message, state.ok]);
+
+    // Do not refresh a protected server-rendered page after a local-only save.
+    // The refresh cannot authenticate while offline and can appear to log the
+    // landlord out even though the unit was queued successfully.
+    if (!state.offlineSaved) {
+      onSuccess?.();
+    }
+  }, [onSuccess, state.message, state.offlineSaved, state.ok]);
 
   function handleUnitTypeChange(event: React.ChangeEvent<HTMLSelectElement>) {
     const defaults = unitTypeDefaults[event.target.value];

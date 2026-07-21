@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useCallback, useMemo, useState } from "react";
 import { createManagerUnitAction } from "@/actions/manager.actions";
 import { initialManagerActionState } from "@/actions/manager.state";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,8 @@ import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Input } from "@/components/ui/input";
 import { Toast, type ToastItem } from "@/components/ui/toast";
+import { runOfflineCapableFormAction } from "@/lib/offline/offline-form.client";
+import { saveManagerUnitOffline } from "@/lib/offline/operational-mutations.client";
 import type { ManagerPropertyRow } from "@/server/repositories/manager.repository";
 
 type ManagerUnitFormProps = {
@@ -50,8 +52,18 @@ export function ManagerUnitForm({
     useState(initialPropertyId);
   const [dismissedToastId, setDismissedToastId] = useState<string | null>(null);
 
+  const offlineCapableAction = useCallback(
+    (previousState: typeof initialManagerActionState, formData: FormData) =>
+      runOfflineCapableFormAction({
+        previousState,
+        formData,
+        onlineAction: createManagerUnitAction,
+        saveOffline: saveManagerUnitOffline,
+      }),
+    [],
+  );
   const [state, formAction, isPending] = useActionState(
-    createManagerUnitAction,
+    offlineCapableAction,
     initialManagerActionState,
   );
 

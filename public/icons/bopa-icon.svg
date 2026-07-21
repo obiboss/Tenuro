@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="BOPA">
+  <rect width="512" height="512" rx="112" fill="#1b4fd8"/>
+  <path d="M128 104h156c67 0 108 32 108 86 0 32-16 57-45 72 37 14 57 42 57 79 0 62-47 99-126 99H128V104Zm86 66v64h61c22 0 34-11 34-32 0-22-13-32-40-32h-55Zm0 126v78h67c27 0 40-13 40-39 0-26-15-39-45-39h-62Z" fill="#fff"/>
+</svg>

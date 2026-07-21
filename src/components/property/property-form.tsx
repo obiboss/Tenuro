@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useCallback, useMemo, useState } from "react";
 import { createPropertyAction } from "@/actions/properties.actions";
 import { initialPropertyActionState } from "@/actions/property.state";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,8 @@ import {
   getNigeriaLgaOptions,
   getNigeriaStateOptions,
 } from "@/lib/nigeria-state-lga";
+import { runOfflineCapableFormAction } from "@/lib/offline/offline-form.client";
+import { saveLandlordPropertyOffline } from "@/lib/offline/operational-mutations.client";
 
 const propertyTypeOptions = [
   {
@@ -29,8 +31,18 @@ const propertyTypeOptions = [
 
 export function PropertyForm() {
   const [selectedState, setSelectedState] = useState("");
+  const offlineCapableAction = useCallback(
+    (previousState: typeof initialPropertyActionState, formData: FormData) =>
+      runOfflineCapableFormAction({
+        previousState,
+        formData,
+        onlineAction: createPropertyAction,
+        saveOffline: saveLandlordPropertyOffline,
+      }),
+    [],
+  );
   const [state, formAction, isPending] = useActionState(
-    createPropertyAction,
+    offlineCapableAction,
     initialPropertyActionState,
   );
 
@@ -48,7 +60,11 @@ export function PropertyForm() {
           {state.message ? (
             <div
               role="alert"
-              className="rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
+              className={
+                state.ok
+                  ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
+                  : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
+              }
             >
               {state.message}
             </div>

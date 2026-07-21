@@ -1,5 +1,6 @@
 import "server-only";
 
+import crypto from "node:crypto";
 import type {
   ManagerCollectionMode,
   ManagerPaymentReceiver,
@@ -27,6 +28,7 @@ import {
 } from "@/server/repositories/manager.repository";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import { createSupabaseServerClient } from "@/server/supabase/server";
+import { normalisePhoneNumber } from "@/server/utils/phone";
 import { assertBusinessSubscriptionAccessForProfile } from "@/server/services/business-subscription.service";
 import type {
   CreateManagerLandlordClientInput,
@@ -383,14 +385,46 @@ export async function createManagerUnit(input: CreateManagerUnitInput) {
 }
 
 export async function createManagerTenant(input: CreateManagerTenantInput) {
-  void input;
-  await requireManagerOrganization();
-
-  throw new AppError(
-    "MANAGER_TENANT_DIRECT_CREATE_DISABLED",
-    "Start tenant onboarding from a specific property unit.",
-    400,
+  const { profile, organization } = await requireManagerOrganization();
+  const admin = createSupabaseAdminClient();
+  const tenantId = crypto.randomUUID();
+  const clientMutationId = crypto.randomUUID();
+  const phone = normalisePhoneNumber(input.phoneNumber);
+  const { data, error } = await admin.rpc(
+    "create_manager_existing_tenant_offline",
+    {
+      p_profile_id: profile.id,
+      p_organization_id: organization.id,
+      p_tenant_id: tenantId,
+      p_landlord_client_id: input.landlordClientId,
+      p_property_id: input.propertyId,
+      p_unit_id: input.unitId,
+      p_full_name: input.fullName,
+      p_phone_number: phone.e164,
+      p_email: nullableText(input.email),
+      p_occupation: nullableText(input.occupation),
+      p_rent_amount: roundMoney(input.rentAmount),
+      p_current_balance: roundMoney(input.currentBalance),
+      p_move_in_date: nullableDate(input.moveInDate),
+      p_next_rent_due_date: nullableDate(input.nextRentDueDate),
+      p_notes: nullableText(input.notes),
+      p_client_mutation_id: clientMutationId,
+    },
   );
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new AppError(
+      "MANAGER_TENANT_CREATE_FAILED",
+      "The tenant could not be confirmed after saving.",
+      500,
+    );
+  }
+
+  return data as Record<string, unknown>;
 }
 
 export async function recordManagerRentPayment(

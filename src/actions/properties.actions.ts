@@ -17,6 +17,9 @@ export type PropertyActionState = {
   ok: boolean;
   message: string;
   fieldErrors?: Record<string, string[]>;
+  offlineSaved?: boolean;
+  submissionId?: string;
+  propertyId?: string;
 };
 
 export async function createPropertyAction(

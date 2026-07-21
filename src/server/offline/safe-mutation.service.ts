@@ -7,6 +7,7 @@ import type {
 import {
   managerRoleHasPermission,
 } from "@/lib/manager-staff-permission";
+import { isAppError } from "@/server/errors/app-error";
 import type {
   OfflineSafeMutationEntity,
   OfflineSafeMutationResult,
@@ -22,6 +23,13 @@ import {
   getSessionUser,
 } from "@/server/services/auth.service";
 import {
+  assertBusinessSubscriptionAccessForProfile,
+} from "@/server/services/business-subscription.service";
+import {
+  applyOfflineOperationalMutation,
+  isOperationalMutation,
+} from "@/server/offline/operational-mutation.service";
+import {
   createSupabaseAdminClient,
 } from "@/server/supabase/admin";
 import {
@@ -36,7 +44,7 @@ import type {
 
 type AuthorizedWorkspace = {
   profileId: string;
-  workspaceType: "manager" | "developer";
+  workspaceType: "manager" | "developer" | "landlord";
   workspaceId: string;
   managerRole:
     | "owner"
@@ -168,6 +176,41 @@ function normalizeMutation(
       };
 
     case "manager_property":
+      if (mutation.operation === "create") {
+        return {
+          ...mutation,
+          payload: {
+            ...mutation.payload,
+            propertyName: mutation.payload.propertyName.trim(),
+            propertyAddress: mutation.payload.propertyAddress.trim(),
+            city: normalizeNullableText(mutation.payload.city),
+            state: normalizeNullableText(mutation.payload.state),
+            lga: normalizeNullableText(mutation.payload.lga),
+            notes: normalizeNullableText(mutation.payload.notes),
+            newLandlord: mutation.payload.newLandlord
+              ? {
+                  ...mutation.payload.newLandlord,
+                  landlordName:
+                    mutation.payload.newLandlord.landlordName.trim(),
+                  landlordPhone: normalizeNullableText(
+                    mutation.payload.newLandlord.landlordPhone,
+                  ),
+                  landlordEmail:
+                    mutation.payload.newLandlord.landlordEmail
+                      ?.trim()
+                      .toLowerCase() ?? null,
+                  landlordAddress: normalizeNullableText(
+                    mutation.payload.newLandlord.landlordAddress,
+                  ),
+                  notes: normalizeNullableText(
+                    mutation.payload.newLandlord.notes,
+                  ),
+                }
+              : null,
+          },
+        };
+      }
+
       return {
         ...mutation,
         payload: {
@@ -191,6 +234,20 @@ function normalizeMutation(
       const phone = normalisePhoneNumber(
         mutation.payload.phoneNumber,
       );
+
+      if (mutation.operation === "create") {
+        return {
+          ...mutation,
+          payload: {
+            ...mutation.payload,
+            fullName: mutation.payload.fullName.trim(),
+            phoneNumber: phone.e164,
+            email: mutation.payload.email?.trim().toLowerCase() ?? null,
+            occupation: normalizeNullableText(mutation.payload.occupation),
+            notes: normalizeNullableText(mutation.payload.notes),
+          },
+        };
+      }
 
       return {
         ...mutation,
@@ -252,6 +309,13 @@ function normalizeMutation(
         },
       };
     }
+
+    case "manager_unit":
+    case "manager_rent_payment":
+    case "landlord_property":
+    case "landlord_unit":
+    case "landlord_rent_payment":
+      return mutation;
   }
 }
 
@@ -308,6 +372,11 @@ async function getAuthorizedWorkspace(): Promise<AuthorizedWorkspace | null> {
       return null;
     }
 
+    await assertBusinessSubscriptionAccessForProfile({
+      profileId: user.id,
+      workspaceType: "manager",
+    });
+
     return {
       profileId: user.id,
       workspaceType: "manager",
@@ -341,6 +410,11 @@ async function getAuthorizedWorkspace(): Promise<AuthorizedWorkspace | null> {
       return null;
     }
 
+    await assertBusinessSubscriptionAccessForProfile({
+      profileId: user.id,
+      workspaceType: "developer",
+    });
+
     const developerOwner =
       ownerAccount.owner_profile_id === user.id;
     const developerBuyerEditAllowed =
@@ -367,6 +441,17 @@ async function getAuthorizedWorkspace(): Promise<AuthorizedWorkspace | null> {
       managerRole: null,
       developerOwner,
       developerBuyerEditAllowed,
+    };
+  }
+
+  if (user.role === "landlord") {
+    return {
+      profileId: user.id,
+      workspaceType: "landlord",
+      workspaceId: user.id,
+      managerRole: null,
+      developerOwner: false,
+      developerBuyerEditAllowed: false,
     };
   }
 
@@ -402,10 +487,11 @@ function getPermissionError(
     }
 
     const permission =
-      mutation.entityType ===
-      "manager_maintenance_request"
+      mutation.entityType === "manager_maintenance_request"
         ? "maintenance.manage"
-        : "property.manage";
+        : mutation.entityType === "manager_rent_payment"
+          ? "payment.manage"
+          : "property.manage";
 
     if (
       !managerRoleHasPermission(
@@ -418,6 +504,27 @@ function getPermissionError(
           "OFFLINE_PERMISSION_DENIED",
         message:
           "You do not have permission to save this change.",
+      };
+    }
+
+    return null;
+  }
+
+  if (mutation.workspaceType === "landlord") {
+    const isLandlordEntity = [
+      "landlord_property",
+      "landlord_unit",
+      "landlord_rent_payment",
+    ].includes(mutation.entityType);
+
+    if (
+      workspace.workspaceType !== "landlord" ||
+      workspace.workspaceId !== workspace.profileId ||
+      !isLandlordEntity
+    ) {
+      return {
+        code: "OFFLINE_PERMISSION_DENIED",
+        message: "You do not have permission to save this change.",
       };
     }
 
@@ -467,11 +574,17 @@ function isOfflineEntityType(
   value: unknown,
 ): value is OfflineSafeMutationEntity["entityType"] {
   return (
+    value === "manager_landlord_client" ||
     value === "manager_property" ||
     value === "manager_unit" ||
     value === "manager_tenant" ||
+    value === "manager_rent_payment" ||
     value ===
       "manager_maintenance_request" ||
+    value === "landlord_property" ||
+    value === "landlord_unit" ||
+    value === "landlord_tenancy" ||
+    value === "landlord_rent_payment" ||
     value === "developer_estate" ||
     value === "developer_plot" ||
     value === "developer_buyer" ||
@@ -720,6 +833,67 @@ export async function applyOfflineSafeMutations(
 
     const requestHash =
       createRequestHash(mutation);
+
+    if (isOperationalMutation(mutation)) {
+      try {
+        results.push(
+          await applyOfflineOperationalMutation({
+            supabase: admin,
+            workspace: {
+              profileId: workspace.profileId,
+              workspaceType: mutation.workspaceType,
+              workspaceId: workspace.workspaceId,
+            },
+            mutation,
+          }),
+        );
+      } catch (error) {
+        if (isAppError(error)) {
+          results.push({
+            clientMutationId: mutation.clientMutationId,
+            status: "rejected",
+            code: error.code,
+            message: error.userMessage,
+          });
+          continue;
+        }
+
+        const code =
+          error && typeof error === "object" && "code" in error
+            ? String(error.code)
+            : "OFFLINE_OPERATION_FAILED";
+        const message =
+          error && typeof error === "object" && "message" in error
+            ? String(error.message)
+            : "This offline change could not be saved yet.";
+
+        results.push(
+          [
+            "22023",
+            "22P02",
+            "23503",
+            "23505",
+            "23514",
+            "42501",
+            "P0001",
+          ].includes(code)
+            ? {
+                clientMutationId: mutation.clientMutationId,
+                status: "rejected",
+                code: "OFFLINE_INVALID_CHANGE",
+                message,
+              }
+            : {
+                clientMutationId: mutation.clientMutationId,
+                status: "retry",
+                code,
+                message: "This offline change could not be synced yet.",
+              },
+        );
+      }
+
+      continue;
+    }
 
     const { data, error } = await admin.rpc(
       "apply_offline_safe_mutation",

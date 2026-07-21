@@ -20,6 +20,8 @@ import {
   getNigeriaStateOptions,
 } from "@/lib/nigeria-state-lga";
 import { LANDLORD_CHARGE_PRESETS } from "@/lib/landlord-charge-presets";
+import { runOfflineCapableFormAction } from "@/lib/offline/offline-form.client";
+import { saveManagerPropertyOffline } from "@/lib/offline/operational-mutations.client";
 import type { ManagerLandlordClientRow } from "@/server/repositories/manager.repository";
 
 type ManagerPropertyFormProps = {
@@ -182,8 +184,18 @@ export function ManagerPropertyForm({
   landlordClients,
 }: ManagerPropertyFormProps) {
   const router = useRouter();
+  const offlineCapableAction = useCallback(
+    (previousState: typeof initialManagerActionState, formData: FormData) =>
+      runOfflineCapableFormAction({
+        previousState,
+        formData,
+        onlineAction: createManagerPropertyAction,
+        saveOffline: saveManagerPropertyOffline,
+      }),
+    [],
+  );
   const [state, formAction, isPending] = useActionState(
-    createManagerPropertyAction,
+    offlineCapableAction,
     initialManagerActionState,
   );
 
@@ -322,7 +334,7 @@ export function ManagerPropertyForm({
   }, [landlordClients]);
 
   useEffect(() => {
-    if (!state.ok || !state.nextHref) {
+    if (!state.ok || !state.nextHref || state.offlineSaved) {
       return;
     }
 
@@ -334,7 +346,13 @@ export function ManagerPropertyForm({
     }, 900);
 
     return () => window.clearTimeout(timeoutId);
-  }, [resetFormState, router, state.nextHref, state.ok]);
+  }, [
+    resetFormState,
+    router,
+    state.nextHref,
+    state.offlineSaved,
+    state.ok,
+  ]);
 
   function addServiceCharge(presetId: string) {
     setHasNoServiceCharges(false);

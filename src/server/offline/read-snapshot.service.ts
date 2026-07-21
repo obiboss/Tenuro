@@ -59,6 +59,18 @@ type ManagerPropertyOfflineRow = {
   updated_at: string;
 };
 
+type ManagerLandlordClientOfflineRow = {
+  id: string;
+  landlord_name: string;
+  landlord_phone: string | null;
+  landlord_email: string | null;
+  landlord_address: string | null;
+  status: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type ManagerUnitOfflineRow = {
   id: string;
   property_id: string;
@@ -104,6 +116,101 @@ type ManagerMaintenanceOfflineRow = {
   reported_date: string;
   resolved_date: string | null;
   notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type ManagerRentPaymentOfflineRow = {
+  id: string;
+  landlord_client_id: string;
+  property_id: string;
+  unit_id: string;
+  tenant_id: string;
+  amount_paid: number;
+  payment_method: string;
+  payment_receiver: string;
+  payment_reference: string | null;
+  payment_date: string;
+  period_start: string | null;
+  period_end: string | null;
+  status: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type LandlordPropertyOfflineRow = {
+  id: string;
+  landlord_id: string;
+  property_name: string;
+  address: string;
+  state: string;
+  lga: string;
+  property_type: string;
+  country_code: string;
+  currency_code: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type LandlordUnitOfflineRow = {
+  id: string;
+  property_id: string;
+  building_name: string | null;
+  unit_identifier: string;
+  unit_type: string;
+  bedrooms: number;
+  bathrooms: number;
+  monthly_rent: number | null;
+  annual_rent: number | null;
+  currency_code: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type LandlordTenancyOfflineRow = {
+  id: string;
+  landlord_id: string;
+  tenant_id: string;
+  unit_id: string;
+  rent_amount: number;
+  currency_code: string;
+  status: string;
+  tenancy_status: string;
+  agreement_live_at: string | null;
+  next_rent_charge_date: string | null;
+  created_at: string;
+  updated_at: string;
+  tenants: {
+    id: string;
+    full_name: string;
+    phone_number: string;
+  } | null;
+  units: {
+    id: string;
+    unit_identifier: string;
+    property_id: string;
+    properties: {
+      id: string;
+      property_name: string;
+    } | null;
+  } | null;
+};
+
+type LandlordRentPaymentOfflineRow = {
+  id: string;
+  landlord_id: string;
+  tenant_id: string;
+  tenancy_id: string;
+  receipt_number: string | null;
+  amount_paid: number;
+  currency_code: string;
+  payment_method: string;
+  payment_reference: string | null;
+  payment_date: string;
+  receipt_status: string;
+  status: string;
   created_at: string;
   updated_at: string;
 };
@@ -265,11 +372,42 @@ async function loadManagerSnapshot(params: {
   generatedAt: string;
 }) {
   const [
+    landlordClients,
     properties,
     units,
     tenants,
     maintenanceRequests,
+    rentPayments,
   ] = await Promise.all([
+    fetchAllPages<ManagerLandlordClientOfflineRow>(
+      async (from, to) => {
+        let query = params.supabase
+          .from("manager_landlord_clients")
+          .select(`
+            id,
+            landlord_name,
+            landlord_phone,
+            landlord_email,
+            landlord_address,
+            status,
+            notes,
+            created_at,
+            updated_at
+          `)
+          .eq("organization_id", params.organizationId)
+          .lte("updated_at", params.generatedAt);
+
+        if (params.cursor) {
+          query = query.gt("updated_at", params.cursor);
+        }
+
+        return query
+          .order("updated_at", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, to)
+          .returns<ManagerLandlordClientOfflineRow[]>();
+      },
+    ),
     fetchAllPages<ManagerPropertyOfflineRow>(
       async (from, to) => {
         let query = params.supabase
@@ -442,9 +580,48 @@ async function loadManagerSnapshot(params: {
           >();
       },
     ),
+    fetchAllPages<ManagerRentPaymentOfflineRow>(
+      async (from, to) => {
+        let query = params.supabase
+          .from("manager_rent_payments")
+          .select(`
+            id,
+            landlord_client_id,
+            property_id,
+            unit_id,
+            tenant_id,
+            amount_paid,
+            payment_method,
+            payment_receiver,
+            payment_reference,
+            payment_date,
+            period_start,
+            period_end,
+            status,
+            notes,
+            created_at,
+            updated_at
+          `)
+          .eq("organization_id", params.organizationId)
+          .lte("updated_at", params.generatedAt);
+
+        if (params.cursor) {
+          query = query.gt("updated_at", params.cursor);
+        }
+
+        return query
+          .order("updated_at", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, to)
+          .returns<ManagerRentPaymentOfflineRow[]>();
+      },
+    ),
   ]);
 
   return [
+    ...landlordClients.map((row) =>
+      toOfflineEntity("manager_landlord_client", row),
+    ),
     ...properties.map((row) =>
       toOfflineEntity(
         "manager_property",
@@ -457,11 +634,146 @@ async function loadManagerSnapshot(params: {
     ...tenants.map((row) =>
       toOfflineEntity("manager_tenant", row),
     ),
+    ...rentPayments.map((row) =>
+      toOfflineEntity("manager_rent_payment", row),
+    ),
     ...maintenanceRequests.map((row) =>
       toOfflineEntity(
         "manager_maintenance_request",
         row,
       ),
+    ),
+  ];
+}
+
+async function loadLandlordSnapshot(params: {
+  supabase: SupabaseClient;
+  landlordId: string;
+  generatedAt: string;
+}) {
+  const properties = await fetchAllPages<LandlordPropertyOfflineRow>(
+    async (from, to) =>
+      params.supabase
+        .from("properties")
+        .select(`
+          id,
+          landlord_id,
+          property_name,
+          address,
+          state,
+          lga,
+          property_type,
+          country_code,
+          currency_code,
+          created_at,
+          updated_at
+        `)
+        .eq("landlord_id", params.landlordId)
+        .is("deleted_at", null)
+        .is("archived_at", null)
+        .lte("created_at", params.generatedAt)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to)
+        .returns<LandlordPropertyOfflineRow[]>(),
+  );
+  const propertyIds = properties.map((property) => property.id);
+  const units =
+    propertyIds.length === 0
+      ? []
+      : await fetchAllPages<LandlordUnitOfflineRow>(async (from, to) =>
+          params.supabase
+            .from("units")
+            .select(`
+              id,
+              property_id,
+              building_name,
+              unit_identifier,
+              unit_type,
+              bedrooms,
+              bathrooms,
+              monthly_rent,
+              annual_rent,
+              currency_code,
+              status,
+              created_at,
+              updated_at
+            `)
+            .in("property_id", propertyIds)
+            .is("deleted_at", null)
+            .is("archived_at", null)
+            .lte("created_at", params.generatedAt)
+            .order("created_at", { ascending: true })
+            .order("id", { ascending: true })
+            .range(from, to)
+            .returns<LandlordUnitOfflineRow[]>(),
+        );
+  const [tenancies, rentPayments] = await Promise.all([
+    fetchAllPages<LandlordTenancyOfflineRow>(async (from, to) =>
+      params.supabase
+        .from("tenancies")
+        .select(`
+          id,
+          landlord_id,
+          tenant_id,
+          unit_id,
+          rent_amount,
+          currency_code,
+          status,
+          tenancy_status,
+          agreement_live_at,
+          next_rent_charge_date,
+          created_at,
+          updated_at,
+          tenants (id, full_name, phone_number),
+          units (
+            id,
+            unit_identifier,
+            property_id,
+            properties (id, property_name)
+          )
+        `)
+        .eq("landlord_id", params.landlordId)
+        .lte("created_at", params.generatedAt)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to)
+        .returns<LandlordTenancyOfflineRow[]>(),
+    ),
+    fetchAllPages<LandlordRentPaymentOfflineRow>(async (from, to) =>
+      params.supabase
+        .from("rent_payments")
+        .select(`
+          id,
+          landlord_id,
+          tenant_id,
+          tenancy_id,
+          receipt_number,
+          amount_paid,
+          currency_code,
+          payment_method,
+          payment_reference,
+          payment_date,
+          receipt_status,
+          status,
+          created_at,
+          updated_at
+        `)
+        .eq("landlord_id", params.landlordId)
+        .lte("created_at", params.generatedAt)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to)
+        .returns<LandlordRentPaymentOfflineRow[]>(),
+    ),
+  ]);
+
+  return [
+    ...properties.map((row) => toOfflineEntity("landlord_property", row)),
+    ...units.map((row) => toOfflineEntity("landlord_unit", row)),
+    ...tenancies.map((row) => toOfflineEntity("landlord_tenancy", row)),
+    ...rentPayments.map((row) =>
+      toOfflineEntity("landlord_rent_payment", row),
     ),
   ];
 }
@@ -754,6 +1066,25 @@ export async function getOfflineReadSnapshot(
       workspaceName:
         ownerAccount.company_name,
       mode,
+      cursor: generatedAt,
+      generatedAt,
+      entities,
+    };
+  }
+
+  if (user.role === "landlord") {
+    const entities = await loadLandlordSnapshot({
+      supabase: admin,
+      landlordId: user.id,
+      generatedAt,
+    });
+
+    return {
+      ownerProfileId: user.id,
+      workspaceType: "landlord",
+      workspaceId: user.id,
+      workspaceName: user.fullName,
+      mode: "full",
       cursor: generatedAt,
       generatedAt,
       entities,

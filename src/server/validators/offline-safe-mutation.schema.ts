@@ -1,7 +1,12 @@
 import { z } from "zod";
 import {
+  MANAGER_COLLECTION_MODES,
   MANAGER_MAINTENANCE_PRIORITIES,
   MANAGER_MAINTENANCE_STATUSES,
+  MANAGER_MANAGEMENT_FEE_TYPES,
+  MANAGER_PAYMENT_METHODS,
+  MANAGER_PAYMENT_RECEIVERS,
+  MANAGER_PAYSTACK_CHARGE_BEARERS,
 } from "@/constants/manager";
 
 const uuidSchema = z
@@ -54,6 +59,16 @@ const nigeriaDate = z
     /^\d{4}-\d{2}-\d{2}$/,
     "Enter a valid date.",
   );
+
+const positiveMoney = z
+  .number()
+  .finite()
+  .positive("Amount must be greater than zero.");
+
+const nonNegativeMoney = z
+  .number()
+  .finite()
+  .nonnegative("Amount cannot be negative.");
 
 const updateBase = {
   clientMutationId: uuidSchema,
@@ -254,6 +269,308 @@ const managerTenantUpdateSchema = z
   })
   .strict();
 
+const managerPropertyCreateSchema = z
+  .object({
+    clientMutationId: uuidSchema,
+    workspaceType: z.literal("manager"),
+    workspaceId: uuidSchema,
+    entityType: z.literal("manager_property"),
+    entityId: uuidSchema,
+    operation: z.literal("create"),
+    baseRevision: z.null(),
+    payload: z
+      .object({
+        landlordClientId: uuidSchema,
+        ownerMode: z.enum(["existing", "new"]),
+        newLandlord: z
+          .object({
+            id: uuidSchema,
+            landlordName: z.string().trim().min(2).max(180),
+            landlordPhone: nullableText(30, "Phone number is too long.").default(null),
+            landlordEmail: optionalEmail.default(null),
+            landlordAddress: nullableText(300, "Address is too long.").default(null),
+            notes: nullableText(600, "Notes are too long.").default(null),
+          })
+          .strict()
+          .nullable(),
+        propertyName: z.string().trim().min(2).max(180),
+        propertyAddress: z.string().trim().min(3).max(300),
+        city: nullableText(120, "City is too long.").default(null),
+        state: nullableText(120, "State is too long.").default(null),
+        lga: nullableText(120, "LGA is too long.").default(null),
+        collectionMode: z.enum(MANAGER_COLLECTION_MODES),
+        managementFeeType: z.enum(MANAGER_MANAGEMENT_FEE_TYPES),
+        managementFeeValue: nonNegativeMoney,
+        paystackChargeBearer: z.enum(MANAGER_PAYSTACK_CHARGE_BEARERS),
+        paymentReceiver: z.enum(MANAGER_PAYMENT_RECEIVERS),
+        hasExistingTenants: z.boolean(),
+        serviceCharges: z
+          .array(
+            z
+              .object({
+                id: uuidSchema,
+                chargeCode: nullableText(80, "Service charge code is too long.").default(null),
+                chargeName: z.string().trim().min(1).max(120),
+                description: nullableText(500, "Description is too long.").default(null),
+                amount: positiveMoney,
+                isRequiredBeforeMoveIn: z.boolean(),
+              })
+              .strict(),
+          )
+          .max(50),
+        propertyRules: z
+          .array(
+            z
+              .object({
+                id: uuidSchema,
+                title: z.string().trim().min(3).max(180),
+                description: z.string().trim().min(5).max(1000),
+                category: z.enum([
+                  "occupancy",
+                  "pets",
+                  "payment",
+                  "noise",
+                  "business_use",
+                  "maintenance",
+                  "safety",
+                  "documentation",
+                  "other",
+                ]),
+                appliesTo: z.enum([
+                  "all_tenants",
+                  "new_tenants",
+                  "renewing_tenants",
+                ]),
+                requiresTenantAcknowledgement: z.boolean(),
+              })
+              .strict(),
+          )
+          .max(50),
+        notes: nullableText(600, "Notes are too long.").default(null),
+      })
+      .strict(),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      value.payload.managementFeeType !== "percentage" ||
+      value.payload.managementFeeValue <= 100,
+    {
+      path: ["payload", "managementFeeValue"],
+      message: "Percentage fee cannot be more than 100%.",
+    },
+  )
+  .refine(
+    (value) => {
+      const names = value.payload.serviceCharges.map((charge) =>
+        charge.chargeName.trim().toLowerCase(),
+      );
+      return new Set(names).size === names.length;
+    },
+    {
+      path: ["payload", "serviceCharges"],
+      message: "Service charge names must be unique.",
+    },
+  )
+  .refine(
+    (value) =>
+      value.payload.ownerMode === "new"
+        ? value.payload.newLandlord?.id === value.payload.landlordClientId
+        : value.payload.newLandlord === null,
+    {
+      path: ["payload", "newLandlord"],
+      message: "The landlord details do not match this property.",
+    },
+  );
+
+const managerUnitCreateSchema = z
+  .object({
+    clientMutationId: uuidSchema,
+    workspaceType: z.literal("manager"),
+    workspaceId: uuidSchema,
+    entityType: z.literal("manager_unit"),
+    entityId: uuidSchema,
+    operation: z.literal("create"),
+    baseRevision: z.null(),
+    payload: z
+      .object({
+        landlordClientId: uuidSchema,
+        propertyId: uuidSchema,
+        unitLabel: z.string().trim().min(1).max(120),
+        unitType: nullableText(80, "Unit type is too long.").default(null),
+        rentAmount: nonNegativeMoney,
+        notes: nullableText(600, "Notes are too long.").default(null),
+      })
+      .strict(),
+  })
+  .strict();
+
+const managerTenantCreateSchema = z
+  .object({
+    clientMutationId: uuidSchema,
+    workspaceType: z.literal("manager"),
+    workspaceId: uuidSchema,
+    entityType: z.literal("manager_tenant"),
+    entityId: uuidSchema,
+    operation: z.literal("create"),
+    baseRevision: z.null(),
+    payload: z
+      .object({
+        landlordClientId: uuidSchema,
+        propertyId: uuidSchema,
+        unitId: uuidSchema,
+        fullName: z.string().trim().min(2).max(180),
+        phoneNumber: z.string().trim().min(7).max(30),
+        email: optionalEmail.default(null),
+        occupation: nullableText(120, "Occupation is too long.").default(null),
+        rentAmount: nonNegativeMoney,
+        currentBalance: nonNegativeMoney,
+        moveInDate: z.union([nigeriaDate, z.null()]).default(null),
+        nextRentDueDate: z.union([nigeriaDate, z.null()]).default(null),
+        notes: nullableText(600, "Notes are too long.").default(null),
+      })
+      .strict(),
+  })
+  .strict();
+
+const managerRentPaymentCreateSchema = z
+  .object({
+    clientMutationId: uuidSchema,
+    workspaceType: z.literal("manager"),
+    workspaceId: uuidSchema,
+    entityType: z.literal("manager_rent_payment"),
+    entityId: uuidSchema,
+    operation: z.literal("create"),
+    baseRevision: z.null(),
+    payload: z
+      .object({
+        landlordClientId: uuidSchema,
+        propertyId: uuidSchema,
+        unitId: uuidSchema,
+        tenantId: uuidSchema,
+        amountPaid: positiveMoney,
+        paymentMethod: z.enum(MANAGER_PAYMENT_METHODS),
+        paymentReceiver: z.enum(MANAGER_PAYMENT_RECEIVERS),
+        paymentReference: nullableText(160, "Reference is too long.").default(null),
+        proofUrl: nullableText(1000, "Proof link is too long.").default(null),
+        paymentDate: nigeriaDate,
+        periodStart: z.union([nigeriaDate, z.null()]).default(null),
+        periodEnd: z.union([nigeriaDate, z.null()]).default(null),
+        notes: nullableText(600, "Notes are too long.").default(null),
+      })
+      .strict(),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      !value.payload.periodStart ||
+      !value.payload.periodEnd ||
+      value.payload.periodEnd >= value.payload.periodStart,
+    {
+      path: ["payload", "periodEnd"],
+      message: "Period end date cannot be before period start date.",
+    },
+  );
+
+const landlordPropertyCreateSchema = z
+  .object({
+    clientMutationId: uuidSchema,
+    workspaceType: z.literal("landlord"),
+    workspaceId: uuidSchema,
+    entityType: z.literal("landlord_property"),
+    entityId: uuidSchema,
+    operation: z.literal("create"),
+    baseRevision: z.null(),
+    payload: z
+      .object({
+        propertyName: z.string().trim().min(2).max(120),
+        address: z.string().trim().min(5).max(300),
+        state: z.string().trim().min(2).max(80),
+        lga: z.string().trim().min(2).max(80),
+        propertyType: z.enum(["residential", "mixed_use", "flat_complex"]),
+        countryCode: z.literal("NG"),
+        currencyCode: z.literal("NGN"),
+      })
+      .strict(),
+  })
+  .strict();
+
+const landlordUnitCreateSchema = z
+  .object({
+    clientMutationId: uuidSchema,
+    workspaceType: z.literal("landlord"),
+    workspaceId: uuidSchema,
+    entityType: z.literal("landlord_unit"),
+    entityId: uuidSchema,
+    operation: z.literal("create"),
+    baseRevision: z.null(),
+    payload: z
+      .object({
+        propertyId: uuidSchema,
+        buildingName: nullableText(100, "Building name is too long.").default(null),
+        unitIdentifier: z.string().trim().min(1).max(80),
+        unitType: z.enum([
+          "single_room",
+          "self_contain",
+          "room_and_parlour",
+          "mini_flat",
+          "two_bedroom_flat",
+          "three_bedroom_flat",
+          "duplex",
+          "shop",
+          "office_space",
+          "other",
+        ]),
+        bedrooms: z.number().int().nonnegative(),
+        bathrooms: z.number().int().nonnegative(),
+        monthlyRent: z.union([nonNegativeMoney, z.null()]),
+        annualRent: z.union([nonNegativeMoney, z.null()]),
+        currencyCode: z.literal("NGN"),
+      })
+      .strict(),
+  })
+  .strict();
+
+const landlordRentPaymentCreateSchema = z
+  .object({
+    clientMutationId: uuidSchema,
+    workspaceType: z.literal("landlord"),
+    workspaceId: uuidSchema,
+    entityType: z.literal("landlord_rent_payment"),
+    entityId: uuidSchema,
+    operation: z.literal("create"),
+    baseRevision: z.null(),
+    payload: z
+      .object({
+        tenancyId: uuidSchema,
+        amountPaid: positiveMoney,
+        paymentMethod: z.enum(["bank_transfer", "cash", "other"]),
+        paymentReference: nullableText(120, "Reference is too long.").default(null),
+        paymentDate: z.string().datetime({ offset: true }),
+        paymentForPeriodStart: z
+          .union([z.string().datetime({ offset: true }), z.null()])
+          .default(null),
+        paymentForPeriodEnd: z
+          .union([z.string().datetime({ offset: true }), z.null()])
+          .default(null),
+        notes: nullableText(1000, "Notes are too long.").default(null),
+        idempotencyKey: uuidSchema,
+      })
+      .strict(),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      !value.payload.paymentForPeriodStart ||
+      !value.payload.paymentForPeriodEnd ||
+      value.payload.paymentForPeriodEnd >=
+        value.payload.paymentForPeriodStart,
+    {
+      path: ["payload", "paymentForPeriodEnd"],
+      message: "Period end date cannot be before period start date.",
+    },
+  );
+
 const developerEstateUpdateSchema = z
   .object({
     ...updateBase,
@@ -311,8 +628,15 @@ export const offlineSafeMutationSchema =
   z.union([
     managerMaintenanceCreateSchema,
     managerMaintenanceUpdateSchema,
+    managerPropertyCreateSchema,
     managerPropertyUpdateSchema,
+    managerUnitCreateSchema,
+    managerTenantCreateSchema,
     managerTenantUpdateSchema,
+    managerRentPaymentCreateSchema,
+    landlordPropertyCreateSchema,
+    landlordUnitCreateSchema,
+    landlordRentPaymentCreateSchema,
     developerEstateUpdateSchema,
     developerBuyerUpdateSchema,
   ]);

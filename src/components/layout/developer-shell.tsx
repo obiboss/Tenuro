@@ -19,6 +19,9 @@ import { developerSignOutAction } from "@/actions/developer-auth.actions";
 import { Badge } from "@/components/ui/badge";
 import { ToastProvider } from "@/components/ui/toast-provider";
 import { cn } from "@/lib/cn";
+import {
+  isAggressiveWorkflowPrefetchAllowed,
+} from "@/lib/workflow-prefetch-policy";
 
 type DeveloperShellProps = {
   children: React.ReactNode;
@@ -187,7 +190,10 @@ export function DeveloperShell({
         <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-border-soft bg-white px-5 py-6 lg:block">
           <BoldverseBrand subtitle="Developer sales workspace" />
 
-          <nav className="mt-8 space-y-2">
+          <nav
+            className="mt-8 space-y-2"
+            aria-label="Developer navigation"
+          >
             {desktopNavItems.map((item) => {
               const Icon = item.icon;
               const active =
@@ -221,6 +227,13 @@ export function DeveloperShell({
                 <Link
                   key={`${item.label}-${item.href}`}
                   href={item.href}
+                  prefetch={
+                    isAggressiveWorkflowPrefetchAllowed(
+                      item.href,
+                    )
+                      ? undefined
+                      : false
+                  }
                   className={cn(
                     "flex min-h-12 items-center gap-3 rounded-button px-4 text-sm font-extrabold transition",
                     active
@@ -295,6 +308,13 @@ export function DeveloperShell({
                 <Link
                   key={`${item.label}-${item.href}`}
                   href={item.href}
+                  prefetch={
+                    isAggressiveWorkflowPrefetchAllowed(
+                      item.href,
+                    )
+                      ? undefined
+                      : false
+                  }
                   className={cn(
                     "flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-xs font-bold transition",
                     active

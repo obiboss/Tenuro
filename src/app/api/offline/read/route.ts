@@ -50,7 +50,15 @@ export async function GET(
           "no-store, max-age=0",
       },
     });
-  } catch {
+  } catch (error) {
+    // Keep database details out of the response, but retain them in the server
+    // log. Without this, a missing migration or an invalid snapshot query is
+    // indistinguishable from a transient offline-sync failure.
+    console.error(
+      "Unable to create the offline read snapshot.",
+      error,
+    );
+
     return NextResponse.json(
       {
         message:

@@ -321,7 +321,7 @@ export async function createManagerTenantAction(
       notes: formData.get("notes"),
     });
 
-    await createManagerTenant(parsed);
+    const tenant = await createManagerTenant(parsed);
 
     revalidatePath("/manager");
     revalidatePath("/manager/overview");
@@ -332,6 +332,11 @@ export async function createManagerTenantAction(
     return {
       ok: true,
       message: "Tenant created successfully.",
+      propertyId: parsed.propertyId,
+      landlordClientId: parsed.landlordClientId,
+      unitId: parsed.unitId,
+      submissionId:
+        typeof tenant.id === "string" ? tenant.id : `${Date.now()}`,
     };
   } catch (error) {
     return toActionError(error);

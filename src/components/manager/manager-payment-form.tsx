@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useActionState } from "react";
+import { useCallback, useMemo, useState, useActionState } from "react";
 import { recordManagerRentPaymentAction } from "@/actions/manager.actions";
 import { initialManagerActionState } from "@/actions/manager.state";
 import {
@@ -13,6 +13,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { runOfflineCapableFormAction } from "@/lib/offline/offline-form.client";
+import { saveManagerPaymentOffline } from "@/lib/offline/operational-mutations.client";
 import type {
   ManagerLandlordClientRow,
   ManagerPropertyRow,
@@ -99,6 +101,16 @@ export function ManagerPaymentForm({
   units,
   tenants,
 }: ManagerPaymentFormProps) {
+  const offlineCapableAction = useCallback(
+    (previousState: typeof initialManagerActionState, formData: FormData) =>
+      runOfflineCapableFormAction({
+        previousState,
+        formData,
+        onlineAction: recordManagerRentPaymentAction,
+        saveOffline: saveManagerPaymentOffline,
+      }),
+    [],
+  );
   const activeTenants = tenants.filter((tenant) => tenant.status === "active");
   const [selectedTenantId, setSelectedTenantId] = useState(
     activeTenants[0]?.id ?? "",
@@ -149,7 +161,7 @@ export function ManagerPaymentForm({
   );
 
   const [state, formAction, isPending] = useActionState(
-    recordManagerRentPaymentAction,
+    offlineCapableAction,
     initialManagerActionState,
   );
 

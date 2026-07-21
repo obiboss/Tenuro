@@ -9,6 +9,9 @@ import { ToastProvider } from "@/components/ui/toast-provider";
 import { cn } from "@/lib/cn";
 import { isPlatformAdminNavItemActive } from "@/lib/platform-admin-navigation";
 import { PLATFORM_ADMIN_NAVIGATION } from "@/lib/navigation";
+import {
+  isAggressiveWorkflowPrefetchAllowed,
+} from "@/lib/workflow-prefetch-policy";
 
 type PlatformAdminShellProps = {
   children: React.ReactNode;
@@ -101,7 +104,18 @@ export function PlatformAdminShell({
               }
 
               return (
-                <Link key={item.href} href={item.href} className={className}>
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  prefetch={
+                    isAggressiveWorkflowPrefetchAllowed(
+                      item.href,
+                    )
+                      ? undefined
+                      : false
+                  }
+                  className={className}
+                >
                   {content}
                 </Link>
               );
@@ -184,6 +198,13 @@ export function PlatformAdminShell({
                     <Link
                       key={item.href}
                       href={item.href}
+                      prefetch={
+                        isAggressiveWorkflowPrefetchAllowed(
+                          item.href,
+                        )
+                          ? undefined
+                          : false
+                      }
                       className={className}
                     >
                       {content}

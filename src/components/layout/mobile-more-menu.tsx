@@ -7,6 +7,7 @@ import { FileText, Settings, ShieldCheck, X } from "lucide-react";
 import { LogoutButton } from "@/components/auth/logout-button";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
+import { isAggressiveWorkflowPrefetchAllowed } from "@/lib/workflow-prefetch-policy";
 
 const moreItems = [
   {
@@ -89,6 +90,13 @@ export function MobileMoreMenu({
                   <Link
                     key={item.href}
                     href={item.href}
+                    prefetch={
+                      isAggressiveWorkflowPrefetchAllowed(
+                        item.href,
+                      )
+                        ? undefined
+                        : false
+                    }
                     onClick={() => setIsOpen(false)}
                     className={cn(
                       "flex items-center justify-between rounded-card border p-3 transition",

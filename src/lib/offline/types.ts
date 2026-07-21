@@ -4,10 +4,16 @@ export type OfflineWorkspaceType =
   | "landlord";
 
 export type OfflineEntityType =
+  | "manager_landlord_client"
   | "manager_property"
   | "manager_unit"
   | "manager_tenant"
+  | "manager_rent_payment"
   | "manager_maintenance_request"
+  | "landlord_property"
+  | "landlord_unit"
+  | "landlord_tenancy"
+  | "landlord_rent_payment"
   | "developer_estate"
   | "developer_plot"
   | "developer_buyer"

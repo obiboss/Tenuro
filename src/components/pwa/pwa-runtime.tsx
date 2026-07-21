@@ -581,7 +581,9 @@ export function PwaRuntime() {
   const offlineWorkspaceHref =
     pathname.startsWith("/developer")
       ? "/offline-workspace.html?workspace=developer"
-      : "/offline-workspace.html?workspace=manager";
+      : pathname.startsWith("/manager")
+        ? "/offline-workspace.html?workspace=manager"
+        : "/offline-workspace.html?workspace=landlord";
   const offlineReviewHref =
     `${offlineWorkspaceHref}&review=1`;
   const offlineStorageHref =

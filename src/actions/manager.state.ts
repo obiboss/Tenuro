@@ -5,8 +5,12 @@ export type ManagerActionState = {
   propertyId?: string;
   landlordClientId?: string;
   unitId?: string;
+  tenantId?: string;
+  paymentId?: string;
+  requestId?: string;
   nextHref?: string;
   submissionId?: string;
+  offlineSaved?: boolean;
 };
 
 export const initialManagerActionState: ManagerActionState = {

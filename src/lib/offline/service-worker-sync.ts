@@ -17,7 +17,13 @@ export async function requestBopaBackgroundSync() {
 
   try {
     const registration =
-      (await navigator.serviceWorker.ready) as ServiceWorkerRegistrationWithSync;
+      (await navigator.serviceWorker.getRegistration()) as
+        | ServiceWorkerRegistrationWithSync
+        | undefined;
+
+    if (!registration) {
+      return;
+    }
 
     if (registration.sync) {
       await registration.sync.register(

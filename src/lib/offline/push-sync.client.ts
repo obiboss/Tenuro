@@ -133,6 +133,16 @@ async function applyServerEntity(
   mutation: OfflineOutboxRecord,
   entity: OfflineSafeMutationEntity,
 ) {
+  if (entity.entityId !== mutation.entityId) {
+    await removeOfflineEntity({
+      ownerProfileId: mutation.ownerProfileId,
+      workspaceType: mutation.workspaceType,
+      workspaceId: mutation.workspaceId,
+      entityType: mutation.entityType,
+      entityId: mutation.entityId,
+    });
+  }
+
   await putOfflineEntity({
     ownerProfileId:
       mutation.ownerProfileId,

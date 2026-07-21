@@ -19,6 +19,10 @@ export class BopaOfflineDatabase extends Dexie {
     OfflineWorkspaceRecord,
     "localKey"
   >;
+  managerLandlordClients!: EntityTable<
+    OfflineEntityRecord,
+    "localKey"
+  >;
   managerProperties!: EntityTable<
     OfflineEntityRecord,
     "localKey"
@@ -32,6 +36,26 @@ export class BopaOfflineDatabase extends Dexie {
     "localKey"
   >;
   managerMaintenanceRequests!: EntityTable<
+    OfflineEntityRecord,
+    "localKey"
+  >;
+  managerRentPayments!: EntityTable<
+    OfflineEntityRecord,
+    "localKey"
+  >;
+  landlordProperties!: EntityTable<
+    OfflineEntityRecord,
+    "localKey"
+  >;
+  landlordUnits!: EntityTable<
+    OfflineEntityRecord,
+    "localKey"
+  >;
+  landlordTenancies!: EntityTable<
+    OfflineEntityRecord,
+    "localKey"
+  >;
+  landlordRentPayments!: EntityTable<
     OfflineEntityRecord,
     "localKey"
   >;
@@ -100,6 +124,24 @@ export class BopaOfflineDatabase extends Dexie {
       drafts:
         "&localKey, ownerProfileId, workspaceId, draftType, updatedAt, [ownerProfileId+workspaceId], [ownerProfileId+workspaceId+draftType]",
     });
+
+    this.version(2).stores({
+      managerRentPayments:
+        "&localKey, ownerProfileId, workspaceId, entityId, [ownerProfileId+workspaceId], [ownerProfileId+workspaceId+entityId], localUpdatedAt, deletedAt",
+      landlordProperties:
+        "&localKey, ownerProfileId, workspaceId, entityId, [ownerProfileId+workspaceId], [ownerProfileId+workspaceId+entityId], localUpdatedAt, deletedAt",
+      landlordUnits:
+        "&localKey, ownerProfileId, workspaceId, entityId, [ownerProfileId+workspaceId], [ownerProfileId+workspaceId+entityId], localUpdatedAt, deletedAt",
+      landlordTenancies:
+        "&localKey, ownerProfileId, workspaceId, entityId, [ownerProfileId+workspaceId], [ownerProfileId+workspaceId+entityId], localUpdatedAt, deletedAt",
+      landlordRentPayments:
+        "&localKey, ownerProfileId, workspaceId, entityId, [ownerProfileId+workspaceId], [ownerProfileId+workspaceId+entityId], localUpdatedAt, deletedAt",
+    });
+
+    this.version(3).stores({
+      managerLandlordClients:
+        "&localKey, ownerProfileId, workspaceId, entityId, [ownerProfileId+workspaceId], [ownerProfileId+workspaceId+entityId], localUpdatedAt, deletedAt",
+    });
   }
 }
 
@@ -144,6 +186,8 @@ export function getOfflineEntityTable(
   "localKey"
 > {
   switch (entityType) {
+    case "manager_landlord_client":
+      return db.managerLandlordClients;
     case "manager_property":
       return db.managerProperties;
     case "manager_unit":
@@ -152,6 +196,16 @@ export function getOfflineEntityTable(
       return db.managerTenants;
     case "manager_maintenance_request":
       return db.managerMaintenanceRequests;
+    case "manager_rent_payment":
+      return db.managerRentPayments;
+    case "landlord_property":
+      return db.landlordProperties;
+    case "landlord_unit":
+      return db.landlordUnits;
+    case "landlord_tenancy":
+      return db.landlordTenancies;
+    case "landlord_rent_payment":
+      return db.landlordRentPayments;
     case "developer_estate":
       return db.developerEstates;
     case "developer_plot":
