@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import { createManagerPropertyAction } from "@/actions/manager.actions";
 import { initialManagerActionState } from "@/actions/manager.state";
 import type { ManagerManagementFeeType } from "@/constants/manager";
+import { ActionResultToast } from "@/components/ui/action-result-toast";
 import { Button } from "@/components/ui/button";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Input } from "@/components/ui/input";
@@ -29,7 +30,62 @@ type ManagerPropertyFormProps = {
 };
 
 type OwnerMode = "existing" | "new";
-type FormStep = "details" | "rent" | "charges" | "rules" | "existing" | "review";
+type FormStep =
+  "details" | "rent" | "charges" | "rules" | "existing" | "review";
+
+function getInvalidFormStep(
+  fieldErrors: Record<string, string[]> | undefined,
+): FormStep | null {
+  if (!fieldErrors) {
+    return null;
+  }
+
+  const hasError = (...fields: string[]) =>
+    fields.some((field) => (fieldErrors[field]?.length ?? 0) > 0);
+
+  if (
+    hasError(
+      "landlordClientId",
+      "landlordName",
+      "landlordPhone",
+      "landlordEmail",
+      "landlordAddress",
+      "propertyName",
+      "propertyAddress",
+      "city",
+      "state",
+      "lga",
+    )
+  ) {
+    return "details";
+  }
+
+  if (
+    hasError(
+      "collectionMode",
+      "managementFeeType",
+      "managementFeeValue",
+      "paystackChargeBearer",
+      "paymentReceiver",
+    )
+  ) {
+    return "rent";
+  }
+
+  if (hasError("serviceCharges")) {
+    return "charges";
+  }
+
+  if (hasError("propertyRules")) {
+    return "rules";
+  }
+
+  if (hasError("hasExistingTenants")) {
+    return "existing";
+  }
+
+  return null;
+}
 
 type ServiceChargeDraft = {
   id: string;
@@ -346,13 +402,28 @@ export function ManagerPropertyForm({
     }, 900);
 
     return () => window.clearTimeout(timeoutId);
-  }, [
-    resetFormState,
-    router,
-    state.nextHref,
-    state.offlineSaved,
-    state.ok,
-  ]);
+  }, [resetFormState, router, state.nextHref, state.offlineSaved, state.ok]);
+
+  useEffect(() => {
+    if (state.ok) {
+      return;
+    }
+
+    const invalidStep = getInvalidFormStep(state.fieldErrors);
+
+    if (!invalidStep) {
+      return;
+    }
+
+    setStep(invalidStep);
+
+    if (
+      state.fieldErrors?.landlordEmail?.length ||
+      state.fieldErrors?.landlordAddress?.length
+    ) {
+      setShowMoreLandlordDetails(true);
+    }
+  }, [state.fieldErrors, state.ok]);
 
   function addServiceCharge(presetId: string) {
     setHasNoServiceCharges(false);
@@ -396,6 +467,13 @@ export function ManagerPropertyForm({
 
   return (
     <form action={formAction}>
+      <ActionResultToast
+        ok={state.ok}
+        message={state.message}
+        successTitle="Property saved"
+        errorTitle="Property could not be saved"
+      />
+
       <input type="hidden" name="ownerMode" value={ownerMode} />
       <input type="hidden" name="landlordClientId" value={selectedLandlordId} />
       <input type="hidden" name="newLandlordName" value={newLandlordName} />
@@ -433,11 +511,7 @@ export function ManagerPropertyForm({
         name="serviceChargesJson"
         value={serviceChargesJson}
       />
-      <input
-        type="hidden"
-        name="propertyRulesJson"
-        value={propertyRulesJson}
-      />
+      <input type="hidden" name="propertyRulesJson" value={propertyRulesJson} />
       <input type="hidden" name="notes" value={notes} />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
@@ -578,6 +652,7 @@ export function ManagerPropertyForm({
                             setNewLandlordName(event.target.value)
                           }
                           placeholder="Example: Mr Chukwuma Okeke"
+                          error={state.fieldErrors?.landlordName?.[0]}
                           required
                         />
 
@@ -589,6 +664,7 @@ export function ManagerPropertyForm({
                             setNewLandlordPhone(event.target.value)
                           }
                           placeholder="Example: 08012345678"
+                          error={state.fieldErrors?.landlordPhone?.[0]}
                           required
                         />
                       </div>
@@ -616,6 +692,7 @@ export function ManagerPropertyForm({
                               setNewLandlordEmail(event.target.value)
                             }
                             placeholder="Optional"
+                            error={state.fieldErrors?.landlordEmail?.[0]}
                           />
 
                           <Input
@@ -626,6 +703,7 @@ export function ManagerPropertyForm({
                               setNewLandlordAddress(event.target.value)
                             }
                             placeholder="Optional"
+                            error={state.fieldErrors?.landlordAddress?.[0]}
                           />
                         </div>
                       ) : null}
@@ -649,6 +727,7 @@ export function ManagerPropertyForm({
                     value={propertyName}
                     onChange={(event) => setPropertyName(event.target.value)}
                     placeholder="Example: Dominion Heights"
+                    error={state.fieldErrors?.propertyName?.[0]}
                     required
                   />
 
@@ -658,6 +737,7 @@ export function ManagerPropertyForm({
                     value={propertyAddress}
                     onChange={(event) => setPropertyAddress(event.target.value)}
                     placeholder="Example: 12 Admiralty Way"
+                    error={state.fieldErrors?.propertyAddress?.[0]}
                     required
                   />
 
@@ -716,6 +796,7 @@ export function ManagerPropertyForm({
                       value={city}
                       onChange={(event) => setCity(event.target.value)}
                       placeholder="Optional"
+                      error={state.fieldErrors?.city?.[0]}
                     />
                   </div>
                 </section>
@@ -950,10 +1031,13 @@ export function ManagerPropertyForm({
                                     label="Item name"
                                     value={charge.customName}
                                     onChange={(event) =>
-                                      updateServiceCharge(charge.id, (item) => ({
-                                        ...item,
-                                        customName: event.target.value,
-                                      }))
+                                      updateServiceCharge(
+                                        charge.id,
+                                        (item) => ({
+                                          ...item,
+                                          customName: event.target.value,
+                                        }),
+                                      )
                                     }
                                     placeholder="Example: Security"
                                     required
@@ -963,10 +1047,13 @@ export function ManagerPropertyForm({
                                     label="Item name"
                                     value={charge.chargeName}
                                     onChange={(event) =>
-                                      updateServiceCharge(charge.id, (item) => ({
-                                        ...item,
-                                        chargeName: event.target.value,
-                                      }))
+                                      updateServiceCharge(
+                                        charge.id,
+                                        (item) => ({
+                                          ...item,
+                                          chargeName: event.target.value,
+                                        }),
+                                      )
                                     }
                                     required
                                   />
@@ -1008,7 +1095,8 @@ export function ManagerPropertyForm({
                       )}
 
                       <p className="rounded-card bg-primary-soft p-4 text-sm font-black text-text-strong">
-                        Service charge total: {formatNaira(String(serviceChargeTotal))}
+                        Service charge total:{" "}
+                        {formatNaira(String(serviceChargeTotal))}
                       </p>
                     </>
                   ) : null}
@@ -1047,7 +1135,11 @@ export function ManagerPropertyForm({
                     </p>
                   </div>
 
-                  <Button type="button" variant="secondary" onClick={addPropertyRule}>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={addPropertyRule}
+                  >
                     Add rule
                   </Button>
 
@@ -1169,6 +1261,12 @@ export function ManagerPropertyForm({
                       No special property rules.
                     </p>
                   )}
+
+                  {state.fieldErrors?.propertyRules?.[0] ? (
+                    <p className="text-sm font-semibold text-danger">
+                      {state.fieldErrors.propertyRules[0]}
+                    </p>
+                  ) : null}
                 </section>
 
                 <div className="flex flex-col gap-3 border-t border-border-soft pt-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1222,6 +1320,11 @@ export function ManagerPropertyForm({
                       No
                     </button>
                   </div>
+
+                  <p className="rounded-card bg-primary-soft p-4 text-sm font-semibold leading-6 text-text-muted">
+                    Continue to the review screen, then tap Save property. This
+                    step does not save the property yet.
+                  </p>
                 </section>
 
                 <div className="flex flex-col gap-3 border-t border-border-soft pt-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1234,7 +1337,7 @@ export function ManagerPropertyForm({
                   </Button>
 
                   <Button type="button" onClick={() => setStep("review")}>
-                    Review
+                    Continue to review
                   </Button>
                 </div>
               </>
@@ -1246,7 +1349,9 @@ export function ManagerPropertyForm({
                       Review and create
                     </h2>
                     <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-                      Confirm the property setup before adding units.
+                      Confirm the property setup, then tap Save property. If you
+                      are offline, it will be stored on this device and queued
+                      for automatic sync.
                     </p>
                   </div>
 
@@ -1286,8 +1391,14 @@ export function ManagerPropertyForm({
                     Back
                   </Button>
 
-                  <Button type="submit" isLoading={isPending}>
-                    Save property
+                  <Button
+                    type="submit"
+                    isLoading={isPending}
+                    disabled={state.ok}
+                  >
+                    {state.offlineSaved
+                      ? "Saved on this device"
+                      : "Save property"}
                   </Button>
                 </div>
               </>

@@ -39,8 +39,15 @@ export class OfflineFormValidationError extends Error {
 
   constructor(error: ZodError) {
     const flattened = error.flatten();
+    const firstFieldError = Object.values(flattened.fieldErrors)
+      .flatMap((messages) => messages ?? [])
+      .find((message) => Boolean(message));
 
-    super(flattened.formErrors[0] ?? "Check the form and try again.");
+    super(
+      flattened.formErrors[0] ??
+        firstFieldError ??
+        "Check the form and try again.",
+    );
     this.name = "OfflineFormValidationError";
     this.fieldErrors = flattened.fieldErrors as Record<string, string[]>;
   }
