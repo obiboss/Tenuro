@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import { createManagerPropertyAction } from "@/actions/manager.actions";
 import { initialManagerActionState } from "@/actions/manager.state";
 import type { ManagerManagementFeeType } from "@/constants/manager";
+import { ActionResultToast } from "@/components/ui/action-result-toast";
 import { Button } from "@/components/ui/button";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,8 @@ import {
   getNigeriaStateOptions,
 } from "@/lib/nigeria-state-lga";
 import { LANDLORD_CHARGE_PRESETS } from "@/lib/landlord-charge-presets";
+import { runOfflineCapableFormAction } from "@/lib/offline/offline-form.client";
+import { saveManagerPropertyOffline } from "@/lib/offline/operational-mutations.client";
 import type { ManagerLandlordClientRow } from "@/server/repositories/manager.repository";
 
 type ManagerPropertyFormProps = {
@@ -28,12 +31,61 @@ type ManagerPropertyFormProps = {
 
 type OwnerMode = "existing" | "new";
 type FormStep =
-  | "details"
-  | "rent"
-  | "charges"
-  | "rules"
-  | "existing"
-  | "review";
+  "details" | "rent" | "charges" | "rules" | "existing" | "review";
+
+function getInvalidFormStep(
+  fieldErrors: Record<string, string[]> | undefined,
+): FormStep | null {
+  if (!fieldErrors) {
+    return null;
+  }
+
+  const hasError = (...fields: string[]) =>
+    fields.some((field) => (fieldErrors[field]?.length ?? 0) > 0);
+
+  if (
+    hasError(
+      "landlordClientId",
+      "landlordName",
+      "landlordPhone",
+      "landlordEmail",
+      "landlordAddress",
+      "propertyName",
+      "propertyAddress",
+      "city",
+      "state",
+      "lga",
+    )
+  ) {
+    return "details";
+  }
+
+  if (
+    hasError(
+      "collectionMode",
+      "managementFeeType",
+      "managementFeeValue",
+      "paystackChargeBearer",
+      "paymentReceiver",
+    )
+  ) {
+    return "rent";
+  }
+
+  if (hasError("serviceCharges")) {
+    return "charges";
+  }
+
+  if (hasError("propertyRules")) {
+    return "rules";
+  }
+
+  if (hasError("hasExistingTenants")) {
+    return "existing";
+  }
+
+  return null;
+}
 
 type ServiceChargeDraft = {
   id: string;
@@ -53,50 +105,6 @@ type PropertyRuleDraft = {
   appliesTo: "all_tenants" | "new_tenants" | "renewing_tenants";
   requiresTenantAcknowledgement: boolean;
 };
-
-const formSteps: Array<{
-  id: FormStep;
-  label: string;
-  mobileLabel: string;
-  description: string;
-}> = [
-  {
-    id: "details",
-    label: "1. Details",
-    mobileLabel: "Add property details",
-    description: "Landlord, address, and location.",
-  },
-  {
-    id: "rent",
-    label: "2. Collection",
-    mobileLabel: "Set rent collection",
-    description: "Manager collection and management fee.",
-  },
-  {
-    id: "charges",
-    label: "3. Charges",
-    mobileLabel: "Add service charges",
-    description: "Move-in service charges.",
-  },
-  {
-    id: "rules",
-    label: "4. Rules",
-    mobileLabel: "Add property rules",
-    description: "Agreement rules.",
-  },
-  {
-    id: "existing",
-    label: "5. Tenants",
-    mobileLabel: "Confirm existing tenants",
-    description: "Current occupants.",
-  },
-  {
-    id: "review",
-    label: "6. Review",
-    mobileLabel: "Review property",
-    description: "Confirm and create.",
-  },
-];
 
 const ruleCategoryOptions = [
   ["occupancy", "Occupancy"],
@@ -197,45 +205,6 @@ function SummaryItem({ label, value }: { label: string; value: string }) {
   );
 }
 
-function PropertySummary({
-  landlord,
-  property,
-  location,
-  hasExistingTenants,
-  managementFee,
-  serviceCharges,
-  propertyRules,
-}: {
-  landlord: string;
-  property: string;
-  location: string;
-  hasExistingTenants: boolean;
-  managementFee: string;
-  serviceCharges: string;
-  propertyRules: string;
-}) {
-  return (
-    <div>
-      <SummaryItem label="Landlord" value={landlord} />
-      <SummaryItem label="Property" value={property} />
-      <SummaryItem label="Location" value={location} />
-      <SummaryItem
-        label="Existing tenants"
-        value={hasExistingTenants ? "Yes" : "No"}
-      />
-      <SummaryItem label="Rent collection" value="Manager collects" />
-      <SummaryItem
-        label="Payment receiver"
-        value="Manager verified Paystack account"
-      />
-      <SummaryItem label="Paystack charge" value="Tenant pays" />
-      <SummaryItem label="Management fee" value={managementFee} />
-      <SummaryItem label="Service charges" value={serviceCharges} />
-      <SummaryItem label="Property rules" value={propertyRules} />
-    </div>
-  );
-}
-
 function StepButton({
   active,
   label,
@@ -271,8 +240,18 @@ export function ManagerPropertyForm({
   landlordClients,
 }: ManagerPropertyFormProps) {
   const router = useRouter();
+  const offlineCapableAction = useCallback(
+    (previousState: typeof initialManagerActionState, formData: FormData) =>
+      runOfflineCapableFormAction({
+        previousState,
+        formData,
+        onlineAction: createManagerPropertyAction,
+        saveOffline: saveManagerPropertyOffline,
+      }),
+    [],
+  );
   const [state, formAction, isPending] = useActionState(
-    createManagerPropertyAction,
+    offlineCapableAction,
     initialManagerActionState,
   );
 
@@ -355,14 +334,6 @@ export function ManagerPropertyForm({
   const propertyRulesJson = JSON.stringify(
     getPropertyRulePayload(propertyRules),
   );
-  const currentStepIndex = formSteps.findIndex((item) => item.id === step);
-  const currentStep = formSteps[currentStepIndex];
-  const serviceChargeSummary =
-    effectiveServiceCharges.length === 0
-      ? "None"
-      : formatNaira(String(serviceChargeTotal));
-  const propertyRuleSummary =
-    propertyRules.length === 0 ? "None" : `${propertyRules.length} added`;
 
   const canContinueFromDetails = useMemo(() => {
     const hasLandlord = useExistingLandlord
@@ -419,7 +390,7 @@ export function ManagerPropertyForm({
   }, [landlordClients]);
 
   useEffect(() => {
-    if (!state.ok || !state.nextHref) {
+    if (!state.ok || !state.nextHref || state.offlineSaved) {
       return;
     }
 
@@ -431,7 +402,28 @@ export function ManagerPropertyForm({
     }, 900);
 
     return () => window.clearTimeout(timeoutId);
-  }, [resetFormState, router, state.nextHref, state.ok]);
+  }, [resetFormState, router, state.nextHref, state.offlineSaved, state.ok]);
+
+  useEffect(() => {
+    if (state.ok) {
+      return;
+    }
+
+    const invalidStep = getInvalidFormStep(state.fieldErrors);
+
+    if (!invalidStep) {
+      return;
+    }
+
+    setStep(invalidStep);
+
+    if (
+      state.fieldErrors?.landlordEmail?.length ||
+      state.fieldErrors?.landlordAddress?.length
+    ) {
+      setShowMoreLandlordDetails(true);
+    }
+  }, [state.fieldErrors, state.ok]);
 
   function addServiceCharge(presetId: string) {
     setHasNoServiceCharges(false);
@@ -475,6 +467,13 @@ export function ManagerPropertyForm({
 
   return (
     <form action={formAction}>
+      <ActionResultToast
+        ok={state.ok}
+        message={state.message}
+        successTitle="Property saved"
+        errorTitle="Property could not be saved"
+      />
+
       <input type="hidden" name="ownerMode" value={ownerMode} />
       <input type="hidden" name="landlordClientId" value={selectedLandlordId} />
       <input type="hidden" name="newLandlordName" value={newLandlordName} />
@@ -518,44 +517,37 @@ export function ManagerPropertyForm({
       <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
         <section className="rounded-card border border-border-soft bg-white shadow-sm">
           <div className="border-b border-border-soft p-4">
-            <div className="sm:hidden">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-black uppercase tracking-wide text-primary">
-                    Step {currentStepIndex + 1} of {formSteps.length}
-                  </p>
-                  <p className="mt-1 text-base font-black text-text-strong">
-                    {currentStep.mobileLabel}
-                  </p>
-                </div>
-
-                <span className="shrink-0 text-sm font-black text-text-muted">
-                  {Math.round(
-                    ((currentStepIndex + 1) / formSteps.length) * 100,
-                  )}
-                  %
-                </span>
-              </div>
-
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-border-soft">
-                <div
-                  className="h-full rounded-full bg-primary transition-[width]"
-                  style={{
-                    width: `${((currentStepIndex + 1) / formSteps.length) * 100}%`,
-                  }}
-                />
-              </div>
-            </div>
-
-            <div className="hidden gap-3 sm:grid sm:grid-cols-2 xl:grid-cols-6">
-              {formSteps.map((item) => (
-                <StepButton
-                  key={item.id}
-                  active={step === item.id}
-                  label={item.label}
-                  description={item.description}
-                />
-              ))}
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+              <StepButton
+                active={step === "details"}
+                label="1. Details"
+                description="Landlord, address, and location."
+              />
+              <StepButton
+                active={step === "rent"}
+                label="2. Collection"
+                description="Manager collection and management fee."
+              />
+              <StepButton
+                active={step === "charges"}
+                label="3. Charges"
+                description="Move-in service charges."
+              />
+              <StepButton
+                active={step === "rules"}
+                label="4. Rules"
+                description="Agreement rules."
+              />
+              <StepButton
+                active={step === "existing"}
+                label="5. Tenants"
+                description="Current occupants."
+              />
+              <StepButton
+                active={step === "review"}
+                label="6. Review"
+                description="Confirm and create."
+              />
             </div>
           </div>
 
@@ -660,6 +652,7 @@ export function ManagerPropertyForm({
                             setNewLandlordName(event.target.value)
                           }
                           placeholder="Example: Mr Chukwuma Okeke"
+                          error={state.fieldErrors?.landlordName?.[0]}
                           required
                         />
 
@@ -671,6 +664,7 @@ export function ManagerPropertyForm({
                             setNewLandlordPhone(event.target.value)
                           }
                           placeholder="Example: 08012345678"
+                          error={state.fieldErrors?.landlordPhone?.[0]}
                           required
                         />
                       </div>
@@ -698,6 +692,7 @@ export function ManagerPropertyForm({
                               setNewLandlordEmail(event.target.value)
                             }
                             placeholder="Optional"
+                            error={state.fieldErrors?.landlordEmail?.[0]}
                           />
 
                           <Input
@@ -708,6 +703,7 @@ export function ManagerPropertyForm({
                               setNewLandlordAddress(event.target.value)
                             }
                             placeholder="Optional"
+                            error={state.fieldErrors?.landlordAddress?.[0]}
                           />
                         </div>
                       ) : null}
@@ -731,6 +727,7 @@ export function ManagerPropertyForm({
                     value={propertyName}
                     onChange={(event) => setPropertyName(event.target.value)}
                     placeholder="Example: Dominion Heights"
+                    error={state.fieldErrors?.propertyName?.[0]}
                     required
                   />
 
@@ -740,6 +737,7 @@ export function ManagerPropertyForm({
                     value={propertyAddress}
                     onChange={(event) => setPropertyAddress(event.target.value)}
                     placeholder="Example: 12 Admiralty Way"
+                    error={state.fieldErrors?.propertyAddress?.[0]}
                     required
                   />
 
@@ -798,6 +796,7 @@ export function ManagerPropertyForm({
                       value={city}
                       onChange={(event) => setCity(event.target.value)}
                       placeholder="Optional"
+                      error={state.fieldErrors?.city?.[0]}
                     />
                   </div>
                 </section>
@@ -1262,6 +1261,12 @@ export function ManagerPropertyForm({
                       No special property rules.
                     </p>
                   )}
+
+                  {state.fieldErrors?.propertyRules?.[0] ? (
+                    <p className="text-sm font-semibold text-danger">
+                      {state.fieldErrors.propertyRules[0]}
+                    </p>
+                  ) : null}
                 </section>
 
                 <div className="flex flex-col gap-3 border-t border-border-soft pt-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1315,6 +1320,11 @@ export function ManagerPropertyForm({
                       No
                     </button>
                   </div>
+
+                  <p className="rounded-card bg-primary-soft p-4 text-sm font-semibold leading-6 text-text-muted">
+                    Continue to the review screen, then tap Save property. This
+                    step does not save the property yet.
+                  </p>
                 </section>
 
                 <div className="flex flex-col gap-3 border-t border-border-soft pt-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1327,7 +1337,7 @@ export function ManagerPropertyForm({
                   </Button>
 
                   <Button type="button" onClick={() => setStep("review")}>
-                    Review
+                    Continue to review
                   </Button>
                 </div>
               </>
@@ -1339,19 +1349,35 @@ export function ManagerPropertyForm({
                       Review and create
                     </h2>
                     <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-                      Confirm the property setup before adding units.
+                      Confirm the property setup, then tap Save property. If you
+                      are offline, it will be stored on this device and queued
+                      for automatic sync.
                     </p>
                   </div>
 
-                  <div className="rounded-card border border-border-soft bg-surface px-4">
-                    <PropertySummary
-                      landlord={landlordSummary}
-                      property={propertyName.trim() || "Not set"}
-                      location={locationSummary || "Not set"}
-                      hasExistingTenants={hasExistingTenants}
-                      managementFee={managementFeeSummary}
-                      serviceCharges={serviceChargeSummary}
-                      propertyRules={propertyRuleSummary}
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <SummaryItem label="Landlord" value={landlordSummary} />
+                    <SummaryItem
+                      label="Property"
+                      value={propertyName.trim() || "Not set"}
+                    />
+                    <SummaryItem
+                      label="Service charges"
+                      value={
+                        effectiveServiceCharges.length === 0
+                          ? "No service charges"
+                          : `${effectiveServiceCharges.length} items - ${formatNaira(
+                              String(serviceChargeTotal),
+                            )}`
+                      }
+                    />
+                    <SummaryItem
+                      label="Property rules"
+                      value={
+                        propertyRules.length === 0
+                          ? "No special property rules"
+                          : `${propertyRules.length} rules`
+                      }
                     />
                   </div>
                 </section>
@@ -1365,8 +1391,14 @@ export function ManagerPropertyForm({
                     Back
                   </Button>
 
-                  <Button type="submit" isLoading={isPending}>
-                    Save property
+                  <Button
+                    type="submit"
+                    isLoading={isPending}
+                    disabled={state.ok}
+                  >
+                    {state.offlineSaved
+                      ? "Saved on this device"
+                      : "Save property"}
                   </Button>
                 </div>
               </>
@@ -1374,20 +1406,47 @@ export function ManagerPropertyForm({
           </div>
         </section>
 
-        <aside className="hidden rounded-card border border-border-soft bg-white p-4 shadow-sm lg:block lg:self-start">
+        <aside className="rounded-card border border-border-soft bg-white p-4 shadow-sm lg:self-start">
           <h2 className="text-lg font-black tracking-tight text-text-strong">
             Summary
           </h2>
 
           <div className="mt-4">
-            <PropertySummary
-              landlord={landlordSummary}
-              property={propertyName.trim() || "Not set"}
-              location={locationSummary || "Not set"}
-              hasExistingTenants={hasExistingTenants}
-              managementFee={managementFeeSummary}
-              serviceCharges={serviceChargeSummary}
-              propertyRules={propertyRuleSummary}
+            <SummaryItem label="Landlord" value={landlordSummary} />
+            <SummaryItem
+              label="Property"
+              value={propertyName.trim() || "Not set"}
+            />
+            <SummaryItem
+              label="Location"
+              value={locationSummary || "Not set"}
+            />
+            <SummaryItem
+              label="Existing tenants"
+              value={hasExistingTenants ? "Yes" : "No"}
+            />
+            <SummaryItem label="Rent collection" value="Manager collects" />
+            <SummaryItem
+              label="Payment receiver"
+              value="Manager verified Paystack account"
+            />
+            <SummaryItem label="Paystack charge" value="Tenant pays" />
+            <SummaryItem label="Management fee" value={managementFeeSummary} />
+            <SummaryItem
+              label="Service charges"
+              value={
+                effectiveServiceCharges.length === 0
+                  ? "None"
+                  : formatNaira(String(serviceChargeTotal))
+              }
+            />
+            <SummaryItem
+              label="Property rules"
+              value={
+                propertyRules.length === 0
+                  ? "None"
+                  : `${propertyRules.length} added`
+              }
             />
           </div>
         </aside>

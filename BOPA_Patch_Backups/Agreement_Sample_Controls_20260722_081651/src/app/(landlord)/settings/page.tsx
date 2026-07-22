@@ -35,7 +35,7 @@ export default async function SettingsPage() {
 
       <PageHeader
         title="Settings"
-        description="Manage your payout account and tenancy agreement."
+        description="Manage your payout account and tenancy agreement wording."
       />
 
       <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
@@ -112,7 +112,7 @@ export default async function SettingsPage() {
       <div id="agreement-template" className="mt-6 scroll-mt-28">
         <SectionCard
           title="Your tenancy agreement"
-          description="Read the agreement your tenants will receive and choose which optional sections to include."
+          description="Read the agreement your tenants will receive. You can change the wording whenever needed."
         >
           <AgreementTemplateEditor
             scope={agreementTemplate.scope}

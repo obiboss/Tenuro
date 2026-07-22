@@ -9,6 +9,7 @@ import {
   Home,
   LockKeyhole,
   Settings,
+  ShieldCheck,
   Users,
 } from "lucide-react";
 import { LogoutButton } from "@/components/auth/logout-button";
@@ -17,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { ToastProvider } from "@/components/ui/toast-provider";
 import { GATED_LANDLORD_PATH_PREFIXES } from "@/server/constants/landlord-subscription-gating";
 import { cn } from "@/lib/cn";
+import { isAggressiveWorkflowPrefetchAllowed } from "@/lib/workflow-prefetch-policy";
 
 type LandlordShellProps = {
   children: React.ReactNode;
@@ -63,6 +65,14 @@ const desktopNavItems = [
     label: "Agreements",
     href: "/agreements",
     icon: FileText,
+  },
+] as const;
+
+const desktopMoreItems = [
+  {
+    label: "Caretakers",
+    href: "/caretakers",
+    icon: ShieldCheck,
   },
   {
     label: "Settings",
@@ -142,6 +152,9 @@ export function LandlordShell({
                 <Link
                   key={item.href}
                   href={href}
+                  prefetch={
+                    isAggressiveWorkflowPrefetchAllowed(href) ? true : false
+                  }
                   className={cn(
                     "flex min-h-12 items-center justify-between rounded-xl border-l-4 px-3 text-base font-bold transition",
                     active
@@ -172,6 +185,51 @@ export function LandlordShell({
                 </Link>
               );
             })}
+
+            <details
+              className="group border-t border-border-soft pt-4"
+              open={desktopMoreItems.some(
+                (item) =>
+                  pathname === item.href ||
+                  pathname.startsWith(`${item.href}/`),
+              )}
+            >
+              <summary className="flex min-h-12 cursor-pointer list-none items-center gap-3 rounded-xl px-4 text-base font-bold text-[#4f5b6d] transition hover:bg-background hover:text-text-strong">
+                <span aria-hidden="true" className="text-lg tracking-widest">
+                  •••
+                </span>
+                More
+              </summary>
+
+              <div className="mt-1 space-y-1 pl-2">
+                {desktopMoreItems.map((item) => {
+                  const Icon = item.icon;
+                  const active =
+                    pathname === item.href ||
+                    pathname.startsWith(`${item.href}/`);
+                  const href = resolveNavHref(item.href, platformAccessLocked);
+
+                  return (
+                    <Link
+                      key={item.href}
+                      href={href}
+                      prefetch={
+                        isAggressiveWorkflowPrefetchAllowed(href) ? true : false
+                      }
+                      className={cn(
+                        "flex min-h-10 items-center gap-3 rounded-xl px-3 text-sm font-bold transition",
+                        active
+                          ? "bg-primary-soft text-primary"
+                          : "text-text-muted hover:bg-background hover:text-text-strong",
+                      )}
+                    >
+                      <Icon aria-hidden="true" size={17} strokeWidth={2.5} />
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            </details>
           </nav>
 
           <div className="mt-auto rounded-xl bg-background p-3">
@@ -228,6 +286,9 @@ export function LandlordShell({
                 <Link
                   key={item.href}
                   href={href}
+                  prefetch={
+                    isAggressiveWorkflowPrefetchAllowed(href) ? true : false
+                  }
                   className={cn(
                     "flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[11px] font-bold transition",
                     active

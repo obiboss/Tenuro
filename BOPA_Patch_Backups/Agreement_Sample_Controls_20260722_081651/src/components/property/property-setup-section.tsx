@@ -92,7 +92,7 @@ export function PropertySetupSection({
       <div id="property-agreement-template" className="mt-6 scroll-mt-28">
         <SectionCard
           title="Agreement for this property"
-          description={`The general agreement will be used for ${propertyName} unless you choose different optional sections here.`}
+          description={`The general agreement will be used for ${propertyName} unless you choose different wording here.`}
         >
           <Link
             href={`/agreements?property=${propertyId}`}
@@ -100,7 +100,7 @@ export function PropertySetupSection({
           >
             <span className="flex items-center gap-3">
               <FileText aria-hidden="true" size={22} strokeWidth={2.5} />
-              Review this agreement
+              View or edit this agreement
             </span>
             <span aria-hidden="true">›</span>
           </Link>

@@ -85,18 +85,16 @@ export default async function ManagerPropertiesPage({
           </p>
         </div>
 
-        {properties.length > 0 ? (
-          <Link
-            href="/manager/properties/new"
-            prefetch={false}
-            className="inline-flex min-h-11 items-center justify-center rounded-button bg-primary px-5 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
-          >
-            Add property
-          </Link>
-        ) : null}
+        <Link
+          href="/manager/properties/new"
+          prefetch={false}
+          className="inline-flex min-h-11 items-center justify-center rounded-button bg-primary px-5 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
+        >
+          Add property
+        </Link>
       </div>
 
-      <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
           <p className="text-xs font-black uppercase tracking-wide text-text-muted">
             Total properties

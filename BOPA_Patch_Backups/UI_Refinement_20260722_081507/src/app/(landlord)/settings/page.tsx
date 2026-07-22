@@ -35,7 +35,7 @@ export default async function SettingsPage() {
 
       <PageHeader
         title="Settings"
-        description="Manage your payout account and tenancy agreement."
+        description="Manage landlord profile, payout bank account, and agreement templates."
       />
 
       <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
@@ -111,8 +111,8 @@ export default async function SettingsPage() {
 
       <div id="agreement-template" className="mt-6 scroll-mt-28">
         <SectionCard
-          title="Your tenancy agreement"
-          description="Read the agreement your tenants will receive and choose which optional sections to include."
+          title="Agreement Template"
+          description="Save a reusable tenancy agreement template for all properties. Property pages can override this with property-specific templates."
         >
           <AgreementTemplateEditor
             scope={agreementTemplate.scope}

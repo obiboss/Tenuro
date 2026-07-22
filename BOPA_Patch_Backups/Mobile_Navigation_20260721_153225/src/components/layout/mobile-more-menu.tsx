@@ -3,8 +3,18 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { FileText, Settings, X } from "lucide-react";
+import {
+  BarChart3,
+  Bell,
+  FileText,
+  History,
+  RefreshCcw,
+  Settings,
+  ShieldCheck,
+  X,
+} from "lucide-react";
 import { LogoutButton } from "@/components/auth/logout-button";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 
@@ -13,13 +23,50 @@ const moreItems = [
     label: "Agreements",
     href: "/agreements",
     icon: FileText,
+    status: "available",
     description: "View or change your tenancy agreement.",
+  },
+  {
+    label: "Rent alerts",
+    href: "/notifications",
+    icon: Bell,
+    status: "available",
+    description: "View alerts and prepared WhatsApp messages.",
+  },
+  {
+    label: "Renewals",
+    href: "/renewals",
+    icon: RefreshCcw,
+    status: "available",
+    description: "See upcoming tenancy renewals.",
+  },
+  {
+    label: "Caretakers",
+    href: "/caretakers",
+    icon: ShieldCheck,
+    status: "available",
+    description: "Invite caretakers and manage property access.",
+  },
+  {
+    label: "Recent activity",
+    href: "/activity",
+    icon: History,
+    status: "available",
+    description: "See recent changes and payments.",
   },
   {
     label: "Settings",
     href: "/settings",
     icon: Settings,
+    status: "available",
     description: "Manage your account setup.",
+  },
+  {
+    label: "Reports",
+    href: "/reports",
+    icon: BarChart3,
+    status: "coming_soon",
+    description: "This section is not active yet.",
   },
 ] as const;
 
@@ -78,6 +125,7 @@ export function MobileMoreMenu({
                 const active =
                   pathname === item.href ||
                   pathname.startsWith(`${item.href}/`);
+                const comingSoon = item.status === "coming_soon";
 
                 return (
                   <Link
@@ -112,6 +160,8 @@ export function MobileMoreMenu({
                         </span>
                       </span>
                     </span>
+
+                    {comingSoon ? <Badge tone="warning">Soon</Badge> : null}
                   </Link>
                 );
               })}

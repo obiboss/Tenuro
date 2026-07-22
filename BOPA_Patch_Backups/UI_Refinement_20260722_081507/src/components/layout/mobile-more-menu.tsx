@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { FileText, Settings, X } from "lucide-react";
+import { FileText, Settings, ShieldCheck, X } from "lucide-react";
 import { LogoutButton } from "@/components/auth/logout-button";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
+import { isAggressiveWorkflowPrefetchAllowed } from "@/lib/workflow-prefetch-policy";
 
 const moreItems = [
   {
@@ -14,6 +15,12 @@ const moreItems = [
     href: "/agreements",
     icon: FileText,
     description: "View or change your tenancy agreement.",
+  },
+  {
+    label: "Caretakers",
+    href: "/caretakers",
+    icon: ShieldCheck,
+    description: "Invite caretakers and manage property access.",
   },
   {
     label: "Settings",
@@ -83,6 +90,11 @@ export function MobileMoreMenu({
                   <Link
                     key={item.href}
                     href={item.href}
+                    prefetch={
+                      isAggressiveWorkflowPrefetchAllowed(item.href)
+                        ? true
+                        : false
+                    }
                     onClick={() => setIsOpen(false)}
                     className={cn(
                       "flex items-center justify-between rounded-card border p-3 transition",

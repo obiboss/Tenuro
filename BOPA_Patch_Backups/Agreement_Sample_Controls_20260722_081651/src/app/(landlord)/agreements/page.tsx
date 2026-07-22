@@ -42,12 +42,12 @@ export default async function AgreementsPage({
               ? `Agreement for ${agreement.propertyName ?? "this property"}`
               : "General tenancy agreement"
           }
-          description="Read the agreement and choose the optional sections you want to include."
+          description="Read through the wording and make any changes before you need to send it to a tenant."
         />
 
         <SectionCard
-          title="Agreement document"
-          description="The sample below shows how the complete agreement will read."
+          title="Agreement wording"
+          description="BOPA will add the tenant, rent, unit and property details when an agreement is prepared."
         >
           <AgreementTemplateEditor
             scope={agreement.scope}
@@ -67,7 +67,7 @@ export default async function AgreementsPage({
     <div className="space-y-6">
       <PageHeader
         title="Agreements"
-        description="Review the agreement your tenants will receive."
+        description="Prepare your agreement before you need to send one to a tenant."
       />
 
       <section className="rounded-card border border-border-soft bg-white p-5 shadow-card md:p-6">
@@ -90,7 +90,7 @@ export default async function AgreementsPage({
 
           <Link href="/agreements?edit=general" className="shrink-0">
             <Button size="lg" fullWidth>
-              Review agreement
+              View or edit agreement
             </Button>
           </Link>
         </div>
@@ -119,8 +119,7 @@ export default async function AgreementsPage({
                     {property.property_name}
                   </p>
                   <p className="mt-1 text-sm font-semibold text-text-muted">
-                    Uses your general agreement unless you choose different
-                    optional sections.
+                    Uses your general agreement unless you change it.
                   </p>
                 </div>
 
@@ -128,7 +127,7 @@ export default async function AgreementsPage({
                   href={`/agreements?property=${property.id}`}
                   className="inline-flex min-h-11 items-center font-extrabold text-primary hover:text-primary-hover"
                 >
-                  Review for this property
+                  Edit for this property
                 </Link>
               </div>
             ))}

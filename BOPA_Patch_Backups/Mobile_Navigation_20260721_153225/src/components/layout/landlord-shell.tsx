@@ -3,12 +3,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  BarChart3,
+  Bell,
   Building2,
   CreditCard,
   FileText,
+  History,
   Home,
   LockKeyhole,
+  RefreshCcw,
   Settings,
+  ShieldCheck,
   Users,
 } from "lucide-react";
 import { LogoutButton } from "@/components/auth/logout-button";
@@ -64,10 +69,44 @@ const desktopNavItems = [
     href: "/agreements",
     icon: FileText,
   },
+] as const;
+
+const desktopMoreItems = [
+  {
+    label: "Rent alerts",
+    href: "/notifications",
+    icon: Bell,
+    status: "available",
+  },
+  {
+    label: "Renewals",
+    href: "/renewals",
+    icon: RefreshCcw,
+    status: "available",
+  },
+  {
+    label: "Activity",
+    href: "/activity",
+    icon: History,
+    status: "available",
+  },
+  {
+    label: "Caretakers",
+    href: "/caretakers",
+    icon: ShieldCheck,
+    status: "available",
+  },
+  {
+    label: "Reports",
+    href: "/reports",
+    icon: BarChart3,
+    status: "coming_soon",
+  },
   {
     label: "Settings",
     href: "/settings",
     icon: Settings,
+    status: "available",
   },
 ] as const;
 
@@ -172,6 +211,48 @@ export function LandlordShell({
                 </Link>
               );
             })}
+
+            <details
+              className="group border-t border-border-soft pt-4"
+              open={desktopMoreItems.some(
+                (item) =>
+                  pathname === item.href ||
+                  pathname.startsWith(`${item.href}/`),
+              )}
+            >
+              <summary className="flex min-h-12 cursor-pointer list-none items-center gap-3 rounded-xl px-4 text-base font-bold text-[#4f5b6d] transition hover:bg-background hover:text-text-strong">
+                <span aria-hidden="true" className="text-lg tracking-widest">
+                  •••
+                </span>
+                More
+              </summary>
+
+              <div className="mt-1 space-y-1 pl-2">
+                {desktopMoreItems.map((item) => {
+                  const Icon = item.icon;
+                  const active =
+                    pathname === item.href ||
+                    pathname.startsWith(`${item.href}/`);
+                  const href = resolveNavHref(item.href, platformAccessLocked);
+
+                  return (
+                    <Link
+                      key={item.href}
+                      href={href}
+                      className={cn(
+                        "flex min-h-10 items-center gap-3 rounded-xl px-3 text-sm font-bold transition",
+                        active
+                          ? "bg-primary-soft text-primary"
+                          : "text-text-muted hover:bg-background hover:text-text-strong",
+                      )}
+                    >
+                      <Icon aria-hidden="true" size={17} strokeWidth={2.5} />
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            </details>
           </nav>
 
           <div className="mt-auto rounded-xl bg-background p-3">
@@ -184,8 +265,16 @@ export function LandlordShell({
 
         <div className="lg:pl-60">
           <header className="sticky top-0 z-30 border-b border-border-soft bg-white px-4 py-3 md:px-6 lg:hidden">
-            <div className="mx-auto max-w-7xl">
+            <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
               <BoldverseBrand subtitle="My property" />
+
+              <Link
+                href="/notifications"
+                aria-label="Rent alerts"
+                className="flex size-11 shrink-0 items-center justify-center rounded-full border border-border-soft bg-white text-primary"
+              >
+                <Bell aria-hidden="true" size={21} strokeWidth={2.6} />
+              </Link>
             </div>
           </header>
 
