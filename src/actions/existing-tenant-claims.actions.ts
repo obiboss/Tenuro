@@ -41,7 +41,6 @@ export async function createManualExistingTenantAction(
       phoneNumber: formData.get("phoneNumber"),
       occupation: formData.get("occupation"),
       tenancyStartDate: formData.get("tenancyStartDate"),
-      currentRentCycleStartDate: formData.get("currentRentCycleStartDate"),
       paymentFrequency: formData.get("paymentFrequency"),
       lastPaymentAmount: formData.get("lastPaymentAmount"),
       lastPaymentDate: formData.get("lastPaymentDate"),

@@ -310,7 +310,8 @@ export function ManagerTenantList({
                   });
                   const tenantAgreements =
                     agreementsByTenantId.get(tenant.id) ?? [];
-                  const tenantPayments = paymentsByTenantId.get(tenant.id) ?? [];
+                  const tenantPayments =
+                    paymentsByTenantId.get(tenant.id) ?? [];
                   const tenantEvidence = evidenceByTenantId.get(tenant.id);
 
                   return (
@@ -376,6 +377,14 @@ export function ManagerTenantList({
                             className="inline-flex min-h-10 items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
                           >
                             Open property
+                          </Link>
+
+                          <Link
+                            href={`/manager/tenants/${tenant.id}/download`}
+                            prefetch={false}
+                            className="text-xs font-black text-primary underline-offset-4 hover:underline"
+                          >
+                            Download tenant details (PDF)
                           </Link>
 
                           {tenantAgreements.slice(0, 1).map((agreement) => (
@@ -474,6 +483,14 @@ export function ManagerTenantList({
                     className="mt-4 inline-flex min-h-10 w-full items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
                   >
                     Open property
+                  </Link>
+
+                  <Link
+                    href={`/manager/tenants/${tenant.id}/download`}
+                    prefetch={false}
+                    className="mt-2 inline-flex min-h-10 w-full items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+                  >
+                    Download tenant details (PDF)
                   </Link>
 
                   {tenantAgreements.length > 0 ||

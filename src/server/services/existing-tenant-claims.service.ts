@@ -43,6 +43,7 @@ import { queueLandlordInAppNotification } from "@/server/services/notification-q
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import {
   addMonths,
+  calculateCurrentRentCycleStartDate,
   calculateArrearsFromCycles,
   deriveArrearsStartDate,
   isCompleteExistingTenantPayment,
@@ -129,9 +130,7 @@ function resolveUnitProperty(
   unitWithProperty: Awaited<ReturnType<typeof getUnitWithPropertyById>>,
 ): ExistingTenantClaimUnitProperty | null {
   const propertyRelation = unitWithProperty.properties as
-    | ExistingTenantClaimUnitProperty
-    | ExistingTenantClaimUnitProperty[]
-    | null;
+    ExistingTenantClaimUnitProperty | ExistingTenantClaimUnitProperty[] | null;
 
   if (Array.isArray(propertyRelation)) {
     return propertyRelation[0] ?? null;
@@ -299,8 +298,7 @@ async function writeExistingTenantClaimAudit(params: {
   propertyId: string | null;
   actorProfileId: string | null;
   actorRole:
-    | typeof AUDIT_ACTOR_ROLES.landlord
-    | typeof AUDIT_ACTOR_ROLES.tenant;
+    typeof AUDIT_ACTOR_ROLES.landlord | typeof AUDIT_ACTOR_ROLES.tenant;
   eventType: ExistingTenantClaimAuditEventType;
   entityId: string;
   description: string;
@@ -533,7 +531,10 @@ export async function createManualExistingTenantForCurrentLandlord(
 
   const normalizedPhone = normalisePhoneNumber(input.phoneNumber);
   const token = createSecureToken();
-  const currentRentCycleStartDate = input.currentRentCycleStartDate;
+  const currentRentCycleStartDate = calculateCurrentRentCycleStartDate({
+    tenancyStartDate: input.tenancyStartDate,
+    paymentFrequency: input.paymentFrequency,
+  });
   const nextRentDueDate = calculateCurrentPeriodEnd({
     currentPeriodStart: currentRentCycleStartDate,
     paymentFrequency: input.paymentFrequency,

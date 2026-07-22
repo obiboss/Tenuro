@@ -51,20 +51,11 @@ export const createManualExistingTenantSchema = z
       .min(2, "Enter the tenant occupation.")
       .max(120),
     tenancyStartDate: dateStringSchema,
-    currentRentCycleStartDate: dateStringSchema,
     paymentFrequency: z.enum(["annual", "monthly", "quarterly", "biannual"]),
     lastPaymentAmount: positiveMoneySchema,
     lastPaymentDate: dateStringSchema,
   })
   .superRefine((value, context) => {
-    if (value.currentRentCycleStartDate < value.tenancyStartDate) {
-      context.addIssue({
-        code: "custom",
-        path: ["currentRentCycleStartDate"],
-        message: "The current rent cycle cannot start before the tenancy.",
-      });
-    }
-
     if (value.lastPaymentDate < value.tenancyStartDate) {
       context.addIssue({
         code: "custom",

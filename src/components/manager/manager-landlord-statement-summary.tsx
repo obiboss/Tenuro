@@ -89,8 +89,8 @@ export function ManagerLandlordStatementSummary({
           </p>
           <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
             {formatNaira(summary.pendingConfirmationAmount)} is linked to
-            payment records that are not yet reliable enough to count as amount
-            due to landlord.
+            payments awaiting confirmation. It is not yet included in the amount
+            due to the landlord.
           </p>
         </div>
       ) : null}

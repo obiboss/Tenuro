@@ -2,6 +2,7 @@ import type { ManagerWorkspaceRole } from "@/server/repositories/manager-staff.r
 
 export type ManagerWorkspacePermission =
   | "overview.view"
+  | "records.import"
   | "property.manage"
   | "payment.manage"
   | "remittance.manage"
@@ -24,6 +25,7 @@ const ROLE_PERMISSIONS: Record<
 > = {
   owner: [
     "overview.view",
+    "records.import",
     "property.manage",
     "payment.manage",
     "remittance.manage",
@@ -34,6 +36,7 @@ const ROLE_PERMISSIONS: Record<
   ],
   manager: [
     "overview.view",
+    "records.import",
     "property.manage",
     "payment.manage",
     "remittance.manage",
@@ -75,6 +78,10 @@ export function canManagerRoleAccessPath(
 
   if (pathname.startsWith("/manager/onboarding")) {
     return false;
+  }
+
+  if (pathname.startsWith("/manager/import")) {
+    return managerRoleHasPermission(role, "records.import");
   }
 
   if (pathname.startsWith("/manager/staff")) {

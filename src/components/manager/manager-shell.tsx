@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   Building2,
+  FileSpreadsheet,
   Landmark,
   LayoutDashboard,
   LogOut,
@@ -59,6 +60,11 @@ const navSections: ManagerNavSection[] = [
         label: "Properties",
         href: "/manager/properties",
         icon: Building2,
+      },
+      {
+        label: "Import records",
+        href: "/manager/import",
+        icon: FileSpreadsheet,
       },
       {
         label: "Tenants",

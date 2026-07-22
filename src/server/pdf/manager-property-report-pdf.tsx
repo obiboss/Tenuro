@@ -1,10 +1,4 @@
-import {
-  Document,
-  Page,
-  StyleSheet,
-  Text,
-  View,
-} from "@react-pdf/renderer";
+import { Document, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
 import type { ManagerPropertyReportSnapshot } from "@/server/repositories/manager-statement-documents.repository";
 
 type Props = {
@@ -17,7 +11,7 @@ const styles = StyleSheet.create({
     paddingTop: 30,
     paddingHorizontal: 30,
     paddingBottom: 42,
-    fontSize: 8.5,
+    fontSize: 9.2,
     color: "#172033",
     backgroundColor: "#FFFFFF",
     fontFamily: "Helvetica",
@@ -78,13 +72,13 @@ const styles = StyleSheet.create({
     borderColor: "#E6ECF5",
   },
   summaryLabel: {
-    fontSize: 6.8,
+    fontSize: 7.2,
     color: "#64748B",
     textTransform: "uppercase",
   },
   summaryValue: {
     marginTop: 4,
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: 700,
     color: "#0F172A",
   },
@@ -132,7 +126,7 @@ const styles = StyleSheet.create({
     lineHeight: 1.35,
   },
   headerText: {
-    fontSize: 6.7,
+    fontSize: 7,
     fontWeight: 700,
     color: "#475569",
     textTransform: "uppercase",
@@ -150,6 +144,15 @@ const styles = StyleSheet.create({
     color: "#6B4F12",
     lineHeight: 1.5,
   },
+  plainSummary: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: "#EEF4FF",
+    color: "#344054",
+    fontSize: 9,
+    lineHeight: 1.6,
+  },
   footer: {
     position: "absolute",
     left: 30,
@@ -163,11 +166,11 @@ const styles = StyleSheet.create({
 });
 
 function formatMoney(amount: number) {
-  return new Intl.NumberFormat("en-NG", {
-    style: "currency",
-    currency: "NGN",
+  const value = new Intl.NumberFormat("en-NG", {
     maximumFractionDigits: 0,
   }).format(Number.isFinite(amount) ? amount : 0);
+
+  return `NGN ${value}`;
 }
 
 function formatDate(value: string | null) {
@@ -181,9 +184,7 @@ function formatDate(value: string | null) {
     year: "numeric",
     timeZone: "Africa/Lagos",
   }).format(
-    value.length === 10
-      ? new Date(`${value}T00:00:00Z`)
-      : new Date(value),
+    value.length === 10 ? new Date(`${value}T00:00:00Z`) : new Date(value),
   );
 }
 
@@ -250,7 +251,7 @@ function maintenanceStatusLabel(value: string) {
 function Footer() {
   return (
     <View style={styles.footer} fixed>
-      <Text>Powered by BOPA — Boldverse Property App</Text>
+      <Text>Powered by BOPA - Boldverse Property App</Text>
       <Text
         render={({ pageNumber, totalPages }) =>
           `Page ${pageNumber} of ${totalPages}`
@@ -260,10 +261,7 @@ function Footer() {
   );
 }
 
-export function ManagerPropertyReportPdf({
-  documentNumber,
-  snapshot,
-}: Props) {
+export function ManagerPropertyReportPdf({ documentNumber, snapshot }: Props) {
   const location = [
     snapshot.property.address,
     snapshot.property.lga,
@@ -271,6 +269,19 @@ export function ManagerPropertyReportPdf({
   ]
     .filter(Boolean)
     .join(", ");
+  const reliablePaymentCount = snapshot.payments.filter(
+    (payment) => payment.status === "recorded" || payment.status === "verified",
+  ).length;
+  const tenantPositionSentence =
+    snapshot.tenantPosition.owingTenants > 0
+      ? `${snapshot.tenantPosition.owingTenants} tenant${
+          snapshot.tenantPosition.owingTenants === 1 ? " is" : "s are"
+        } owing ${formatMoney(snapshot.tenantPosition.outstandingBalance)}.`
+      : "No current tenant is recorded as owing rent.";
+  const maintenanceSentence =
+    snapshot.totals.actualMaintenanceCost > 0
+      ? `${formatMoney(snapshot.totals.actualMaintenanceCost)} was recorded as maintenance expense.`
+      : "No maintenance expense was recorded for this period.";
 
   return (
     <Document
@@ -280,9 +291,7 @@ export function ManagerPropertyReportPdf({
     >
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
-          <Text style={styles.companyName}>
-            {snapshot.organization.name}
-          </Text>
+          <Text style={styles.companyName}>{snapshot.organization.name}</Text>
           <Text style={styles.companyMeta}>
             {snapshot.organization.phone ?? "Phone not provided"}
             {"  •  "}
@@ -290,7 +299,7 @@ export function ManagerPropertyReportPdf({
           </Text>
 
           <View style={styles.titleBox}>
-            <Text style={styles.title}>Property report</Text>
+            <Text style={styles.title}>Property Management Report</Text>
             <Text style={styles.titleMeta}>
               {snapshot.property.name}
               {"\n"}
@@ -305,12 +314,17 @@ export function ManagerPropertyReportPdf({
           </View>
         </View>
 
+        <Text style={styles.plainSummary}>
+          At a glance: {formatMoney(snapshot.totals.baseRentReceived)} in rent
+          was collected from {reliablePaymentCount} payment
+          {reliablePaymentCount === 1 ? "" : "s"}. {maintenanceSentence}{" "}
+          {tenantPositionSentence}
+        </Text>
+
         <View style={styles.detailGrid}>
           <View style={styles.detailColumn}>
             <Text style={styles.detailLabel}>Landlord</Text>
-            <Text style={styles.detailValue}>
-              {snapshot.landlord.name}
-            </Text>
+            <Text style={styles.detailValue}>{snapshot.landlord.name}</Text>
             <Text style={styles.companyMeta}>
               {snapshot.landlord.phone ?? "Phone not provided"}
               {"\n"}
@@ -319,7 +333,7 @@ export function ManagerPropertyReportPdf({
           </View>
 
           <View style={styles.detailColumn}>
-            <Text style={styles.detailLabel}>Property position</Text>
+            <Text style={styles.detailLabel}>Occupancy</Text>
             <Text style={styles.detailValue}>
               {snapshot.occupancy.occupiedUnits} occupied ·{" "}
               {snapshot.occupancy.vacantUnits} vacant ·{" "}
@@ -334,9 +348,30 @@ export function ManagerPropertyReportPdf({
 
         <View style={styles.summaryRow}>
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Total received</Text>
+            <Text style={styles.summaryLabel}>Rent collected</Text>
             <Text style={styles.summaryValue}>
-              {formatMoney(snapshot.totals.totalReceived)}
+              {formatMoney(snapshot.totals.baseRentReceived)}
+            </Text>
+          </View>
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryLabel}>Other charges collected</Text>
+            <Text style={styles.summaryValue}>
+              {formatMoney(snapshot.totals.serviceChargesReceived)}
+            </Text>
+          </View>
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryLabel}>Maintenance expenses</Text>
+            <Text style={styles.summaryValue}>
+              {formatMoney(snapshot.totals.actualMaintenanceCost)}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.summaryRow}>
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryLabel}>Rent still owing</Text>
+            <Text style={styles.summaryValue}>
+              {formatMoney(snapshot.tenantPosition.outstandingBalance)}
             </Text>
           </View>
           <View style={styles.summaryCard}>
@@ -353,88 +388,51 @@ export function ManagerPropertyReportPdf({
           </View>
         </View>
 
-        <View style={styles.summaryRow}>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Outstanding rent</Text>
-            <Text style={styles.summaryValue}>
-              {formatMoney(
-                snapshot.tenantPosition.outstandingBalance,
-              )}
-            </Text>
-          </View>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Service charges</Text>
-            <Text style={styles.summaryValue}>
-              {formatMoney(snapshot.totals.serviceChargesReceived)}
-            </Text>
-          </View>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Open maintenance</Text>
-            <Text style={styles.summaryValue}>
-              {snapshot.totals.openMaintenanceCount}
-            </Text>
-          </View>
-        </View>
+        {snapshot.totals.pendingConfirmationAmount > 0 ||
+        snapshot.totals.openMaintenanceCount > 0 ? (
+          <Text style={styles.note}>
+            {snapshot.totals.pendingConfirmationAmount > 0
+              ? `${formatMoney(snapshot.totals.pendingConfirmationAmount)} is awaiting payment confirmation. `
+              : ""}
+            {snapshot.totals.openMaintenanceCount > 0
+              ? `${snapshot.totals.openMaintenanceCount} maintenance item${
+                  snapshot.totals.openMaintenanceCount === 1 ? " is" : "s are"
+                } still open, with an estimated cost of ${formatMoney(
+                  snapshot.totals.estimatedOpenMaintenanceCost,
+                )}.`
+              : ""}
+          </Text>
+        ) : null}
 
+        <Footer />
+      </Page>
+
+      <Page size="A4" style={styles.page}>
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Current tenant position</Text>
+          <Text style={styles.sectionTitle}>Tenants and rent dates</Text>
 
           <View style={styles.table}>
             <View style={styles.tableHeader}>
-              <Text
-                style={[
-                  styles.cell,
-                  styles.headerText,
-                  { width: "26%" },
-                ]}
-              >
+              <Text style={[styles.cell, styles.headerText, { width: "26%" }]}>
                 Tenant
               </Text>
-              <Text
-                style={[
-                  styles.cell,
-                  styles.headerText,
-                  { width: "14%" },
-                ]}
-              >
+              <Text style={[styles.cell, styles.headerText, { width: "14%" }]}>
                 Unit
               </Text>
-              <Text
-                style={[
-                  styles.cell,
-                  styles.headerText,
-                  { width: "17%" },
-                ]}
-              >
+              <Text style={[styles.cell, styles.headerText, { width: "17%" }]}>
                 Rent
               </Text>
-              <Text
-                style={[
-                  styles.cell,
-                  styles.headerText,
-                  { width: "18%" },
-                ]}
-              >
+              <Text style={[styles.cell, styles.headerText, { width: "18%" }]}>
                 Balance
               </Text>
-              <Text
-                style={[
-                  styles.cell,
-                  styles.headerText,
-                  { width: "25%" },
-                ]}
-              >
+              <Text style={[styles.cell, styles.headerText, { width: "25%" }]}>
                 Position
               </Text>
             </View>
 
             {snapshot.tenants.length > 0 ? (
               snapshot.tenants.map((tenant) => (
-                <View
-                  key={tenant.id}
-                  style={styles.tableRow}
-                  wrap={false}
-                >
+                <View key={tenant.id} style={styles.tableRow} wrap={false}>
                   <Text style={[styles.cell, { width: "26%" }]}>
                     {tenant.fullName}
                   </Text>
@@ -463,74 +461,38 @@ export function ManagerPropertyReportPdf({
           </View>
         </View>
 
+        <Footer />
+      </Page>
+
+      <Page size="A4" style={styles.page}>
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Rent activity</Text>
+          <Text style={styles.sectionTitle}>Rent payments received</Text>
 
           <View style={styles.table}>
             <View style={styles.tableHeader}>
-              <Text
-                style={[
-                  styles.cell,
-                  styles.headerText,
-                  { width: "19%" },
-                ]}
-              >
+              <Text style={[styles.cell, styles.headerText, { width: "19%" }]}>
                 Date
               </Text>
-              <Text
-                style={[
-                  styles.cell,
-                  styles.headerText,
-                  { width: "23%" },
-                ]}
-              >
+              <Text style={[styles.cell, styles.headerText, { width: "23%" }]}>
                 Tenant
               </Text>
-              <Text
-                style={[
-                  styles.cell,
-                  styles.headerText,
-                  { width: "12%" },
-                ]}
-              >
+              <Text style={[styles.cell, styles.headerText, { width: "12%" }]}>
                 Unit
               </Text>
-              <Text
-                style={[
-                  styles.cell,
-                  styles.headerText,
-                  { width: "18%" },
-                ]}
-              >
+              <Text style={[styles.cell, styles.headerText, { width: "18%" }]}>
                 Amount
               </Text>
-              <Text
-                style={[
-                  styles.cell,
-                  styles.headerText,
-                  { width: "14%" },
-                ]}
-              >
+              <Text style={[styles.cell, styles.headerText, { width: "14%" }]}>
                 Share
               </Text>
-              <Text
-                style={[
-                  styles.cell,
-                  styles.headerText,
-                  { width: "14%" },
-                ]}
-              >
+              <Text style={[styles.cell, styles.headerText, { width: "14%" }]}>
                 Status
               </Text>
             </View>
 
             {snapshot.payments.length > 0 ? (
               snapshot.payments.map((payment) => (
-                <View
-                  key={payment.id}
-                  style={styles.tableRow}
-                  wrap={false}
-                >
+                <View key={payment.id} style={styles.tableRow} wrap={false}>
                   <Text style={[styles.cell, { width: "19%" }]}>
                     {formatDate(payment.paymentDate)}
                   </Text>
@@ -559,78 +521,54 @@ export function ManagerPropertyReportPdf({
           </View>
         </View>
 
+        <Footer />
+      </Page>
+
+      <Page size="A4" style={styles.page}>
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Maintenance activity</Text>
+          <Text style={styles.sectionTitle}>Repairs and maintenance</Text>
 
           <View style={styles.table}>
             <View style={styles.tableHeader}>
-              <Text
-                style={[
-                  styles.cell,
-                  styles.headerText,
-                  { width: "18%" },
-                ]}
-              >
+              <Text style={[styles.cell, styles.headerText, { width: "15%" }]}>
                 Date
               </Text>
-              <Text
-                style={[
-                  styles.cell,
-                  styles.headerText,
-                  { width: "35%" },
-                ]}
-              >
+              <Text style={[styles.cell, styles.headerText, { width: "28%" }]}>
                 Issue
               </Text>
-              <Text
-                style={[
-                  styles.cell,
-                  styles.headerText,
-                  { width: "12%" },
-                ]}
-              >
+              <Text style={[styles.cell, styles.headerText, { width: "11%" }]}>
                 Unit
               </Text>
-              <Text
-                style={[
-                  styles.cell,
-                  styles.headerText,
-                  { width: "17%" },
-                ]}
-              >
-                Expected
+              <Text style={[styles.cell, styles.headerText, { width: "16%" }]}>
+                Estimated
               </Text>
-              <Text
-                style={[
-                  styles.cell,
-                  styles.headerText,
-                  { width: "18%" },
-                ]}
-              >
+              <Text style={[styles.cell, styles.headerText, { width: "17%" }]}>
+                Spent
+              </Text>
+              <Text style={[styles.cell, styles.headerText, { width: "13%" }]}>
                 Status
               </Text>
             </View>
 
             {snapshot.maintenance.length > 0 ? (
               snapshot.maintenance.map((item) => (
-                <View
-                  key={item.id}
-                  style={styles.tableRow}
-                  wrap={false}
-                >
-                  <Text style={[styles.cell, { width: "18%" }]}>
+                <View key={item.id} style={styles.tableRow} wrap={false}>
+                  <Text style={[styles.cell, { width: "15%" }]}>
                     {formatDate(item.reportedDate)}
                   </Text>
-                  <Text style={[styles.cell, { width: "35%" }]}>
+                  <Text style={[styles.cell, { width: "28%" }]}>
                     {item.issueTitle}
                   </Text>
-                  <Text style={[styles.cell, { width: "12%" }]}>
+                  <Text style={[styles.cell, { width: "11%" }]}>
                     {item.unitLabel ?? "Property"}
                   </Text>
-                  <Text style={[styles.cell, { width: "17%" }]}>
+                  <Text style={[styles.cell, { width: "16%" }]}>
                     {formatMoney(item.estimatedCost)}
                   </Text>
-                  <Text style={[styles.cell, { width: "18%" }]}>
+                  <Text style={[styles.cell, { width: "17%" }]}>
+                    {formatMoney(item.actualCost)}
+                  </Text>
+                  <Text style={[styles.cell, { width: "13%" }]}>
                     {maintenanceStatusLabel(item.status)}
                   </Text>
                 </View>
@@ -644,10 +582,10 @@ export function ManagerPropertyReportPdf({
         </View>
 
         <Text style={styles.note}>
-          This property report includes rent, occupancy, tenant position, and
-          maintenance records saved in BOPA. Landlord remittances are
-          landlord-wide records and remain in the landlord statement unless
-          they are specifically allocated to a property.
+          This report is based on the rent, tenant, unit, and maintenance
+          records saved for this property. Landlord remittances are shown in the
+          separate landlord statement because they may cover more than one
+          property.
         </Text>
 
         <Footer />

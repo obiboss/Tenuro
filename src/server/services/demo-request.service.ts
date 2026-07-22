@@ -223,11 +223,21 @@ export async function submitPublicDemoRequest(params: {
   };
 }
 
-export async function getPlatformAdminDemoRequests() {
+export async function getPlatformAdminDemoRequests(params?: {
+  limit?: number;
+}) {
   await requirePlatformAdmin();
 
   const supabase = createSupabaseAdminClient();
-  const requests = await listDemoRequests(supabase, { limit: 100 });
+  const requests = await listDemoRequests(supabase, {
+    limit: params?.limit ?? 100,
+  });
+  const active = requests.filter(
+    (request) =>
+      request.status === "pending" ||
+      request.status === "contacted" ||
+      request.status === "scheduled",
+  ).length;
 
   return {
     requests,
@@ -238,6 +248,7 @@ export async function getPlatformAdminDemoRequests() {
         .length,
       completed: requests.filter((request) => request.status === "completed")
         .length,
+      active,
       all: requests.length,
     },
   };

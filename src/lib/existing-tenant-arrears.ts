@@ -1,8 +1,5 @@
 export type ExistingTenantPaymentFrequency =
-  | "annual"
-  | "monthly"
-  | "quarterly"
-  | "biannual";
+  "annual" | "monthly" | "quarterly" | "biannual";
 
 export type ExistingTenantPaymentRecord = {
   amount: number;
@@ -88,6 +85,24 @@ export function calculateCurrentDueDate(params: {
   }
 
   return toDateOnly(currentDueDate);
+}
+
+export function calculateCurrentRentCycleStartDate(params: {
+  tenancyStartDate: string;
+  paymentFrequency: ExistingTenantPaymentFrequency;
+  today?: Date;
+}) {
+  const today = params.today ?? new Date();
+  const frequencyMonths = getFrequencyMonths(params.paymentFrequency);
+  let currentCycleStart = parseDateOnly(params.tenancyStartDate);
+  let nextCycleStart = addMonths(currentCycleStart, frequencyMonths);
+
+  while (nextCycleStart.getTime() <= today.getTime()) {
+    currentCycleStart = nextCycleStart;
+    nextCycleStart = addMonths(currentCycleStart, frequencyMonths);
+  }
+
+  return toDateOnly(currentCycleStart);
 }
 
 export function getDefaultArrearsStartDate(params: {
@@ -271,9 +286,12 @@ export function getCycleBalance(cycle: ExistingTenantRentCycle) {
   return Math.max(cycle.rentCharged - paymentsTotal, 0);
 }
 
-export type RentCycleStatus = "fully_paid" | "part_paid" | "not_paid" | "assumed_paid";
+export type RentCycleStatus =
+  "fully_paid" | "part_paid" | "not_paid" | "assumed_paid";
 
-export function getCycleStatus(cycle: ExistingTenantRentCycle): RentCycleStatus {
+export function getCycleStatus(
+  cycle: ExistingTenantRentCycle,
+): RentCycleStatus {
   if (cycle.assumedPaid || !hasMeaningfulCycleArrears(cycle)) {
     return "assumed_paid";
   }

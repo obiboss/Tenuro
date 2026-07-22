@@ -44,7 +44,7 @@ export function AdminPayoutVerificationPreview({
   accounts,
   total,
 }: AdminPayoutVerificationPreviewProps) {
-  const visibleAccounts = (accounts ?? []).slice(0, 3);
+  const visibleAccounts = (accounts ?? []).slice(0, 4);
 
   return (
     <SectionCard

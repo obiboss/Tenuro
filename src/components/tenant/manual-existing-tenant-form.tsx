@@ -101,7 +101,7 @@ export function ManualExistingTenantForm({
         </div>
 
         <Select
-          label="How often does this tenant pay rent?"
+          label="How is rent collected"
           name="paymentFrequency"
           options={paymentFrequencyOptions}
           defaultValue="annual"
@@ -109,25 +109,14 @@ export function ManualExistingTenantForm({
           required
         />
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <Input
-            label="When did the tenancy start?"
-            name="tenancyStartDate"
-            type="date"
-            helperText="Use the original date the tenant first moved in."
-            error={state.fieldErrors?.tenancyStartDate?.[0]}
-            required
-          />
-
-          <Input
-            label="When did the current rent cycle start?"
-            name="currentRentCycleStartDate"
-            type="date"
-            helperText="Example: the date the tenant’s present rent year started."
-            error={state.fieldErrors?.currentRentCycleStartDate?.[0]}
-            required
-          />
-        </div>
+        <Input
+          label="When did the tenancy start?"
+          name="tenancyStartDate"
+          type="date"
+          helperText="Use the date the tenant first moved in. BOPA will keep this date as the rent-cycle date."
+          error={state.fieldErrors?.tenancyStartDate?.[0]}
+          required
+        />
       </div>
 
       <div className="space-y-5 border-t border-border-soft pt-6">
