@@ -50,3 +50,7 @@ next-env.d.ts
 .bopa-backups/
 BOPA_Patch_Backups/
 BOPA_*Implementation*/
+# Local BOPA patch and backup folders
+/BOPA_Patch_Backups/
+/.bopa-backups/
+/BOPA_*_Implementation_*/

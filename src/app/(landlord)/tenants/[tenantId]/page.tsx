@@ -340,7 +340,7 @@ export default async function TenantDetailPage({
       RENT_PAYMENT_FREQUENCY_LABELS[activeTenancy.payment_frequency];
     const rentDueDate = hasOutstandingBalance
       ? activeTenancy.current_period_start
-      : (activeTenancy.next_rent_charge_date ?? activeTenancy.next_renewal_date);
+      : (activeTenancy.next_rent_charge_date);
 
     return (
       <div className="mx-auto w-full max-w-3xl">
@@ -379,7 +379,7 @@ export default async function TenantDetailPage({
               <div className="rounded-button bg-background p-4">
                 <p className="text-sm font-bold text-text-muted">Original move-in date</p>
                 <p className="mt-1 text-lg font-black text-text-strong">
-                  {formatDate(activeTenancy.move_in_date ?? activeTenancy.start_date)}
+                  {formatDate(activeTenancy.start_date)}
                 </p>
               </div>
               <div className="rounded-button bg-background p-4">
