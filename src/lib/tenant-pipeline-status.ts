@@ -78,6 +78,14 @@ export function resolveTenantPipelineStatus(params: {
     };
   }
 
+  if (params.isOperationallyLive) {
+    return {
+      label: "Active",
+      tone: "success",
+      phase: "active",
+    };
+  }
+
   if (params.onboardingStatus === "approved" && !params.isAgreementSetup) {
     return {
       label: "Awaiting Agreement",
@@ -129,14 +137,6 @@ export function resolveTenantPipelineStatus(params: {
       label: "Awaiting Agreement",
       tone: "primary",
       phase: "awaiting_agreement",
-    };
-  }
-
-  if (params.isOperationallyLive) {
-    return {
-      label: "Active",
-      tone: "success",
-      phase: "active",
     };
   }
 

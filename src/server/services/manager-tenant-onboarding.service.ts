@@ -216,9 +216,17 @@ function calculateManagerOnboardingNextRentDueDate(params: {
   onboardingType: ManagerTenantOnboardingRequestRow["onboarding_type"];
   moveInDate: string;
   paymentFrequency: ManagerOnboardingPaymentFrequency;
+  openingBalance?: number;
 }) {
+  const hasConfirmedOutstandingBalance =
+    params.onboardingType === "current_occupant" &&
+    typeof params.openingBalance === "number" &&
+    params.openingBalance > 0;
+  const awaitingManagerBalanceConfirmation =
+    params.onboardingType === "current_occupant" &&
+    typeof params.openingBalance !== "number";
   const calculator =
-    params.onboardingType === "current_occupant"
+    hasConfirmedOutstandingBalance || awaitingManagerBalanceConfirmation
       ? calculateCurrentRentDueDate
       : calculateNextRentDueDate;
 
@@ -1390,6 +1398,7 @@ export async function approveManagerTenantOnboardingRequestForCurrentManager(
     onboardingType: request.onboarding_type,
     moveInDate: input.confirmedMoveInDate,
     paymentFrequency,
+    openingBalance: Number(input.openingBalance),
   });
 
   const hasCurrentTenant = await hasCurrentManagerTenantForUnit(adminSupabase, {
@@ -1423,6 +1432,14 @@ export async function approveManagerTenantOnboardingRequestForCurrentManager(
     occupation: request.tenant_occupation,
     rentAmount: roundMoney(confirmedRentAmount),
     currentBalance: roundMoney(input.openingBalance),
+    lastPaymentAmount:
+      request.onboarding_type === "current_occupant"
+        ? request.existing_tenant_last_payment_amount
+        : null,
+    lastPaymentDate:
+      request.onboarding_type === "current_occupant"
+        ? request.existing_tenant_last_payment_date
+        : null,
     moveInDate: input.confirmedMoveInDate,
     paymentFrequency,
     rentCycleAnchorDate: input.confirmedMoveInDate,

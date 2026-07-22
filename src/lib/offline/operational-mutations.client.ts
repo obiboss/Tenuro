@@ -8,6 +8,7 @@ import {
 import {
   calculateCurrentRentCycle,
   calculateCurrentRentDueDate,
+  calculateNextRentDueDate,
 } from "@/lib/rent-cycle";
 import { createManagerMaintenanceRequestSchema } from "@/server/validators/manager-maintenance.schema";
 import {
@@ -235,6 +236,8 @@ export async function saveManagerTenantOffline(formData: FormData) {
       occupation: formData.get("occupation"),
       rentAmount: formData.get("rentAmount"),
       paymentFrequency: formData.get("paymentFrequency"),
+      lastPaymentAmount: formData.get("lastPaymentAmount"),
+      lastPaymentDate: formData.get("lastPaymentDate"),
       currentBalance: formData.get("currentBalance"),
       moveInDate: formData.get("moveInDate"),
       nextRentDueDate: formData.get("nextRentDueDate"),
@@ -246,7 +249,9 @@ export async function saveManagerTenantOffline(formData: FormData) {
     anchorDate: tenant.moveInDate,
     paymentFrequency: tenant.paymentFrequency,
   });
-  const nextRentDueDate = calculateCurrentRentDueDate({
+  const nextRentDueDate = (tenant.currentBalance > 0
+    ? calculateCurrentRentDueDate
+    : calculateNextRentDueDate)({
     anchorDate: tenant.moveInDate,
     paymentFrequency: tenant.paymentFrequency,
   });
@@ -272,6 +277,8 @@ export async function saveManagerTenantOffline(formData: FormData) {
         current_period_start: currentCycle.periodStart,
         current_period_end: currentCycle.periodEnd,
         current_balance: tenant.currentBalance,
+        last_payment_amount: tenant.lastPaymentAmount,
+        last_payment_date: tenant.lastPaymentDate,
         move_in_date: tenant.moveInDate,
         next_rent_due_date: nextRentDueDate,
         move_out_date: null,

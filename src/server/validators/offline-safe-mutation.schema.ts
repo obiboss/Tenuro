@@ -427,6 +427,10 @@ const managerTenantCreateSchema = z
         occupation: nullableText(120, "Occupation is too long.").default(null),
         rentAmount: positiveMoney,
         paymentFrequency: z.enum(RENT_PAYMENT_FREQUENCIES),
+        // Older queued tenant records were saved before these fields existed.
+        // Keep them nullable so those records can still sync after deployment.
+        lastPaymentAmount: z.union([positiveMoney, z.null()]).default(null),
+        lastPaymentDate: z.union([nigeriaDate, z.null()]).default(null),
         currentBalance: nonNegativeMoney,
         moveInDate: nigeriaDate,
         // Accepted for compatibility with queued mutations. The server ignores

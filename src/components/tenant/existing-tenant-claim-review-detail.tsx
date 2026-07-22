@@ -25,7 +25,8 @@ import {
   type ExistingTenantRentCycle,
 } from "@/lib/existing-tenant-arrears";
 import {
-  calculateCurrentRentCycle,
+  calculateCurrentRentDueDate,
+  calculateNextRentDueDate,
   RENT_PAYMENT_FREQUENCY_LABELS,
 } from "@/lib/rent-cycle";
 import type {
@@ -55,15 +56,6 @@ function formatDate(value: string | null) {
     month: "long",
     year: "numeric",
   }).format(new Date(`${value}T00:00:00`));
-}
-
-function getTenantInitials(name: string) {
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
 }
 
 function getPropertyUnitLabel(claim: ExistingTenantClaimDetailRow) {
@@ -128,22 +120,26 @@ export function ExistingTenantClaimReviewDetail({
   const [confirmedMoveInDate, setConfirmedMoveInDate] = useState(
     claim.landlord_confirmed_move_in_date ?? claim.tenant_move_in_date ?? "",
   );
-  const confirmedCurrentDueDate = useMemo(() => {
+  const openingBalance = liveSummary.amountOwed;
+  const confirmedRentDueDate = useMemo(() => {
     if (!confirmedMoveInDate) {
       return "";
     }
 
     try {
-      return calculateCurrentRentCycle({
+      const calculator =
+        openingBalance > 0
+          ? calculateCurrentRentDueDate
+          : calculateNextRentDueDate;
+
+      return calculator({
         anchorDate: confirmedMoveInDate,
         paymentFrequency,
-      }).periodStart;
+      });
     } catch {
       return "";
     }
-  }, [confirmedMoveInDate, paymentFrequency]);
-
-  const openingBalance = liveSummary.amountOwed;
+  }, [confirmedMoveInDate, openingBalance, paymentFrequency]);
 
   useEffect(() => {
     if (approveState.ok && approveState.tenantId) {
@@ -177,143 +173,41 @@ export function ExistingTenantClaimReviewDetail({
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto w-full max-w-2xl space-y-4">
       <Link
         href="/existing-tenant-claims"
         className="inline-flex min-h-11 items-center gap-2 text-sm font-bold text-primary"
       >
         <ArrowLeft size={16} />
-        Back to claims
+        Back to tenants
       </Link>
 
-      <section className="rounded-card border border-border-soft bg-white p-5 shadow-card">
-        <div className="flex items-start gap-4">
-          <div className="flex size-14 shrink-0 items-center justify-center rounded-full bg-primary-soft text-lg font-black text-primary">
-            {getTenantInitials(tenantName)}
-          </div>
-
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl font-black text-text-strong">
-                {tenantName}
-              </h1>
-              <Badge tone="warning">Needs Review</Badge>
-            </div>
-            <p className="mt-1 text-base font-semibold text-text-muted">
-              {getPropertyUnitLabel(claim)}
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-button bg-background p-4">
-            <p className="text-sm font-bold text-text-muted">Phone</p>
-            <p className="mt-1 text-base font-extrabold text-text-strong">
-              {claim.tenant_phone_number ?? "Not provided"}
-            </p>
-          </div>
-          <div className="rounded-button bg-background p-4">
-            <p className="text-sm font-bold text-text-muted">Occupation</p>
-            <p className="mt-1 text-base font-extrabold text-text-strong">
-              {claim.tenant_occupation ?? "Not provided"}
-            </p>
-          </div>
-          <div className="rounded-button bg-background p-4">
-            <p className="text-sm font-bold text-text-muted">Identification</p>
-            <p className="mt-1 text-base font-extrabold text-text-strong">
-              {claim.tenant_id_type
-                ? idTypeLabels[claim.tenant_id_type]
-                : "Not provided"}
-              {claim.tenant_id_number ? ` · ${claim.tenant_id_number}` : ""}
-            </p>
-          </div>
-          <div className="rounded-button bg-background p-4">
-            <p className="text-sm font-bold text-text-muted">Move-in date</p>
-            <p className="mt-1 text-base font-extrabold text-text-strong">
-              {formatDate(claim.tenant_move_in_date)}
-            </p>
-          </div>
-        </div>
-
-        {claim.tenant_notes ? (
-          <p className="mt-4 rounded-button bg-background p-4 text-base leading-7 text-text-muted">
-            {claim.tenant_notes}
-          </p>
-        ) : null}
-      </section>
-
-      <section className="space-y-4 rounded-card border border-border-soft bg-surface p-5">
-        <div>
-          <h2 className="text-lg font-black text-text-strong">Rent history</h2>
-          <p className="mt-1 text-base leading-7 text-text-muted">
-            Optional. Only record arrears for years where the tenant still owes
-            rent. Review this before approving below.
+      <header className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="truncate text-2xl font-black text-text-strong">
+            {tenantName}
+          </h1>
+          <p className="mt-1 text-sm font-semibold text-text-muted">
+            {getPropertyUnitLabel(claim)}
           </p>
         </div>
+        <Badge tone="primary">Ready to save</Badge>
+      </header>
 
-        <form action={arrearsAction} className="space-y-4">
-          <ActionResultToast
-            ok={arrearsState.ok}
-            message={arrearsState.message}
-            successTitle="Rent history saved"
-            errorTitle="Could not save rent history"
-          />
-
-          <input type="hidden" name="claimId" value={claim.id} />
-          <input
-            type="hidden"
-            name="rentCyclesJson"
-            value={JSON.stringify(
-              cycles.map((cycle) => ({
-                periodStart: cycle.periodStart,
-                periodEnd: cycle.periodEnd,
-                rentCharged: cycle.rentCharged,
-                assumedPaid: cycle.assumedPaid,
-                payments: cycle.payments,
-              })),
-            )}
-          />
-
-          <ExistingTenantRentHistoryTable
-            cycles={cycles}
-            confirmedRentAmount={confirmedRentAmountNumber}
-            onCyclesChange={setCycles}
-            disabled={arrearsPending}
-          />
-
-          <Button
-            type="submit"
-            variant="secondary"
-            isLoading={arrearsPending}
-            fullWidth
-          >
-            Save rent history
-          </Button>
-        </form>
-      </section>
-
-      <div className="rounded-card border-2 border-danger/25 bg-danger-soft/30 p-5">
-        <p className="text-xs font-black uppercase tracking-wide text-danger">
-          Amount owed from recorded years
-        </p>
-        <p className="mt-2 text-2xl font-black text-danger">
-          {formatNaira(openingBalance)}
-        </p>
-        <p className="mt-2 text-sm leading-6 text-text-muted">
-          Only includes rent years where you recorded arrears. All other years
-          are assumed fully paid.
+      <div className="rounded-button border border-primary/20 bg-primary-soft px-4 py-3">
+        <p className="font-black text-text-strong">Confirm the existing tenancy</p>
+        <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+          {tenantName} already lives in this unit. Confirm the original move-in date and rent position, then save the tenant. A new agreement is not required.
         </p>
       </div>
 
-      <section className="space-y-4 rounded-card border border-primary/15 bg-primary-soft/30 p-5">
-        <div>
-          <h2 className="text-lg font-black text-text-strong">
-            Final approval
-          </h2>
-          <p className="mt-1 text-base leading-7 text-text-muted">
-            Confirm the move-in date. The unit rent is locked, and BOPA calculates the current cycle automatically.
-          </p>
-        </div>
+      <form
+        id={`approve-claim-${claim.id}`}
+        action={approveAction}
+        className="space-y-4 rounded-card border border-border-soft bg-white p-4 shadow-card sm:p-5"
+      >
+        <input type="hidden" name="claimId" value={claim.id} />
+        <input type="hidden" name="openingBalance" value={String(openingBalance)} />
 
         {approveState.ok === false && approveState.message ? (
           <div
@@ -324,88 +218,209 @@ export function ExistingTenantClaimReviewDetail({
           </div>
         ) : null}
 
-        <form
-          id={`approve-claim-${claim.id}`}
-          action={approveAction}
-          className="space-y-4"
-        >
-          <input type="hidden" name="claimId" value={claim.id} />
-          <input
-            type="hidden"
-            name="openingBalance"
-            value={String(openingBalance)}
-          />
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <p className="text-sm font-semibold text-text-strong">Unit rent</p>
-              <p className="flex min-h-14 items-center rounded-button border border-border-soft bg-surface px-4 text-base font-black text-text-strong">
-                {formatNaira(confirmedRentAmountNumber)} · {RENT_PAYMENT_FREQUENCY_LABELS[paymentFrequency]}
+        <div>
+          <h2 className="text-base font-black text-text-strong">Tenancy details</h2>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="rounded-button bg-background p-3">
+              <p className="text-xs font-bold text-text-muted">Unit rent</p>
+              <p className="mt-1 font-black text-text-strong">
+                {formatNaira(confirmedRentAmountNumber)}
               </p>
             </div>
-            <div className="space-y-2">
-              <p className="text-sm font-semibold text-text-strong">
-                Opening balance
+            <div className="rounded-button bg-background p-3">
+              <p className="text-xs font-bold text-text-muted">Collection</p>
+              <p className="mt-1 font-black text-text-strong">
+                {RENT_PAYMENT_FREQUENCY_LABELS[paymentFrequency]}
               </p>
-              <p className="flex min-h-14 items-center rounded-button border border-border-soft bg-surface px-4 text-base font-black text-danger">
-                {formatNaira(openingBalance)}
+            </div>
+            <div className="rounded-button bg-background p-3">
+              <p className="text-xs font-bold text-text-muted">Last payment</p>
+              <p className="mt-1 font-black text-text-strong">
+                {claim.landlord_last_payment_amount
+                  ? formatNaira(Number(claim.landlord_last_payment_amount))
+                  : "Not recorded"}
               </p>
-              <p className="text-sm text-text-muted">
-                Matches the amount owed summary above.
+            </div>
+            <div className="rounded-button bg-background p-3">
+              <p className="text-xs font-bold text-text-muted">Payment date</p>
+              <p className="mt-1 font-black text-text-strong">
+                {formatDate(claim.landlord_last_payment_date)}
               </p>
             </div>
           </div>
+        </div>
 
-          <Input
-            label="Confirmed move-in date"
-            name="confirmedMoveInDate"
-            type="date"
-            value={confirmedMoveInDate}
-            onChange={(event) => setConfirmedMoveInDate(event.target.value)}
-            required
-          />
+        <Input
+          label="Original move-in date"
+          name="confirmedMoveInDate"
+          type="date"
+          value={confirmedMoveInDate}
+          onChange={(event) => setConfirmedMoveInDate(event.target.value)}
+          helperText="This sets every future rent due date and cannot be changed later."
+          required
+        />
 
-          <div className="rounded-button border border-border-soft bg-background p-4">
-            <p className="text-sm font-semibold text-text-muted">Current rent cycle started</p>
-            <p className="mt-2 text-lg font-black text-text-strong">
-              {formatDate(confirmedCurrentDueDate)}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-button bg-background p-4">
+            <p className="text-sm font-semibold text-text-muted">Rent due date</p>
+            <p className="mt-1 text-lg font-black text-text-strong">
+              {formatDate(confirmedRentDueDate)}
             </p>
-            <p className="mt-1 text-sm text-text-muted">
-              Calculated from the original move-in date and the unit's locked frequency.
+            <p className="mt-1 text-xs font-semibold leading-5 text-text-muted">
+              {openingBalance > 0
+                ? "Outstanding rent remains on this cycle."
+                : "The tenant is paid up; this is the next renewal date."}
             </p>
           </div>
+          <div
+            className={`rounded-button p-4 ${
+              openingBalance > 0 ? "bg-danger-soft" : "bg-success-soft"
+            }`}
+          >
+            <p className="text-sm font-semibold text-text-muted">Amount owed</p>
+            <p
+              className={`mt-1 text-lg font-black ${
+                openingBalance > 0 ? "text-danger" : "text-success"
+              }`}
+            >
+              {formatNaira(openingBalance)}
+            </p>
+            <p className="mt-1 text-xs font-semibold leading-5 text-text-muted">
+              {openingBalance > 0 ? "Review unpaid periods below." : "No arrears recorded."}
+            </p>
+          </div>
+        </div>
 
-          <Textarea
-            label="Review note"
-            name="reviewNotes"
-            placeholder="Optional note saved with the tenancy."
-            defaultValue={claim.landlord_review_notes ?? ""}
-          />
+        <details className="rounded-button border border-border-soft bg-background">
+          <summary className="cursor-pointer list-none px-4 py-3 text-sm font-black text-primary">
+            Add a private note
+          </summary>
+          <div className="border-t border-border-soft p-4">
+            <Textarea
+              label="Private note"
+              name="reviewNotes"
+              placeholder="Optional note saved with the tenancy."
+              defaultValue={claim.landlord_review_notes ?? ""}
+            />
+          </div>
+        </details>
 
+        <div className="sticky bottom-20 z-20 -mx-4 border-t border-border-soft bg-white p-4 sm:static sm:mx-0 sm:border-0 sm:p-0">
           <Button
             type="button"
             fullWidth
             onClick={() => setShowApproveConfirm(true)}
             disabled={approvePending}
           >
-            Approve and create tenancy
+            Save existing tenant
           </Button>
-        </form>
+        </div>
+      </form>
 
-        <button
-          type="button"
-          className="min-h-11 text-sm font-extrabold text-danger"
-          onClick={() => setShowRejectConfirm(true)}
-        >
-          Reject this claim
-        </button>
-      </section>
+      <details className="rounded-card border border-border-soft bg-white shadow-sm">
+        <summary className="cursor-pointer list-none px-4 py-4 text-sm font-black text-primary sm:px-5">
+          Review tenant details and unpaid rent
+        </summary>
+
+        <div className="space-y-5 border-t border-border-soft p-4 sm:p-5">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-button bg-background p-4">
+              <p className="text-sm font-bold text-text-muted">Phone</p>
+              <p className="mt-1 font-extrabold text-text-strong">
+                {claim.tenant_phone_number ?? "Not provided"}
+              </p>
+            </div>
+            <div className="rounded-button bg-background p-4">
+              <p className="text-sm font-bold text-text-muted">Occupation</p>
+              <p className="mt-1 font-extrabold text-text-strong">
+                {claim.tenant_occupation ?? "Not provided"}
+              </p>
+            </div>
+            <div className="rounded-button bg-background p-4">
+              <p className="text-sm font-bold text-text-muted">Identification</p>
+              <p className="mt-1 font-extrabold text-text-strong">
+                {claim.tenant_id_type
+                  ? idTypeLabels[claim.tenant_id_type]
+                  : "Not provided"}
+                {claim.tenant_id_number ? ` · ${claim.tenant_id_number}` : ""}
+              </p>
+            </div>
+            <div className="rounded-button bg-background p-4">
+              <p className="text-sm font-bold text-text-muted">Tenant's move-in date</p>
+              <p className="mt-1 font-extrabold text-text-strong">
+                {formatDate(claim.tenant_move_in_date)}
+              </p>
+            </div>
+          </div>
+
+          {claim.tenant_notes ? (
+            <div className="rounded-button bg-background p-4 text-sm font-semibold leading-6 text-text-muted">
+              {claim.tenant_notes}
+            </div>
+          ) : null}
+
+          <div className="border-t border-border-soft pt-5">
+            <h2 className="text-base font-black text-text-strong">Previous unpaid rent</h2>
+            <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+              Only add periods where the tenant still owes rent. All other periods are treated as paid.
+            </p>
+
+            <form action={arrearsAction} className="mt-4 space-y-4">
+              <ActionResultToast
+                ok={arrearsState.ok}
+                message={arrearsState.message}
+                successTitle="Rent history saved"
+                errorTitle="Could not save rent history"
+              />
+
+              <input type="hidden" name="claimId" value={claim.id} />
+              <input
+                type="hidden"
+                name="rentCyclesJson"
+                value={JSON.stringify(
+                  cycles.map((cycle) => ({
+                    periodStart: cycle.periodStart,
+                    periodEnd: cycle.periodEnd,
+                    rentCharged: cycle.rentCharged,
+                    assumedPaid: cycle.assumedPaid,
+                    payments: cycle.payments,
+                  })),
+                )}
+              />
+
+              <ExistingTenantRentHistoryTable
+                cycles={cycles}
+                confirmedRentAmount={confirmedRentAmountNumber}
+                onCyclesChange={setCycles}
+                disabled={arrearsPending}
+              />
+
+              <Button
+                type="submit"
+                variant="secondary"
+                isLoading={arrearsPending}
+                fullWidth
+              >
+                Save unpaid rent
+              </Button>
+            </form>
+          </div>
+
+          <button
+            type="button"
+            className="min-h-11 text-sm font-extrabold text-danger"
+            onClick={() => setShowRejectConfirm(true)}
+          >
+            Reject this tenant record
+          </button>
+        </div>
+      </details>
 
       <ConfirmDialog
         open={showApproveConfirm}
-        title="Confirm tenancy"
-        description={`You are about to confirm ${tenantName}'s tenancy at ${getPropertyUnitLabel(claim)}. The current rent cycle started on ${formatDate(confirmedCurrentDueDate)} and BOPA will use it for future rent due dates. Check this date before continuing.`}
-        confirmLabel="Confirm and approve"
+        title="Save existing tenant"
+        description={`You are about to save ${tenantName} as the current tenant of ${getPropertyUnitLabel(claim)}. The rent due date is ${formatDate(confirmedRentDueDate)}. No new agreement will be created.`}
+        confirmLabel="Save tenant"
         cancelLabel="Go back and check"
         isLoading={approvePending}
         onCancel={() => setShowApproveConfirm(false)}
@@ -461,10 +476,10 @@ export function ExistingTenantClaimReviewDetail({
         ok={approveState.ok}
         message={
           approveState.ok
-            ? `${approveState.tenantName ?? tenantName}'s tenancy has been created.`
+            ? `${approveState.tenantName ?? tenantName} is now saved as the current tenant.`
             : approveState.message
         }
-        successTitle="Tenancy created"
+        successTitle="Existing tenant saved"
         errorTitle="Could not approve claim"
       />
     </div>

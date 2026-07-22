@@ -108,6 +108,8 @@ type ManagerTenantOfflineRow = {
   occupation: string | null;
   rent_amount: number;
   current_balance: number;
+  last_payment_amount: number | null;
+  last_payment_date: string | null;
   move_in_date: string | null;
   payment_frequency: string;
   rent_cycle_anchor_date: string | null;
@@ -564,6 +566,8 @@ async function loadManagerSnapshot(params: {
             occupation,
             rent_amount,
             current_balance,
+            last_payment_amount,
+            last_payment_date,
             move_in_date,
             payment_frequency,
             rent_cycle_anchor_date,

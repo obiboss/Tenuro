@@ -213,6 +213,8 @@ export type ManagerTenantRow = {
   occupation: string | null;
   rent_amount: number;
   current_balance: number;
+  last_payment_amount?: number | null;
+  last_payment_date?: string | null;
   move_in_date: string | null;
   payment_frequency: "annual" | "biannual" | "quarterly" | "monthly";
   rent_cycle_anchor_date: string | null;
@@ -553,6 +555,8 @@ const MANAGER_TENANT_SELECT = `
   occupation,
   rent_amount,
   current_balance,
+  last_payment_amount,
+  last_payment_date,
   move_in_date,
   payment_frequency,
   rent_cycle_anchor_date,
@@ -1415,6 +1419,8 @@ export async function createManagerTenant(
     occupation: string | null;
     rentAmount: number;
     currentBalance: number;
+    lastPaymentAmount?: number | null;
+    lastPaymentDate?: string | null;
     moveInDate: string | null;
     paymentFrequency: "annual" | "biannual" | "quarterly" | "monthly";
     rentCycleAnchorDate: string | null;
@@ -1438,6 +1444,8 @@ export async function createManagerTenant(
       occupation: params.occupation,
       rent_amount: params.rentAmount,
       current_balance: params.currentBalance,
+      last_payment_amount: params.lastPaymentAmount ?? null,
+      last_payment_date: params.lastPaymentDate ?? null,
       move_in_date: params.moveInDate,
       payment_frequency: params.paymentFrequency,
       rent_cycle_anchor_date: params.rentCycleAnchorDate,
@@ -1447,6 +1455,33 @@ export async function createManagerTenant(
       status: params.status,
       notes: params.notes,
     })
+    .select(MANAGER_TENANT_SELECT)
+    .single<ManagerTenantRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function updateManagerTenantOpeningPaymentSnapshot(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    tenantId: string;
+    lastPaymentAmount: number;
+    lastPaymentDate: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("manager_tenants")
+    .update({
+      last_payment_amount: params.lastPaymentAmount,
+      last_payment_date: params.lastPaymentDate,
+    })
+    .eq("organization_id", params.organizationId)
+    .eq("id", params.tenantId)
     .select(MANAGER_TENANT_SELECT)
     .single<ManagerTenantRow>();
 

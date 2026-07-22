@@ -36,6 +36,25 @@ function hasServerRecord(conflict: OfflineConflictRecord) {
   return Object.keys(conflict.serverPayload).length > 0;
 }
 
+function getConflictMessage(conflict: OfflineConflictRecord) {
+  const reason = conflict.reasonMessage?.trim();
+
+  if (!reason) {
+    return "BOPA could not sync this record. It is still safely stored on this device.";
+  }
+
+  const isTechnicalDatabaseMessage =
+    /invalid input value|sqlstate|enum |column .+ does not exist|relation .+ does not exist|violates .+ constraint/i.test(
+      reason,
+    );
+
+  if (isTechnicalDatabaseMessage) {
+    return `BOPA could not save this ${ENTITY_LABELS[conflict.entityType]} online. The details are still safely stored on this device.`;
+  }
+
+  return reason;
+}
+
 export function OfflineConflictDialog({
   open,
   onClose,
@@ -193,8 +212,7 @@ export function OfflineConflictDialog({
                         {ENTITY_LABELS[conflict.entityType]}
                       </p>
                       <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-                        {conflict.reasonMessage ??
-                          "BOPA found a difference between this device and the online record."}
+                        {getConflictMessage(conflict)}
                       </p>
                     </div>
                   </div>
@@ -231,7 +249,7 @@ export function OfflineConflictDialog({
                           onClick={() => void keepOnlineRecord(conflict)}
                           className="min-h-11 rounded-button border border-border-soft bg-white px-4 text-sm font-black text-text-strong disabled:opacity-50"
                         >
-                          Discard saved record
+                          Remove saved record
                         </button>
                       </>
                     )}

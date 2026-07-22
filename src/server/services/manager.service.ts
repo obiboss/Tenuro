@@ -3,6 +3,7 @@ import "server-only";
 import {
   calculateCurrentRentCycle,
   calculateCurrentRentDueDate,
+  calculateNextRentDueDate,
   calculateRentPeriodFromStart,
 } from "@/lib/rent-cycle";
 import crypto from "node:crypto";
@@ -29,6 +30,7 @@ import {
   markManagerPropertyExistingTenantSetupCompleted,
   recordManagerLandlordRemittance as recordManagerLandlordRemittanceRecord,
   recordManagerRentPayment as recordManagerRentPaymentRecord,
+  updateManagerTenantOpeningPaymentSnapshot,
   upsertLandlordPayoutProfile,
 } from "@/server/repositories/manager.repository";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
@@ -415,7 +417,9 @@ export async function createManagerTenant(input: CreateManagerTenantInput) {
     anchorDate: moveInDate,
     paymentFrequency,
   });
-  const nextRentDueDate = calculateCurrentRentDueDate({
+  const nextRentDueDate = (input.currentBalance > 0
+    ? calculateCurrentRentDueDate
+    : calculateNextRentDueDate)({
     anchorDate: moveInDate,
     paymentFrequency,
   });
@@ -457,10 +461,20 @@ export async function createManagerTenant(input: CreateManagerTenantInput) {
   }
 
   const tenantData = data as Record<string, unknown>;
+  const savedTenantId =
+    typeof tenantData.id === "string" ? tenantData.id : tenantId;
+  const tenantWithPaymentSnapshot =
+    await updateManagerTenantOpeningPaymentSnapshot(admin, {
+      organizationId: organization.id,
+      tenantId: savedTenantId,
+      lastPaymentAmount: roundMoney(input.lastPaymentAmount),
+      lastPaymentDate: input.lastPaymentDate,
+    });
 
   return {
     ...tenantData,
-    id: typeof tenantData.id === "string" ? tenantData.id : tenantId,
+    ...tenantWithPaymentSnapshot,
+    id: savedTenantId,
     payment_frequency: paymentFrequency,
     rent_cycle_anchor_date: moveInDate,
     current_period_start: currentCycle.periodStart,

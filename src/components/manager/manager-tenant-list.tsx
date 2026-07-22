@@ -324,6 +324,11 @@ export function ManagerTenantList({
                             {tenant.email}
                           </p>
                         ) : null}
+                        {tenant.last_payment_amount && tenant.last_payment_date ? (
+                          <p className="mt-1 text-xs font-semibold text-text-muted">
+                            Last paid {formatNaira(tenant.last_payment_amount)} on {formatDate(tenant.last_payment_date)}
+                          </p>
+                        ) : null}
                         {tenant.status === "eviction_notice" ? (
                           <span className="mt-2 inline-flex rounded-full bg-warning-soft px-3 py-1 text-xs font-black uppercase tracking-wide text-warning">
                             Notice served
@@ -451,6 +456,11 @@ export function ManagerTenantList({
                         {formatNaira(tenant.rent_amount)} · Due{" "}
                         {formatDate(tenant.next_rent_due_date)}
                       </p>
+                      {tenant.last_payment_amount && tenant.last_payment_date ? (
+                        <p className="mt-1 text-xs font-semibold text-text-muted">
+                          Last paid {formatNaira(tenant.last_payment_amount)} on {formatDate(tenant.last_payment_date)}
+                        </p>
+                      ) : null}
                     </div>
                     <span
                       className={`shrink-0 rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${getTenantRentStatusClassName(

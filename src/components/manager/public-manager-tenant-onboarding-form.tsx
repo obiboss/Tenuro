@@ -80,6 +80,7 @@ function getSuccessCopy(
     | "review"
     | "declined"
     | undefined,
+  isCurrentOccupant: boolean,
 ) {
   if (screeningResult === "declined") {
     return {
@@ -104,7 +105,9 @@ function getSuccessCopy(
     badge: "Submitted",
     title: "Details submitted",
     description: "Your information is being reviewed.",
-    next: "Once approved, you will receive the tenancy agreement through WhatsApp or email.",
+    next: isCurrentOccupant
+      ? "Once approved, your existing tenancy will be added to the property record. A new agreement is not required."
+      : "Once approved, you will receive the tenancy agreement through WhatsApp or email.",
   };
 }
 
@@ -184,7 +187,7 @@ export function PublicManagerTenantOnboardingForm({
     [guarantors],
   );
 
-  const successCopy = getSuccessCopy(state.screeningResult);
+  const successCopy = getSuccessCopy(state.screeningResult, isCurrentOccupant);
 
   async function handleReceiptUpload(
     event: React.ChangeEvent<HTMLInputElement>,

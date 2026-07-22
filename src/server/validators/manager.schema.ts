@@ -278,6 +278,15 @@ export const createManagerTenantSchema = z.object({
   occupation: optionalTextSchema(120, "Occupation is too long."),
   rentAmount: positiveMoneySchema,
   paymentFrequency: z.enum(RENT_PAYMENT_FREQUENCIES),
+  lastPaymentAmount: positiveMoneySchema,
+  lastPaymentDate: z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter the last payment date.")
+    .refine(
+      (value) => value <= getCurrentLagosDateOnly(),
+      "Last payment date cannot be in the future.",
+    ),
   currentBalance: moneySchema.default(0),
   moveInDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter the move-in date."),
   nextRentDueDate: optionalDateSchema,

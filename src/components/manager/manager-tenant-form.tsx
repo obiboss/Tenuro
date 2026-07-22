@@ -5,11 +5,14 @@ import { createManagerTenantAction } from "@/actions/manager.actions";
 import { initialManagerActionState } from "@/actions/manager.state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Input } from "@/components/ui/input";
 import { runOfflineCapableFormAction } from "@/lib/offline/offline-form.client";
 import { saveManagerTenantOffline } from "@/lib/offline/operational-mutations.client";
 import {
   calculateCurrentRentDueDate,
+  calculateNextRentDueDate,
+  getCurrentLagosDateOnly,
   RENT_PAYMENT_FREQUENCY_LABELS,
 } from "@/lib/rent-cycle";
 import type {
@@ -67,6 +70,7 @@ export function ManagerTenantForm({
   const initialUnitId = lockedUnitId ?? vacantUnitsForProperty[0]?.id ?? "";
   const [selectedUnitId, setSelectedUnitId] = useState(initialUnitId);
   const [moveInDate, setMoveInDate] = useState("");
+  const [currentBalance, setCurrentBalance] = useState("0");
 
   const selectedProperty = useMemo(
     () =>
@@ -79,20 +83,25 @@ export function ManagerTenantForm({
     [selectedUnitId, vacantUnitsForProperty],
   );
 
-  const currentRentDueDate = useMemo(() => {
+  const rentDueDate = useMemo(() => {
     if (!selectedUnit || !moveInDate) {
       return "";
     }
 
     try {
-      return calculateCurrentRentDueDate({
+      const balance = Number(currentBalance || 0);
+      const calculator = balance > 0
+        ? calculateCurrentRentDueDate
+        : calculateNextRentDueDate;
+
+      return calculator({
         anchorDate: moveInDate,
         paymentFrequency: selectedUnit.rent_frequency,
       });
     } catch {
       return "";
     }
-  }, [moveInDate, selectedUnit]);
+  }, [currentBalance, moveInDate, selectedUnit]);
 
   const offlineCapableAction = useCallback(
     (previousState: typeof initialManagerActionState, formData: FormData) =>
@@ -130,7 +139,7 @@ export function ManagerTenantForm({
       <Card>
         <CardContent>
           <h2 className="text-lg font-black tracking-tight text-text-strong">
-            Add tenant
+            Add existing tenant
           </h2>
           <p className="rounded-card bg-surface p-4 text-sm font-semibold leading-6 text-text-muted">
             Add an active property first before creating tenants.
@@ -179,13 +188,13 @@ export function ManagerTenantForm({
         name="paymentFrequency"
         value={selectedUnit?.rent_frequency ?? "annual"}
       />
-      <input type="hidden" name="nextRentDueDate" value={currentRentDueDate} />
+      <input type="hidden" name="nextRentDueDate" value={rentDueDate} />
 
       <Card>
         <CardContent>
           <div>
             <h2 className="text-lg font-black tracking-tight text-text-strong">
-              {isLockedToUnit ? "Add current occupant" : "Add tenant"}
+              {isLockedToUnit ? "Add current occupant" : "Add existing tenant"}
             </h2>
             <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
               The selected unit controls the rent amount and collection frequency.
@@ -282,7 +291,7 @@ export function ManagerTenantForm({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Input
-              label="Move-in date"
+              label="Original move-in date"
               name="moveInDate"
               type="date"
               value={moveInDate}
@@ -292,24 +301,47 @@ export function ManagerTenantForm({
               required
             />
             <div className="rounded-button border border-border-soft bg-background px-4 py-3">
-              <p className="text-sm font-bold text-text-muted">Current rent due</p>
+              <p className="text-sm font-bold text-text-muted">Rent due date</p>
               <p className="mt-2 text-lg font-black text-text-strong">
-                {formatDate(currentRentDueDate)}
+                {formatDate(rentDueDate)}
               </p>
               <p className="mt-1 text-xs font-semibold text-text-muted">
-                Calculated automatically from the original move-in date.
+                Shows the outstanding cycle when owing, otherwise the next renewal date.
               </p>
             </div>
           </div>
 
-          <Input
-            label="Current balance"
+          <div className="space-y-4 rounded-card border border-border-soft bg-surface p-4">
+            <div>
+              <h3 className="font-black text-text-strong">Last rent payment</h3>
+              <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
+                Record the most recent amount and payment date. The payment date does not change the rent-cycle anchor.
+              </p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <CurrencyInput
+                label="Amount last paid"
+                name="lastPaymentAmount"
+                error={state.fieldErrors?.lastPaymentAmount?.[0]}
+                required
+              />
+              <Input
+                label="Date of last payment"
+                name="lastPaymentDate"
+                type="date"
+                max={getCurrentLagosDateOnly()}
+                error={state.fieldErrors?.lastPaymentDate?.[0]}
+                required
+              />
+            </div>
+          </div>
+
+          <CurrencyInput
+            label="Amount currently owed"
             name="currentBalance"
-            type="number"
-            min="0"
-            step="0.01"
-            defaultValue="0"
-            helperText="Enter 0 if the tenant is not owing."
+            value={currentBalance}
+            onValueChange={setCurrentBalance}
+            helperText="Enter 0 when the tenant is fully paid up."
             error={state.fieldErrors?.currentBalance?.[0]}
             required
           />
@@ -336,7 +368,7 @@ export function ManagerTenantForm({
               </p>
             ) : null}
             <Button type="submit" isLoading={isPending} disabled={Boolean(submitDisabledReason)} fullWidth>
-              Save tenant
+              Save existing tenant
             </Button>
           </div>
         </CardFooter>

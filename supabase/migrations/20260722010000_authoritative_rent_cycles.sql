@@ -472,6 +472,7 @@ set
   ),
   next_rent_due_date = case
     when tenant.status in ('active', 'eviction_notice')
+      and coalesce(tenant.current_balance, 0) > 0
       then public.bopa_current_rent_due_date(
         coalesce(tenant.rent_cycle_anchor_date, tenant.move_in_date),
         unit.rent_frequency,
@@ -853,8 +854,8 @@ begin
   end if;
 
   select case
-    when organization.owner_profile_id = p_profile_id then 'owner'
-    else staff.staff_role
+    when organization.owner_profile_id = p_profile_id then 'owner'::text
+    else staff.staff_role::text
   end
   into v_role
   from public.manager_organizations organization
@@ -936,7 +937,20 @@ begin
     nullif(btrim(p_occupation), ''), v_unit.rent_amount,
     v_unit.rent_frequency, p_move_in_date, round(p_current_balance, 2),
     p_move_in_date,
-    public.bopa_current_rent_due_date(p_move_in_date, v_unit.rent_frequency, public.bopa_lagos_current_date()),
+    case
+      when round(p_current_balance, 2) > 0 then
+        public.bopa_current_rent_due_date(
+          p_move_in_date,
+          v_unit.rent_frequency,
+          public.bopa_lagos_current_date()
+        )
+      else
+        public.bopa_next_rent_due_date(
+          p_move_in_date,
+          v_unit.rent_frequency,
+          public.bopa_lagos_current_date()
+        )
+    end,
     'active', nullif(btrim(p_notes), '')
   ) returning * into v_tenant;
 

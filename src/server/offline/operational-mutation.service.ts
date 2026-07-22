@@ -175,6 +175,38 @@ function managerTenantMatchesQueuedPayload(
   );
 }
 
+async function saveManagerTenantOpeningPaymentSnapshot(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    tenantId: string;
+    lastPaymentAmount: number | null;
+    lastPaymentDate: string | null;
+    fallbackTenant: Record<string, unknown>;
+  },
+) {
+  if (params.lastPaymentAmount === null || !params.lastPaymentDate) {
+    return params.fallbackTenant;
+  }
+
+  const { data, error } = await supabase
+    .from("manager_tenants")
+    .update({
+      last_payment_amount: params.lastPaymentAmount,
+      last_payment_date: params.lastPaymentDate,
+    })
+    .eq("organization_id", params.organizationId)
+    .eq("id", params.tenantId)
+    .select("*")
+    .single<Record<string, unknown>>();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 async function applyManagerProperty(
   supabase: SupabaseClient,
   workspace: OperationalWorkspace,
@@ -386,12 +418,21 @@ async function applyManagerTenant(
 
   if (existingTenant) {
     if (managerTenantMatchesQueuedPayload(existingTenant, payload)) {
+      const tenantWithPaymentSnapshot =
+        await saveManagerTenantOpeningPaymentSnapshot(supabase, {
+          organizationId: workspace.workspaceId,
+          tenantId: String(existingTenant.id),
+          lastPaymentAmount: payload.lastPaymentAmount,
+          lastPaymentDate: payload.lastPaymentDate,
+          fallbackTenant: existingTenant,
+        });
+
       return {
         clientMutationId: mutation.clientMutationId,
         status: "duplicate" as const,
         entity: toEntity(
           mutation,
-          existingTenant,
+          tenantWithPaymentSnapshot,
           String(existingTenant.id),
         ),
       };
@@ -441,10 +482,20 @@ async function applyManagerTenant(
     throw new Error("The tenant could not be confirmed after syncing.");
   }
 
+  const createdTenant = data as Record<string, unknown>;
+  const tenantWithPaymentSnapshot =
+    await saveManagerTenantOpeningPaymentSnapshot(supabase, {
+      organizationId: workspace.workspaceId,
+      tenantId: String(createdTenant.id ?? mutation.entityId),
+      lastPaymentAmount: payload.lastPaymentAmount,
+      lastPaymentDate: payload.lastPaymentDate,
+      fallbackTenant: createdTenant,
+    });
+
   return {
     clientMutationId: mutation.clientMutationId,
     status: "applied" as const,
-    entity: toEntity(mutation, data as Record<string, unknown>),
+    entity: toEntity(mutation, tenantWithPaymentSnapshot),
   };
 }
 

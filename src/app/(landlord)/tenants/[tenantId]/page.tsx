@@ -28,6 +28,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { TrustNotice } from "@/components/ui/trust-notice";
 import { resolveTenantPipelineStatus } from "@/lib/tenant-pipeline-status";
+import { RENT_PAYMENT_FREQUENCY_LABELS } from "@/lib/rent-cycle";
 import {
   isSubmittedForLandlordReview,
   TENANT_ONBOARDING_STATUSES,
@@ -69,6 +70,49 @@ function sumCharges(
   charges: Awaited<ReturnType<typeof getLandlordChargesForCurrentLandlord>>,
 ) {
   return charges.reduce((total, charge) => total + Number(charge.amount), 0);
+}
+
+function formatNaira(amount: number) {
+  return new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency: "NGN",
+    maximumFractionDigits: 0,
+  }).format(Number.isFinite(Number(amount)) ? Number(amount) : 0);
+}
+
+function formatDate(value: string | null | undefined) {
+  if (!value) {
+    return "Not set";
+  }
+
+  return new Intl.DateTimeFormat("en-NG", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(`${value}T00:00:00`));
+}
+
+function getExistingTenantClaimId(
+  answers: Record<string, unknown> | null | undefined,
+) {
+  if (!answers) {
+    return null;
+  }
+
+  const value =
+    answers.existing_tenant_claim_id ??
+    answers.source_existing_tenant_claim_id;
+
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function isExistingTenantRecord(
+  answers: Record<string, unknown> | null | undefined,
+) {
+  return Boolean(
+    answers?.source === "existing_tenant_claim" ||
+      getExistingTenantClaimId(answers),
+  );
 }
 
 function resolveAgreementStep(params: {
@@ -122,6 +166,8 @@ export default async function TenantDetailPage({
     setupTenancy && !isTenancyInAgreementSetup(setupTenancy)
       ? setupTenancy
       : await getCurrentTenantActiveTenancy(tenantId);
+  const existingTenantRecord = isExistingTenantRecord(tenant.kyc_answers);
+  const existingTenantClaimId = getExistingTenantClaimId(tenant.kyc_answers);
 
   const agreementDocument = setupTenancy
     ? await getCurrentTenancyAgreementByTenancyId(setupTenancy.id)
@@ -172,28 +218,36 @@ export default async function TenantDetailPage({
   );
 
   const isAgreementAccepted = agreementDocument?.document_status === "accepted";
+  const agreementRequirementSatisfied =
+    existingTenantRecord || isAgreementAccepted;
   const isTenantApproved = tenant.onboarding_status === "approved";
   const isRentSettled = Boolean(
     ledgerSummary.balance && outstandingBalance <= 0,
   );
 
   const hasPaymentLinkPrerequisites = Boolean(
-    activeTenancy && hasOutstandingBalance && isAgreementAccepted,
+    activeTenancy && hasOutstandingBalance && agreementRequirementSatisfied,
   );
   const canSendPaymentLink =
     hasPaymentLinkPrerequisites && payoutVerification.isVerified;
 
   const shouldShowPaymentLockedNotice = Boolean(
-    activeTenancy && hasOutstandingBalance && !isAgreementAccepted,
+    activeTenancy &&
+      hasOutstandingBalance &&
+      !agreementRequirementSatisfied &&
+      !existingTenantRecord,
   );
 
-  const canCreateTenancyRecord = isTenantApproved && !setupTenancy;
-  const agreementStep = resolveAgreementStep({
-    requestedStep: step,
-    isTenantApproved,
-    setupTenancy,
-    agreementDocument,
-  });
+  const canCreateTenancyRecord =
+    isTenantApproved && !setupTenancy && !existingTenantRecord;
+  const agreementStep = existingTenantRecord
+    ? null
+    : resolveAgreementStep({
+        requestedStep: step,
+        isTenantApproved,
+        setupTenancy,
+        agreementDocument,
+      });
 
   const shouldShowKycReview =
     isSubmittedForLandlordReview(tenant.onboarding_status) ||
@@ -211,7 +265,7 @@ export default async function TenantDetailPage({
   const shouldShowActivationCard = Boolean(
     isTenantApproved &&
     activeTenancy &&
-    isAgreementAccepted &&
+    agreementRequirementSatisfied &&
     isRentSettled &&
     !tenant.profile_id,
   );
@@ -241,6 +295,213 @@ export default async function TenantDetailPage({
                         : (paymentGate?.description ??
                           "Online rent payment links are unavailable until payout verification is approved. You can still record manual payments.")
                       : "Send the tenant activation link so they can set their password and access their dashboard.";
+
+  if (existingTenantRecord) {
+    if (!activeTenancy) {
+      return (
+        <div className="mx-auto w-full max-w-3xl">
+          <Link
+            href="/tenants"
+            className="mb-5 inline-flex min-h-11 items-center gap-2 text-sm font-bold text-primary hover:text-primary-hover"
+          >
+            <ArrowLeft aria-hidden="true" size={18} strokeWidth={2.6} />
+            Back to tenants
+          </Link>
+
+          <PageHeader
+            title={tenant.full_name}
+            description={`${tenant.units?.properties?.property_name ?? "Property"} · ${tenant.units?.unit_identifier ?? "Unit"}`}
+            action={<Badge tone="warning">Record incomplete</Badge>}
+          />
+
+          <SectionCard
+            title="Complete existing tenant record"
+            description="This tenant already lives in the unit. Confirm the rent history to activate the tenancy record; a new agreement is not required."
+          >
+            {existingTenantClaimId ? (
+              <Link
+                href={`/existing-tenant-claims/${existingTenantClaimId}`}
+                className="inline-flex min-h-12 w-full items-center justify-center rounded-button bg-primary px-5 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary-hover"
+              >
+                Continue existing tenant setup
+              </Link>
+            ) : (
+              <TrustNotice
+                title="Existing tenant record needs attention"
+                description="Return to the existing tenant review list and complete the saved rent history."
+              />
+            )}
+          </SectionCard>
+        </div>
+      );
+    }
+
+    const frequencyLabel =
+      RENT_PAYMENT_FREQUENCY_LABELS[activeTenancy.payment_frequency];
+    const rentDueDate = hasOutstandingBalance
+      ? activeTenancy.current_period_start
+      : (activeTenancy.next_rent_charge_date ?? activeTenancy.next_renewal_date);
+
+    return (
+      <div className="mx-auto w-full max-w-3xl">
+        <Link
+          href="/tenants"
+          className="mb-4 inline-flex min-h-11 items-center gap-2 text-sm font-bold text-primary hover:text-primary-hover"
+        >
+          <ArrowLeft aria-hidden="true" size={18} strokeWidth={2.6} />
+          Back to tenants
+        </Link>
+
+        <PageHeader
+          title={tenant.full_name}
+          description={`${tenant.units?.properties?.property_name ?? "Property"} · ${tenant.units?.unit_identifier ?? "Unit"}`}
+          action={<Badge tone="success">Current tenant</Badge>}
+        />
+
+        <div className="space-y-5">
+          <SectionCard
+            title="Rent position"
+            description="This existing tenant is active. No new agreement is required."
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-button bg-background p-4">
+                <p className="text-sm font-bold text-text-muted">Unit rent</p>
+                <p className="mt-1 text-lg font-black text-text-strong">
+                  {formatNaira(Number(activeTenancy.rent_amount))}
+                </p>
+              </div>
+              <div className="rounded-button bg-background p-4">
+                <p className="text-sm font-bold text-text-muted">Rent collection</p>
+                <p className="mt-1 text-lg font-black text-text-strong">
+                  {frequencyLabel}
+                </p>
+              </div>
+              <div className="rounded-button bg-background p-4">
+                <p className="text-sm font-bold text-text-muted">Original move-in date</p>
+                <p className="mt-1 text-lg font-black text-text-strong">
+                  {formatDate(activeTenancy.move_in_date ?? activeTenancy.start_date)}
+                </p>
+              </div>
+              <div className="rounded-button bg-background p-4">
+                <p className="text-sm font-bold text-text-muted">Rent due date</p>
+                <p className="mt-1 text-lg font-black text-text-strong">
+                  {formatDate(rentDueDate)}
+                </p>
+              </div>
+            </div>
+
+            <div
+              className={`mt-3 rounded-button p-4 ${
+                hasOutstandingBalance ? "bg-danger-soft" : "bg-success-soft"
+              }`}
+            >
+              <p className="text-sm font-bold text-text-muted">Amount owed</p>
+              <p
+                className={`mt-1 text-xl font-black ${
+                  hasOutstandingBalance ? "text-danger" : "text-success"
+                }`}
+              >
+                {formatNaira(outstandingBalance)}
+              </p>
+            </div>
+          </SectionCard>
+
+          {canSendPaymentLink && activeTenancy ? (
+            <SectionCard
+              title="Collect outstanding rent"
+              description="Send the tenant a secure rent payment link."
+            >
+              <RentPaymentModal
+                tenancyId={activeTenancy.id}
+                defaultAmount={outstandingBalance}
+                landlordChargesAmount={0}
+                agentCommissionAmount={agentCommissionAmount}
+                tenuroFeeAmount={tenuroFeeAmount}
+                periodStart={activeTenancy.current_period_start}
+                periodEnd={activeTenancy.current_period_end}
+              />
+            </SectionCard>
+          ) : null}
+
+          {hasPaymentLinkPrerequisites && paymentGate ? (
+            <SectionCard
+              title="Online payment link unavailable"
+              description="You can still record a bank transfer or cash payment."
+              action={
+                <Badge tone={payoutVerification.badgeTone}>
+                  {payoutVerification.badgeLabel}
+                </Badge>
+              }
+            >
+              <PayoutPaymentGateNotice gate={paymentGate} />
+            </SectionCard>
+          ) : null}
+
+          {shouldShowActivationCard ? (
+            <TenantActivationInviteCard tenantId={tenant.id} />
+          ) : null}
+
+          <details className="rounded-card border border-border-soft bg-white shadow-sm">
+            <summary className="cursor-pointer list-none px-5 py-4 text-sm font-black text-primary">
+              View tenant details and more actions
+            </summary>
+
+            <div className="space-y-5 border-t border-border-soft p-5">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-button bg-background p-4">
+                  <p className="text-sm font-bold text-text-muted">Phone number</p>
+                  <p className="mt-1 font-black text-text-strong">
+                    {tenant.phone_number}
+                  </p>
+                </div>
+                <div className="rounded-button bg-background p-4">
+                  <p className="text-sm font-bold text-text-muted">Occupation</p>
+                  <p className="mt-1 font-black text-text-strong">
+                    {tenant.occupation || "Not provided"}
+                  </p>
+                </div>
+              </div>
+
+              <TrustNotice
+                title="Agreement is optional"
+                description="Create a new agreement later only when the tenancy terms change or when both parties want one at renewal."
+              />
+
+              <RequestPaymentProofPanel
+                requester="landlord"
+                tenancyId={activeTenancy.id}
+                tenantName={tenant.full_name}
+                tenantPhone={tenant.phone_number}
+                propertyUnitLabel={`${tenant.units?.properties?.property_name ?? "Property"} · ${tenant.units?.unit_identifier ?? "Unit"}`}
+                rentAmount={Number(activeTenancy.rent_amount)}
+              />
+
+              {canIssueQuitNotice ? (
+                <QuitNoticeIssueCard
+                  tenantId={tenant.id}
+                  tenancyId={activeTenancy.id}
+                />
+              ) : null}
+
+              <MoveOutConfirmationCard
+                tenantId={tenant.id}
+                notices={quitNotices}
+              />
+
+              {tenant.landlord_notes ? (
+                <div className="rounded-button bg-background p-4">
+                  <p className="text-sm font-bold text-text-muted">Private note</p>
+                  <p className="mt-1 text-sm font-semibold leading-6 text-text-normal">
+                    {tenant.landlord_notes}
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          </details>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

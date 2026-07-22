@@ -317,6 +317,8 @@ export async function createManagerTenantAction(
       occupation: formData.get("occupation"),
       rentAmount: formData.get("rentAmount"),
       paymentFrequency: formData.get("paymentFrequency"),
+      lastPaymentAmount: formData.get("lastPaymentAmount"),
+      lastPaymentDate: formData.get("lastPaymentDate"),
       currentBalance: formData.get("currentBalance"),
       moveInDate: formData.get("moveInDate"),
       nextRentDueDate: formData.get("nextRentDueDate"),
@@ -333,7 +335,7 @@ export async function createManagerTenantAction(
 
     return {
       ok: true,
-      message: "Tenant created successfully.",
+      message: "Existing tenant saved successfully.",
       propertyId: parsed.propertyId,
       landlordClientId: parsed.landlordClientId,
       unitId: parsed.unitId,
