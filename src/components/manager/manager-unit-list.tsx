@@ -1,6 +1,16 @@
+"use client";
+
 import Link from "next/link";
+import { useManagerOfflineData } from "@/components/manager/manager-offline-data-provider";
 import { isManagerCurrentTenantStatus } from "@/constants/manager";
 import { RENT_PAYMENT_FREQUENCY_LABELS } from "@/lib/rent-cycle";
+import {
+  applyOfflineTenantOccupancy,
+  getManagerOfflineStatusLabel,
+  getManagerOfflineSyncStatus,
+  isManagerUnsyncedRow,
+  mergeManagerRows,
+} from "@/lib/offline/manager-data";
 import type {
   ManagerPropertyRow,
   ManagerTenantRow,
@@ -187,11 +197,18 @@ function buildPropertyDetailHref(params: {
   propertyDetailTab?: string;
   query: Record<string, string>;
   hash: string;
+  isLocalProperty?: boolean;
 }) {
   const searchParams = new URLSearchParams(params.query);
 
   if (params.propertyDetailTab) {
     searchParams.set("tab", params.propertyDetailTab);
+  }
+
+  if (params.isLocalProperty) {
+    searchParams.set("pendingProperty", params.propertyId);
+
+    return `/manager/properties?${searchParams.toString()}#${params.hash}`;
   }
 
   return `/manager/properties/${params.propertyId}?${searchParams.toString()}#${params.hash}`;
@@ -243,6 +260,20 @@ export function ManagerUnitList({
   addUnitHref = "#add-unit",
   propertyDetailTab,
 }: ManagerUnitListProps) {
+  const offline = useManagerOfflineData();
+  const propertyIds = new Set(properties.map((property) => property.id));
+  const mergedTenants = mergeManagerRows(
+    tenants,
+    offline.tenants.filter((tenant) => propertyIds.has(tenant.property_id)),
+  );
+  const mergedUnits = applyOfflineTenantOccupancy(
+    mergeManagerRows(
+      units,
+      offline.units.filter((unit) => propertyIds.has(unit.property_id)),
+    ),
+    mergedTenants,
+  );
+
   const propertyNameById = new Map(
     properties.map((property) => [property.id, property.property_name]),
   );
@@ -250,7 +281,7 @@ export function ManagerUnitList({
     properties.map((property) => [property.id, property]),
   );
 
-  const tenantByUnitId = buildTenantByUnitId(tenants);
+  const tenantByUnitId = buildTenantByUnitId(mergedTenants);
   const openRequestByUnitId = buildOpenRequestByUnitId(onboardingRequests);
 
   return (
@@ -279,7 +310,7 @@ export function ManagerUnitList({
         ) : null}
       </div>
 
-      {units.length > 0 ? (
+      {mergedUnits.length > 0 ? (
         <>
           <div className="hidden overflow-x-auto md:block">
             <table className="min-w-full divide-y divide-border-soft text-left">
@@ -309,7 +340,7 @@ export function ManagerUnitList({
               </thead>
 
               <tbody className="divide-y divide-border-soft bg-white">
-                {units.map((unit) => {
+                {mergedUnits.map((unit) => {
                   const property = propertyById.get(unit.property_id);
                   const shouldCaptureExistingTenant = Boolean(
                     property?.existing_tenant_setup_required &&
@@ -328,9 +359,22 @@ export function ManagerUnitList({
                   return (
                     <tr key={unit.id} className="align-top">
                       <td className="px-4 py-4">
-                        <p className="text-sm font-black text-text-strong">
-                          {unit.unit_label}
-                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-black text-text-strong">
+                            {unit.unit_label}
+                          </p>
+                          {isManagerUnsyncedRow(unit) ? (
+                            <span
+                              className={
+                                getManagerOfflineSyncStatus(unit) === "review"
+                                  ? "rounded-full bg-danger-soft px-2 py-0.5 text-[11px] font-black text-danger"
+                                  : "rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-black text-primary"
+                              }
+                            >
+                              {getManagerOfflineStatusLabel(unit)}
+                            </span>
+                          ) : null}
+                        </div>
                         <p className="mt-1 text-xs font-semibold text-text-muted">
                           {propertyNameById.get(unit.property_id) ?? "Property"}
                         </p>
@@ -359,6 +403,11 @@ export function ManagerUnitList({
                             className="text-primary underline-offset-4 hover:underline"
                           >
                             {tenantLabel}
+                            {isManagerUnsyncedRow(tenant) ? (
+                              <span className="ml-2 rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-black text-primary">
+                                {getManagerOfflineStatusLabel(tenant)}
+                              </span>
+                            ) : null}
                           </Link>
                         ) : (
                           <span className="text-text-muted">
@@ -398,6 +447,7 @@ export function ManagerUnitList({
                                   onboardUnit: unit.id,
                                 },
                                 hash: "tenant-onboarding",
+                                isLocalProperty: isManagerUnsyncedRow(property),
                               })}
                               prefetch={false}
                               className="inline-flex min-h-10 items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
@@ -433,7 +483,7 @@ export function ManagerUnitList({
           </div>
 
           <div className="divide-y divide-border-soft md:hidden">
-            {units.map((unit) => {
+            {mergedUnits.map((unit) => {
               const property = propertyById.get(unit.property_id);
               const shouldCaptureExistingTenant = Boolean(
                 property?.existing_tenant_setup_required &&
@@ -453,9 +503,22 @@ export function ManagerUnitList({
                 <article key={unit.id} className="p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate font-black text-text-strong">
-                        {unit.unit_label}
-                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate font-black text-text-strong">
+                          {unit.unit_label}
+                        </p>
+                        {isManagerUnsyncedRow(unit) ? (
+                          <span
+                            className={
+                              getManagerOfflineSyncStatus(unit) === "review"
+                                ? "rounded-full bg-danger-soft px-2 py-0.5 text-[11px] font-black text-danger"
+                                : "rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-black text-primary"
+                            }
+                          >
+                            {getManagerOfflineStatusLabel(unit)}
+                          </span>
+                        ) : null}
+                      </div>
                       <p className="mt-1 text-sm font-semibold text-text-muted">
                         {unit.unit_type ?? "Unit"} ·{" "}
                         {formatNaira(unit.rent_amount)} ·{" "}
@@ -497,6 +560,7 @@ export function ManagerUnitList({
                                   onboardUnit: unit.id,
                                 },
                                 hash: "tenant-onboarding",
+                                isLocalProperty: isManagerUnsyncedRow(property),
                               })}
                           prefetch={false}
                           className="inline-flex min-h-10 w-full items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"

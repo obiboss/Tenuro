@@ -153,7 +153,7 @@ export function ManagerTenantForm({
             </h2>
             <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
               {state.offlineSaved
-                ? "The unit will show as occupied after this record syncs."
+                ? "The tenant is visible immediately. BOPA will sync the record automatically."
                 : "The unit now shows as occupied, with rent dates calculated from the move-in date."}
             </p>
           </div>

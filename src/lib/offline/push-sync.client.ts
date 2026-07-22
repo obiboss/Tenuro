@@ -8,6 +8,7 @@ import {
 import {
   putOfflineEntity,
   removeOfflineEntity,
+  updateOfflineEntityData,
 } from "@/lib/offline/entity.repository";
 import {
   createOfflineWorkspaceKey,
@@ -97,6 +98,25 @@ async function moveRetryExhaustedToReview(
     mutation,
   );
 
+  const retryMessage =
+    "This change could not be sent after several attempts.";
+
+  await updateOfflineEntityData({
+    ownerProfileId: mutation.ownerProfileId,
+    workspaceType: mutation.workspaceType,
+    workspaceId: mutation.workspaceId,
+    entityType: mutation.entityType,
+    entityId: mutation.entityId,
+    update: {
+      offline_sync_status: "review",
+      offline_sync_error: retryMessage,
+    },
+  });
+  await updateRelatedManagerPropertyRecords(mutation, {
+    offline_sync_status: "review",
+    offline_sync_error: retryMessage,
+  });
+
   await addOfflineConflict({
     ownerProfileId:
       mutation.ownerProfileId,
@@ -129,6 +149,30 @@ async function moveRetryExhaustedToReview(
   );
 }
 
+async function updateRelatedManagerPropertyRecords(
+  mutation: OfflineOutboxRecord,
+  update: Record<string, unknown>,
+) {
+  if (mutation.entityType !== "manager_property" || !isObject(mutation.payload)) {
+    return;
+  }
+
+  const newLandlord = mutation.payload.newLandlord;
+
+  if (!isObject(newLandlord) || typeof newLandlord.id !== "string") {
+    return;
+  }
+
+  await updateOfflineEntityData({
+    ownerProfileId: mutation.ownerProfileId,
+    workspaceType: mutation.workspaceType,
+    workspaceId: mutation.workspaceId,
+    entityType: "manager_landlord_client",
+    entityId: newLandlord.id,
+    update,
+  });
+}
+
 async function applyServerEntity(
   mutation: OfflineOutboxRecord,
   entity: OfflineSafeMutationEntity,
@@ -143,6 +187,8 @@ async function applyServerEntity(
     });
   }
 
+  const syncedAt = new Date().toISOString();
+
   await putOfflineEntity({
     ownerProfileId:
       mutation.ownerProfileId,
@@ -156,7 +202,18 @@ async function applyServerEntity(
       entity.serverRevision,
     serverUpdatedAt: entity.updatedAt,
     deletedAt: entity.deletedAt,
-    data: entity.data,
+    data: {
+      ...entity.data,
+      offline_sync_status: "synced",
+      offline_sync_error: null,
+      offline_synced_at: syncedAt,
+    },
+  });
+
+  await updateRelatedManagerPropertyRecords(mutation, {
+    offline_sync_status: "synced",
+    offline_sync_error: null,
+    offline_synced_at: syncedAt,
   });
 }
 
@@ -197,29 +254,27 @@ async function moveToReview(
       : undefined;
 
   if (serverEntity) {
-    await applyServerEntity(
-      mutation,
-      serverEntity,
-    );
-  } else if (
-    mutation.operation === "create"
-  ) {
-    await removeOfflineEntity({
-      ownerProfileId:
-        mutation.ownerProfileId,
-      workspaceType:
-        mutation.workspaceType,
-      workspaceId:
-        mutation.workspaceId,
-      entityType:
-        mutation.entityType,
-      entityId:
-        mutation.entityId,
-    });
+    await applyServerEntity(mutation, serverEntity);
   } else {
-    await requireFullReadRefresh(
-      mutation,
-    );
+    await updateOfflineEntityData({
+      ownerProfileId: mutation.ownerProfileId,
+      workspaceType: mutation.workspaceType,
+      workspaceId: mutation.workspaceId,
+      entityType: mutation.entityType,
+      entityId: mutation.entityId,
+      update: {
+        offline_sync_status: "review",
+        offline_sync_error: result.message,
+      },
+    });
+    await updateRelatedManagerPropertyRecords(mutation, {
+      offline_sync_status: "review",
+      offline_sync_error: result.message,
+    });
+
+    if (mutation.operation !== "create") {
+      await requireFullReadRefresh(mutation);
+    }
   }
 
   await addOfflineConflict({
@@ -503,5 +558,17 @@ export async function pushOfflineSafeMutations() {
       mutation,
       result,
     );
+  }
+
+  // A manager may capture many properties, units, tenants, payments, or
+  // maintenance records before connectivity returns. Continue draining ready
+  // batches so synchronization is not limited to the first 25 records.
+  const remainingReadyMutations = await listReadyOfflineMutations(
+    ownerProfileId,
+    1,
+  );
+
+  if (remainingReadyMutations.length > 0) {
+    await pushOfflineSafeMutations();
   }
 }

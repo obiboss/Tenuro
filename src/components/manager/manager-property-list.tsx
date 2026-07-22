@@ -1,11 +1,15 @@
 import Link from "next/link";
 import {
-  buildManagerOccupancySnapshot,
   type ManagerLandlordClientRow,
   type ManagerPropertyRow,
   type ManagerTenantRow,
   type ManagerUnitRow,
 } from "@/server/repositories/manager.repository";
+import {
+  getManagerOfflineStatusLabel,
+  getManagerOfflineSyncStatus,
+  isManagerUnsyncedRow,
+} from "@/lib/offline/manager-data";
 
 type ManagerPropertyListProps = {
   landlordClients: ManagerLandlordClientRow[];
@@ -99,7 +103,15 @@ function buildUnitSummaryByPropertyId(params: {
   units: ManagerUnitRow[];
   tenants: ManagerTenantRow[];
 }) {
-  const occupancy = buildManagerOccupancySnapshot(params);
+  const currentTenantUnitIds = new Set(
+    params.tenants
+      .filter(
+        (tenant) =>
+          !tenant.move_out_date &&
+          (tenant.status === "active" || tenant.status === "eviction_notice"),
+      )
+      .map((tenant) => tenant.unit_id),
+  );
 
   return params.units.reduce((summary, unit) => {
     const existing = summary.get(unit.property_id) ?? {
@@ -110,11 +122,12 @@ function buildUnitSummaryByPropertyId(params: {
 
     existing.total += 1;
 
-    if (occupancy.occupiedUnitIds.has(unit.id)) {
+    if (
+      unit.status !== "inactive" &&
+      (unit.status === "occupied" || currentTenantUnitIds.has(unit.id))
+    ) {
       existing.occupied += 1;
-    }
-
-    if (occupancy.vacantUnitIds.has(unit.id)) {
+    } else if (unit.status === "vacant") {
       existing.vacant += 1;
     }
 
@@ -126,6 +139,12 @@ function buildUnitSummaryByPropertyId(params: {
 
 function normaliseFilter(value: string, allowedValues: readonly string[]) {
   return allowedValues.includes(value) ? value : "all";
+}
+
+function getManagerPropertyHref(property: ManagerPropertyRow) {
+  return isManagerUnsyncedRow(property)
+    ? `/manager/properties?pendingProperty=${encodeURIComponent(property.id)}`
+    : `/manager/properties/${property.id}`;
 }
 
 export function ManagerPropertyList({
@@ -338,9 +357,22 @@ export function ManagerPropertyList({
                   return (
                     <tr key={property.id} className="align-top">
                       <td className="max-w-80 px-4 py-4">
-                        <p className="truncate text-sm font-black text-text-strong">
-                          {property.property_name}
-                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="truncate text-sm font-black text-text-strong">
+                            {property.property_name}
+                          </p>
+                          {isManagerUnsyncedRow(property) ? (
+                            <span
+                              className={
+                                getManagerOfflineSyncStatus(property) === "review"
+                                  ? "rounded-full bg-danger-soft px-2 py-0.5 text-[11px] font-black text-danger"
+                                  : "rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-black text-primary"
+                              }
+                            >
+                              {getManagerOfflineStatusLabel(property)}
+                            </span>
+                          ) : null}
+                        </div>
                         <p className="mt-1 line-clamp-2 text-xs font-semibold leading-5 text-text-muted">
                           {property.property_address}
                         </p>
@@ -383,7 +415,7 @@ export function ManagerPropertyList({
 
                       <td className="px-4 py-4 text-right">
                         <Link
-                          href={`/manager/properties/${property.id}`}
+                          href={getManagerPropertyHref(property)}
                           prefetch={false}
                           className="inline-flex min-h-10 items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
                         >
@@ -409,9 +441,22 @@ export function ManagerPropertyList({
                 <article key={property.id} className="p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate font-black text-text-strong">
-                        {property.property_name}
-                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate font-black text-text-strong">
+                          {property.property_name}
+                        </p>
+                        {isManagerUnsyncedRow(property) ? (
+                          <span
+                            className={
+                              getManagerOfflineSyncStatus(property) === "review"
+                                ? "rounded-full bg-danger-soft px-2 py-0.5 text-[11px] font-black text-danger"
+                                : "rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-black text-primary"
+                            }
+                          >
+                            {getManagerOfflineStatusLabel(property)}
+                          </span>
+                        ) : null}
+                      </div>
                       <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
                         {landlordNameById.get(property.landlord_client_id) ??
                           "Landlord"}{" "}
@@ -436,7 +481,7 @@ export function ManagerPropertyList({
                   </div>
 
                   <Link
-                    href={`/manager/properties/${property.id}`}
+                    href={getManagerPropertyHref(property)}
                     prefetch={false}
                     className="mt-4 inline-flex min-h-10 w-full items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
                   >

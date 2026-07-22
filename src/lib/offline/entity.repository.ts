@@ -148,3 +148,44 @@ export async function removeOfflineEntity(
     createOfflineEntityKey(input),
   );
 }
+
+export async function getOfflineEntity(
+  input: OfflineEntityScope & {
+    entityType: OfflineEntityType;
+    entityId: string;
+  },
+) {
+  const db = await openOfflineDatabase();
+  const table = getOfflineEntityTable(db, input.entityType);
+
+  return table.get(createOfflineEntityKey(input));
+}
+
+export async function updateOfflineEntityData(
+  input: OfflineEntityScope & {
+    entityType: OfflineEntityType;
+    entityId: string;
+    update: OfflineEntityPayload;
+  },
+) {
+  const db = await openOfflineDatabase();
+  const table = getOfflineEntityTable(db, input.entityType);
+  const localKey = createOfflineEntityKey(input);
+  const current = await table.get(localKey);
+
+  if (!current) {
+    return null;
+  }
+
+  const nextRecord: OfflineEntityRecord = {
+    ...current,
+    localUpdatedAt: new Date().toISOString(),
+    data: {
+      ...current.data,
+      ...input.update,
+    },
+  };
+
+  await table.put(nextRecord);
+  return nextRecord;
+}

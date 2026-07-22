@@ -13,12 +13,12 @@ import {
   type ManagerRentPaymentStatus,
 } from "@/constants/manager";
 import {
-  notFound,
   redirect,
 } from "next/navigation";
 import { ManagerBankAccountGate } from "@/components/manager/manager-bank-account-gate";
 import { ManagerExistingTenantSetupCard } from "@/components/manager/manager-existing-tenant-setup-card";
 import { ManagerPropertyMaintenanceActivity } from "@/components/manager/manager-property-maintenance-activity";
+import { ManagerPendingPropertyDetail } from "@/components/manager/manager-pending-property-detail";
 import { ManagerTenantOnboardingForm } from "@/components/manager/manager-tenant-onboarding-form";
 import { ManagerTenantOnboardingReviewList } from "@/components/manager/manager-tenant-onboarding-review-list";
 import { ManagerUnitForm } from "@/components/manager/manager-unit-form";
@@ -423,7 +423,7 @@ export default async function ManagerPropertyDetailPage({
   );
 
   if (!property) {
-    notFound();
+    return <ManagerPendingPropertyDetail propertyId={propertyId} />;
   }
 
   const landlord = landlordClients.find(

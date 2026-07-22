@@ -2,6 +2,11 @@ import {
   MANAGER_MAINTENANCE_PRIORITY_LABELS,
   MANAGER_MAINTENANCE_STATUS_LABELS,
 } from "@/constants/manager";
+import {
+  getManagerOfflineStatusLabel,
+  getManagerOfflineSyncStatus,
+  isManagerUnsyncedRow,
+} from "@/lib/offline/manager-data";
 import type { ManagerMaintenanceRequestRow } from "@/server/repositories/manager-maintenance.repository";
 import type {
   ManagerLandlordClientRow,
@@ -142,6 +147,17 @@ export function ManagerMaintenanceList({
                   <span className="w-fit rounded-full bg-primary-soft px-3 py-1 text-xs font-black uppercase tracking-wide text-primary">
                     {MANAGER_MAINTENANCE_STATUS_LABELS[request.status]}
                   </span>
+                  {isManagerUnsyncedRow(request) ? (
+                    <span
+                      className={
+                        getManagerOfflineSyncStatus(request) === "review"
+                          ? "w-fit rounded-full bg-danger-soft px-3 py-1 text-xs font-black text-danger"
+                          : "w-fit rounded-full bg-primary-soft px-3 py-1 text-xs font-black text-primary"
+                      }
+                    >
+                      {getManagerOfflineStatusLabel(request)}
+                    </span>
+                  ) : null}
                 </div>
               </div>
 

@@ -1,4 +1,9 @@
 import Link from "next/link";
+import {
+  getManagerOfflineStatusLabel,
+  getManagerOfflineSyncStatus,
+  isManagerUnsyncedRow,
+} from "@/lib/offline/manager-data";
 import type {
   ManagerLandlordClientRow,
   ManagerPropertyRow,
@@ -119,13 +124,26 @@ export function ManagerPaymentList({
                   </p>
                 </div>
 
-                <span
-                  className={`w-fit rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${getPaymentStatusClassName(
-                    payment.status,
-                  )}`}
-                >
-                  {getPaymentStatusLabel(payment.status)}
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={`w-fit rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${getPaymentStatusClassName(
+                      payment.status,
+                    )}`}
+                  >
+                    {getPaymentStatusLabel(payment.status)}
+                  </span>
+                  {isManagerUnsyncedRow(payment) ? (
+                    <span
+                      className={
+                        getManagerOfflineSyncStatus(payment) === "review"
+                          ? "w-fit rounded-full bg-danger-soft px-3 py-1 text-xs font-black text-danger"
+                          : "w-fit rounded-full bg-primary-soft px-3 py-1 text-xs font-black text-primary"
+                      }
+                    >
+                      {getManagerOfflineStatusLabel(payment)}
+                    </span>
+                  ) : null}
+                </div>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-3">
@@ -177,7 +195,7 @@ export function ManagerPaymentList({
                 </div>
               </div>
 
-              {canShareReceipt(payment.status) ? (
+              {canShareReceipt(payment.status) && !isManagerUnsyncedRow(payment) ? (
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <Link
                     href={`/manager/receipts/${payment.id}/download`}
@@ -196,7 +214,9 @@ export function ManagerPaymentList({
                 </div>
               ) : (
                 <p className="rounded-card bg-warning-soft p-3 text-sm font-semibold text-warning">
-                  Receipt will be available after this payment is confirmed.
+                  {isManagerUnsyncedRow(payment)
+                    ? "Receipt will be available after this saved payment syncs."
+                    : "Receipt will be available after this payment is confirmed."}
                 </p>
               )}
             </article>

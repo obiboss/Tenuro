@@ -46,45 +46,60 @@ type PageResult<T> = {
 
 type ManagerPropertyOfflineRow = {
   id: string;
+  organization_id: string;
   landlord_client_id: string;
   property_name: string;
   property_address: string;
   city: string | null;
   state: string | null;
   lga: string | null;
-  status: string;
-  existing_tenant_setup_required: boolean;
+  collection_mode: string;
+  management_fee_type: string;
+  management_fee_value: number;
+  paystack_charge_bearer: string;
+  payment_receiver: string;
   notes: string | null;
+  existing_tenant_setup_required: boolean;
+  existing_tenant_setup_completed_at: string | null;
+  existing_tenant_setup_completed_by_profile_id: string | null;
+  status: string;
   created_at: string;
   updated_at: string;
 };
 
 type ManagerLandlordClientOfflineRow = {
   id: string;
+  organization_id: string;
+  landlord_profile_id: string | null;
   landlord_name: string;
   landlord_phone: string | null;
   landlord_email: string | null;
   landlord_address: string | null;
-  status: string;
   notes: string | null;
+  status: string;
   created_at: string;
   updated_at: string;
 };
 
 type ManagerUnitOfflineRow = {
   id: string;
+  organization_id: string;
+  landlord_client_id: string;
   property_id: string;
   unit_label: string;
   unit_type: string | null;
   rent_frequency: string;
   rent_amount: number;
   status: string;
+  notes: string | null;
   created_at: string;
   updated_at: string;
 };
 
 type ManagerTenantOfflineRow = {
   id: string;
+  organization_id: string;
+  landlord_client_id: string;
   property_id: string;
   unit_id: string;
   full_name: string;
@@ -92,12 +107,12 @@ type ManagerTenantOfflineRow = {
   email: string | null;
   occupation: string | null;
   rent_amount: number;
+  current_balance: number;
+  move_in_date: string | null;
   payment_frequency: string;
   rent_cycle_anchor_date: string | null;
   current_period_start: string | null;
   current_period_end: string | null;
-  current_balance: number;
-  move_in_date: string | null;
   next_rent_due_date: string | null;
   move_out_date: string | null;
   status: string;
@@ -108,6 +123,8 @@ type ManagerTenantOfflineRow = {
 
 type ManagerMaintenanceOfflineRow = {
   id: string;
+  organization_id: string;
+  landlord_client_id: string;
   property_id: string;
   unit_id: string | null;
   tenant_id: string | null;
@@ -121,25 +138,46 @@ type ManagerMaintenanceOfflineRow = {
   reported_date: string;
   resolved_date: string | null;
   notes: string | null;
+  metadata: Record<string, unknown>;
+  created_by_profile_id: string | null;
+  updated_by_profile_id: string | null;
   created_at: string;
   updated_at: string;
 };
 
 type ManagerRentPaymentOfflineRow = {
   id: string;
+  organization_id: string;
   landlord_client_id: string;
   property_id: string;
   unit_id: string;
   tenant_id: string;
-  amount_paid: number;
-  payment_method: string;
+  collection_mode: string;
   payment_receiver: string;
+  paystack_charge_bearer: string;
+  amount_paid: number;
+  base_rent_amount: number;
+  service_charge_amount: number;
+  service_charge_items_snapshot: Array<Record<string, unknown>>;
+  currency_code: string;
+  payment_method: string;
   payment_reference: string | null;
   payment_date: string;
   period_start: string | null;
   period_end: string | null;
+  management_fee_type: string;
+  management_fee_value: number;
+  management_fee_amount: number;
+  landlord_net_amount: number;
   status: string;
+  recorded_by_profile_id: string | null;
+  confirmed_by_profile_id: string | null;
+  verified_at: string | null;
+  rejected_at: string | null;
+  reversed_at: string | null;
+  rejection_reason: string | null;
   notes: string | null;
+  metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 };
@@ -395,12 +433,14 @@ async function loadManagerSnapshot(params: {
           .from("manager_landlord_clients")
           .select(`
             id,
+            organization_id,
+            landlord_profile_id,
             landlord_name,
             landlord_phone,
             landlord_email,
             landlord_address,
-            status,
             notes,
+            status,
             created_at,
             updated_at
           `)
@@ -424,15 +464,23 @@ async function loadManagerSnapshot(params: {
           .from("manager_properties")
           .select(`
             id,
+            organization_id,
             landlord_client_id,
             property_name,
             property_address,
             city,
             state,
             lga,
-            status,
-            existing_tenant_setup_required,
+            collection_mode,
+            management_fee_type,
+            management_fee_value,
+            paystack_charge_bearer,
+            payment_receiver,
             notes,
+            existing_tenant_setup_required,
+            existing_tenant_setup_completed_at,
+            existing_tenant_setup_completed_by_profile_id,
+            status,
             created_at,
             updated_at
           `)
@@ -466,12 +514,15 @@ async function loadManagerSnapshot(params: {
           .from("manager_units")
           .select(`
             id,
+            organization_id,
+            landlord_client_id,
             property_id,
             unit_label,
             unit_type,
             rent_frequency,
             rent_amount,
             status,
+            notes,
             created_at,
             updated_at
           `)
@@ -503,6 +554,8 @@ async function loadManagerSnapshot(params: {
           .from("manager_tenants")
           .select(`
             id,
+            organization_id,
+            landlord_client_id,
             property_id,
             unit_id,
             full_name,
@@ -510,12 +563,12 @@ async function loadManagerSnapshot(params: {
             email,
             occupation,
             rent_amount,
+            current_balance,
+            move_in_date,
             payment_frequency,
             rent_cycle_anchor_date,
             current_period_start,
             current_period_end,
-            current_balance,
-            move_in_date,
             next_rent_due_date,
             move_out_date,
             status,
@@ -555,6 +608,8 @@ async function loadManagerSnapshot(params: {
           )
           .select(`
             id,
+            organization_id,
+            landlord_client_id,
             property_id,
             unit_id,
             tenant_id,
@@ -568,6 +623,9 @@ async function loadManagerSnapshot(params: {
             reported_date,
             resolved_date,
             notes,
+            metadata,
+            created_by_profile_id,
+            updated_by_profile_id,
             created_at,
             updated_at
           `)
@@ -601,19 +659,37 @@ async function loadManagerSnapshot(params: {
           .from("manager_rent_payments")
           .select(`
             id,
+            organization_id,
             landlord_client_id,
             property_id,
             unit_id,
             tenant_id,
-            amount_paid,
-            payment_method,
+            collection_mode,
             payment_receiver,
+            paystack_charge_bearer,
+            amount_paid,
+            base_rent_amount,
+            service_charge_amount,
+            service_charge_items_snapshot,
+            currency_code,
+            payment_method,
             payment_reference,
             payment_date,
             period_start,
             period_end,
+            management_fee_type,
+            management_fee_value,
+            management_fee_amount,
+            landlord_net_amount,
             status,
+            recorded_by_profile_id,
+            confirmed_by_profile_id,
+            verified_at,
+            rejected_at,
+            reversed_at,
+            rejection_reason,
             notes,
+            metadata,
             created_at,
             updated_at
           `)

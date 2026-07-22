@@ -1,7 +1,5 @@
 import { redirect } from "next/navigation";
-import { ManagerMaintenanceForm } from "@/components/manager/manager-maintenance-form";
-import { ManagerMaintenanceList } from "@/components/manager/manager-maintenance-list";
-import { PageHeader } from "@/components/ui/page-header";
+import { ManagerMaintenanceOfflineView } from "@/components/manager/manager-maintenance-offline-view";
 import { listManagerMaintenanceRequests } from "@/server/repositories/manager-maintenance.repository";
 import {
   getManagerOrganizationForCurrentUser,
@@ -69,40 +67,16 @@ export default async function ManagerMaintenancePage({
         property.id === resolvedSearchParams?.propertyId,
     )?.id ?? "";
 
-  const filteredMaintenanceRequests =
-    selectedPropertyId
-      ? maintenanceRequests.filter(
-          (request) =>
-            request.property_id === selectedPropertyId,
-        )
-      : maintenanceRequests;
+
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Maintenance"
-        description="Record property issues, expected repair costs, and their progress."
-      />
-
-      <section className="grid gap-6 lg:grid-cols-[460px_1fr]">
-        <ManagerMaintenanceForm
-          landlordClients={landlordClients}
-          properties={properties}
-          units={units}
-          tenants={tenants}
-        />
-
-        <ManagerMaintenanceList
-          landlordClients={landlordClients}
-          properties={properties}
-          units={units}
-          tenants={tenants}
-          maintenanceRequests={
-            filteredMaintenanceRequests
-          }
-          selectedPropertyId={selectedPropertyId}
-        />
-      </section>
-    </div>
+    <ManagerMaintenanceOfflineView
+      initialLandlordClients={landlordClients}
+      initialProperties={properties}
+      initialUnits={units}
+      initialTenants={tenants}
+      initialMaintenanceRequests={maintenanceRequests}
+      selectedPropertyId={selectedPropertyId}
+    />
   );
 }

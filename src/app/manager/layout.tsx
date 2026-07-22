@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { ManagerOfflineDataProvider } from "@/components/manager/manager-offline-data-provider";
 import { ManagerShell } from "@/components/manager/manager-shell";
 import { canManagerRoleAccessPath } from "@/lib/manager-staff-permission";
 import { getManagerOrganizationAccessForCurrentUser } from "@/server/repositories/manager.repository";
@@ -57,12 +58,17 @@ export default async function ManagerLayout({ children }: ManagerLayoutProps) {
   }
 
   return (
-    <ManagerShell
-      managerName={manager.fullName}
-      organizationName={organization?.organization_name}
-      staffRole={staffRole}
+    <ManagerOfflineDataProvider
+      ownerProfileId={manager.id}
+      workspaceId={organization?.id ?? null}
     >
-      {children}
-    </ManagerShell>
+      <ManagerShell
+        managerName={manager.fullName}
+        organizationName={organization?.organization_name}
+        staffRole={staffRole}
+      >
+        {children}
+      </ManagerShell>
+    </ManagerOfflineDataProvider>
   );
 }

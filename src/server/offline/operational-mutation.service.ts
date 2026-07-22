@@ -151,6 +151,30 @@ function assertStableRowMatches(
   }
 }
 
+function normaliseComparableText(value: unknown) {
+  return String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function normaliseComparablePhone(value: unknown) {
+  return String(value ?? "").replace(/\D/g, "").replace(/^234/, "0");
+}
+
+function managerTenantMatchesQueuedPayload(
+  row: Record<string, unknown>,
+  payload: Extract<
+    OfflineOperationalMutation,
+    { entityType: "manager_tenant" }
+  >["payload"],
+) {
+  return (
+    normaliseComparableText(row.full_name) ===
+      normaliseComparableText(payload.fullName) &&
+    normaliseComparablePhone(row.phone_number) ===
+      normaliseComparablePhone(payload.phoneNumber) &&
+    String(row.move_in_date ?? "") === String(payload.moveInDate)
+  );
+}
+
 async function applyManagerProperty(
   supabase: SupabaseClient,
   workspace: OperationalWorkspace,
@@ -347,6 +371,46 @@ async function applyManagerTenant(
   mutation: Extract<OfflineOperationalMutation, { entityType: "manager_tenant" }>,
 ) {
   const payload = mutation.payload;
+  const { data: existingTenant, error: existingTenantError } = await supabase
+    .from("manager_tenants")
+    .select("*")
+    .eq("organization_id", workspace.workspaceId)
+    .eq("unit_id", payload.unitId)
+    .in("status", ["active", "eviction_notice"])
+    .is("move_out_date", null)
+    .maybeSingle<Record<string, unknown>>();
+
+  if (existingTenantError) {
+    throw existingTenantError;
+  }
+
+  if (existingTenant) {
+    if (managerTenantMatchesQueuedPayload(existingTenant, payload)) {
+      return {
+        clientMutationId: mutation.clientMutationId,
+        status: "duplicate" as const,
+        entity: toEntity(
+          mutation,
+          existingTenant,
+          String(existingTenant.id),
+        ),
+      };
+    }
+
+    return {
+      clientMutationId: mutation.clientMutationId,
+      status: "conflict" as const,
+      code: "OFFLINE_CONFLICT" as const,
+      message:
+        "This unit already has a different current tenant. The saved record was not applied.",
+      serverEntity: toEntity(
+        mutation,
+        existingTenant,
+        String(existingTenant.id),
+      ),
+    };
+  }
+
   const { data, error } = await supabase.rpc(
     "create_manager_existing_tenant_offline",
     {

@@ -1,8 +1,6 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ManagerPropertyList } from "@/components/manager/manager-property-list";
+import { ManagerPropertiesOfflineView } from "@/components/manager/manager-properties-offline-view";
 import {
-  buildManagerOccupancySnapshot,
   getManagerOrganizationForCurrentUser,
   listManagerLandlordClients,
   listManagerProperties,
@@ -19,34 +17,6 @@ type ManagerPropertiesPageProps = {
     collection?: string;
   }>;
 };
-
-function getUnitSummary(params: {
-  units: Awaited<ReturnType<typeof listManagerUnits>>;
-  tenants: Awaited<ReturnType<typeof listManagerTenants>>;
-}) {
-  const occupancy = buildManagerOccupancySnapshot(params);
-
-  return params.units.reduce(
-    (summary, unit) => {
-      summary.total += 1;
-
-      if (occupancy.occupiedUnitIds.has(unit.id)) {
-        summary.occupied += 1;
-      }
-
-      if (occupancy.vacantUnitIds.has(unit.id)) {
-        summary.vacant += 1;
-      }
-
-      return summary;
-    },
-    {
-      total: 0,
-      occupied: 0,
-      vacant: 0,
-    },
-  );
-}
 
 export default async function ManagerPropertiesPage({
   searchParams,
@@ -71,78 +41,16 @@ export default async function ManagerPropertiesPage({
     listManagerTenants(supabase, { organizationId: organization.id }),
   ]);
 
-  const unitSummary = getUnitSummary({ units, tenants });
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-black tracking-tight text-text-strong">
-            Properties
-          </h1>
-          <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-            Manage all properties, units, and tenants.
-          </p>
-        </div>
-
-        {properties.length > 0 ? (
-          <Link
-            href="/manager/properties/new"
-            prefetch={false}
-            className="inline-flex min-h-11 items-center justify-center rounded-button bg-primary px-5 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
-          >
-            Add property
-          </Link>
-        ) : null}
-      </div>
-
-      <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <div className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
-          <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-            Total properties
-          </p>
-          <p className="mt-2 text-2xl font-black text-text-strong">
-            {properties.length.toLocaleString("en-NG")}
-          </p>
-        </div>
-
-        <div className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
-          <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-            Total units
-          </p>
-          <p className="mt-2 text-2xl font-black text-text-strong">
-            {unitSummary.total.toLocaleString("en-NG")}
-          </p>
-        </div>
-
-        <div className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
-          <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-            Occupied units
-          </p>
-          <p className="mt-2 text-2xl font-black text-text-strong">
-            {unitSummary.occupied.toLocaleString("en-NG")}
-          </p>
-        </div>
-
-        <div className="rounded-card border border-border-soft bg-white p-4 shadow-sm">
-          <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-            Vacant units
-          </p>
-          <p className="mt-2 text-2xl font-black text-text-strong">
-            {unitSummary.vacant.toLocaleString("en-NG")}
-          </p>
-        </div>
-      </section>
-
-      <ManagerPropertyList
-        landlordClients={landlordClients}
-        properties={properties}
-        units={units}
-        tenants={tenants}
-        searchQuery={resolvedSearchParams?.q ?? ""}
-        statusFilter={resolvedSearchParams?.status ?? "all"}
-        collectionFilter={resolvedSearchParams?.collection ?? "all"}
-      />
-    </div>
+    <ManagerPropertiesOfflineView
+      initialLandlordClients={landlordClients}
+      initialProperties={properties}
+      initialUnits={units}
+      initialTenants={tenants}
+      searchQuery={resolvedSearchParams?.q ?? ""}
+      statusFilter={resolvedSearchParams?.status ?? "all"}
+      collectionFilter={resolvedSearchParams?.collection ?? "all"}
+    />
   );
 }

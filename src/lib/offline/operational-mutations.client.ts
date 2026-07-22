@@ -1,5 +1,6 @@
 "use client";
 
+import { putOfflineEntity } from "@/lib/offline/entity.repository";
 import {
   OfflineFormValidationError,
   queueOfflineFormMutation,
@@ -94,7 +95,7 @@ export async function saveManagerPropertyOffline(formData: FormData) {
   const landlordClientId =
     ownerMode === "new" ? generatedLandlordId : property.landlordClientId;
 
-  await queueOfflineFormMutation({
+  const queued = await queueOfflineFormMutation({
     workspaceType: "manager",
     draft: {
       entityType: "manager_property",
@@ -123,19 +124,59 @@ export async function saveManagerPropertyOffline(formData: FormData) {
         city: nullable(property.city),
         state: nullable(property.state),
         lga: nullable(property.lga),
-        status: "active",
+        collection_mode: property.collectionMode,
+        management_fee_type: property.managementFeeType,
+        management_fee_value: property.managementFeeValue,
+        paystack_charge_bearer: property.paystackChargeBearer,
+        payment_receiver: property.paymentReceiver,
         existing_tenant_setup_required: property.hasExistingTenants,
+        existing_tenant_setup_completed_at: null,
+        existing_tenant_setup_completed_by_profile_id: null,
+        status: "active",
         notes: nullable(property.notes),
+        offline_landlord_name:
+          landlord?.landlordName ??
+          (typeof formData.get("existingLandlordName") === "string"
+            ? String(formData.get("existingLandlordName"))
+            : null),
         created_at: now(),
         updated_at: now(),
       },
     },
   });
 
+  if (landlord) {
+    await putOfflineEntity({
+      ownerProfileId: queued.ownerProfileId,
+      workspaceType: "manager",
+      workspaceId: queued.workspaceId,
+      entityType: "manager_landlord_client",
+      entityId: generatedLandlordId,
+      serverRevision: 0,
+      serverUpdatedAt: null,
+      data: {
+        id: generatedLandlordId,
+        organization_id: queued.workspaceId,
+        landlord_profile_id: null,
+        landlord_name: landlord.landlordName,
+        landlord_phone: nullable(landlord.landlordPhone),
+        landlord_email: nullable(landlord.landlordEmail),
+        landlord_address: nullable(landlord.landlordAddress),
+        notes: nullable(landlord.notes),
+        status: "active",
+        created_at: now(),
+        updated_at: now(),
+        offline_sync_status: "waiting",
+        offline_sync_error: null,
+        offline_client_mutation_id: queued.clientMutationId,
+      },
+    });
+  }
+
   return {
     propertyId,
     landlordClientId,
-    nextHref: "/offline-workspace.html?workspace=manager",
+    nextHref: `/manager/properties?pendingProperty=${encodeURIComponent(propertyId)}&tab=units&addUnit=1`,
   };
 }
 
@@ -218,6 +259,7 @@ export async function saveManagerTenantOffline(formData: FormData) {
       payload: tenant,
       optimisticData: {
         id: tenantId,
+        landlord_client_id: tenant.landlordClientId,
         property_id: tenant.propertyId,
         unit_id: tenant.unitId,
         full_name: tenant.fullName,
@@ -232,6 +274,7 @@ export async function saveManagerTenantOffline(formData: FormData) {
         current_balance: tenant.currentBalance,
         move_in_date: tenant.moveInDate,
         next_rent_due_date: nextRentDueDate,
+        move_out_date: null,
         status: "active",
         notes: nullable(tenant.notes),
         created_at: now(),
@@ -271,15 +314,36 @@ export async function saveManagerPaymentOffline(formData: FormData) {
       payload: payment,
       optimisticData: {
         id: paymentId,
+        landlord_client_id: payment.landlordClientId,
         property_id: payment.propertyId,
         unit_id: payment.unitId,
         tenant_id: payment.tenantId,
-        amount_paid: payment.amountPaid,
-        payment_method: payment.paymentMethod,
+        collection_mode: "manager_collects",
         payment_receiver: payment.paymentReceiver,
+        paystack_charge_bearer: "tenant",
+        amount_paid: payment.amountPaid,
+        base_rent_amount: payment.amountPaid,
+        service_charge_amount: 0,
+        service_charge_items_snapshot: [],
+        currency_code: "NGN",
+        payment_method: payment.paymentMethod,
         payment_reference: nullable(payment.paymentReference),
         payment_date: payment.paymentDate,
-        status: "waiting_to_sync",
+        period_start: nullable(payment.periodStart),
+        period_end: nullable(payment.periodEnd),
+        management_fee_type: "percentage",
+        management_fee_value: 0,
+        management_fee_amount: 0,
+        landlord_net_amount: payment.amountPaid,
+        status: "recorded",
+        recorded_by_profile_id: null,
+        confirmed_by_profile_id: null,
+        verified_at: null,
+        rejected_at: null,
+        reversed_at: null,
+        rejection_reason: null,
+        notes: nullable(payment.notes),
+        metadata: { source: "bopa_manager_local_first" },
         created_at: now(),
         updated_at: now(),
       },
@@ -330,6 +394,7 @@ export async function saveManagerMaintenanceOffline(formData: FormData) {
       },
       optimisticData: {
         id: requestId,
+        landlord_client_id: request.landlordClientId,
         property_id: request.propertyId,
         unit_id: request.unitId ?? null,
         tenant_id: request.tenantId ?? null,
@@ -343,6 +408,9 @@ export async function saveManagerMaintenanceOffline(formData: FormData) {
         reported_date: request.reportedDate,
         resolved_date: null,
         notes: nullable(request.notes),
+        metadata: { source: "bopa_manager_local_first" },
+        created_by_profile_id: null,
+        updated_by_profile_id: null,
         created_at: now(),
         updated_at: now(),
       },

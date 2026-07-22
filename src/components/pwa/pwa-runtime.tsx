@@ -17,9 +17,8 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import {
-  usePathname,
-} from "next/navigation";
+import { useRouter } from "next/navigation";
+import { OfflineConflictDialog } from "@/components/pwa/offline-conflict-dialog";
 import {
   getOfflineHealthServerSnapshot,
   getOfflineHealthSnapshot,
@@ -28,6 +27,7 @@ import {
 import {
   initializeOfflineRuntime,
 } from "@/lib/offline/initialize";
+import { subscribeToOfflineEvents } from "@/lib/offline/coordination";
 import {
   pushOfflineSafeMutations,
 } from "@/lib/offline/push-sync.client";
@@ -182,8 +182,43 @@ function getStandaloneServerStatus() {
   return false;
 }
 
+function getOfflinePrimeRoutes(pathname: string) {
+  if (pathname.startsWith("/manager")) {
+    return [
+      pathname,
+      "/manager/overview",
+      "/manager/properties",
+      "/manager/tenants",
+      "/manager/payments",
+      "/manager/maintenance",
+    ];
+  }
+
+  if (pathname.startsWith("/developer")) {
+    return [pathname, "/developer/overview"];
+  }
+
+  if (
+    pathname.startsWith("/overview") ||
+    pathname.startsWith("/properties") ||
+    pathname.startsWith("/tenants") ||
+    pathname.startsWith("/payments")
+  ) {
+    return [pathname, "/overview", "/properties", "/tenants", "/payments"];
+  }
+
+  return [pathname];
+}
+
+function primeOfflineRoutes(worker: ServiceWorker | null) {
+  worker?.postMessage({
+    type: "BOPA_PRIME_OFFLINE_ROUTES",
+    routes: getOfflinePrimeRoutes(window.location.pathname),
+  });
+}
+
 export function PwaRuntime() {
-  const pathname = usePathname();
+  const router = useRouter();
   const isOnline = useSyncExternalStore(
     subscribeOnlineStatus,
     getOnlineStatus,
@@ -209,6 +244,8 @@ export function PwaRuntime() {
     useState(false);
   const [waitingWorker, setWaitingWorker] =
     useState<ServiceWorker | null>(null);
+  const [showConflictDialog, setShowConflictDialog] = useState(false);
+  const [showStorageDetails, setShowStorageDetails] = useState(false);
 
   const offlineRuntime = useSyncExternalStore(
     subscribeOfflineRuntime,
@@ -409,6 +446,14 @@ export function PwaRuntime() {
   }, []);
 
   useEffect(() => {
+    return subscribeToOfflineEvents((event) => {
+      if (event.type === "sync_completed") {
+        router.refresh();
+      }
+    });
+  }, [router]);
+
+  useEffect(() => {
     if (
       process.env.NODE_ENV !== "production" ||
       !("serviceWorker" in navigator)
@@ -444,6 +489,11 @@ export function PwaRuntime() {
             },
           );
 
+        const readyRegistration = await navigator.serviceWorker.ready;
+        primeOfflineRoutes(
+          readyRegistration.active ?? navigator.serviceWorker.controller,
+        );
+
         if (registration.waiting) {
           setWaitingWorker(registration.waiting);
           setUpdateAvailable(true);
@@ -465,6 +515,8 @@ export function PwaRuntime() {
     }
 
     function handleControllerChange() {
+      primeOfflineRoutes(navigator.serviceWorker.controller);
+
       if (applyingUpdateRef.current) {
         window.location.reload();
       }
@@ -578,16 +630,6 @@ export function PwaRuntime() {
   const showWaitingStatus =
     !showConflictStatus &&
     offlineRuntime.pendingCount > 0;
-  const offlineWorkspaceHref =
-    pathname.startsWith("/developer")
-      ? "/offline-workspace.html?workspace=developer"
-      : pathname.startsWith("/manager")
-        ? "/offline-workspace.html?workspace=manager"
-        : "/offline-workspace.html?workspace=landlord";
-  const offlineReviewHref =
-    `${offlineWorkspaceHref}&review=1`;
-  const offlineStorageHref =
-    `${offlineWorkspaceHref}&storage=1`;
   const updateBlocked =
     !isOnline ||
     offlineRuntime.syncState === "syncing" ||
@@ -659,12 +701,13 @@ export function PwaRuntime() {
             </p>
           </div>
 
-          <a
-            href={offlineReviewHref}
+          <button
+            type="button"
+            onClick={() => setShowConflictDialog(true)}
             className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-button bg-danger-soft px-4 text-sm font-black text-danger transition hover:opacity-85"
           >
             Review
-          </a>
+          </button>
         </div>
       ) : null}
 
@@ -718,12 +761,13 @@ export function PwaRuntime() {
             </p>
           </div>
 
-          <a
-            href={offlineStorageHref}
+          <button
+            type="button"
+            onClick={() => setShowStorageDetails(true)}
             className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-button bg-warning-soft px-4 text-sm font-black text-warning transition hover:opacity-85"
           >
-            Manage
-          </a>
+            Details
+          </button>
         </div>
       ) : null}
 
@@ -790,6 +834,58 @@ export function PwaRuntime() {
               strokeWidth={2.6}
             />
           </button>
+        </div>
+      ) : null}
+
+      <OfflineConflictDialog
+        open={showConflictDialog}
+        onClose={() => setShowConflictDialog(false)}
+      />
+
+      {showStorageDetails ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="offline-storage-title"
+          className="fixed inset-0 z-[110] flex items-end justify-center bg-black/40 p-3 sm:items-center"
+        >
+          <div className="w-full max-w-md rounded-card bg-white p-5 shadow-card">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 id="offline-storage-title" className="text-lg font-black text-text-strong">
+                  Device storage
+                </h2>
+                <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
+                  BOPA keeps a protected working copy on this device so normal forms remain available during network downtime. Synced records are refreshed automatically.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowStorageDetails(false)}
+                aria-label="Close"
+                className="inline-flex size-10 shrink-0 items-center justify-center rounded-button text-text-muted transition hover:bg-surface"
+              >
+                <X className="size-5" aria-hidden="true" />
+              </button>
+            </div>
+            <dl className="mt-4 grid gap-3 rounded-card bg-surface p-4 text-sm">
+              <div className="flex justify-between gap-4">
+                <dt className="font-semibold text-text-muted">Changes waiting</dt>
+                <dd className="font-black text-text-strong">{offlineRuntime.pendingCount}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="font-semibold text-text-muted">Records needing review</dt>
+                <dd className="font-black text-text-strong">{offlineRuntime.conflictCount}</dd>
+              </div>
+            </dl>
+            <button
+              type="button"
+              onClick={() => setShowStorageDetails(false)}
+              className="mt-4 min-h-11 w-full rounded-button bg-primary px-5 text-sm font-black text-white"
+            >
+              Done
+            </button>
+          </div>
         </div>
       ) : null}
 

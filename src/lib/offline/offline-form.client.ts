@@ -8,6 +8,7 @@ import {
   announceOfflineSaved,
   OFFLINE_SAVED_MESSAGE,
 } from "@/lib/offline/offline-save-notification";
+import { runRegisteredOfflineSync } from "@/lib/offline/sync-orchestrator";
 import type {
   OfflineEntityPayload,
   OfflineEntityType,
@@ -17,7 +18,8 @@ import { listOfflineWorkspaces } from "@/lib/offline/workspace.repository";
 
 export { OFFLINE_SAVED_MESSAGE } from "@/lib/offline/offline-save-notification";
 
-const CONNECTIVITY_PROBE_TIMEOUT_MS = 3_000;
+const ONLINE_SAVED_MESSAGE =
+  "Saved. BOPA is syncing it automatically.";
 
 export type OfflineFormResult = {
   ok: boolean;
@@ -69,33 +71,6 @@ export function toOfflineFormError(error: unknown): OfflineFormResult {
         ? error.message
         : "This form could not be saved on this device.",
   };
-}
-
-async function canReachBopa() {
-  if (!navigator.onLine) {
-    return false;
-  }
-
-  const controller = new AbortController();
-  const timeout = window.setTimeout(
-    () => controller.abort(),
-    CONNECTIVITY_PROBE_TIMEOUT_MS,
-  );
-
-  try {
-    const response = await fetch("/api/offline/read?probe=1", {
-      method: "GET",
-      credentials: "same-origin",
-      cache: "no-store",
-      signal: controller.signal,
-    });
-
-    return response.status === 204;
-  } catch {
-    return false;
-  } finally {
-    window.clearTimeout(timeout);
-  }
 }
 
 async function getOfflineFormWorkspace(workspaceType: OfflineWorkspaceType) {
@@ -157,12 +132,20 @@ export async function queueOfflineFormMutation(input: {
     serverUpdatedAt: null,
     data: {
       ...input.draft.optimisticData,
+      ...(input.workspaceType === "manager"
+        ? { organization_id: context.workspaceId }
+        : {}),
       offline_sync_status: "waiting",
+      offline_sync_error: null,
       offline_client_mutation_id: queued.clientMutationId,
     },
   });
 
-  return queued;
+  return {
+    ...queued,
+    ownerProfileId: context.ownerProfileId,
+    workspaceId: context.workspaceId,
+  };
 }
 
 export async function runOfflineCapableFormAction<
@@ -173,38 +156,49 @@ export async function runOfflineCapableFormAction<
   onlineAction: (previousState: TState, formData: FormData) => Promise<TState>;
   saveOffline: (formData: FormData) => Promise<Partial<TState>>;
 }): Promise<TState> {
-  if (await canReachBopa()) {
-    try {
-      return await input.onlineAction(input.previousState, input.formData);
-    } catch (error) {
-      if (await canReachBopa()) {
-        throw error;
-      }
-    }
-  }
-
   try {
+    // Supported data-capture actions are local-first. The record receives one
+    // stable identifier before any network request, so a lost response cannot
+    // create a second tenant, unit, or property during fallback.
     const offlineResult = await input.saveOffline(input.formData);
     const submissionId = crypto.randomUUID();
+    const message = navigator.onLine
+      ? ONLINE_SAVED_MESSAGE
+      : OFFLINE_SAVED_MESSAGE;
 
-    announceOfflineSaved({
-      message: OFFLINE_SAVED_MESSAGE,
-      submissionId,
-    });
+    announceOfflineSaved({ message, submissionId });
+
+    if (navigator.onLine) {
+      void runRegisteredOfflineSync();
+    }
 
     return {
       ...input.previousState,
       ...offlineResult,
       ok: true,
-      message: OFFLINE_SAVED_MESSAGE,
+      message,
       fieldErrors: undefined,
       offlineSaved: true,
       submissionId,
     } as TState;
-  } catch (error) {
+  } catch (offlineError) {
+    // IndexedDB can be unavailable in a restricted browser. While online, keep
+    // the ordinary server action as a safe fallback instead of blocking work.
+    if (navigator.onLine) {
+      try {
+        return await input.onlineAction(input.previousState, input.formData);
+      } catch (onlineError) {
+        return {
+          ...input.previousState,
+          ...toOfflineFormError(onlineError),
+          offlineSaved: false,
+        } as TState;
+      }
+    }
+
     return {
       ...input.previousState,
-      ...toOfflineFormError(error),
+      ...toOfflineFormError(offlineError),
       offlineSaved: false,
     } as TState;
   }

@@ -80,34 +80,71 @@ function toLocalEntity(
   };
 }
 
-async function clearWorkspaceEntities(
-  db: Awaited<
-    ReturnType<typeof openOfflineDatabase>
-  >,
+async function getProtectedLocalEntityKeys(
+  db: Awaited<ReturnType<typeof openOfflineDatabase>>,
   response: OfflineReadResponse,
 ) {
-  const entityTypes =
-    ENTITY_TYPES_BY_WORKSPACE[
-      response.workspaceType
-    ];
+  const protectedKeys = new Set<string>();
+  const [outbox, conflicts] = await Promise.all([
+    db.outbox
+      .where("[ownerProfileId+workspaceId]")
+      .equals([response.ownerProfileId, response.workspaceId])
+      .toArray(),
+    db.conflicts
+      .where("[ownerProfileId+workspaceId]")
+      .equals([response.ownerProfileId, response.workspaceId])
+      .filter((conflict) => conflict.status === "unresolved")
+      .toArray(),
+  ]);
+
+  for (const item of [...outbox, ...conflicts]) {
+    protectedKeys.add(
+      createOfflineEntityKey({
+        ownerProfileId: response.ownerProfileId,
+        workspaceType: response.workspaceType,
+        workspaceId: response.workspaceId,
+        entityType: item.entityType,
+        entityId: item.entityId,
+      }),
+    );
+  }
+
+  for (const entityType of ENTITY_TYPES_BY_WORKSPACE[response.workspaceType]) {
+    const table = getOfflineEntityTable(db, entityType);
+    const records = await table
+      .where("[ownerProfileId+workspaceId]")
+      .equals([response.ownerProfileId, response.workspaceId])
+      .toArray();
+
+    for (const record of records) {
+      const status = record.data.offline_sync_status;
+
+      if (status === "waiting" || status === "review") {
+        protectedKeys.add(record.localKey);
+      }
+    }
+  }
+
+  return protectedKeys;
+}
+
+async function clearWorkspaceEntities(
+  db: Awaited<ReturnType<typeof openOfflineDatabase>>,
+  response: OfflineReadResponse,
+  protectedKeys: Set<string>,
+) {
+  const entityTypes = ENTITY_TYPES_BY_WORKSPACE[response.workspaceType];
 
   for (const entityType of entityTypes) {
-    const table = getOfflineEntityTable(
-      db,
-      entityType,
-    );
+    const table = getOfflineEntityTable(db, entityType);
     const keys = await table
-      .where(
-        "[ownerProfileId+workspaceId]",
-      )
-      .equals([
-        response.ownerProfileId,
-        response.workspaceId,
-      ])
+      .where("[ownerProfileId+workspaceId]")
+      .equals([response.ownerProfileId, response.workspaceId])
       .primaryKeys();
+    const removableKeys = keys.filter((key) => !protectedKeys.has(String(key)));
 
-    if (keys.length > 0) {
-      await table.bulkDelete(keys);
+    if (removableKeys.length > 0) {
+      await table.bulkDelete(removableKeys);
     }
   }
 }
@@ -126,11 +163,10 @@ export async function applyOfflineReadResponse(
     "rw",
     db.tables,
     async () => {
+      const protectedKeys = await getProtectedLocalEntityKeys(db, response);
+
       if (response.mode === "full") {
-        await clearWorkspaceEntities(
-          db,
-          response,
-        );
+        await clearWorkspaceEntities(db, response, protectedKeys);
       }
 
       const recordsByType = new Map<
@@ -139,6 +175,18 @@ export async function applyOfflineReadResponse(
       >();
 
       for (const entity of response.entities) {
+        const localKey = createOfflineEntityKey({
+          ownerProfileId: response.ownerProfileId,
+          workspaceType: response.workspaceType,
+          workspaceId: response.workspaceId,
+          entityType: entity.entityType,
+          entityId: entity.entityId,
+        });
+
+        if (protectedKeys.has(localKey)) {
+          continue;
+        }
+
         const current =
           recordsByType.get(
             entity.entityType,

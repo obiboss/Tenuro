@@ -1,10 +1,15 @@
 import { redirect } from "next/navigation";
 import { ManagerBankAccountGate } from "@/components/manager/manager-bank-account-gate";
-import { ManagerOperationalOverview } from "@/components/manager/manager-operational-overview";
+import { ManagerOperationalOverviewOffline } from "@/components/manager/manager-operational-overview-offline";
 import { getActiveManagerPaystackAccount } from "@/server/repositories/manager-paystack-accounts.repository";
 import {
   getManagerOverview,
   getManagerOrganizationForCurrentUser,
+  listManagerLandlordClients,
+  listManagerProperties,
+  listManagerRentPayments,
+  listManagerTenants,
+  listManagerUnits,
 } from "@/server/repositories/manager.repository";
 import { requireManagerWorkspaceOperator } from "@/server/services/auth.service";
 import { createSupabaseServerClient } from "@/server/supabase/server";
@@ -22,9 +27,22 @@ export default async function ManagerOverviewPage() {
     redirect("/manager/onboarding");
   }
 
-  const [overview, managerPaystackAccount] = await Promise.all([
+  const [
+    overview,
+    managerPaystackAccount,
+    landlordClients,
+    properties,
+    units,
+    tenants,
+    payments,
+  ] = await Promise.all([
     getManagerOverview(supabase, organization.id),
     getActiveManagerPaystackAccount(supabase, organization.id),
+    listManagerLandlordClients(supabase, organization.id),
+    listManagerProperties(supabase, organization.id),
+    listManagerUnits(supabase, { organizationId: organization.id }),
+    listManagerTenants(supabase, { organizationId: organization.id }),
+    listManagerRentPayments(supabase, organization.id),
   ]);
 
   if (!overview) {
@@ -37,9 +55,14 @@ export default async function ManagerOverviewPage() {
         verificationStatus={managerPaystackAccount?.verification_status ?? null}
       />
 
-      <ManagerOperationalOverview
+      <ManagerOperationalOverviewOffline
         managerName={manager.fullName}
         overview={overview}
+        initialLandlordClients={landlordClients}
+        initialProperties={properties}
+        initialUnits={units}
+        initialTenants={tenants}
+        initialPayments={payments}
       />
     </div>
   );

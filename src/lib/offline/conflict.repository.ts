@@ -49,3 +49,13 @@ export async function resolveOfflineConflict(
     resolvedAt: new Date().toISOString(),
   });
 }
+
+export async function listUnresolvedOfflineConflicts() {
+  const db = await openOfflineDatabase();
+
+  return db.conflicts
+    .where("status")
+    .equals("unresolved")
+    .reverse()
+    .sortBy("createdAt");
+}

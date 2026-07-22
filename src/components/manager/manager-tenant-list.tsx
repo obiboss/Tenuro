@@ -3,6 +3,11 @@ import {
   getManagerTenantRentStatus,
   type ManagerTenantRentStatus,
 } from "@/lib/manager-rent-status";
+import {
+  getManagerOfflineStatusLabel,
+  getManagerOfflineSyncStatus,
+  isManagerUnsyncedRow,
+} from "@/lib/offline/manager-data";
 import type {
   ManagerPropertyRow,
   ManagerRentPaymentRow,
@@ -31,22 +36,10 @@ type ManagerTenantListProps = {
 };
 
 const rentFilterOptions = [
-  {
-    value: "all",
-    label: "All rent positions",
-  },
-  {
-    value: "owing",
-    label: "Owing",
-  },
-  {
-    value: "due_soon",
-    label: "Due soon",
-  },
-  {
-    value: "clear",
-    label: "Paid up",
-  },
+  { value: "all", label: "All rent positions" },
+  { value: "owing", label: "Owing" },
+  { value: "due_soon", label: "Due soon" },
+  { value: "clear", label: "Paid up" },
 ] as const;
 
 function formatNaira(amount: number) {
@@ -89,12 +82,26 @@ function getTenantRentStatusClassName(rentStatus: ManagerTenantRentStatus) {
   return "bg-surface text-text-muted";
 }
 
-function getTenantRentFilterValue(rentStatus: ManagerTenantRentStatus) {
-  return rentStatus.kind;
+function getSyncBadgeClassName(tenant: ManagerTenantRow) {
+  return getManagerOfflineSyncStatus(tenant) === "review"
+    ? "bg-danger-soft text-danger"
+    : "bg-primary-soft text-primary";
 }
 
-function isNoticeServedTenant(tenant: ManagerTenantRow) {
-  return tenant.status === "eviction_notice";
+function SyncBadge({ tenant }: { tenant: ManagerTenantRow }) {
+  if (!isManagerUnsyncedRow(tenant)) {
+    return null;
+  }
+
+  return (
+    <span
+      className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-black ${getSyncBadgeClassName(
+        tenant,
+      )}`}
+    >
+      {getManagerOfflineStatusLabel(tenant)}
+    </span>
+  );
 }
 
 export function ManagerTenantList({
@@ -112,11 +119,9 @@ export function ManagerTenantList({
     rentFilter,
     rentFilterOptions.map((option) => option.value),
   );
-
   const propertyNameById = new Map(
     properties.map((property) => [property.id, property.property_name]),
   );
-
   const unitById = new Map(units.map((unit) => [unit.id, unit]));
   const lowerSearchQuery = safeSearchQuery.toLowerCase();
   const agreementsByTenantId = new Map<
@@ -151,17 +156,16 @@ export function ManagerTenantList({
   }
 
   const filteredTenants = tenants
+    .filter(
+      (tenant) =>
+        !tenant.move_out_date &&
+        (tenant.status === "active" || tenant.status === "eviction_notice"),
+    )
     .filter((tenant) => {
       const unit = unitById.get(tenant.unit_id);
-      const rentStatus = getManagerTenantRentStatus({
-        tenant,
-        unit,
-      });
+      const rentStatus = getManagerTenantRentStatus({ tenant, unit });
 
-      if (
-        safeRentFilter !== "all" &&
-        getTenantRentFilterValue(rentStatus) !== safeRentFilter
-      ) {
+      if (safeRentFilter !== "all" && rentStatus.kind !== safeRentFilter) {
         return false;
       }
 
@@ -169,13 +173,11 @@ export function ManagerTenantList({
         return true;
       }
 
-      const propertyName = propertyNameById.get(tenant.property_id) ?? "";
-
       return [
         tenant.full_name,
         tenant.phone_number,
         tenant.email ?? "",
-        propertyName,
+        propertyNameById.get(tenant.property_id) ?? "",
         unit?.unit_label ?? "",
       ]
         .join(" ")
@@ -193,7 +195,6 @@ export function ManagerTenantList({
         <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
           Open a property, add a unit, then add the tenant from a vacant unit.
         </p>
-
         <Link
           href="/manager/properties"
           prefetch={false}
@@ -213,8 +214,7 @@ export function ManagerTenantList({
             Tenant list
           </h2>
           <p className="text-sm font-semibold leading-6 text-text-muted">
-            Search tenants, check balances, and open the property they belong
-            to.
+            Search tenants, check balances, and open the property they belong to.
           </p>
         </div>
 
@@ -229,7 +229,6 @@ export function ManagerTenantList({
             placeholder="Search tenant, phone, property, or unit"
             className="min-h-11 rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition placeholder:text-text-muted focus:border-primary"
           />
-
           <select
             name="rent"
             defaultValue={safeRentFilter}
@@ -241,7 +240,6 @@ export function ManagerTenantList({
               </option>
             ))}
           </select>
-
           <button
             type="submit"
             className="min-h-11 rounded-button bg-primary px-5 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
@@ -258,7 +256,6 @@ export function ManagerTenantList({
             <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
               Try another tenant name, phone number, property, unit, or filter.
             </p>
-
             <Link
               href="/manager/tenants"
               prefetch={false}
@@ -274,27 +271,22 @@ export function ManagerTenantList({
             <table className="min-w-full divide-y divide-border-soft text-left">
               <thead className="bg-surface">
                 <tr>
-                  <th className="px-4 py-3 text-xs font-black uppercase tracking-wide text-text-muted">
-                    Tenant
-                  </th>
-                  <th className="px-4 py-3 text-xs font-black uppercase tracking-wide text-text-muted">
-                    Property
-                  </th>
-                  <th className="px-4 py-3 text-xs font-black uppercase tracking-wide text-text-muted">
-                    Unit
-                  </th>
-                  <th className="px-4 py-3 text-xs font-black uppercase tracking-wide text-text-muted">
-                    Rent
-                  </th>
-                  <th className="px-4 py-3 text-xs font-black uppercase tracking-wide text-text-muted">
-                    Next due
-                  </th>
-                  <th className="px-4 py-3 text-xs font-black uppercase tracking-wide text-text-muted">
-                    Balance
-                  </th>
-                  <th className="px-4 py-3 text-xs font-black uppercase tracking-wide text-text-muted">
-                    Rent position
-                  </th>
+                  {[
+                    "Tenant",
+                    "Property",
+                    "Unit",
+                    "Rent",
+                    "Next due",
+                    "Balance",
+                    "Rent position",
+                  ].map((heading) => (
+                    <th
+                      key={heading}
+                      className="px-4 py-3 text-xs font-black uppercase tracking-wide text-text-muted"
+                    >
+                      {heading}
+                    </th>
+                  ))}
                   <th className="px-4 py-3 text-right text-xs font-black uppercase tracking-wide text-text-muted">
                     Action
                   </th>
@@ -304,15 +296,12 @@ export function ManagerTenantList({
               <tbody className="divide-y divide-border-soft bg-white">
                 {filteredTenants.map((tenant) => {
                   const unit = unitById.get(tenant.unit_id);
-                  const rentStatus = getManagerTenantRentStatus({
-                    tenant,
-                    unit,
-                  });
+                  const rentStatus = getManagerTenantRentStatus({ tenant, unit });
                   const tenantAgreements =
                     agreementsByTenantId.get(tenant.id) ?? [];
-                  const tenantPayments =
-                    paymentsByTenantId.get(tenant.id) ?? [];
+                  const tenantPayments = paymentsByTenantId.get(tenant.id) ?? [];
                   const tenantEvidence = evidenceByTenantId.get(tenant.id);
+                  const isPendingLocal = isManagerUnsyncedRow(tenant);
 
                   return (
                     <tr
@@ -321,9 +310,12 @@ export function ManagerTenantList({
                       className="scroll-mt-24 align-top"
                     >
                       <td className="max-w-72 px-4 py-4">
-                        <p className="truncate text-sm font-black text-text-strong">
-                          {tenant.full_name}
-                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="truncate text-sm font-black text-text-strong">
+                            {tenant.full_name}
+                          </p>
+                          <SyncBadge tenant={tenant} />
+                        </div>
                         <p className="mt-1 text-xs font-semibold text-text-muted">
                           {tenant.phone_number}
                         </p>
@@ -332,43 +324,36 @@ export function ManagerTenantList({
                             {tenant.email}
                           </p>
                         ) : null}
-                        {isNoticeServedTenant(tenant) ? (
+                        {tenant.status === "eviction_notice" ? (
                           <span className="mt-2 inline-flex rounded-full bg-warning-soft px-3 py-1 text-xs font-black uppercase tracking-wide text-warning">
                             Notice served
                           </span>
                         ) : null}
                       </td>
-
                       <td className="px-4 py-4 text-sm font-bold text-text-strong">
                         {propertyNameById.get(tenant.property_id) ?? "Property"}
                       </td>
-
                       <td className="px-4 py-4 text-sm font-bold text-text-strong">
                         {unit?.unit_label ?? "Unit"}
                       </td>
-
                       <td className="px-4 py-4 text-sm font-bold text-text-strong">
                         {formatNaira(tenant.rent_amount)}
                       </td>
-
                       <td className="px-4 py-4 text-sm font-bold text-text-strong">
                         {formatDate(tenant.next_rent_due_date)}
                       </td>
-
                       <td className="px-4 py-4 text-sm font-bold text-text-strong">
                         {formatNaira(tenant.current_balance)}
                       </td>
-
                       <td className="px-4 py-4">
                         <span
                           className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${getTenantRentStatusClassName(
                             rentStatus,
                           )}`}
                         >
-                          {rentStatus.label}
+                          {rentStatus.label || "Pending"}
                         </span>
                       </td>
-
                       <td className="px-4 py-4 text-right">
                         <div className="flex flex-col items-end gap-2">
                           <Link
@@ -379,45 +364,50 @@ export function ManagerTenantList({
                             Open property
                           </Link>
 
-                          <Link
-                            href={`/manager/tenants/${tenant.id}/download`}
-                            prefetch={false}
-                            className="text-xs font-black text-primary underline-offset-4 hover:underline"
-                          >
-                            Download tenant details (PDF)
-                          </Link>
-
-                          {tenantAgreements.slice(0, 1).map((agreement) => (
-                            <Link
-                              key={agreement.id}
-                              href={`/manager/agreements/${agreement.id}/download`}
-                              prefetch={false}
-                              className="text-xs font-black text-primary underline-offset-4 hover:underline"
-                            >
-                              Download agreement
-                            </Link>
-                          ))}
-
-                          {tenantPayments.slice(0, 2).map((payment) => (
-                            <Link
-                              key={payment.id}
-                              href={`/manager/receipts/${payment.id}/download`}
-                              prefetch={false}
-                              className="text-xs font-black text-primary underline-offset-4 hover:underline"
-                            >
-                              Receipt {formatDate(payment.payment_date)}
-                            </Link>
-                          ))}
-
-                          {tenantEvidence?.receipt.signedUrl ? (
-                            <Link
-                              href={tenantEvidence.receipt.signedUrl}
-                              target="_blank"
-                              className="text-xs font-black text-primary underline-offset-4 hover:underline"
-                            >
-                              Last payment evidence
-                            </Link>
-                          ) : null}
+                          {isPendingLocal ? (
+                            <p className="max-w-44 text-right text-xs font-semibold leading-5 text-text-muted">
+                              Documents become available after this record syncs.
+                            </p>
+                          ) : (
+                            <>
+                              <Link
+                                href={`/manager/tenants/${tenant.id}/download`}
+                                prefetch={false}
+                                className="text-xs font-black text-primary underline-offset-4 hover:underline"
+                              >
+                                Download tenant details (PDF)
+                              </Link>
+                              {tenantAgreements.slice(0, 1).map((agreement) => (
+                                <Link
+                                  key={agreement.id}
+                                  href={`/manager/agreements/${agreement.id}/download`}
+                                  prefetch={false}
+                                  className="text-xs font-black text-primary underline-offset-4 hover:underline"
+                                >
+                                  Download agreement
+                                </Link>
+                              ))}
+                              {tenantPayments.slice(0, 2).map((payment) => (
+                                <Link
+                                  key={payment.id}
+                                  href={`/manager/receipts/${payment.id}/download`}
+                                  prefetch={false}
+                                  className="text-xs font-black text-primary underline-offset-4 hover:underline"
+                                >
+                                  Receipt {formatDate(payment.payment_date)}
+                                </Link>
+                              ))}
+                              {tenantEvidence?.receipt.signedUrl ? (
+                                <Link
+                                  href={tenantEvidence.receipt.signedUrl}
+                                  target="_blank"
+                                  className="text-xs font-black text-primary underline-offset-4 hover:underline"
+                                >
+                                  Last payment evidence
+                                </Link>
+                              ) : null}
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -430,14 +420,11 @@ export function ManagerTenantList({
           <div className="divide-y divide-border-soft md:hidden">
             {filteredTenants.map((tenant) => {
               const unit = unitById.get(tenant.unit_id);
-              const rentStatus = getManagerTenantRentStatus({
-                tenant,
-                unit,
-              });
-              const tenantAgreements =
-                agreementsByTenantId.get(tenant.id) ?? [];
+              const rentStatus = getManagerTenantRentStatus({ tenant, unit });
+              const tenantAgreements = agreementsByTenantId.get(tenant.id) ?? [];
               const tenantPayments = paymentsByTenantId.get(tenant.id) ?? [];
               const tenantEvidence = evidenceByTenantId.get(tenant.id);
+              const isPendingLocal = isManagerUnsyncedRow(tenant);
 
               return (
                 <article
@@ -447,33 +434,30 @@ export function ManagerTenantList({
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate font-black text-text-strong">
-                        {tenant.full_name}
-                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate font-black text-text-strong">
+                          {tenant.full_name}
+                        </p>
+                        <SyncBadge tenant={tenant} />
+                      </div>
                       <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
                         {tenant.phone_number}
                       </p>
-                      {isNoticeServedTenant(tenant) ? (
-                        <span className="mt-2 inline-flex rounded-full bg-warning-soft px-3 py-1 text-xs font-black uppercase tracking-wide text-warning">
-                          Notice served
-                        </span>
-                      ) : null}
                       <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
-                        {unit?.unit_label ?? "Unit"} -{" "}
+                        {unit?.unit_label ?? "Unit"} ·{" "}
                         {propertyNameById.get(tenant.property_id) ?? "Property"}
                       </p>
                       <p className="mt-1 text-sm font-semibold text-text-muted">
-                        {formatNaira(tenant.rent_amount)} - Due{" "}
+                        {formatNaira(tenant.rent_amount)} · Due{" "}
                         {formatDate(tenant.next_rent_due_date)}
                       </p>
                     </div>
-
                     <span
                       className={`shrink-0 rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${getTenantRentStatusClassName(
                         rentStatus,
                       )}`}
                     >
-                      {rentStatus.label}
+                      {rentStatus.label || "Pending"}
                     </span>
                   </div>
 
@@ -485,56 +469,62 @@ export function ManagerTenantList({
                     Open property
                   </Link>
 
-                  <Link
-                    href={`/manager/tenants/${tenant.id}/download`}
-                    prefetch={false}
-                    className="mt-2 inline-flex min-h-10 w-full items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
-                  >
-                    Download tenant details (PDF)
-                  </Link>
+                  {isPendingLocal ? (
+                    <p className="mt-3 rounded-button bg-primary-soft px-3 py-2 text-sm font-semibold leading-6 text-primary">
+                      Saved on this device. Documents will be available after sync.
+                    </p>
+                  ) : (
+                    <>
+                      <Link
+                        href={`/manager/tenants/${tenant.id}/download`}
+                        prefetch={false}
+                        className="mt-2 inline-flex min-h-10 w-full items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
+                      >
+                        Download tenant details (PDF)
+                      </Link>
 
-                  {tenantAgreements.length > 0 ||
-                  tenantPayments.length > 0 ||
-                  tenantEvidence?.receipt.signedUrl ? (
-                    <div className="mt-3 rounded-card bg-surface p-3">
-                      <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-                        Documents
-                      </p>
-                      <div className="mt-2 flex flex-col gap-2">
-                        {tenantAgreements.slice(0, 1).map((agreement) => (
-                          <Link
-                            key={agreement.id}
-                            href={`/manager/agreements/${agreement.id}/download`}
-                            prefetch={false}
-                            className="text-sm font-black text-primary"
-                          >
-                            Download agreement
-                          </Link>
-                        ))}
-
-                        {tenantPayments.slice(0, 2).map((payment) => (
-                          <Link
-                            key={payment.id}
-                            href={`/manager/receipts/${payment.id}/download`}
-                            prefetch={false}
-                            className="text-sm font-black text-primary"
-                          >
-                            Receipt {formatDate(payment.payment_date)}
-                          </Link>
-                        ))}
-
-                        {tenantEvidence?.receipt.signedUrl ? (
-                          <Link
-                            href={tenantEvidence.receipt.signedUrl}
-                            target="_blank"
-                            className="text-sm font-black text-primary"
-                          >
-                            Last payment evidence
-                          </Link>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : null}
+                      {tenantAgreements.length > 0 ||
+                      tenantPayments.length > 0 ||
+                      tenantEvidence?.receipt.signedUrl ? (
+                        <div className="mt-3 rounded-card bg-surface p-3">
+                          <p className="text-xs font-black uppercase tracking-wide text-text-muted">
+                            Documents
+                          </p>
+                          <div className="mt-2 flex flex-col gap-2">
+                            {tenantAgreements.slice(0, 1).map((agreement) => (
+                              <Link
+                                key={agreement.id}
+                                href={`/manager/agreements/${agreement.id}/download`}
+                                prefetch={false}
+                                className="text-sm font-black text-primary"
+                              >
+                                Download agreement
+                              </Link>
+                            ))}
+                            {tenantPayments.slice(0, 2).map((payment) => (
+                              <Link
+                                key={payment.id}
+                                href={`/manager/receipts/${payment.id}/download`}
+                                prefetch={false}
+                                className="text-sm font-black text-primary"
+                              >
+                                Receipt {formatDate(payment.payment_date)}
+                              </Link>
+                            ))}
+                            {tenantEvidence?.receipt.signedUrl ? (
+                              <Link
+                                href={tenantEvidence.receipt.signedUrl}
+                                target="_blank"
+                                className="text-sm font-black text-primary"
+                              >
+                                Last payment evidence
+                              </Link>
+                            ) : null}
+                          </div>
+                        </div>
+                      ) : null}
+                    </>
+                  )}
                 </article>
               );
             })}
