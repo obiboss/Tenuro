@@ -59,6 +59,8 @@ export type TenantListRow = TenantRow & {
     unit_type: string;
     bedrooms: number;
     bathrooms: number;
+    rent_frequency: "annual" | "biannual" | "quarterly" | "monthly";
+    rent_amount: number;
     monthly_rent: number | null;
     annual_rent: number | null;
     status: string;
@@ -138,6 +140,8 @@ const TENANT_SELECT = `
     unit_type,
     bedrooms,
     bathrooms,
+    rent_frequency,
+    rent_amount,
     monthly_rent,
     annual_rent,
     status,

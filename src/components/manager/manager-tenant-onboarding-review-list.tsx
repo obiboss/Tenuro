@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Toast, type ToastItem } from "@/components/ui/toast";
 import { WhatsAppShareActions } from "@/components/ui/whatsapp-share-actions";
+import { RENT_PAYMENT_FREQUENCY_LABELS } from "@/lib/rent-cycle";
 import type { ManagerTenantOnboardingRequestRow } from "@/server/repositories/manager-tenant-onboarding.repository";
 
 type ManagerTenantOnboardingReviewListProps = {
@@ -768,6 +769,14 @@ export function ManagerTenantOnboardingReviewDetail({
             <DetailItem label="ID number" value={request.tenant_id_number} />
             <DetailItem label="Unit rent" value={formatNaira(unitRentAmount)} />
             <DetailItem
+              label="Rent collection"
+              value={
+                RENT_PAYMENT_FREQUENCY_LABELS[
+                  request.manager_units?.rent_frequency ?? "annual"
+                ]
+              }
+            />
+            <DetailItem
               label="Move-in date"
               value={formatDate(request.tenant_move_in_date)}
             />
@@ -1007,11 +1016,6 @@ export function ManagerTenantOnboardingReviewDetail({
             <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
               <form action={approveAction} className="space-y-4">
                 <input type="hidden" name="requestId" value={request.id} />
-                <input
-                  type="hidden"
-                  name="confirmedRentAmount"
-                  value={String(unitRentAmount)}
-                />
 
                 <div>
                   <label

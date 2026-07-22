@@ -353,7 +353,8 @@ export default async function TenantDetailPage({
                   <TenancyForm
                     tenantId={tenant.id}
                     unitId={tenant.unit_id}
-                    defaultAnnualRent={tenant.units?.annual_rent ?? null}
+                    rentAmount={tenant.units?.rent_amount ?? 0}
+                    rentFrequency={tenant.units?.rent_frequency ?? "annual"}
                   />
                 </div>
               </SectionCard>

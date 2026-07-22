@@ -18,14 +18,16 @@ import { ActionResultToast } from "@/components/ui/action-result-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { CurrencyInput } from "@/components/ui/currency-input";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   calculateArrearsFromCycles,
-  calculateCurrentDueDate,
   type ExistingTenantRentCycle,
 } from "@/lib/existing-tenant-arrears";
+import {
+  calculateCurrentRentCycle,
+  RENT_PAYMENT_FREQUENCY_LABELS,
+} from "@/lib/rent-cycle";
 import type {
   ExistingTenantClaimDetailRow,
   ExistingTenantClaimIdType,
@@ -89,14 +91,11 @@ export function ExistingTenantClaimReviewDetail({
   const [cycles, setCycles] = useState<ExistingTenantRentCycle[]>(
     initialRentState.cycles,
   );
-  const [confirmedRentAmount, setConfirmedRentAmount] = useState(
-    String(
-      claim.landlord_confirmed_rent_amount ??
-        claim.tenant_claimed_rent_amount ??
-        claim.units?.annual_rent ??
-        0,
-    ),
+  const confirmedRentAmountNumber = Number(
+    claim.units?.rent_amount ?? claim.tenant_claimed_rent_amount ?? 0,
   );
+  const paymentFrequency =
+    claim.units?.rent_frequency ?? claim.tenant_payment_frequency;
   const [showApproveConfirm, setShowApproveConfirm] = useState(false);
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
@@ -120,25 +119,29 @@ export function ExistingTenantClaimReviewDetail({
     () =>
       calculateArrearsFromCycles({
         moveInDate: claim.tenant_move_in_date ?? "",
-        paymentFrequency: claim.tenant_payment_frequency,
+        paymentFrequency,
         cycles,
       }),
-    [claim.tenant_move_in_date, claim.tenant_payment_frequency, cycles],
+    [claim.tenant_move_in_date, paymentFrequency, cycles],
   );
-
-  const confirmedRentAmountNumber = Number(confirmedRentAmount || 0);
 
   const [confirmedMoveInDate, setConfirmedMoveInDate] = useState(
     claim.landlord_confirmed_move_in_date ?? claim.tenant_move_in_date ?? "",
   );
-  const [confirmedCurrentDueDate, setConfirmedCurrentDueDate] = useState(
-    claim.landlord_confirmed_current_due_date ??
-      claim.bopa_calculated_current_due_date ??
-      calculateCurrentDueDate({
-        moveInDate: confirmedMoveInDate,
-        paymentFrequency: claim.tenant_payment_frequency,
-      }),
-  );
+  const confirmedCurrentDueDate = useMemo(() => {
+    if (!confirmedMoveInDate) {
+      return "";
+    }
+
+    try {
+      return calculateCurrentRentCycle({
+        anchorDate: confirmedMoveInDate,
+        paymentFrequency,
+      }).periodStart;
+    } catch {
+      return "";
+    }
+  }, [confirmedMoveInDate, paymentFrequency]);
 
   const openingBalance = liveSummary.amountOwed;
 
@@ -308,8 +311,7 @@ export function ExistingTenantClaimReviewDetail({
             Final approval
           </h2>
           <p className="mt-1 text-base leading-7 text-text-muted">
-            Confirm the rent, move-in date, and due dates before creating the
-            live tenancy.
+            Confirm the move-in date. The unit rent is locked, and BOPA calculates the current cycle automatically.
           </p>
         </div>
 
@@ -335,13 +337,12 @@ export function ExistingTenantClaimReviewDetail({
           />
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <CurrencyInput
-              label="Confirmed rent amount"
-              name="confirmedRentAmount"
-              value={confirmedRentAmount}
-              onValueChange={setConfirmedRentAmount}
-              required
-            />
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-text-strong">Unit rent</p>
+              <p className="flex min-h-14 items-center rounded-button border border-border-soft bg-surface px-4 text-base font-black text-text-strong">
+                {formatNaira(confirmedRentAmountNumber)} · {RENT_PAYMENT_FREQUENCY_LABELS[paymentFrequency]}
+              </p>
+            </div>
             <div className="space-y-2">
               <p className="text-sm font-semibold text-text-strong">
                 Opening balance
@@ -364,30 +365,14 @@ export function ExistingTenantClaimReviewDetail({
             required
           />
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <p className="text-sm font-semibold text-warning">
-                Rent due date (tenant stated)
-              </p>
-              <p className="flex min-h-14 items-center rounded-button border border-warning/40 bg-warning-soft/50 px-4 text-base font-black text-warning">
-                {formatDate(claim.tenant_claimed_next_rent_due_date)}
-              </p>
-              <p className="text-sm text-text-muted">
-                What the tenant said on the claim form. Compare with the
-                calculated date.
-              </p>
-            </div>
-            <Input
-              label="Current rent cycle started"
-              name="confirmedCurrentDueDate"
-              type="date"
-              value={confirmedCurrentDueDate}
-              onChange={(event) =>
-                setConfirmedCurrentDueDate(event.target.value)
-              }
-              helperText="BOPA will calculate the next due date from this date."
-              required
-            />
+          <div className="rounded-button border border-border-soft bg-background p-4">
+            <p className="text-sm font-semibold text-text-muted">Current rent cycle started</p>
+            <p className="mt-2 text-lg font-black text-text-strong">
+              {formatDate(confirmedCurrentDueDate)}
+            </p>
+            <p className="mt-1 text-sm text-text-muted">
+              Calculated from the original move-in date and the unit's locked frequency.
+            </p>
           </div>
 
           <Textarea

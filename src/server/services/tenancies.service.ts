@@ -302,9 +302,36 @@ export async function createTenancyForCurrentLandlord(
     );
   }
 
+  const unitRentAmount = Number(unit.rent_amount);
+  const unitRentFrequency = unit.rent_frequency;
+
+  if (!Number.isFinite(unitRentAmount) || unitRentAmount <= 0) {
+    throw new AppError(
+      "UNIT_RENT_NOT_CONFIGURED",
+      "Set the unit rent amount and collection frequency before creating the tenancy.",
+      400,
+    );
+  }
+
+  if (
+    input.paymentFrequency !== unitRentFrequency ||
+    Math.abs(Number(input.rentAmount) - unitRentAmount) > 0.009
+  ) {
+    throw new AppError(
+      "UNIT_RENT_CONFIGURATION_MISMATCH",
+      "The tenancy rent must match the unit's saved rent amount and collection frequency.",
+      400,
+    );
+  }
+
   const tenancy = await createTenancy(supabase, {
     landlordId: landlord.id,
-    input,
+    input: {
+      ...input,
+      rentAmount: unitRentAmount,
+      paymentFrequency: unitRentFrequency,
+      currencyCode: unit.currency_code,
+    },
   });
 
   await writeAuditLog({

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { RentPaymentFrequency } from "@/lib/rent-cycle";
 import type { AgentPropertyListingInput } from "@/server/validators/agent-property-listing.schema";
 
 export type AgentPropertyListingStatus =
@@ -42,6 +43,8 @@ export type AgentPropertyListingRow = {
     | "other";
   bedrooms: number;
   bathrooms: number;
+  rent_frequency: RentPaymentFrequency;
+  rent_amount: number;
   annual_rent: number | null;
   monthly_rent: number | null;
   agent_commission_amount: number;
@@ -84,6 +87,8 @@ const AGENT_PROPERTY_LISTING_SELECT = `
   unit_type,
   bedrooms,
   bathrooms,
+  rent_frequency,
+  rent_amount,
   annual_rent,
   monthly_rent,
   agent_commission_amount,
@@ -150,6 +155,8 @@ export async function createAgentPropertyListing(
       unit_type: params.input.unitType,
       bedrooms: params.input.bedrooms,
       bathrooms: params.input.bathrooms,
+      rent_frequency: params.input.rentFrequency,
+      rent_amount: params.input.rentAmount,
       annual_rent: params.input.annualRent ?? null,
       monthly_rent: params.input.monthlyRent ?? null,
       agent_commission_amount: normaliseCommissionAmount(
@@ -308,6 +315,8 @@ export async function approveAgentPropertyListingByLandlord(
       unit_type: params.input.unitType,
       bedrooms: params.input.bedrooms,
       bathrooms: params.input.bathrooms,
+      rent_frequency: params.input.rentFrequency,
+      rent_amount: params.input.rentAmount,
       annual_rent: params.input.annualRent ?? null,
       monthly_rent: params.input.monthlyRent ?? null,
       agent_commission_amount: normaliseCommissionAmount(

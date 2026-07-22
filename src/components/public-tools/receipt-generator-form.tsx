@@ -6,23 +6,15 @@ import { initialPublicReceiptGeneratorState } from "@/actions/public-receipt-gen
 import { GeneratedReceiptResult } from "@/components/public-tools/generated-receipt-result";
 import { FreeToolAccountPrompt } from "@/components/public-tools/free-tool-account-prompt";
 import { Button } from "@/components/ui/button";
+import {
+  addDaysToDateOnly,
+  calculateAnchoredRentCycleDate,
+} from "@/lib/rent-cycle";
 
 type ReceiptGeneratorFormProps = {
   sourcePath: string;
   sourceLocation?: string;
 };
-
-function addMonths(date: Date, months: number) {
-  const result = new Date(
-    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
-  );
-  result.setUTCMonth(result.getUTCMonth() + months);
-  return result;
-}
-
-function formatDateOnly(value: Date) {
-  return value.toISOString().slice(0, 10);
-}
 
 function calculateEndDate(startDate: string, duration: string) {
   if (!startDate) {
@@ -36,16 +28,18 @@ function calculateEndDate(startDate: string, duration: string) {
   };
 
   const months = monthsByDuration[duration] ?? 12;
-  const start = new Date(`${startDate}T00:00:00.000Z`);
 
-  if (Number.isNaN(start.getTime())) {
+  try {
+    const nextPeriodStart = calculateAnchoredRentCycleDate({
+      anchorDate: startDate,
+      paymentFrequency: "monthly",
+      cycleIndex: months,
+    });
+
+    return addDaysToDateOnly(nextPeriodStart, -1);
+  } catch {
     return "";
   }
-
-  const end = addMonths(start, months);
-  end.setUTCDate(end.getUTCDate() - 1);
-
-  return formatDateOnly(end);
 }
 
 function FieldError({ message }: { message?: string }) {

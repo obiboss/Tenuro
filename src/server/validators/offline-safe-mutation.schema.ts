@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { RENT_PAYMENT_FREQUENCIES } from "@/lib/rent-cycle";
 import {
   MANAGER_COLLECTION_MODES,
   MANAGER_MAINTENANCE_PRIORITIES,
@@ -398,7 +399,8 @@ const managerUnitCreateSchema = z
         propertyId: uuidSchema,
         unitLabel: z.string().trim().min(1).max(120),
         unitType: nullableText(80, "Unit type is too long.").default(null),
-        rentAmount: nonNegativeMoney,
+        rentFrequency: z.enum(RENT_PAYMENT_FREQUENCIES),
+        rentAmount: positiveMoney,
         notes: nullableText(600, "Notes are too long.").default(null),
       })
       .strict(),
@@ -423,9 +425,12 @@ const managerTenantCreateSchema = z
         phoneNumber: z.string().trim().min(7).max(30),
         email: optionalEmail.default(null),
         occupation: nullableText(120, "Occupation is too long.").default(null),
-        rentAmount: nonNegativeMoney,
+        rentAmount: positiveMoney,
+        paymentFrequency: z.enum(RENT_PAYMENT_FREQUENCIES),
         currentBalance: nonNegativeMoney,
-        moveInDate: z.union([nigeriaDate, z.null()]).default(null),
+        moveInDate: nigeriaDate,
+        // Accepted for compatibility with queued mutations. The server ignores
+        // this value and recalculates the due date from the unit and move-in anchor.
         nextRentDueDate: z.union([nigeriaDate, z.null()]).default(null),
         notes: nullableText(600, "Notes are too long.").default(null),
       })
@@ -523,6 +528,8 @@ const landlordUnitCreateSchema = z
         ]),
         bedrooms: z.number().int().nonnegative(),
         bathrooms: z.number().int().nonnegative(),
+        rentFrequency: z.enum(RENT_PAYMENT_FREQUENCIES),
+        rentAmount: positiveMoney,
         monthlyRent: z.union([nonNegativeMoney, z.null()]),
         annualRent: z.union([nonNegativeMoney, z.null()]),
         currencyCode: z.literal("NGN"),

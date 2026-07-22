@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { phoneNumberSchema } from "@/server/validators/auth.schema";
+import { RENT_PAYMENT_FREQUENCIES } from "@/lib/rent-cycle";
 import { positiveMoneySchema } from "@/server/validators/common.schema";
 
 const optionalMoneySchema = z.union([positiveMoneySchema, z.null()]).optional();
@@ -53,6 +54,10 @@ export const agentPropertyListingSchema = z
     ]),
     bedrooms: z.coerce.number().int().min(0).max(20),
     bathrooms: z.coerce.number().int().min(0).max(20),
+    rentFrequency: z.enum(RENT_PAYMENT_FREQUENCIES).optional(),
+    rentAmount: optionalMoneySchema,
+    // Legacy fields remain accepted for deployed agent forms. The resolved
+    // output always contains one frequency and one matching amount.
     annualRent: optionalMoneySchema,
     monthlyRent: optionalMoneySchema,
 
@@ -66,9 +71,54 @@ export const agentPropertyListingSchema = z
 
     notes: z.string().trim().max(1000).optional().or(z.literal("")),
   })
-  .refine((value) => value.annualRent || value.monthlyRent, {
-    path: ["annualRent"],
-    message: "Enter annual rent or monthly rent.",
+  .transform((value, context) => {
+    const annualRent = Number(value.annualRent ?? 0);
+    const monthlyRent = Number(value.monthlyRent ?? 0);
+    const explicitAmount = Number(value.rentAmount ?? 0);
+
+    if (annualRent > 0 && monthlyRent > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["rentAmount"],
+        message: "Choose one rent frequency and enter one rent amount.",
+      });
+      return z.NEVER;
+    }
+
+    const rentFrequency =
+      value.rentFrequency ?? (monthlyRent > 0 ? "monthly" : "annual");
+    const legacyAmount = rentFrequency === "monthly" ? monthlyRent : annualRent;
+    const rentAmount = explicitAmount > 0 ? explicitAmount : legacyAmount;
+
+    if (!Number.isFinite(rentAmount) || rentAmount <= 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["rentAmount"],
+        message: "Enter the rent amount for this unit.",
+      });
+      return z.NEVER;
+    }
+
+    if (
+      value.rentFrequency &&
+      ((rentFrequency === "annual" && monthlyRent > 0 && annualRent <= 0) ||
+        (rentFrequency === "monthly" && annualRent > 0 && monthlyRent <= 0))
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["rentAmount"],
+        message: "The rent amount must match the selected rent frequency.",
+      });
+      return z.NEVER;
+    }
+
+    return {
+      ...value,
+      rentFrequency,
+      rentAmount,
+      annualRent: rentFrequency === "annual" ? rentAmount : null,
+      monthlyRent: rentFrequency === "monthly" ? rentAmount : null,
+    };
   });
 
 export type AgentPropertyListingInput = z.infer<

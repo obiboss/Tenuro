@@ -11,6 +11,10 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { TrustNotice } from "@/components/ui/trust-notice";
+import {
+  RENT_PAYMENT_FREQUENCIES,
+  RENT_PAYMENT_FREQUENCY_LABELS,
+} from "@/lib/rent-cycle";
 
 type PublicLandlordVerificationFormProps = {
   token: string;
@@ -35,6 +39,11 @@ const unitTypeOptions = [
   { label: "Office Space", value: "office_space" },
   { label: "Other", value: "other" },
 ];
+
+const rentFrequencyOptions = RENT_PAYMENT_FREQUENCIES.map((value) => ({
+  value,
+  label: RENT_PAYMENT_FREQUENCY_LABELS[value],
+}));
 
 const stateLgaMap: Record<string, string[]> = {
   Lagos: [
@@ -301,20 +310,22 @@ export function PublicLandlordVerificationForm({
                 />
               </div>
 
-              <CurrencyInput
-                label="Annual rent"
-                name="annualRent"
-                defaultValue={moneyDefaultValue(listing.annual_rent)}
-                error={state.fieldErrors?.annualRent?.[0]}
-                helperText="Most Nigerian landlords collect rent yearly, so this is the main rent amount."
+              <Select
+                label="Rent collection frequency"
+                name="rentFrequency"
+                options={rentFrequencyOptions}
+                defaultValue={listing.rent_frequency}
+                error={state.fieldErrors?.rentFrequency?.[0]}
+                required
               />
 
               <CurrencyInput
-                label="Monthly rent"
-                name="monthlyRent"
-                defaultValue={moneyDefaultValue(listing.monthly_rent)}
-                error={state.fieldErrors?.monthlyRent?.[0]}
-                helperText="Use only if this unit is rented monthly."
+                label="Rent amount for this frequency"
+                name="rentAmount"
+                defaultValue={moneyDefaultValue(listing.rent_amount)}
+                error={state.fieldErrors?.rentAmount?.[0]}
+                helperText="This becomes the unit's official rent amount after approval."
+                required
               />
             </div>
           </div>

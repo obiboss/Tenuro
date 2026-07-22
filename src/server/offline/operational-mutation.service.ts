@@ -323,6 +323,7 @@ async function applyManagerUnit(
       property_id: payload.propertyId,
       unit_label: payload.unitLabel,
       unit_type: payload.unitType,
+      rent_frequency: payload.rentFrequency,
       rent_amount: payload.rentAmount,
       status: "vacant",
       notes: payload.notes,
@@ -562,6 +563,8 @@ async function applyLandlordUnit(
       unit_type: payload.unitType,
       bedrooms: payload.bedrooms,
       bathrooms: payload.bathrooms,
+      rent_frequency: payload.rentFrequency,
+      rent_amount: payload.rentAmount,
       monthly_rent: payload.monthlyRent,
       annual_rent: payload.annualRent,
       currency_code: payload.currencyCode,
@@ -634,5 +637,7 @@ export async function applyOfflineOperationalMutation(input: {
       return applyLandlordUnit(supabase, workspace, mutation);
     case "landlord_rent_payment":
       return applyLandlordPayment(supabase, mutation);
+    default:
+      throw new Error("This offline operation is not supported.");
   }
 }

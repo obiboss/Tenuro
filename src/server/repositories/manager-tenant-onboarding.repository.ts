@@ -131,6 +131,7 @@ export type ManagerTenantOnboardingRequestRow = {
     id: string;
     unit_label: string;
     unit_type: string | null;
+    rent_frequency: "annual" | "monthly" | "quarterly" | "biannual";
     rent_amount: number;
     status: string;
   } | null;
@@ -243,6 +244,7 @@ const REQUEST_SELECT = `
     id,
     unit_label,
     unit_type,
+    rent_frequency,
     rent_amount,
     status
   ),
@@ -336,6 +338,7 @@ export async function createManagerTenantOnboardingRequest(
     invitedTenantPhoneNumber: string;
     invitedTenantEmail: string | null;
     note: string | null;
+    paymentFrequency: "annual" | "monthly" | "quarterly" | "biannual";
     tenantRequirementsSnapshot: ManagerTenantRequirementSnapshotItem[];
     metadata: Record<string, unknown>;
   },
@@ -354,6 +357,7 @@ export async function createManagerTenantOnboardingRequest(
       invited_tenant_phone_number: params.invitedTenantPhoneNumber,
       invited_tenant_email: params.invitedTenantEmail,
       manager_review_notes: params.note,
+      tenant_payment_frequency: params.paymentFrequency,
       tenant_requirements_snapshot: params.tenantRequirementsSnapshot,
       tenant_requirement_answers: [],
       tenant_screening_result: "not_screened",

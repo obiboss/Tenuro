@@ -5,6 +5,7 @@ import {
 } from "@/server/constants/audit-events";
 import { AppError } from "@/server/errors/app-error";
 import { getPropertyById } from "@/server/repositories/properties.repository";
+import { getActiveTenancyForUnit } from "@/server/repositories/tenancies.repository";
 import {
   archiveUnit,
   createUnit,
@@ -74,6 +75,24 @@ export async function updateUnitForCurrentLandlord(
       "You do not have permission to edit this unit.",
       403,
     );
+  }
+
+  const changesRentConfiguration =
+    (input.rentFrequency !== undefined &&
+      input.rentFrequency !== unit.rent_frequency) ||
+    (input.rentAmount !== undefined &&
+      Number(input.rentAmount) !== Number(unit.rent_amount));
+
+  if (changesRentConfiguration) {
+    const activeTenancy = await getActiveTenancyForUnit(supabase, unitId);
+
+    if (activeTenancy) {
+      throw new AppError(
+        "UNIT_RENT_CONFIGURATION_LOCKED",
+        "Move the current tenant out before changing this unit's rent amount or collection frequency.",
+        400,
+      );
+    }
   }
 
   const updatedUnit = await updateUnit(supabase, unitId, input);

@@ -17,41 +17,42 @@ import {
   type ReminderIntervalDays,
 } from "@/lib/reminder-interval";
 import {
+  RENT_PAYMENT_FREQUENCY_LABELS,
+  type RentPaymentFrequency,
+} from "@/lib/rent-cycle";
+import {
   calculateTenancyEndDate,
   formatDisplayDate,
   getTodayDateInputValue,
-  type TenancyPaymentFrequency,
 } from "@/lib/tenancy-period";
 
-type TenancyFormProps = {
+ type TenancyFormProps = {
   tenantId: string;
   unitId: string;
-  defaultAnnualRent?: number | null;
+  rentAmount: number;
+  rentFrequency: RentPaymentFrequency;
 };
-
-const paymentFrequencyOptions: {
-  label: string;
-  value: TenancyPaymentFrequency;
-}[] = [
-  { label: "Yearly / Annual", value: "annual" },
-  { label: "Biannual", value: "biannual" },
-  { label: "Quarterly", value: "quarterly" },
-  { label: "Monthly", value: "monthly" },
-];
 
 const reminderIntervalOptions = REMINDER_INTERVAL_OPTIONS.map((option) => ({
   label: option.label,
   value: String(option.value),
 }));
 
+function formatNaira(value: number) {
+  return new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency: "NGN",
+    maximumFractionDigits: 0,
+  }).format(Number(value) || 0);
+}
+
 export function TenancyForm({
   tenantId,
   unitId,
-  defaultAnnualRent,
+  rentAmount,
+  rentFrequency,
 }: TenancyFormProps) {
   const [startDate, setStartDate] = useState(getTodayDateInputValue());
-  const [paymentFrequency, setPaymentFrequency] =
-    useState<TenancyPaymentFrequency>("annual");
   const [reminderIntervalDays, setReminderIntervalDays] =
     useState<ReminderIntervalDays>(90);
 
@@ -62,11 +63,11 @@ export function TenancyForm({
 
   const calculatedEndDate = useMemo(() => {
     try {
-      return calculateTenancyEndDate(startDate, paymentFrequency);
+      return calculateTenancyEndDate(startDate, rentFrequency);
     } catch {
       return "";
     }
-  }, [paymentFrequency, startDate]);
+  }, [rentFrequency, startDate]);
 
   const displayedEndDate = calculatedEndDate
     ? formatDisplayDate(calculatedEndDate)
@@ -88,14 +89,8 @@ export function TenancyForm({
     setStartDate(event.target.value);
   }
 
-  function handlePaymentFrequencyChange(event: ChangeEvent<HTMLSelectElement>) {
-    setPaymentFrequency(event.target.value as TenancyPaymentFrequency);
-  }
-
   function handleReminderIntervalChange(event: ChangeEvent<HTMLSelectElement>) {
-    setReminderIntervalDays(
-      Number(event.target.value) as ReminderIntervalDays,
-    );
+    setReminderIntervalDays(Number(event.target.value) as ReminderIntervalDays);
   }
 
   return (
@@ -112,45 +107,34 @@ export function TenancyForm({
           <div className="space-y-5">
             <TrustNotice
               title="Create rental agreement"
-              description="Set the rent amount and agreed rent start date. This date controls the tenant’s rent calendar, renewal date, agreement period, and payment period."
+              description="The unit's rent amount and collection frequency are locked. Enter the agreed move-in date; BOPA will use it as the permanent rent-cycle anchor."
             />
-
-            {state.message ? (
-              <div
-                role="alert"
-                className={
-                  state.ok
-                    ? "rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
-                    : "rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
-                }
-              >
-                {state.message}
-              </div>
-            ) : null}
 
             <input type="hidden" name="tenantId" value={tenantId} />
             <input type="hidden" name="unitId" value={unitId} />
-
-            <CurrencyInput
-              label="Rent amount"
-              name="rentAmount"
-              defaultValue={defaultAnnualRent ?? null}
-              placeholder="0.00"
-              error={state.fieldErrors?.rentAmount?.[0]}
-              helperText="Annual rent is the default because most Nigerian landlords collect rent yearly."
-              required
-            />
-
-            <Select
-              label="Rent payment frequency"
+            <input type="hidden" name="rentAmount" value={rentAmount} />
+            <input
+              type="hidden"
               name="paymentFrequency"
-              options={paymentFrequencyOptions}
-              value={paymentFrequency}
-              onChange={handlePaymentFrequencyChange}
-              error={state.fieldErrors?.paymentFrequency?.[0]}
-              helperText="Keep as yearly unless this tenant is on a different payment arrangement."
-              required
+              value={rentFrequency}
             />
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-button border border-border-soft bg-background px-4 py-3">
+                <p className="text-sm font-bold text-text-muted">Unit rent</p>
+                <p className="mt-2 text-lg font-extrabold text-text-strong">
+                  {formatNaira(rentAmount)}
+                </p>
+              </div>
+              <div className="rounded-button border border-border-soft bg-background px-4 py-3">
+                <p className="text-sm font-bold text-text-muted">
+                  Rent collection
+                </p>
+                <p className="mt-2 text-lg font-extrabold text-text-strong">
+                  {RENT_PAYMENT_FREQUENCY_LABELS[rentFrequency]}
+                </p>
+              </div>
+            </div>
 
             <div className="grid gap-4 md:grid-cols-2">
               <Input
@@ -160,7 +144,7 @@ export function TenancyForm({
                 value={startDate}
                 onChange={handleStartDateChange}
                 error={state.fieldErrors?.startDate?.[0]}
-                helperText="Use the agreed date the tenant’s rent calendar starts. This may be different from the payment date."
+                helperText="This date controls every future rent due date. The payment date will not change it."
                 required
               />
 
@@ -172,8 +156,7 @@ export function TenancyForm({
                   {displayedEndDate}
                 </p>
                 <p className="mt-1 text-sm leading-6 text-text-muted">
-                  Automatically calculated from the rent start date and payment
-                  frequency.
+                  Calculated from the move-in date and locked unit frequency.
                 </p>
               </div>
             </div>

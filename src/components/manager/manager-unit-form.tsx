@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Toast, type ToastItem } from "@/components/ui/toast";
 import { runOfflineCapableFormAction } from "@/lib/offline/offline-form.client";
 import { saveManagerUnitOffline } from "@/lib/offline/operational-mutations.client";
+import { RENT_PAYMENT_FREQUENCY_LABELS, RENT_PAYMENT_FREQUENCIES } from "@/lib/rent-cycle";
 import type { ManagerPropertyRow } from "@/server/repositories/manager.repository";
 
 type ManagerUnitFormProps = {
@@ -231,11 +232,36 @@ export function ManagerUnitForm({
               ) : null}
             </div>
 
+            <div className="space-y-2">
+              <label htmlFor="manager-unit-rent-frequency" className="text-sm font-bold text-text-strong">
+                Rent collection frequency
+              </label>
+              <select
+                id="manager-unit-rent-frequency"
+                name="rentFrequency"
+                defaultValue="annual"
+                className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
+                required
+              >
+                {RENT_PAYMENT_FREQUENCIES.map((frequency) => (
+                  <option key={frequency} value={frequency}>
+                    {RENT_PAYMENT_FREQUENCY_LABELS[frequency]}
+                  </option>
+                ))}
+              </select>
+              {state.ok ? null : state.fieldErrors?.rentFrequency?.[0] ? (
+                <p className="text-sm font-semibold text-danger">
+                  {state.fieldErrors.rentFrequency[0]}
+                </p>
+              ) : null}
+            </div>
+
             <CurrencyInput
-              label="Rent amount"
+              label="Rent amount for this frequency"
               name="rentAmount"
               placeholder="0.00"
               error={state.ok ? undefined : state.fieldErrors?.rentAmount?.[0]}
+              helperText="This amount and frequency will be locked during tenant onboarding."
               required
             />
 

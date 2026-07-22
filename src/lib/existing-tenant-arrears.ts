@@ -1,5 +1,14 @@
-export type ExistingTenantPaymentFrequency =
-  "annual" | "monthly" | "quarterly" | "biannual";
+import {
+  calculateAnchoredRentCycleDate,
+  calculateCurrentRentCycle,
+  calculateCurrentRentDueDate,
+  calculateRentPeriod,
+  getCurrentLagosDateOnly,
+  getRentFrequencyMonths,
+  type RentPaymentFrequency,
+} from "@/lib/rent-cycle";
+
+export type ExistingTenantPaymentFrequency = RentPaymentFrequency;
 
 export type ExistingTenantPaymentRecord = {
   amount: number;
@@ -36,34 +45,19 @@ export type ExistingTenantArrearsSummary = {
 };
 
 export function parseDateOnly(value: string) {
-  return new Date(`${value}T00:00:00`);
+  return new Date(`${value}T00:00:00Z`);
 }
 
 export function toDateOnly(value: Date) {
   return value.toISOString().slice(0, 10);
 }
 
-export function addMonths(value: Date, months: number) {
-  const nextDate = new Date(value);
-  nextDate.setMonth(nextDate.getMonth() + months);
-
-  return nextDate;
+export function getFrequencyMonths(frequency: ExistingTenantPaymentFrequency) {
+  return getRentFrequencyMonths(frequency);
 }
 
-export function getFrequencyMonths(frequency: ExistingTenantPaymentFrequency) {
-  if (frequency === "monthly") {
-    return 1;
-  }
-
-  if (frequency === "quarterly") {
-    return 3;
-  }
-
-  if (frequency === "biannual") {
-    return 6;
-  }
-
-  return 12;
+function referenceDateOnly(today?: Date) {
+  return getCurrentLagosDateOnly(today);
 }
 
 export function calculateCurrentDueDate(params: {
@@ -71,20 +65,11 @@ export function calculateCurrentDueDate(params: {
   paymentFrequency: ExistingTenantPaymentFrequency;
   today?: Date;
 }) {
-  const today = params.today ?? new Date();
-  const frequencyMonths = getFrequencyMonths(params.paymentFrequency);
-  let currentDueDate = addMonths(
-    parseDateOnly(params.moveInDate),
-    frequencyMonths,
-  );
-  let nextDueDate = addMonths(currentDueDate, frequencyMonths);
-
-  while (nextDueDate.getTime() <= today.getTime()) {
-    currentDueDate = nextDueDate;
-    nextDueDate = addMonths(currentDueDate, frequencyMonths);
-  }
-
-  return toDateOnly(currentDueDate);
+  return calculateCurrentRentDueDate({
+    anchorDate: params.moveInDate,
+    paymentFrequency: params.paymentFrequency,
+    referenceDate: referenceDateOnly(params.today),
+  });
 }
 
 export function calculateCurrentRentCycleStartDate(params: {
@@ -92,17 +77,11 @@ export function calculateCurrentRentCycleStartDate(params: {
   paymentFrequency: ExistingTenantPaymentFrequency;
   today?: Date;
 }) {
-  const today = params.today ?? new Date();
-  const frequencyMonths = getFrequencyMonths(params.paymentFrequency);
-  let currentCycleStart = parseDateOnly(params.tenancyStartDate);
-  let nextCycleStart = addMonths(currentCycleStart, frequencyMonths);
-
-  while (nextCycleStart.getTime() <= today.getTime()) {
-    currentCycleStart = nextCycleStart;
-    nextCycleStart = addMonths(currentCycleStart, frequencyMonths);
-  }
-
-  return toDateOnly(currentCycleStart);
+  return calculateCurrentRentCycle({
+    anchorDate: params.tenancyStartDate,
+    paymentFrequency: params.paymentFrequency,
+    referenceDate: referenceDateOnly(params.today),
+  }).periodStart;
 }
 
 export function getDefaultArrearsStartDate(params: {
@@ -111,41 +90,39 @@ export function getDefaultArrearsStartDate(params: {
   today?: Date;
   activeYearCount?: number;
 }) {
-  const today = params.today ?? new Date();
   const activeYearCount = params.activeYearCount ?? 2;
-  const frequencyMonths = getFrequencyMonths(params.paymentFrequency);
-  const currentDueDate = parseDateOnly(
-    calculateCurrentDueDate({
-      moveInDate: params.moveInDate,
+  const currentDueDate = calculateCurrentDueDate(params);
+  const currentIndex = Math.max(
+    1,
+    calculateCurrentRentCycle({
+      anchorDate: params.moveInDate,
       paymentFrequency: params.paymentFrequency,
-      today,
-    }),
+      referenceDate: currentDueDate,
+    }).cycleIndex,
   );
-  const firstChargeDate = addMonths(
-    parseDateOnly(params.moveInDate),
-    frequencyMonths,
-  );
-
-  let arrearsStartDate = addMonths(
-    currentDueDate,
-    -activeYearCount * frequencyMonths,
+  const cyclesPerYear = 12 / getFrequencyMonths(params.paymentFrequency);
+  const startIndex = Math.max(
+    1,
+    currentIndex - activeYearCount * cyclesPerYear,
   );
 
-  if (arrearsStartDate.getTime() < firstChargeDate.getTime()) {
-    arrearsStartDate = firstChargeDate;
-  }
-
-  return toDateOnly(arrearsStartDate);
+  return calculateAnchoredRentCycleDate({
+    anchorDate: params.moveInDate,
+    paymentFrequency: params.paymentFrequency,
+    cycleIndex: startIndex,
+  });
 }
 
 function formatCycleLabel(periodStart: string, periodEnd: string) {
   const start = new Intl.DateTimeFormat("en-NG", {
     month: "short",
     year: "numeric",
+    timeZone: "UTC",
   }).format(parseDateOnly(periodStart));
   const end = new Intl.DateTimeFormat("en-NG", {
     month: "short",
     year: "numeric",
+    timeZone: "UTC",
   }).format(parseDateOnly(periodEnd));
 
   return `${start} – ${end}`;
@@ -157,32 +134,35 @@ export function buildRentCycles(params: {
   savedCycles?: ExistingTenantRentCycle[];
   today?: Date;
 }) {
-  const today = params.today ?? new Date();
-  const frequencyMonths = getFrequencyMonths(params.paymentFrequency);
+  const today = referenceDateOnly(params.today);
   const savedByPeriod = new Map(
     (params.savedCycles ?? []).map((cycle) => [cycle.periodStart, cycle]),
   );
-
   const cycles: ExistingTenantRentCycle[] = [];
-  let dueDate = addMonths(parseDateOnly(params.moveInDate), frequencyMonths);
 
-  while (dueDate.getTime() <= today.getTime()) {
-    const periodStart = toDateOnly(dueDate);
-    const periodEnd = toDateOnly(addMonths(dueDate, frequencyMonths));
-    const saved = savedByPeriod.get(periodStart);
+  for (let cycleIndex = 1; ; cycleIndex += 1) {
+    const period = calculateRentPeriod({
+      anchorDate: params.moveInDate,
+      paymentFrequency: params.paymentFrequency,
+      cycleIndex,
+    });
+
+    if (period.periodStart > today) {
+      break;
+    }
+
+    const saved = savedByPeriod.get(period.periodStart);
     const assumedPaid = saved?.assumedPaid ?? true;
 
     cycles.push({
-      id: periodStart,
-      label: formatCycleLabel(periodStart, periodEnd),
-      periodStart,
-      periodEnd,
+      id: period.periodStart,
+      label: formatCycleLabel(period.periodStart, period.periodEnd),
+      periodStart: period.periodStart,
+      periodEnd: period.periodEnd,
       rentCharged: assumedPaid ? 0 : Number(saved?.rentCharged ?? 0),
       assumedPaid,
       payments: assumedPaid ? [] : (saved?.payments ?? []),
     });
-
-    dueDate = parseDateOnly(periodEnd);
   }
 
   return cycles;
@@ -202,12 +182,11 @@ export function deriveArrearsStartDate(params: {
     return recordingCycles[0];
   }
 
-  return addMonths(
-    parseDateOnly(params.moveInDate),
-    getFrequencyMonths(params.paymentFrequency),
-  )
-    .toISOString()
-    .slice(0, 10);
+  return calculateAnchoredRentCycleDate({
+    anchorDate: params.moveInDate,
+    paymentFrequency: params.paymentFrequency,
+    cycleIndex: 1,
+  });
 }
 
 export function hasMeaningfulCycleArrears(cycle: ExistingTenantRentCycle) {
@@ -275,7 +254,7 @@ function paymentBelongsToCycle(
   const periodStart = parseDateOnly(cycle.periodStart).getTime();
   const periodEnd = parseDateOnly(cycle.periodEnd).getTime();
 
-  return paidAt >= periodStart && paidAt < periodEnd;
+  return paidAt >= periodStart && paidAt <= periodEnd;
 }
 
 export function getCycleBalance(cycle: ExistingTenantRentCycle) {

@@ -18,6 +18,12 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { runOfflineCapableFormAction } from "@/lib/offline/offline-form.client";
 import { saveLandlordUnitOffline } from "@/lib/offline/operational-mutations.client";
+import { RENT_PAYMENT_FREQUENCY_LABELS } from "@/lib/rent-cycle";
+
+
+const rentFrequencyOptions = Object.entries(RENT_PAYMENT_FREQUENCY_LABELS).map(
+  ([value, label]) => ({ value, label }),
+);
 
 const unitTypeOptions = [
   { label: "Single Room", value: "single_room" },
@@ -280,24 +286,32 @@ export function UnitForm({
         />
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <CurrencyInput
-            label="Annual rent"
-            name="annualRent"
-            placeholder="0.00"
-            resetKey={formResetKey}
-            error={state.fieldErrors?.annualRent?.[0]}
-            helperText="Use this for yearly rent."
+          <Select
+            label="Rent frequency"
+            name="rentFrequency"
+            options={rentFrequencyOptions}
+            defaultValue="annual"
+            key={`rent-frequency-${formResetKey}`}
+            error={state.fieldErrors?.rentFrequency?.[0]}
+            helperText="This becomes the official rent cycle for the unit."
+            required
           />
 
           <CurrencyInput
-            label="Monthly rent"
-            name="monthlyRent"
+            label="Rent amount"
+            name="rentAmount"
             placeholder="0.00"
             resetKey={formResetKey}
-            error={state.fieldErrors?.monthlyRent?.[0]}
-            helperText="Optional. Use only for monthly rent."
+            error={state.fieldErrors?.rentAmount?.[0]}
+            helperText="Enter the amount charged for the selected frequency."
+            required
           />
         </div>
+
+        <p className="text-xs font-semibold leading-5 text-text-muted">
+          Tenant onboarding will use this frequency and amount automatically.
+          They cannot be changed to a different rent plan during onboarding.
+        </p>
       </section>
 
       <div className="h-px bg-border-soft" />

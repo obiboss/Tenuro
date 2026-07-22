@@ -318,7 +318,7 @@ export function buildInitialRentCyclesForClaim(
             const periodStart = new Date(`${cycle.periodStart}T00:00:00`).getTime();
             const periodEnd = new Date(`${cycle.periodEnd}T00:00:00`).getTime();
 
-            return paidAt >= periodStart && paidAt < periodEnd;
+            return paidAt >= periodStart && paidAt <= periodEnd;
           })
           .map((payment) => ({
             amount: Number(payment.amount),

@@ -1,20 +1,12 @@
+import { format, isValid, parseISO } from "date-fns";
 import {
-  addDays,
-  addMonths,
-  addYears,
-  format,
-  getDate,
-  getMonth,
-  isValid,
-  parseISO,
-  subDays,
-} from "date-fns";
+  calculateRentPeriod,
+  getCurrentLagosDateOnly,
+  getRentFrequencyMonths,
+  type RentPaymentFrequency,
+} from "@/lib/rent-cycle";
 
-export type TenancyPaymentFrequency =
-  | "annual"
-  | "biannual"
-  | "quarterly"
-  | "monthly";
+export type TenancyPaymentFrequency = RentPaymentFrequency;
 
 function parseDateInput(value: string) {
   const parsedDate = parseISO(value);
@@ -27,37 +19,38 @@ function parseDateInput(value: string) {
 }
 
 export function getTodayDateInputValue() {
-  return format(new Date(), "yyyy-MM-dd");
+  return getCurrentLagosDateOnly();
 }
 
 export function calculateTenancyEndDate(
   startDate: string,
   paymentFrequency: TenancyPaymentFrequency,
 ) {
-  const parsedStartDate = parseDateInput(startDate);
-
-  const nextPeriodStart =
-    paymentFrequency === "annual"
-      ? addYears(parsedStartDate, 1)
-      : paymentFrequency === "biannual"
-        ? addMonths(parsedStartDate, 6)
-        : paymentFrequency === "quarterly"
-          ? addMonths(parsedStartDate, 3)
-          : addMonths(parsedStartDate, 1);
-
-  return format(subDays(nextPeriodStart, 1), "yyyy-MM-dd");
+  return calculateRentPeriod({
+    anchorDate: startDate,
+    paymentFrequency,
+    cycleIndex: 0,
+  }).periodEnd;
 }
 
 export function calculateNextRentChargeDate(endDate: string) {
-  return format(addDays(parseDateInput(endDate), 1), "yyyy-MM-dd");
+  const date = parseDateInput(endDate);
+  date.setDate(date.getDate() + 1);
+  return format(date, "yyyy-MM-dd");
 }
 
 export function getRentAnchorDay(startDate: string) {
-  return getDate(parseDateInput(startDate));
+  return parseDateInput(startDate).getDate();
 }
 
 export function getRentAnchorMonth(startDate: string) {
-  return getMonth(parseDateInput(startDate)) + 1;
+  return parseDateInput(startDate).getMonth() + 1;
+}
+
+export function getPaymentFrequencyMonths(
+  paymentFrequency: TenancyPaymentFrequency,
+) {
+  return getRentFrequencyMonths(paymentFrequency);
 }
 
 export function formatDisplayDate(value: string) {

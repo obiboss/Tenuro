@@ -51,7 +51,7 @@ export const createManualExistingTenantSchema = z
       .min(2, "Enter the tenant occupation.")
       .max(120),
     tenancyStartDate: dateStringSchema,
-    paymentFrequency: z.enum(["annual", "monthly", "quarterly", "biannual"]),
+    paymentFrequency: z.enum(["annual", "monthly", "quarterly", "biannual"]).optional(),
     lastPaymentAmount: positiveMoneySchema,
     lastPaymentDate: dateStringSchema,
   })
@@ -74,13 +74,9 @@ export const submitExistingTenantClaimSchema = z.object({
   idType: existingTenantClaimIdTypeSchema,
   idNumber: z.string().trim().min(3, "Enter your ID number.").max(120),
   moveInDate: dateStringSchema,
-  statedRentDueDate: dateStringSchema,
-  claimedRentAmount: positiveMoneySchema,
-  paymentFrequency: z
-    .enum(["annual", "monthly", "quarterly", "biannual"], {
-      message: "Select your rent payment frequency.",
-    })
-    .default("annual"),
+  statedRentDueDate: dateStringSchema.optional(),
+  claimedRentAmount: positiveMoneySchema.optional(),
+  paymentFrequency: z.enum(["annual", "monthly", "quarterly", "biannual"]).optional(),
   tenantNotes: z.string().trim().max(1000).optional().or(z.literal("")),
 });
 
@@ -93,9 +89,7 @@ export const updateExistingTenantClaimArrearsSchema = z.object({
 
 export const approveExistingTenantClaimSchema = z.object({
   claimId: uuidSchema,
-  confirmedRentAmount: positiveMoneySchema,
   confirmedMoveInDate: dateStringSchema,
-  confirmedCurrentDueDate: dateStringSchema,
   openingBalance: moneySchema.default(0),
   reviewNotes: z.string().trim().max(1000).optional().or(z.literal("")),
 });

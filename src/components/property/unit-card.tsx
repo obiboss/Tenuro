@@ -1,6 +1,7 @@
 import { BedDouble, Bath, Home } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { RENT_PAYMENT_FREQUENCY_LABELS } from "@/lib/rent-cycle";
 import type { UnitRow } from "@/server/repositories/units.repository";
 
 type UnitCardProps = {
@@ -84,16 +85,16 @@ export function UnitCard({ unit }: UnitCardProps) {
 
         <div className="col-span-2 mt-6 grid grid-cols-2 gap-4 sm:col-span-1 sm:col-start-2">
           <div className="rounded-button bg-background p-3">
-            <p className="text-xs font-bold text-text-muted">Annual Rent</p>
+            <p className="text-xs font-bold text-text-muted">Rent</p>
             <p className="mt-1 text-sm font-extrabold text-text-strong">
-              {formatMoney(unit.annual_rent, unit.currency_code)}
+              {formatMoney(unit.rent_amount, unit.currency_code)}
             </p>
           </div>
 
           <div className="rounded-button bg-background p-3">
-            <p className="text-xs font-bold text-text-muted">Monthly Rent</p>
+            <p className="text-xs font-bold text-text-muted">Rent frequency</p>
             <p className="mt-1 text-sm font-extrabold text-text-strong">
-              {formatMoney(unit.monthly_rent, unit.currency_code)}
+              {RENT_PAYMENT_FREQUENCY_LABELS[unit.rent_frequency]}
             </p>
           </div>
 

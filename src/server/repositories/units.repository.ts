@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { RentPaymentFrequency } from "@/lib/rent-cycle";
 import type {
   CreateUnitInput,
   UpdateUnitInput,
@@ -35,6 +36,8 @@ export type UnitRow = {
   unit_type: UnitType;
   bedrooms: number;
   bathrooms: number;
+  rent_frequency: RentPaymentFrequency;
+  rent_amount: number;
   monthly_rent: number | null;
   annual_rent: number | null;
   currency_code: string;
@@ -43,7 +46,7 @@ export type UnitRow = {
 };
 
 const UNIT_SELECT =
-  "id, property_id, block_id, building_name, unit_identifier, unit_type, bedrooms, bathrooms, monthly_rent, annual_rent, currency_code, status, created_at";
+  "id, property_id, block_id, building_name, unit_identifier, unit_type, bedrooms, bathrooms, rent_frequency, rent_amount, monthly_rent, annual_rent, currency_code, status, created_at";
 
 export async function createUnit(
   supabase: SupabaseClient,
@@ -58,6 +61,8 @@ export async function createUnit(
       unit_type: input.unitType,
       bedrooms: input.bedrooms,
       bathrooms: input.bathrooms,
+      rent_frequency: input.rentFrequency,
+      rent_amount: input.rentAmount,
       monthly_rent: input.monthlyRent ?? null,
       annual_rent: input.annualRent ?? null,
       currency_code: input.currencyCode,
@@ -84,6 +89,8 @@ export async function updateUnit(
     unit_type: UnitType;
     bedrooms: number;
     bathrooms: number;
+    rent_frequency: RentPaymentFrequency;
+    rent_amount: number;
     monthly_rent: number | null;
     annual_rent: number | null;
     currency_code: string;
@@ -107,6 +114,15 @@ export async function updateUnit(
 
   if (input.bathrooms !== undefined) {
     updatePayload.bathrooms = input.bathrooms;
+  }
+
+
+  if (input.rentFrequency !== undefined) {
+    updatePayload.rent_frequency = input.rentFrequency;
+  }
+
+  if (input.rentAmount !== undefined) {
+    updatePayload.rent_amount = input.rentAmount ?? 0;
   }
 
   if (input.monthlyRent !== undefined) {
@@ -205,6 +221,8 @@ export async function getVacantUnitsForLandlord(
       unit_type,
       bedrooms,
       bathrooms,
+      rent_frequency,
+      rent_amount,
       monthly_rent,
       annual_rent,
       currency_code,
@@ -237,6 +255,8 @@ export async function getVacantUnitsForLandlord(
       buildingName: unit.building_name as string | null,
       unitIdentifier: unit.unit_identifier as string,
       unitType: unit.unit_type as UnitType,
+      rentFrequency: unit.rent_frequency as RentPaymentFrequency,
+      rentAmount: Number(unit.rent_amount),
       annualRent: unit.annual_rent as number | null,
       monthlyRent: unit.monthly_rent as number | null,
       currencyCode: unit.currency_code as string,
@@ -309,6 +329,9 @@ export async function getUnitWithPropertyById(
       unit_identifier,
       building_name,
       property_id,
+      rent_frequency,
+      rent_amount,
+      currency_code,
       properties (
         id,
         property_name,
@@ -323,6 +346,9 @@ export async function getUnitWithPropertyById(
       unit_identifier: string;
       building_name: string | null;
       property_id: string;
+      rent_frequency: RentPaymentFrequency;
+      rent_amount: number;
+      currency_code: string;
       properties: {
         id: string;
         property_name: string;

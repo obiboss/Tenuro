@@ -1,5 +1,9 @@
 import { z } from "zod";
 import {
+  getCurrentLagosDateOnly,
+  RENT_PAYMENT_FREQUENCIES,
+} from "@/lib/rent-cycle";
+import {
   MANAGER_COLLECTION_MODES,
   MANAGER_MANAGEMENT_FEE_TYPES,
   MANAGER_PAYMENT_METHODS,
@@ -245,7 +249,8 @@ export const createManagerUnitSchema = z.object({
     maxMessage: "Unit label is too long.",
   }),
   unitType: optionalTextSchema(80, "Unit type is too long."),
-  rentAmount: moneySchema,
+  rentFrequency: z.enum(RENT_PAYMENT_FREQUENCIES),
+  rentAmount: positiveMoneySchema,
   notes: optionalTextSchema(600, "Notes are too long."),
 });
 
@@ -271,9 +276,10 @@ export const createManagerTenantSchema = z.object({
   }),
   email: optionalEmailSchema,
   occupation: optionalTextSchema(120, "Occupation is too long."),
-  rentAmount: moneySchema,
+  rentAmount: positiveMoneySchema,
+  paymentFrequency: z.enum(RENT_PAYMENT_FREQUENCIES),
   currentBalance: moneySchema.default(0),
-  moveInDate: optionalDateSchema,
+  moveInDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter the move-in date."),
   nextRentDueDate: optionalDateSchema,
   notes: optionalTextSchema(600, "Notes are too long."),
 });
@@ -298,7 +304,7 @@ export const recordManagerRentPaymentSchema = z
           .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid payment date.")
           .optional(),
       )
-      .default(new Date().toISOString().slice(0, 10)),
+      .default(getCurrentLagosDateOnly()),
     periodStart: optionalDateSchema,
     periodEnd: optionalDateSchema,
     notes: optionalTextSchema(600, "Notes are too long."),
@@ -334,7 +340,7 @@ export const recordManagerLandlordRemittanceSchema = z
           .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid remittance date.")
           .optional(),
       )
-      .default(new Date().toISOString().slice(0, 10)),
+      .default(getCurrentLagosDateOnly()),
     periodStart: optionalDateSchema,
     periodEnd: optionalDateSchema,
     paymentMethod: z.enum(MANAGER_REMITTANCE_PAYMENT_METHODS),

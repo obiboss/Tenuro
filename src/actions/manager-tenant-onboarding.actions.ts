@@ -227,7 +227,6 @@ export async function approveManagerTenantOnboardingRequestAction(
 
     const parsed = approveManagerTenantOnboardingRequestSchema.parse({
       requestId: formData.get("requestId"),
-      confirmedRentAmount: formData.get("confirmedRentAmount"),
       confirmedMoveInDate: formData.get("confirmedMoveInDate"),
       openingBalance: formData.get("openingBalance"),
       reviewNotes: formData.get("reviewNotes"),

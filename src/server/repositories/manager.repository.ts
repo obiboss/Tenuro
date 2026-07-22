@@ -193,6 +193,7 @@ export type ManagerUnitRow = {
   property_id: string;
   unit_label: string;
   unit_type: string | null;
+  rent_frequency: "annual" | "biannual" | "quarterly" | "monthly";
   rent_amount: number;
   status: ManagerUnitStatus;
   notes: string | null;
@@ -213,6 +214,10 @@ export type ManagerTenantRow = {
   rent_amount: number;
   current_balance: number;
   move_in_date: string | null;
+  payment_frequency: "annual" | "biannual" | "quarterly" | "monthly";
+  rent_cycle_anchor_date: string | null;
+  current_period_start: string | null;
+  current_period_end: string | null;
   next_rent_due_date: string | null;
   move_out_date: string | null;
   status: ManagerTenantStatus;
@@ -528,6 +533,7 @@ const MANAGER_UNIT_SELECT = `
   property_id,
   unit_label,
   unit_type,
+  rent_frequency,
   rent_amount,
   status,
   notes,
@@ -548,6 +554,10 @@ const MANAGER_TENANT_SELECT = `
   rent_amount,
   current_balance,
   move_in_date,
+  payment_frequency,
+  rent_cycle_anchor_date,
+  current_period_start,
+  current_period_end,
   next_rent_due_date,
   move_out_date,
   status,
@@ -1245,6 +1255,7 @@ export async function createManagerUnit(
     propertyId: string;
     unitLabel: string;
     unitType: string | null;
+    rentFrequency: "annual" | "biannual" | "quarterly" | "monthly";
     rentAmount: number;
     status: ManagerUnitStatus;
     notes: string | null;
@@ -1258,6 +1269,7 @@ export async function createManagerUnit(
       property_id: params.propertyId,
       unit_label: params.unitLabel,
       unit_type: params.unitType,
+      rent_frequency: params.rentFrequency,
       rent_amount: params.rentAmount,
       status: params.status,
       notes: params.notes,
@@ -1404,6 +1416,10 @@ export async function createManagerTenant(
     rentAmount: number;
     currentBalance: number;
     moveInDate: string | null;
+    paymentFrequency: "annual" | "biannual" | "quarterly" | "monthly";
+    rentCycleAnchorDate: string | null;
+    currentPeriodStart: string | null;
+    currentPeriodEnd: string | null;
     nextRentDueDate: string | null;
     status: ManagerTenantStatus;
     notes: string | null;
@@ -1423,6 +1439,10 @@ export async function createManagerTenant(
       rent_amount: params.rentAmount,
       current_balance: params.currentBalance,
       move_in_date: params.moveInDate,
+      payment_frequency: params.paymentFrequency,
+      rent_cycle_anchor_date: params.rentCycleAnchorDate,
+      current_period_start: params.currentPeriodStart,
+      current_period_end: params.currentPeriodEnd,
       next_rent_due_date: params.nextRentDueDate,
       status: params.status,
       notes: params.notes,

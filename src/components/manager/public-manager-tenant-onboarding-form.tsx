@@ -8,6 +8,10 @@ import { CurrencyInput } from "@/components/ui/currency-input";
 import { Input } from "@/components/ui/input";
 import { Toast, type ToastItem } from "@/components/ui/toast";
 import { WhatsAppShareActions } from "@/components/ui/whatsapp-share-actions";
+import {
+  getCurrentLagosDateOnly,
+  RENT_PAYMENT_FREQUENCY_LABELS,
+} from "@/lib/rent-cycle";
 import type { ManagerTenantOnboardingRequestRow } from "@/server/repositories/manager-tenant-onboarding.repository";
 
 type PublicManagerTenantOnboardingFormProps = {
@@ -34,12 +38,7 @@ const idTypeOptions = [
   ["voters_card", "Voter's Card"],
 ] as const;
 
-const frequencyOptions = [
-  ["annual", "Annual rent"],
-  ["monthly", "Monthly rent"],
-  ["quarterly", "Quarterly rent"],
-  ["biannual", "Biannual rent"],
-] as const;
+
 
 type RequirementAnswerDraft = {
   booleanAnswer?: boolean;
@@ -787,7 +786,7 @@ export function PublicManagerTenantOnboardingForm({
                     Rent details
                   </h2>
                   <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-                    Enter the current rent details for this existing tenant.
+                    Confirm the original move-in date and the last payment. The unit rent amount and frequency are already fixed.
                   </p>
                 </div>
 
@@ -796,45 +795,21 @@ export function PublicManagerTenantOnboardingForm({
                     label="Move-in date"
                     name="moveInDate"
                     type="date"
+                    helperText="This date becomes the permanent rent-cycle anchor."
                     error={state.fieldErrors?.moveInDate?.[0]}
                     required
                   />
-
-                  <div className="space-y-2">
-                    <label
-                      className="text-sm font-bold text-text-strong"
-                      htmlFor="paymentFrequency"
-                    >
-                      Rent frequency
-                    </label>
-
-                    <select
-                      id="paymentFrequency"
-                      name="paymentFrequency"
-                      defaultValue="annual"
-                      className="min-h-12 w-full rounded-button border border-border-soft bg-white px-4 text-sm font-semibold text-text-strong outline-none transition focus:border-primary"
-                      required
-                    >
-                      {frequencyOptions.map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
+                  <div className="rounded-button border border-border-soft bg-background p-4">
+                    <p className="text-sm font-bold text-text-muted">Rent terms</p>
+                    <p className="mt-2 text-base font-black text-text-strong">
+                      {new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(Number(request.manager_units?.rent_amount ?? 0))}
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-text-muted">
+                      {RENT_PAYMENT_FREQUENCY_LABELS[request.manager_units?.rent_frequency ?? "annual"]}
+                    </p>
+                    <input type="hidden" name="paymentFrequency" value={request.manager_units?.rent_frequency ?? "annual"} />
+                    <input type="hidden" name="claimedRentAmount" value={request.manager_units?.rent_amount ?? 0} />
                   </div>
-                </div>
-
-                <div className="mt-4">
-                  <CurrencyInput
-                    label="Rent amount"
-                    name="claimedRentAmount"
-                    placeholder="0.00"
-                    defaultValue={String(
-                      request.manager_units?.rent_amount ?? "",
-                    )}
-                    error={state.fieldErrors?.claimedRentAmount?.[0]}
-                    required
-                  />
                 </div>
 
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -850,7 +825,7 @@ export function PublicManagerTenantOnboardingForm({
                     label="Date of last payment"
                     name="lastPaymentDate"
                     type="date"
-                    max={new Date().toISOString().slice(0, 10)}
+                    max={getCurrentLagosDateOnly()}
                     error={state.fieldErrors?.lastPaymentDate?.[0]}
                     required
                   />

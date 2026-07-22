@@ -48,6 +48,8 @@ function parseAgentPropertyListingForm(formData: FormData) {
     unitType: formData.get("unitType"),
     bedrooms: formData.get("bedrooms"),
     bathrooms: formData.get("bathrooms"),
+    rentFrequency: formData.get("rentFrequency"),
+    rentAmount: nullableMoney(formData.get("rentAmount")),
     annualRent: nullableMoney(formData.get("annualRent")),
     monthlyRent: nullableMoney(formData.get("monthlyRent")),
     agentCommissionAmount: nullableMoney(formData.get("agentCommissionAmount")),

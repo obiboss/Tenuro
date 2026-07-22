@@ -41,7 +41,7 @@ export async function createManualExistingTenantAction(
       phoneNumber: formData.get("phoneNumber"),
       occupation: formData.get("occupation"),
       tenancyStartDate: formData.get("tenancyStartDate"),
-      paymentFrequency: formData.get("paymentFrequency"),
+      paymentFrequency: formData.get("paymentFrequency") || undefined,
       lastPaymentAmount: formData.get("lastPaymentAmount"),
       lastPaymentDate: formData.get("lastPaymentDate"),
     });
@@ -122,9 +122,9 @@ export async function submitExistingTenantClaimAction(
       idType: formData.get("idType"),
       idNumber: formData.get("idNumber"),
       moveInDate: formData.get("moveInDate"),
-      statedRentDueDate: formData.get("statedRentDueDate"),
-      claimedRentAmount: formData.get("claimedRentAmount"),
-      paymentFrequency: formData.get("paymentFrequency"),
+      statedRentDueDate: formData.get("statedRentDueDate") || undefined,
+      claimedRentAmount: formData.get("claimedRentAmount") || undefined,
+      paymentFrequency: formData.get("paymentFrequency") || undefined,
       tenantNotes: formData.get("tenantNotes"),
     });
 
@@ -188,9 +188,7 @@ export async function approveExistingTenantClaimAction(
   try {
     const parsed = approveExistingTenantClaimSchema.parse({
       claimId: formData.get("claimId"),
-      confirmedRentAmount: formData.get("confirmedRentAmount"),
       confirmedMoveInDate: formData.get("confirmedMoveInDate"),
-      confirmedCurrentDueDate: formData.get("confirmedCurrentDueDate"),
       openingBalance: formData.get("openingBalance"),
       reviewNotes: formData.get("reviewNotes"),
     });

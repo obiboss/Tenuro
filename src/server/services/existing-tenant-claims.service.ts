@@ -42,17 +42,17 @@ import { writeAuditLog } from "@/server/services/audit-log.service";
 import { queueLandlordInAppNotification } from "@/server/services/notification-queue.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import {
-  addMonths,
-  calculateCurrentRentCycleStartDate,
   calculateArrearsFromCycles,
   deriveArrearsStartDate,
   isCompleteExistingTenantPayment,
   normalizeRentCycleAfterEdit,
-  parseDateOnly,
-  toDateOnly,
   type ExistingTenantRentCycle,
 } from "@/lib/existing-tenant-arrears";
 import { getFrequencyMonths } from "@/lib/existing-tenant-arrears";
+import {
+  calculateCurrentRentCycle,
+  calculateCurrentRentDueDate,
+} from "@/lib/rent-cycle";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 import { normalisePhoneNumber } from "@/server/utils/phone";
 import type {
@@ -83,6 +83,8 @@ export type ExistingTenantClaimUnitOption = {
   unitIdentifier: string;
   buildingName: string | null;
   unitType: UnitType;
+  rentFrequency: ExistingTenantClaimPaymentFrequency;
+  rentAmount: number;
   annualRent: number | null;
   monthlyRent: number | null;
   currencyCode: string;
@@ -137,40 +139,6 @@ function resolveUnitProperty(
   }
 
   return propertyRelation;
-}
-
-function calculateCurrentPeriodEnd(params: {
-  currentPeriodStart: string;
-  paymentFrequency: ExistingTenantClaimPaymentFrequency;
-}) {
-  return toDateOnly(
-    addMonths(
-      parseDateOnly(params.currentPeriodStart),
-      getFrequencyMonths(params.paymentFrequency),
-    ),
-  );
-}
-
-function resolveManualExistingTenantRentAmount(params: {
-  annualRent: number | null;
-  monthlyRent: number | null;
-  paymentFrequency: ExistingTenantClaimPaymentFrequency;
-}) {
-  const annualRent = Number(params.annualRent ?? 0);
-  const monthlyRent = Number(params.monthlyRent ?? 0);
-  let amount = 0;
-
-  if (params.paymentFrequency === "annual") {
-    amount = annualRent > 0 ? annualRent : monthlyRent * 12;
-  } else if (params.paymentFrequency === "biannual") {
-    amount = annualRent > 0 ? annualRent / 2 : monthlyRent * 6;
-  } else if (params.paymentFrequency === "quarterly") {
-    amount = annualRent > 0 ? annualRent / 4 : monthlyRent * 3;
-  } else {
-    amount = monthlyRent > 0 ? monthlyRent : annualRent / 12;
-  }
-
-  return Math.round(amount * 100) / 100;
 }
 
 function mapCycleInputToRentCycle(
@@ -332,6 +300,8 @@ export async function getCurrentLandlordExistingTenantClaimUnitOptions() {
       unit_identifier,
       building_name,
       unit_type,
+      rent_frequency,
+      rent_amount,
       annual_rent,
       monthly_rent,
       currency_code,
@@ -371,6 +341,8 @@ export async function getCurrentLandlordExistingTenantClaimUnitOptions() {
       unitIdentifier,
       buildingName,
       unitType: unit.unit_type as UnitType,
+      rentFrequency: unit.rent_frequency as ExistingTenantClaimPaymentFrequency,
+      rentAmount: Number(unit.rent_amount),
       annualRent:
         typeof unit.annual_rent === "number" ? unit.annual_rent : null,
       monthlyRent:
@@ -515,13 +487,10 @@ export async function createManualExistingTenantForCurrentLandlord(
     );
   }
 
-  const rentAmount = resolveManualExistingTenantRentAmount({
-    annualRent: unit.annual_rent,
-    monthlyRent: unit.monthly_rent,
-    paymentFrequency: input.paymentFrequency,
-  });
+  const rentAmount = Number(unit.rent_amount);
+  const paymentFrequency = unit.rent_frequency;
 
-  if (rentAmount <= 0) {
+  if (!Number.isFinite(rentAmount) || rentAmount <= 0) {
     throw new AppError(
       "UNIT_RENT_MISSING",
       "Add the rent amount to this unit before setting up the tenant.",
@@ -531,14 +500,12 @@ export async function createManualExistingTenantForCurrentLandlord(
 
   const normalizedPhone = normalisePhoneNumber(input.phoneNumber);
   const token = createSecureToken();
-  const currentRentCycleStartDate = calculateCurrentRentCycleStartDate({
-    tenancyStartDate: input.tenancyStartDate,
-    paymentFrequency: input.paymentFrequency,
+  const currentCycle = calculateCurrentRentCycle({
+    anchorDate: input.tenancyStartDate,
+    paymentFrequency,
   });
-  const nextRentDueDate = calculateCurrentPeriodEnd({
-    currentPeriodStart: currentRentCycleStartDate,
-    paymentFrequency: input.paymentFrequency,
-  });
+  const currentRentCycleStartDate = currentCycle.periodStart;
+  const nextRentDueDate = currentCycle.nextRentDueDate;
 
   const claim = await createManualExistingTenantClaim(adminSupabase, {
     landlordId: landlord.id,
@@ -552,7 +519,7 @@ export async function createManualExistingTenantForCurrentLandlord(
     currentRentCycleStartDate,
     nextRentDueDate,
     rentAmount,
-    paymentFrequency: input.paymentFrequency,
+    paymentFrequency,
     lastPaymentAmount: input.lastPaymentAmount,
     lastPaymentDate: input.lastPaymentDate,
   });
@@ -577,7 +544,7 @@ export async function createManualExistingTenantForCurrentLandlord(
       tenancy_start_date: input.tenancyStartDate,
       current_rent_cycle_start_date: currentRentCycleStartDate,
       next_rent_due_date: nextRentDueDate,
-      payment_frequency: input.paymentFrequency,
+      payment_frequency: paymentFrequency,
       last_payment_amount: input.lastPaymentAmount,
       last_payment_date: input.lastPaymentDate,
     },
@@ -638,6 +605,21 @@ export async function submitExistingTenantClaimByToken(
   });
 
   const normalizedPhone = normalisePhoneNumber(input.phoneNumber);
+  const rentAmount = Number(claim.units?.rent_amount ?? 0);
+  const paymentFrequency = claim.units?.rent_frequency;
+
+  if (!paymentFrequency || !Number.isFinite(rentAmount) || rentAmount <= 0) {
+    throw new AppError(
+      "UNIT_RENT_MISSING",
+      "The landlord must set the unit rent before this form can be submitted.",
+      400,
+    );
+  }
+
+  const statedRentDueDate = calculateCurrentRentDueDate({
+    anchorDate: input.moveInDate,
+    paymentFrequency,
+  });
 
   const submittedClaim = await submitExistingTenantClaim(supabase, {
     claimId: claim.id,
@@ -648,9 +630,9 @@ export async function submitExistingTenantClaimByToken(
     idType: input.idType,
     idNumber: input.idNumber,
     moveInDate: input.moveInDate,
-    statedRentDueDate: input.statedRentDueDate,
-    claimedRentAmount: input.claimedRentAmount,
-    paymentFrequency: input.paymentFrequency,
+    statedRentDueDate,
+    claimedRentAmount: rentAmount,
+    paymentFrequency,
     tenantNotes: input.tenantNotes?.trim() || null,
   });
 
@@ -738,18 +720,29 @@ export async function updateExistingTenantClaimArrearsForCurrentLandlord(
     );
   }
 
-  if (!claim.tenant_move_in_date || !claim.tenant_claimed_rent_amount) {
+  if (!claim.tenant_move_in_date) {
     throw new AppError(
       "CLAIM_RENT_DETAILS_INCOMPLETE",
-      "The tenant must submit move-in date and rent amount before arrears can be calculated.",
+      "The tenant must submit the original move-in date before arrears can be calculated.",
+      400,
+    );
+  }
+
+  const unitRentAmount = Number(claim.units?.rent_amount ?? 0);
+  const unitRentFrequency = claim.units?.rent_frequency;
+
+  if (!unitRentFrequency || !Number.isFinite(unitRentAmount) || unitRentAmount <= 0) {
+    throw new AppError(
+      "UNIT_RENT_MISSING",
+      "Set the unit rent amount and collection frequency before calculating arrears.",
       400,
     );
   }
 
   const calculation = calculateExistingTenantArrears({
     moveInDate: claim.tenant_move_in_date,
-    rentAmount: Number(claim.tenant_claimed_rent_amount),
-    paymentFrequency: claim.tenant_payment_frequency,
+    rentAmount: unitRentAmount,
+    paymentFrequency: unitRentFrequency,
     cycles: input.cycles,
   });
 
@@ -818,8 +811,7 @@ export async function approveExistingTenantClaimForCurrentLandlord(
   if (
     !claim.tenant_full_name ||
     !claim.tenant_phone_number ||
-    !claim.tenant_move_in_date ||
-    !claim.tenant_claimed_rent_amount
+    !claim.tenant_move_in_date
   ) {
     throw new AppError(
       "CLAIM_DETAILS_INCOMPLETE",
@@ -855,10 +847,23 @@ export async function approveExistingTenantClaimForCurrentLandlord(
     );
   }
 
-  const currentPeriodEnd = calculateCurrentPeriodEnd({
-    currentPeriodStart: input.confirmedCurrentDueDate,
-    paymentFrequency: claim.tenant_payment_frequency,
+  const rentAmount = Number(unit.rent_amount);
+  const paymentFrequency = unit.rent_frequency;
+
+  if (!Number.isFinite(rentAmount) || rentAmount <= 0) {
+    throw new AppError(
+      "UNIT_RENT_MISSING",
+      "Set the unit rent amount and collection frequency before approving this tenant.",
+      400,
+    );
+  }
+
+  const confirmedPeriod = calculateCurrentRentCycle({
+    anchorDate: input.confirmedMoveInDate,
+    paymentFrequency,
   });
+  const currentPeriodStart = confirmedPeriod.periodStart;
+  const currentPeriodEnd = confirmedPeriod.periodEnd;
 
   const tenant = await createTenantFromExistingClaim(adminSupabase, {
     landlordId: landlord.id,
@@ -879,9 +884,9 @@ export async function approveExistingTenantClaimForCurrentLandlord(
       landlord_arrears_start_date: claim.landlord_arrears_start_date,
       landlord_payment_history: claim.landlord_payment_history,
       landlord_confirmed_move_in_date: input.confirmedMoveInDate,
-      landlord_confirmed_current_due_date: input.confirmedCurrentDueDate,
+      landlord_confirmed_current_due_date: currentPeriodStart,
       landlord_confirmed_current_period_end: currentPeriodEnd,
-      landlord_confirmed_rent_amount: input.confirmedRentAmount,
+      landlord_confirmed_rent_amount: rentAmount,
       landlord_confirmed_opening_balance: input.openingBalance,
       landlord_review_notes: input.reviewNotes || null,
     },
@@ -891,11 +896,11 @@ export async function approveExistingTenantClaimForCurrentLandlord(
     landlordId: landlord.id,
     tenantId: tenant.id,
     unitId: claim.unit_id,
-    rentAmount: input.confirmedRentAmount,
-    paymentFrequency: claim.tenant_payment_frequency,
+    rentAmount,
+    paymentFrequency,
     currencyCode: claim.units?.currency_code ?? "NGN",
     moveInDate: input.confirmedMoveInDate,
-    currentPeriodStart: input.confirmedCurrentDueDate,
+    currentPeriodStart: currentPeriodStart,
     openingBalance: input.openingBalance,
     openingBalanceNote:
       input.openingBalance > 0
@@ -951,13 +956,13 @@ export async function approveExistingTenantClaimForCurrentLandlord(
       amount: input.openingBalance,
       currencyCode: tenancy.currency_code,
       description: "Amount owed from existing tenant onboarding.",
-      entryDate: input.confirmedCurrentDueDate,
+      entryDate: currentPeriodStart,
       metadata: {
         ...ledgerMetadata,
         claimed_rent_amount: claim.tenant_claimed_rent_amount,
-        confirmed_rent_amount: input.confirmedRentAmount,
+        confirmed_rent_amount: rentAmount,
         confirmed_move_in_date: input.confirmedMoveInDate,
-        confirmed_current_due_date: input.confirmedCurrentDueDate,
+        confirmed_current_due_date: currentPeriodStart,
         current_period_end: currentPeriodEnd,
         landlord_arrears_start_date: claim.landlord_arrears_start_date,
         landlord_payment_history: claim.landlord_payment_history,
@@ -973,10 +978,10 @@ export async function approveExistingTenantClaimForCurrentLandlord(
     claimId: claim.id,
     landlordId: landlord.id,
     reviewedBy: landlord.id,
-    confirmedRentAmount: input.confirmedRentAmount,
+    confirmedRentAmount: rentAmount,
     confirmedMoveInDate: input.confirmedMoveInDate,
-    confirmedCurrentDueDate: input.confirmedCurrentDueDate,
-    confirmedNextRentDueDate: tenancy.next_rent_charge_date ?? currentPeriodEnd,
+    confirmedCurrentDueDate: currentPeriodStart,
+    confirmedNextRentDueDate: tenancy.next_rent_charge_date ?? confirmedPeriod.nextRentDueDate,
     openingBalance: input.openingBalance,
     reviewNotes: input.reviewNotes?.trim() || null,
     approvedTenantId: tenant.id,
@@ -997,9 +1002,9 @@ export async function approveExistingTenantClaimForCurrentLandlord(
       tenant_id: tenant.id,
       tenancy_id: tenancy.id,
       tenant_full_name: tenant.full_name,
-      confirmed_rent_amount: input.confirmedRentAmount,
+      confirmed_rent_amount: rentAmount,
       confirmed_move_in_date: input.confirmedMoveInDate,
-      confirmed_current_due_date: input.confirmedCurrentDueDate,
+      confirmed_current_due_date: currentPeriodStart,
       opening_balance: input.openingBalance,
     },
   });

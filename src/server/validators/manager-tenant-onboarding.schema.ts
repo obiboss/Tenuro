@@ -85,14 +85,6 @@ const moneySchema = z.preprocess(
     .min(0, "Amount cannot be negative."),
 );
 
-const positiveMoneySchema = z.preprocess(
-  moneyValue,
-  z.coerce
-    .number()
-    .finite("Enter a valid amount.")
-    .positive("Amount must be greater than zero."),
-);
-
 const optionalPositiveMoneySchema = z.preprocess(
   moneyValue,
   z.coerce
@@ -229,7 +221,6 @@ export const submitManagerTenantOnboardingRequestSchema = z.object({
 
 export const approveManagerTenantOnboardingRequestSchema = z.object({
   requestId: uuidSchema,
-  confirmedRentAmount: positiveMoneySchema,
   confirmedMoveInDate: dateSchema,
   openingBalance: moneySchema.default(0),
   reviewNotes: optionalTextSchema(1000, "Review note is too long."),

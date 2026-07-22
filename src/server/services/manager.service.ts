@@ -1,5 +1,10 @@
 import "server-only";
 
+import {
+  calculateCurrentRentCycle,
+  calculateCurrentRentDueDate,
+  calculateRentPeriodFromStart,
+} from "@/lib/rent-cycle";
 import crypto from "node:crypto";
 import type {
   ManagerCollectionMode,
@@ -378,6 +383,7 @@ export async function createManagerUnit(input: CreateManagerUnitInput) {
     propertyId: input.propertyId,
     unitLabel: input.unitLabel,
     unitType: nullableText(input.unitType),
+    rentFrequency: input.rentFrequency,
     rentAmount: roundMoney(input.rentAmount),
     status: "vacant",
     notes: nullableText(input.notes),
@@ -385,8 +391,34 @@ export async function createManagerUnit(input: CreateManagerUnitInput) {
 }
 
 export async function createManagerTenant(input: CreateManagerTenantInput) {
-  const { profile, organization } = await requireManagerOrganization();
+  const { supabase, profile, organization } = await requireManagerOrganization();
   const admin = createSupabaseAdminClient();
+  const unit = await getManagerUnitById(supabase, {
+    organizationId: organization.id,
+    landlordClientId: input.landlordClientId,
+    propertyId: input.propertyId,
+    unitId: input.unitId,
+  });
+
+  if (!unit || unit.status !== "vacant") {
+    throw new AppError(
+      "MANAGER_UNIT_NOT_AVAILABLE",
+      "The selected unit is no longer vacant.",
+      400,
+    );
+  }
+
+  const moveInDate = input.moveInDate;
+  const paymentFrequency = unit.rent_frequency;
+  const rentAmount = roundMoney(Number(unit.rent_amount));
+  const currentCycle = calculateCurrentRentCycle({
+    anchorDate: moveInDate,
+    paymentFrequency,
+  });
+  const nextRentDueDate = calculateCurrentRentDueDate({
+    anchorDate: moveInDate,
+    paymentFrequency,
+  });
   const tenantId = crypto.randomUUID();
   const clientMutationId = crypto.randomUUID();
   const phone = normalisePhoneNumber(input.phoneNumber);
@@ -403,10 +435,10 @@ export async function createManagerTenant(input: CreateManagerTenantInput) {
       p_phone_number: phone.e164,
       p_email: nullableText(input.email),
       p_occupation: nullableText(input.occupation),
-      p_rent_amount: roundMoney(input.rentAmount),
+      p_rent_amount: rentAmount,
       p_current_balance: roundMoney(input.currentBalance),
-      p_move_in_date: nullableDate(input.moveInDate),
-      p_next_rent_due_date: nullableDate(input.nextRentDueDate),
+      p_move_in_date: moveInDate,
+      p_next_rent_due_date: nextRentDueDate,
       p_notes: nullableText(input.notes),
       p_client_mutation_id: clientMutationId,
     },
@@ -424,7 +456,17 @@ export async function createManagerTenant(input: CreateManagerTenantInput) {
     );
   }
 
-  return data as Record<string, unknown>;
+  const tenantData = data as Record<string, unknown>;
+
+  return {
+    ...tenantData,
+    id: typeof tenantData.id === "string" ? tenantData.id : tenantId,
+    payment_frequency: paymentFrequency,
+    rent_cycle_anchor_date: moveInDate,
+    current_period_start: currentCycle.periodStart,
+    current_period_end: currentCycle.periodEnd,
+    next_rent_due_date: nextRentDueDate,
+  };
 }
 
 export async function recordManagerRentPayment(
@@ -479,6 +521,23 @@ export async function recordManagerRentPayment(
   }
 
   const amountPaid = roundMoney(input.amountPaid);
+  const hasOutstandingBalance = Number(tenant.current_balance) > 0;
+  const paymentPeriodStart = hasOutstandingBalance
+    ? tenant.current_period_start ?? tenant.rent_cycle_anchor_date ?? tenant.move_in_date
+    : tenant.next_rent_due_date;
+  let paymentPeriodEnd = hasOutstandingBalance ? tenant.current_period_end : null;
+
+  if (
+    !hasOutstandingBalance &&
+    paymentPeriodStart &&
+    tenant.rent_cycle_anchor_date
+  ) {
+    paymentPeriodEnd = calculateRentPeriodFromStart({
+      anchorDate: tenant.rent_cycle_anchor_date,
+      paymentFrequency: tenant.payment_frequency,
+      periodStart: paymentPeriodStart,
+    }).periodEnd;
+  }
 
   const shares = calculatePaymentShares({
     amountPaid,
@@ -507,8 +566,8 @@ export async function recordManagerRentPayment(
     paymentMethod: input.paymentMethod,
     paymentReference: nullableText(input.paymentReference),
     paymentDate: input.paymentDate,
-    periodStart: nullableDate(input.periodStart),
-    periodEnd: nullableDate(input.periodEnd),
+    periodStart: paymentPeriodStart ?? nullableDate(input.periodStart),
+    periodEnd: paymentPeriodEnd ?? nullableDate(input.periodEnd),
     managementFeeType: property.management_fee_type,
     managementFeeValue: Number(property.management_fee_value),
     managementFeeAmount: shares.managerCommission,

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { RENT_PAYMENT_FREQUENCIES } from "@/lib/rent-cycle";
 import {
   MANAGER_COLLECTION_MODES,
   MANAGER_MANAGEMENT_FEE_TYPES,
@@ -32,6 +33,7 @@ export const managerImportRowSchema = z
     paymentReceiver: z.enum(MANAGER_PAYMENT_RECEIVERS),
     unitLabel: z.string().trim().min(1).max(120),
     unitType: optionalText,
+    rentFrequency: z.enum(RENT_PAYMENT_FREQUENCIES),
     rentAmount: z.number().finite().positive(),
     tenantName: optionalText,
     tenantPhone: optionalText,
@@ -71,14 +73,6 @@ export const managerImportRowSchema = z
           code: "custom",
           path: ["moveInDate"],
           message: "Add the tenancy start date.",
-        });
-      }
-
-      if (!row.nextRentDueDate) {
-        context.addIssue({
-          code: "custom",
-          path: ["nextRentDueDate"],
-          message: "Add the next rent due date.",
         });
       }
     }

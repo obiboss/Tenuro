@@ -8,6 +8,10 @@ import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { runOfflineCapableFormAction } from "@/lib/offline/offline-form.client";
 import { saveManagerTenantOffline } from "@/lib/offline/operational-mutations.client";
+import {
+  calculateCurrentRentDueDate,
+  RENT_PAYMENT_FREQUENCY_LABELS,
+} from "@/lib/rent-cycle";
 import type {
   ManagerPropertyRow,
   ManagerUnitRow,
@@ -20,6 +24,26 @@ type ManagerTenantFormProps = {
   lockedUnitId?: string;
 };
 
+function formatNaira(amount: number) {
+  return new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency: "NGN",
+    maximumFractionDigits: 0,
+  }).format(Number(amount) || 0);
+}
+
+function formatDate(value: string) {
+  if (!value) {
+    return "Enter the move-in date";
+  }
+
+  return new Intl.DateTimeFormat("en-NG", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(`${value}T00:00:00`));
+}
+
 export function ManagerTenantForm({
   properties,
   units,
@@ -29,12 +53,9 @@ export function ManagerTenantForm({
   const activeProperties = properties.filter(
     (property) => property.status === "active",
   );
-
   const initialPropertyId = lockedPropertyId ?? activeProperties[0]?.id ?? "";
-
   const [selectedPropertyId, setSelectedPropertyId] =
     useState(initialPropertyId);
-
   const vacantUnitsForProperty = useMemo(
     () =>
       units.filter(
@@ -43,10 +64,9 @@ export function ManagerTenantForm({
       ),
     [selectedPropertyId, units],
   );
-
   const initialUnitId = lockedUnitId ?? vacantUnitsForProperty[0]?.id ?? "";
-
   const [selectedUnitId, setSelectedUnitId] = useState(initialUnitId);
+  const [moveInDate, setMoveInDate] = useState("");
 
   const selectedProperty = useMemo(
     () =>
@@ -54,11 +74,25 @@ export function ManagerTenantForm({
       null,
     [activeProperties, selectedPropertyId],
   );
-
   const selectedUnit = useMemo(
     () => vacantUnitsForProperty.find((unit) => unit.id === selectedUnitId),
     [selectedUnitId, vacantUnitsForProperty],
   );
+
+  const currentRentDueDate = useMemo(() => {
+    if (!selectedUnit || !moveInDate) {
+      return "";
+    }
+
+    try {
+      return calculateCurrentRentDueDate({
+        anchorDate: moveInDate,
+        paymentFrequency: selectedUnit.rent_frequency,
+      });
+    } catch {
+      return "";
+    }
+  }, [moveInDate, selectedUnit]);
 
   const offlineCapableAction = useCallback(
     (previousState: typeof initialManagerActionState, formData: FormData) =>
@@ -76,7 +110,6 @@ export function ManagerTenantForm({
   );
 
   const isLockedToUnit = Boolean(lockedPropertyId && lockedUnitId);
-
   const submitDisabledReason =
     vacantUnitsForProperty.length === 0
       ? "Choose a property with a vacant unit to continue."
@@ -84,13 +117,10 @@ export function ManagerTenantForm({
         ? "Choose a vacant unit to continue."
         : null;
 
-  const submitReasonId = "manager-tenant-submit-reason";
-
   function handlePropertyChange(propertyId: string) {
     const firstVacantUnit = units.find(
       (unit) => unit.property_id === propertyId && unit.status === "vacant",
     );
-
     setSelectedPropertyId(propertyId);
     setSelectedUnitId(firstVacantUnit?.id ?? "");
   }
@@ -102,11 +132,9 @@ export function ManagerTenantForm({
           <h2 className="text-lg font-black tracking-tight text-text-strong">
             Add tenant
           </h2>
-          <div className="rounded-card bg-surface p-4">
-            <p className="text-sm font-semibold leading-6 text-text-muted">
-              Add an active property first before creating tenants.
-            </p>
-          </div>
+          <p className="rounded-card bg-surface p-4 text-sm font-semibold leading-6 text-text-muted">
+            Add an active property first before creating tenants.
+          </p>
         </CardContent>
       </Card>
     );
@@ -116,13 +144,9 @@ export function ManagerTenantForm({
     return (
       <Card>
         <CardContent>
-          <div
-            role="alert"
-            className="rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success"
-          >
+          <div role="alert" className="rounded-button bg-success-soft px-4 py-3 text-sm font-semibold text-success">
             {state.message || "Tenant added successfully."}
           </div>
-
           <div className="rounded-card bg-surface p-4">
             <h2 className="text-lg font-black tracking-tight text-text-strong">
               Tenant saved
@@ -130,7 +154,7 @@ export function ManagerTenantForm({
             <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
               {state.offlineSaved
                 ? "The unit will show as occupied after this record syncs."
-                : "The unit will now show as occupied on this property."}
+                : "The unit now shows as occupied, with rent dates calculated from the move-in date."}
             </p>
           </div>
         </CardContent>
@@ -145,6 +169,17 @@ export function ManagerTenantForm({
         name="landlordClientId"
         value={selectedProperty?.landlord_client_id ?? ""}
       />
+      <input
+        type="hidden"
+        name="rentAmount"
+        value={selectedUnit?.rent_amount ?? ""}
+      />
+      <input
+        type="hidden"
+        name="paymentFrequency"
+        value={selectedUnit?.rent_frequency ?? "annual"}
+      />
+      <input type="hidden" name="nextRentDueDate" value={currentRentDueDate} />
 
       <Card>
         <CardContent>
@@ -153,52 +188,33 @@ export function ManagerTenantForm({
               {isLockedToUnit ? "Add current occupant" : "Add tenant"}
             </h2>
             <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-              {isLockedToUnit
-                ? "Capture the details of the person occupying this vacant unit."
-                : "Assign the tenant to a vacant unit and enter the current rent position."}
+              The selected unit controls the rent amount and collection frequency.
             </p>
           </div>
 
           {state.message ? (
-            <div
-              role="alert"
-              className="rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger"
-            >
+            <div role="alert" className="rounded-button bg-danger-soft px-4 py-3 text-sm font-semibold text-danger">
               {state.message}
             </div>
           ) : null}
 
           {isLockedToUnit ? (
             <>
-              <input
-                type="hidden"
-                name="propertyId"
-                value={selectedPropertyId}
-              />
+              <input type="hidden" name="propertyId" value={selectedPropertyId} />
               <input type="hidden" name="unitId" value={selectedUnitId} />
-
               <div className="rounded-card bg-primary-soft p-4">
-                <p className="text-sm font-semibold leading-6 text-text-muted">
-                  Property:{" "}
+                <p className="text-sm font-semibold text-text-muted">
                   <span className="font-black text-text-strong">
                     {selectedProperty?.property_name ?? "Property"}
-                  </span>
-                </p>
-                <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-                  Unit:{" "}
-                  <span className="font-black text-text-strong">
-                    {selectedUnit?.unit_label ?? "Unit"}
-                  </span>
+                  </span>{" "}
+                  · {selectedUnit?.unit_label ?? "Unit"}
                 </p>
               </div>
             </>
           ) : (
-            <>
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <label
-                  htmlFor="manager-tenant-property"
-                  className="text-sm font-bold text-text-strong"
-                >
+                <label htmlFor="manager-tenant-property" className="text-sm font-bold text-text-strong">
                   Property
                 </label>
                 <select
@@ -215,18 +231,9 @@ export function ManagerTenantForm({
                     </option>
                   ))}
                 </select>
-                {state.fieldErrors?.propertyId?.[0] ? (
-                  <p className="text-sm font-semibold text-danger">
-                    {state.fieldErrors.propertyId[0]}
-                  </p>
-                ) : null}
               </div>
-
               <div className="space-y-2">
-                <label
-                  htmlFor="manager-tenant-unit"
-                  className="text-sm font-bold text-text-strong"
-                >
+                <label htmlFor="manager-tenant-unit" className="text-sm font-bold text-text-strong">
                   Unit
                 </label>
                 <select
@@ -247,80 +254,53 @@ export function ManagerTenantForm({
                     <option value="">No vacant unit available</option>
                   )}
                 </select>
-                {state.fieldErrors?.unitId?.[0] ? (
-                  <p className="text-sm font-semibold text-danger">
-                    {state.fieldErrors.unitId[0]}
-                  </p>
-                ) : null}
               </div>
-            </>
+            </div>
           )}
 
-          {state.fieldErrors?.landlordClientId?.[0] ? (
-            <p className="text-sm font-semibold text-danger">
-              {state.fieldErrors.landlordClientId[0]}
-            </p>
-          ) : null}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-button border border-border-soft bg-background px-4 py-3">
+              <p className="text-sm font-bold text-text-muted">Unit rent</p>
+              <p className="mt-2 text-lg font-black text-text-strong">
+                {formatNaira(selectedUnit?.rent_amount ?? 0)}
+              </p>
+            </div>
+            <div className="rounded-button border border-border-soft bg-background px-4 py-3">
+              <p className="text-sm font-bold text-text-muted">Rent collection</p>
+              <p className="mt-2 text-lg font-black text-text-strong">
+                {selectedUnit
+                  ? RENT_PAYMENT_FREQUENCY_LABELS[selectedUnit.rent_frequency]
+                  : "Select a unit"}
+              </p>
+            </div>
+          </div>
 
-          <Input
-            label="Tenant name"
-            name="fullName"
-            placeholder="Example: Mrs Ada Nwankwo"
-            autoComplete="name"
-            error={state.fieldErrors?.fullName?.[0]}
-            required
-          />
+          <Input label="Tenant name" name="fullName" placeholder="Example: Mrs Ada Nwankwo" autoComplete="name" error={state.fieldErrors?.fullName?.[0]} required />
+          <Input label="Tenant phone" name="phoneNumber" placeholder="Example: 08012345678" autoComplete="tel" error={state.fieldErrors?.phoneNumber?.[0]} required />
+          <Input label="Tenant email" name="email" type="email" placeholder="Optional" autoComplete="email" error={state.fieldErrors?.email?.[0]} />
+          <Input label="Occupation" name="occupation" placeholder="Optional" error={state.fieldErrors?.occupation?.[0]} />
 
-          <Input
-            label="Tenant phone"
-            name="phoneNumber"
-            placeholder="Example: 08012345678"
-            autoComplete="tel"
-            error={state.fieldErrors?.phoneNumber?.[0]}
-            required
-          />
-
-          <Input
-            label="Tenant email"
-            name="email"
-            type="email"
-            placeholder="Optional"
-            autoComplete="email"
-            error={state.fieldErrors?.email?.[0]}
-          />
-
-          <Input
-            label="Occupation"
-            name="occupation"
-            placeholder="Optional"
-            error={state.fieldErrors?.occupation?.[0]}
-          />
-
-          <Input
-            key={`rent-${selectedUnit?.id ?? "none"}`}
-            label="Rent amount"
-            name="rentAmount"
-            type="number"
-            min="0"
-            step="0.01"
-            defaultValue={selectedUnit?.rent_amount ?? 0}
-            error={state.fieldErrors?.rentAmount?.[0]}
-            required
-          />
-
-          <Input
-            label="Move-in date"
-            name="moveInDate"
-            type="date"
-            error={state.fieldErrors?.moveInDate?.[0]}
-          />
-
-          <Input
-            label="Next rent due date"
-            name="nextRentDueDate"
-            type="date"
-            error={state.fieldErrors?.nextRentDueDate?.[0]}
-          />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input
+              label="Move-in date"
+              name="moveInDate"
+              type="date"
+              value={moveInDate}
+              onChange={(event) => setMoveInDate(event.target.value)}
+              helperText="This is the permanent rent-cycle anchor."
+              error={state.fieldErrors?.moveInDate?.[0]}
+              required
+            />
+            <div className="rounded-button border border-border-soft bg-background px-4 py-3">
+              <p className="text-sm font-bold text-text-muted">Current rent due</p>
+              <p className="mt-2 text-lg font-black text-text-strong">
+                {formatDate(currentRentDueDate)}
+              </p>
+              <p className="mt-1 text-xs font-semibold text-text-muted">
+                Calculated automatically from the original move-in date.
+              </p>
+            </div>
+          </div>
 
           <Input
             label="Current balance"
@@ -335,10 +315,7 @@ export function ManagerTenantForm({
           />
 
           <div className="space-y-2">
-            <label
-              htmlFor="manager-tenant-notes"
-              className="text-sm font-bold text-text-strong"
-            >
+            <label htmlFor="manager-tenant-notes" className="text-sm font-bold text-text-strong">
               Notes
             </label>
             <textarea
@@ -348,34 +325,17 @@ export function ManagerTenantForm({
               placeholder="Optional note"
               className="w-full rounded-button border border-border-soft bg-white px-4 py-3 text-sm font-semibold text-text-strong outline-none transition placeholder:text-text-muted focus:border-primary"
             />
-            {state.fieldErrors?.notes?.[0] ? (
-              <p className="text-sm font-semibold text-danger">
-                {state.fieldErrors.notes[0]}
-              </p>
-            ) : null}
           </div>
         </CardContent>
 
         <CardFooter>
           <div className="w-full space-y-3">
             {submitDisabledReason ? (
-              <p
-                id={submitReasonId}
-                className="text-sm font-semibold text-danger"
-              >
+              <p className="text-sm font-semibold text-danger">
                 {submitDisabledReason}
               </p>
             ) : null}
-
-            <Button
-              type="submit"
-              isLoading={isPending}
-              disabled={Boolean(submitDisabledReason)}
-              aria-describedby={
-                submitDisabledReason ? submitReasonId : undefined
-              }
-              fullWidth
-            >
+            <Button type="submit" isLoading={isPending} disabled={Boolean(submitDisabledReason)} fullWidth>
               Save tenant
             </Button>
           </div>

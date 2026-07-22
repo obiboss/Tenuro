@@ -80,6 +80,8 @@ export type ExistingTenantClaimDetailRow = ExistingTenantClaimRow & {
     unit_identifier: string;
     building_name: string | null;
     unit_type: string;
+    rent_frequency: ExistingTenantClaimPaymentFrequency;
+    rent_amount: number;
     annual_rent: number | null;
     monthly_rent: number | null;
     currency_code: string;
@@ -148,6 +150,8 @@ const EXISTING_TENANT_CLAIM_DETAIL_SELECT = `
     unit_identifier,
     building_name,
     unit_type,
+    rent_frequency,
+    rent_amount,
     annual_rent,
     monthly_rent,
     currency_code,

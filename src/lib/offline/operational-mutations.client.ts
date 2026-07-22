@@ -4,6 +4,10 @@ import {
   OfflineFormValidationError,
   queueOfflineFormMutation,
 } from "@/lib/offline/offline-form.client";
+import {
+  calculateCurrentRentCycle,
+  calculateCurrentRentDueDate,
+} from "@/lib/rent-cycle";
 import { createManagerMaintenanceRequestSchema } from "@/server/validators/manager-maintenance.schema";
 import {
   createManagerLandlordClientSchema,
@@ -142,6 +146,7 @@ export async function saveManagerUnitOffline(formData: FormData) {
       propertyId: formData.get("propertyId"),
       unitLabel: formData.get("unitLabel"),
       unitType: formData.get("unitType"),
+      rentFrequency: formData.get("rentFrequency"),
       rentAmount: formData.get("rentAmount"),
       notes: formData.get("notes"),
     }),
@@ -160,6 +165,7 @@ export async function saveManagerUnitOffline(formData: FormData) {
         landlord_client_id: unit.landlordClientId,
         unit_label: unit.unitLabel,
         unit_type: nullable(unit.unitType),
+        rent_frequency: unit.rentFrequency,
         rent_amount: unit.rentAmount,
         status: "vacant",
         notes: nullable(unit.notes),
@@ -187,6 +193,7 @@ export async function saveManagerTenantOffline(formData: FormData) {
       email: formData.get("email"),
       occupation: formData.get("occupation"),
       rentAmount: formData.get("rentAmount"),
+      paymentFrequency: formData.get("paymentFrequency"),
       currentBalance: formData.get("currentBalance"),
       moveInDate: formData.get("moveInDate"),
       nextRentDueDate: formData.get("nextRentDueDate"),
@@ -194,6 +201,14 @@ export async function saveManagerTenantOffline(formData: FormData) {
     }),
   );
   const tenantId = crypto.randomUUID();
+  const currentCycle = calculateCurrentRentCycle({
+    anchorDate: tenant.moveInDate,
+    paymentFrequency: tenant.paymentFrequency,
+  });
+  const nextRentDueDate = calculateCurrentRentDueDate({
+    anchorDate: tenant.moveInDate,
+    paymentFrequency: tenant.paymentFrequency,
+  });
 
   await queueOfflineFormMutation({
     workspaceType: "manager",
@@ -210,9 +225,13 @@ export async function saveManagerTenantOffline(formData: FormData) {
         email: nullable(tenant.email),
         occupation: nullable(tenant.occupation),
         rent_amount: tenant.rentAmount,
+        payment_frequency: tenant.paymentFrequency,
+        rent_cycle_anchor_date: tenant.moveInDate,
+        current_period_start: currentCycle.periodStart,
+        current_period_end: currentCycle.periodEnd,
         current_balance: tenant.currentBalance,
-        move_in_date: tenant.moveInDate ?? null,
-        next_rent_due_date: tenant.nextRentDueDate ?? null,
+        move_in_date: tenant.moveInDate,
+        next_rent_due_date: nextRentDueDate,
         status: "active",
         notes: nullable(tenant.notes),
         created_at: now(),
@@ -380,6 +399,8 @@ export async function saveLandlordUnitOffline(propertyId: string, formData: Form
       unitType: formData.get("unitType"),
       bedrooms: formData.get("bedrooms"),
       bathrooms: formData.get("bathrooms"),
+      rentFrequency: formData.get("rentFrequency"),
+      rentAmount: formData.get("rentAmount"),
       monthlyRent: formData.get("monthlyRent") || null,
       annualRent: formData.get("annualRent") || null,
       currencyCode: "NGN",
@@ -401,6 +422,8 @@ export async function saveLandlordUnitOffline(propertyId: string, formData: Form
         building_name: nullable(unit.buildingName),
         bedrooms: unit.bedrooms,
         bathrooms: unit.bathrooms,
+        rent_frequency: unit.rentFrequency,
+        rent_amount: unit.rentAmount,
         monthly_rent: unit.monthlyRent ?? null,
         annual_rent: unit.annualRent ?? null,
         status: "vacant",

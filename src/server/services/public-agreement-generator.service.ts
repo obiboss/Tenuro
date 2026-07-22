@@ -1,6 +1,10 @@
 import "server-only";
 
 import crypto from "node:crypto";
+import {
+  addDaysToDateOnly,
+  calculateAnchoredRentCycleDate,
+} from "@/lib/rent-cycle";
 import { AppError } from "@/server/errors/app-error";
 import {
   createAgreementUsageEvent,
@@ -111,20 +115,6 @@ function buildClaimUrl(params: { agreementId: string; token: string }) {
   )}?token=${encodeURIComponent(params.token)}`;
 }
 
-function addMonths(date: Date, months: number) {
-  const result = new Date(
-    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
-  );
-
-  result.setUTCMonth(result.getUTCMonth() + months);
-
-  return result;
-}
-
-function toDateOnly(value: Date) {
-  return value.toISOString().slice(0, 10);
-}
-
 function formatDate(value: string | null) {
   if (!value) {
     return "____________________";
@@ -147,9 +137,7 @@ function calculateTenancyEndDate(
   startDate: string,
   duration: PublicAgreementDuration,
 ) {
-  const start = new Date(`${startDate}T00:00:00.000Z`);
-
-  if (Number.isNaN(start.getTime())) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
     throw new AppError(
       "INVALID_TENANCY_START_DATE",
       "Enter a valid tenancy start date.",
@@ -164,13 +152,27 @@ function calculateTenancyEndDate(
   };
 
   const months = monthsByDuration[duration];
-  const nextPeriodStart = addMonths(start, months);
-  nextPeriodStart.setUTCDate(nextPeriodStart.getUTCDate() - 1);
+  const paymentFrequency = months === 6 ? "biannual" : "annual";
+  const cycleIndex = months === 24 ? 2 : 1;
 
-  return {
-    tenancyEndDate: toDateOnly(nextPeriodStart),
-    tenancyDurationMonths: months,
-  };
+  try {
+    const nextPeriodStart = calculateAnchoredRentCycleDate({
+      anchorDate: startDate,
+      paymentFrequency,
+      cycleIndex,
+    });
+
+    return {
+      tenancyEndDate: addDaysToDateOnly(nextPeriodStart, -1),
+      tenancyDurationMonths: months,
+    };
+  } catch {
+    throw new AppError(
+      "INVALID_TENANCY_START_DATE",
+      "Enter a valid tenancy start date.",
+      400,
+    );
+  }
 }
 
 function cleanOptional(value: string | null | undefined) {

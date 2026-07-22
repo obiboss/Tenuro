@@ -14,6 +14,10 @@ import {
   getNigeriaLgaOptions,
   getNigeriaStateOptions,
 } from "@/lib/nigeria-state-lga";
+import {
+  RENT_PAYMENT_FREQUENCIES,
+  RENT_PAYMENT_FREQUENCY_LABELS,
+} from "@/lib/rent-cycle";
 
 const propertyTypeOptions = [
   {
@@ -42,6 +46,11 @@ const unitTypeOptions = [
   { label: "Office Space", value: "office_space" },
   { label: "Other", value: "other" },
 ];
+
+const rentFrequencyOptions = RENT_PAYMENT_FREQUENCIES.map((value) => ({
+  value,
+  label: RENT_PAYMENT_FREQUENCY_LABELS[value],
+}));
 
 const unitTypeDefaults: Record<
   string,
@@ -294,20 +303,22 @@ export function AgentPropertyListingForm() {
             />
           </div>
 
-          <CurrencyInput
-            label="Annual rent"
-            name="annualRent"
-            placeholder="0.00"
-            error={state.fieldErrors?.annualRent?.[0]}
-            helperText="Most Nigerian landlords collect rent yearly, so this is the main rent amount."
+          <Select
+            label="Rent collection frequency"
+            name="rentFrequency"
+            options={rentFrequencyOptions}
+            defaultValue="annual"
+            error={state.fieldErrors?.rentFrequency?.[0]}
+            required
           />
 
           <CurrencyInput
-            label="Monthly rent"
-            name="monthlyRent"
+            label="Rent amount for this frequency"
+            name="rentAmount"
             placeholder="0.00"
-            error={state.fieldErrors?.monthlyRent?.[0]}
-            helperText="Use only if this unit is rented monthly."
+            error={state.fieldErrors?.rentAmount?.[0]}
+            helperText="This becomes the unit's official rent amount."
+            required
           />
         </div>
       </div>

@@ -270,6 +270,7 @@ export async function createManagerUnitAction(
       propertyId: formData.get("propertyId"),
       unitLabel: formData.get("unitLabel"),
       unitType: formData.get("unitType"),
+      rentFrequency: formData.get("rentFrequency"),
       rentAmount: formData.get("rentAmount"),
       notes: formData.get("notes"),
     });
@@ -315,6 +316,7 @@ export async function createManagerTenantAction(
       email: formData.get("email"),
       occupation: formData.get("occupation"),
       rentAmount: formData.get("rentAmount"),
+      paymentFrequency: formData.get("paymentFrequency"),
       currentBalance: formData.get("currentBalance"),
       moveInDate: formData.get("moveInDate"),
       nextRentDueDate: formData.get("nextRentDueDate"),

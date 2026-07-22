@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { isManagerCurrentTenantStatus } from "@/constants/manager";
+import { RENT_PAYMENT_FREQUENCY_LABELS } from "@/lib/rent-cycle";
 import type {
   ManagerPropertyRow,
   ManagerTenantRow,
@@ -340,7 +341,10 @@ export function ManagerUnitList({
                       </td>
 
                       <td className="px-4 py-4 text-sm font-bold text-text-strong">
-                        {formatNaira(unit.rent_amount)}
+                        <p>{formatNaira(unit.rent_amount)}</p>
+                        <p className="mt-1 text-xs font-semibold text-text-muted">
+                          {RENT_PAYMENT_FREQUENCY_LABELS[unit.rent_frequency]}
+                        </p>
                       </td>
 
                       <td className="px-4 py-4 text-sm font-bold text-text-strong">
@@ -454,7 +458,8 @@ export function ManagerUnitList({
                       </p>
                       <p className="mt-1 text-sm font-semibold text-text-muted">
                         {unit.unit_type ?? "Unit"} ·{" "}
-                        {formatNaira(unit.rent_amount)}
+                        {formatNaira(unit.rent_amount)} ·{" "}
+                        {RENT_PAYMENT_FREQUENCY_LABELS[unit.rent_frequency]}
                       </p>
                       <p className="mt-1 text-sm font-semibold text-text-muted">
                         Tenant/request:{" "}

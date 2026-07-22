@@ -76,6 +76,7 @@ type ManagerUnitOfflineRow = {
   property_id: string;
   unit_label: string;
   unit_type: string | null;
+  rent_frequency: string;
   rent_amount: number;
   status: string;
   created_at: string;
@@ -91,6 +92,10 @@ type ManagerTenantOfflineRow = {
   email: string | null;
   occupation: string | null;
   rent_amount: number;
+  payment_frequency: string;
+  rent_cycle_anchor_date: string | null;
+  current_period_start: string | null;
+  current_period_end: string | null;
   current_balance: number;
   move_in_date: string | null;
   next_rent_due_date: string | null;
@@ -161,6 +166,8 @@ type LandlordUnitOfflineRow = {
   unit_type: string;
   bedrooms: number;
   bathrooms: number;
+  rent_frequency: string;
+  rent_amount: number;
   monthly_rent: number | null;
   annual_rent: number | null;
   currency_code: string;
@@ -175,6 +182,10 @@ type LandlordTenancyOfflineRow = {
   tenant_id: string;
   unit_id: string;
   rent_amount: number;
+  payment_frequency: string;
+  move_in_date: string | null;
+  current_period_start: string | null;
+  current_period_end: string | null;
   currency_code: string;
   status: string;
   tenancy_status: string;
@@ -458,6 +469,7 @@ async function loadManagerSnapshot(params: {
             property_id,
             unit_label,
             unit_type,
+            rent_frequency,
             rent_amount,
             status,
             created_at,
@@ -498,6 +510,10 @@ async function loadManagerSnapshot(params: {
             email,
             occupation,
             rent_amount,
+            payment_frequency,
+            rent_cycle_anchor_date,
+            current_period_start,
+            current_period_end,
             current_balance,
             move_in_date,
             next_rent_due_date,
@@ -691,6 +707,8 @@ async function loadLandlordSnapshot(params: {
               unit_type,
               bedrooms,
               bathrooms,
+              rent_frequency,
+              rent_amount,
               monthly_rent,
               annual_rent,
               currency_code,
@@ -717,6 +735,10 @@ async function loadLandlordSnapshot(params: {
           tenant_id,
           unit_id,
           rent_amount,
+          payment_frequency,
+          move_in_date,
+          current_period_start,
+          current_period_end,
           currency_code,
           status,
           tenancy_status,

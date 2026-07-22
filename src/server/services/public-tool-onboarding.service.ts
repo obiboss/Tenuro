@@ -1,5 +1,9 @@
 import "server-only";
 
+import {
+  RENT_PAYMENT_FREQUENCIES,
+  type RentPaymentFrequency,
+} from "@/lib/rent-cycle";
 import { AppError } from "@/server/errors/app-error";
 import {
   createAgreementUsageEvent,
@@ -27,6 +31,44 @@ import { hashPublicReceiptToken } from "@/server/services/public-receipt-generat
 import { normalisePhoneNumber } from "@/server/utils/phone";
 import type { PublicAgreementSignupInput } from "@/server/validators/public-agreement-generator.schema";
 import type { PublicReceiptSignupInput } from "@/server/validators/public-receipt-generator.schema";
+
+
+function parseRentPaymentFrequency(value: unknown): RentPaymentFrequency | null {
+  return typeof value === "string" &&
+    RENT_PAYMENT_FREQUENCIES.includes(value as RentPaymentFrequency)
+    ? (value as RentPaymentFrequency)
+    : null;
+}
+
+function getAgreementRentFrequency(agreement: {
+  metadata: Record<string, unknown>;
+  agreement_snapshot: Record<string, unknown>;
+}) {
+  const metadataFrequency = parseRentPaymentFrequency(
+    agreement.metadata.rent_frequency,
+  );
+
+  if (metadataFrequency) {
+    return metadataFrequency;
+  }
+
+  const tenancySnapshot = agreement.agreement_snapshot.tenancy_snapshot;
+  if (
+    tenancySnapshot &&
+    typeof tenancySnapshot === "object" &&
+    !Array.isArray(tenancySnapshot)
+  ) {
+    const snapshotFrequency = parseRentPaymentFrequency(
+      (tenancySnapshot as Record<string, unknown>).paymentFrequency,
+    );
+
+    if (snapshotFrequency) {
+      return snapshotFrequency;
+    }
+  }
+
+  return "annual" as const;
+}
 
 function cleanOptional(value: string | null | undefined) {
   const cleaned = value?.trim();
@@ -293,8 +335,14 @@ export async function createLandlordAccountFromPublicReceipt(
     unitType: "other",
     bedrooms: 0,
     bathrooms: 0,
+    rentFrequency:
+      Number(receipt.rent_duration_months) === 6 ? "biannual" : "annual",
+    rentAmount: Number(receipt.rent_amount),
     monthlyRent: null,
-    annualRent: Number(receipt.rent_amount),
+    annualRent:
+      Number(receipt.rent_duration_months) === 6
+        ? null
+        : Number(receipt.rent_amount),
     currencyCode: receipt.currency_code,
   });
 
@@ -430,8 +478,16 @@ export async function createLandlordAccountFromPublicAgreement(
     unitType: "other",
     bedrooms: 0,
     bathrooms: 0,
-    monthlyRent: null,
-    annualRent: Number(agreement.rent_amount),
+    rentFrequency: getAgreementRentFrequency(agreement),
+    rentAmount: Number(agreement.rent_amount),
+    monthlyRent:
+      getAgreementRentFrequency(agreement) === "monthly"
+        ? Number(agreement.rent_amount)
+        : null,
+    annualRent:
+      getAgreementRentFrequency(agreement) === "annual"
+        ? Number(agreement.rent_amount)
+        : null,
     currencyCode: agreement.currency_code,
   });
 

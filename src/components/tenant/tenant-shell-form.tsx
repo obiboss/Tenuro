@@ -7,13 +7,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import {
+  RENT_PAYMENT_FREQUENCY_LABELS,
+  type RentPaymentFrequency,
+} from "@/lib/rent-cycle";
 
 type VacantUnit = {
   id: string;
   propertyName: string;
   unitIdentifier: string;
-  annualRent: number | null;
-  monthlyRent: number | null;
+  rentAmount: number;
+  rentFrequency: RentPaymentFrequency;
   currencyCode: string;
 };
 
@@ -42,9 +46,9 @@ export function TenantShellForm({ vacantUnits }: TenantShellFormProps) {
   const unitOptions = vacantUnits.map((unit) => ({
     value: unit.id,
     label: `${unit.propertyName} — ${unit.unitIdentifier} — ${formatMoney(
-      unit.annualRent,
+      unit.rentAmount,
       unit.currencyCode,
-    )}`,
+    )} — ${RENT_PAYMENT_FREQUENCY_LABELS[unit.rentFrequency]}`,
   }));
 
   return (

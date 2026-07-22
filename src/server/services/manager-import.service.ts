@@ -3,6 +3,10 @@ import "server-only";
 import crypto from "node:crypto";
 import { normalisePhoneNumber, tryNormalisePhoneNumber } from "@/lib/phone";
 import {
+  calculateCurrentRentCycle,
+  calculateCurrentRentDueDate,
+} from "@/lib/rent-cycle";
+import {
   managerImportRowSchema,
   type ManagerImportIssue,
   type ManagerImportResult,
@@ -271,9 +275,13 @@ export async function importManagerRows(
 
       let unit = findUnit(units, property.id, row.unitLabel);
 
-      if (unit && !sameMoney(unit.rent_amount, row.rentAmount)) {
+      if (
+        unit &&
+        (!sameMoney(unit.rent_amount, row.rentAmount) ||
+          unit.rent_frequency !== row.rentFrequency)
+      ) {
         throw new Error(
-          "This unit already exists with a different rent amount. Correct the spreadsheet or update the unit in BOPA first.",
+          "This unit already exists with a different rent amount or collection frequency. Correct the spreadsheet or update the unit in BOPA first.",
         );
       }
 
@@ -284,6 +292,7 @@ export async function importManagerRows(
           propertyId: property.id,
           unitLabel: row.unitLabel,
           unitType: nullableText(row.unitType),
+          rentFrequency: row.rentFrequency,
           rentAmount: row.rentAmount,
           status: "vacant",
           notes: "Imported from an existing records spreadsheet.",
@@ -298,8 +307,20 @@ export async function importManagerRows(
         continue;
       }
 
+      if (!row.moveInDate) {
+        throw new Error("Add the tenant's original move-in date.");
+      }
+
       const normalisedTenantPhone = normalisePhoneNumber(row.tenantPhone ?? "");
       let tenant = findCurrentTenant(tenants, unit.id);
+      const importedCurrentCycle = calculateCurrentRentCycle({
+        anchorDate: row.moveInDate,
+        paymentFrequency: unit.rent_frequency,
+      });
+      const importedNextRentDueDate = calculateCurrentRentDueDate({
+        anchorDate: row.moveInDate,
+        paymentFrequency: unit.rent_frequency,
+      });
 
       if (tenant) {
         const existingPhone = normalisePhoneNumber(tenant.phone_number).e164;
@@ -327,7 +348,7 @@ export async function importManagerRows(
             p_rent_amount: row.rentAmount,
             p_current_balance: row.currentBalance,
             p_move_in_date: row.moveInDate,
-            p_next_rent_due_date: row.nextRentDueDate,
+            p_next_rent_due_date: importedNextRentDueDate,
             p_notes: "Imported from an existing records spreadsheet.",
             p_client_mutation_id: crypto.randomUUID(),
           },
@@ -348,9 +369,13 @@ export async function importManagerRows(
           email: row.tenantEmail,
           occupation: row.occupation,
           rent_amount: row.rentAmount,
+          payment_frequency: row.rentFrequency,
+          rent_cycle_anchor_date: row.moveInDate,
+          current_period_start: importedCurrentCycle.periodStart,
+          current_period_end: importedCurrentCycle.periodEnd,
           current_balance: row.currentBalance,
           move_in_date: row.moveInDate,
-          next_rent_due_date: row.nextRentDueDate,
+          next_rent_due_date: importedNextRentDueDate,
           move_out_date: null,
           status: "active",
           notes: "Imported from an existing records spreadsheet.",

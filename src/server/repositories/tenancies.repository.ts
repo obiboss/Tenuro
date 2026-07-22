@@ -1,5 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  calculateRentPeriodFromStart,
+} from "@/lib/rent-cycle";
+import {
   calculateNextRentChargeDate,
   calculateTenancyEndDate,
   getRentAnchorDay,
@@ -456,11 +459,13 @@ export async function createLiveExistingTenantTenancy(
     agreementNotes: string | null;
   },
 ) {
-  const currentPeriodEnd = calculateTenancyEndDate(
-    params.currentPeriodStart,
-    params.paymentFrequency as TenancyPaymentFrequency,
-  );
-  const nextRentChargeDate = calculateNextRentChargeDate(currentPeriodEnd);
+  const currentPeriod = calculateRentPeriodFromStart({
+    anchorDate: params.moveInDate,
+    paymentFrequency: params.paymentFrequency,
+    periodStart: params.currentPeriodStart,
+  });
+  const currentPeriodEnd = currentPeriod.periodEnd;
+  const nextRentChargeDate = currentPeriod.nextRentDueDate;
   const now = new Date().toISOString();
 
   const { data, error } = await supabase

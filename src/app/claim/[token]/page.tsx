@@ -149,7 +149,7 @@ export default async function ClaimPage({ params }: ClaimPageProps) {
                       {unit?.unit_identifier ?? "Unit"}
                     </p>
                     <p className="mt-1 text-base leading-6 text-text-muted">
-                      Listed rent: {formatNaira(Number(unit?.annual_rent ?? 0))}
+                      Listed rent: {formatNaira(Number(unit?.rent_amount ?? 0))}
                     </p>
                   </div>
                 </div>
@@ -165,6 +165,8 @@ export default async function ClaimPage({ params }: ClaimPageProps) {
                 invitedName={claim.invited_tenant_full_name}
                 invitedPhoneNumber={claim.invited_tenant_phone_number}
                 invitedEmail={claim.invited_tenant_email}
+                rentAmount={Number(unit?.rent_amount ?? 0)}
+                rentFrequency={unit?.rent_frequency ?? "annual"}
               />
             </SectionCard>
 

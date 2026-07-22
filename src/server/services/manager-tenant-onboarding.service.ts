@@ -3,6 +3,11 @@ import "server-only";
 import crypto from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  calculateCurrentRentCycle,
+  calculateCurrentRentDueDate,
+  calculateNextRentDueDate,
+} from "@/lib/rent-cycle";
+import {
   calculateManagerPaymentBreakdown,
   roundMoney,
 } from "@/lib/manager-automation";
@@ -189,28 +194,15 @@ function generatePaymentToken() {
   return crypto.randomBytes(24).toString("hex");
 }
 
-function getFrequencyMonths(frequency: ManagerOnboardingPaymentFrequency) {
-  const months: Record<ManagerOnboardingPaymentFrequency, number> = {
-    monthly: 1,
-    quarterly: 3,
-    biannual: 6,
-    annual: 12,
-  };
-
-  return months[frequency];
-}
-
 function formatDateOnly(date: Date) {
   const year = date.getUTCFullYear();
   const month = String(date.getUTCMonth() + 1).padStart(2, "0");
   const day = String(date.getUTCDate()).padStart(2, "0");
-
   return `${year}-${month}-${day}`;
 }
 
 function todayDateOnly() {
   const now = new Date();
-
   return formatDateOnly(
     new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())),
   );
@@ -220,67 +212,18 @@ function compareDateOnly(first: string, second: string) {
   return first.localeCompare(second);
 }
 
-function addMonthsToDateOnly(dateValue: string, monthsToAdd: number) {
-  const [yearValue, monthValue, dayValue] = dateValue.split("-").map(Number);
-
-  if (!yearValue || !monthValue || !dayValue) {
-    throw new AppError("INVALID_DATE", "Invalid move-in date.", 400);
-  }
-
-  const totalMonthIndex = monthValue - 1 + monthsToAdd;
-  const targetYear = yearValue + Math.floor(totalMonthIndex / 12);
-  const targetMonthIndex = ((totalMonthIndex % 12) + 12) % 12;
-  const lastDayOfTargetMonth = new Date(
-    Date.UTC(targetYear, targetMonthIndex + 1, 0),
-  ).getUTCDate();
-
-  const targetDay = Math.min(dayValue, lastDayOfTargetMonth);
-
-  return formatDateOnly(
-    new Date(Date.UTC(targetYear, targetMonthIndex, targetDay)),
-  );
-}
-
-function calculateFirstNextRentDueDate(params: {
-  moveInDate: string;
-  paymentFrequency: ManagerOnboardingPaymentFrequency;
-}) {
-  return addMonthsToDateOnly(
-    params.moveInDate,
-    getFrequencyMonths(params.paymentFrequency),
-  );
-}
-
-function calculateCurrentNextRentDueDate(params: {
-  moveInDate: string;
-  paymentFrequency: ManagerOnboardingPaymentFrequency;
-  referenceDate?: string;
-}) {
-  const frequencyMonths = getFrequencyMonths(params.paymentFrequency);
-  const referenceDate = params.referenceDate ?? todayDateOnly();
-  let dueDate = addMonthsToDateOnly(params.moveInDate, frequencyMonths);
-
-  while (compareDateOnly(dueDate, referenceDate) < 0) {
-    dueDate = addMonthsToDateOnly(dueDate, frequencyMonths);
-  }
-
-  return dueDate;
-}
-
 function calculateManagerOnboardingNextRentDueDate(params: {
   onboardingType: ManagerTenantOnboardingRequestRow["onboarding_type"];
   moveInDate: string;
   paymentFrequency: ManagerOnboardingPaymentFrequency;
 }) {
-  if (params.onboardingType === "new_incoming_tenant") {
-    return calculateFirstNextRentDueDate({
-      moveInDate: params.moveInDate,
-      paymentFrequency: params.paymentFrequency,
-    });
-  }
+  const calculator =
+    params.onboardingType === "current_occupant"
+      ? calculateCurrentRentDueDate
+      : calculateNextRentDueDate;
 
-  return calculateCurrentNextRentDueDate({
-    moveInDate: params.moveInDate,
+  return calculator({
+    anchorDate: params.moveInDate,
     paymentFrequency: params.paymentFrequency,
   });
 }
@@ -1114,6 +1057,14 @@ export async function createManagerTenantOnboardingRequestForCurrentManager(
     );
   }
 
+  if (!Number.isFinite(Number(unit.rent_amount)) || Number(unit.rent_amount) <= 0) {
+    throw new AppError(
+      "MANAGER_UNIT_RENT_REQUIRED",
+      "Set the unit rent amount and collection frequency before sending a tenant link.",
+      400,
+    );
+  }
+
   await assertNoOpenTenantRequestForUnit(supabase, {
     organizationId: organization.id,
     unitId: input.unitId,
@@ -1151,6 +1102,7 @@ export async function createManagerTenantOnboardingRequestForCurrentManager(
     invitedTenantPhoneNumber: tenantPhone.e164,
     invitedTenantEmail: input.email?.trim().toLowerCase() ?? null,
     note: nullableText(input.note),
+    paymentFrequency: unit.rent_frequency,
     tenantRequirementsSnapshot,
     metadata: {
       source: "bopa_manager_tenant_onboarding_link",
@@ -1217,14 +1169,6 @@ export async function submitManagerTenantOnboardingRequestByToken(
     );
   }
 
-  if (isCurrentOccupant && !input.claimedRentAmount) {
-    throw new AppError(
-      "MANAGER_RENT_AMOUNT_REQUIRED",
-      "Enter the rent amount.",
-      400,
-    );
-  }
-
   let verifiedPaymentEvidence: Awaited<
     ReturnType<typeof verifyExistingTenantPaymentEvidenceUpload>
   > | null = null;
@@ -1270,7 +1214,8 @@ export async function submitManagerTenantOnboardingRequestByToken(
     );
   }
 
-  const paymentFrequency = input.paymentFrequency ?? "annual";
+  const paymentFrequency = request.manager_units?.rent_frequency ?? "annual";
+  const claimedRentAmount = Number(request.manager_units?.rent_amount ?? 0);
 
   const nextRentDueDate =
     isCurrentOccupant && input.moveInDate
@@ -1322,7 +1267,7 @@ export async function submitManagerTenantOnboardingRequestByToken(
       idNumber: input.idNumber,
       moveInDate: input.moveInDate ?? null,
       statedRentDueDate: nextRentDueDate,
-      claimedRentAmount: input.claimedRentAmount ?? null,
+      claimedRentAmount: isCurrentOccupant ? claimedRentAmount : null,
       lastPaymentAmount: isCurrentOccupant
         ? (input.lastPaymentAmount ?? null)
         : null,
@@ -1401,7 +1346,7 @@ export async function approveManagerTenantOnboardingRequestForCurrentManager(
 
   if (
     request.onboarding_type === "current_occupant" &&
-    (!request.tenant_move_in_date || !request.tenant_claimed_rent_amount)
+    !request.tenant_move_in_date
   ) {
     throw new AppError(
       "MANAGER_ONBOARDING_DETAILS_MISSING",
@@ -1427,9 +1372,7 @@ export async function approveManagerTenantOnboardingRequestForCurrentManager(
     moveInDate: input.confirmedMoveInDate,
   });
 
-  const confirmedRentAmount = Number(
-    request.manager_units?.rent_amount ?? input.confirmedRentAmount,
-  );
+  const confirmedRentAmount = Number(request.manager_units?.rent_amount ?? 0);
 
   if (!Number.isFinite(confirmedRentAmount) || confirmedRentAmount <= 0) {
     throw new AppError(
@@ -1439,7 +1382,8 @@ export async function approveManagerTenantOnboardingRequestForCurrentManager(
     );
   }
 
-  const paymentFrequency = (request.tenant_payment_frequency ??
+  const paymentFrequency = (request.manager_units?.rent_frequency ??
+    request.tenant_payment_frequency ??
     "annual") as ManagerOnboardingPaymentFrequency;
 
   const nextRentDueDate = calculateManagerOnboardingNextRentDueDate({
@@ -1463,6 +1407,10 @@ export async function approveManagerTenantOnboardingRequestForCurrentManager(
 
   const tenantStatus =
     request.onboarding_type === "new_incoming_tenant" ? "inactive" : "active";
+  const currentPeriod = calculateCurrentRentCycle({
+    anchorDate: input.confirmedMoveInDate,
+    paymentFrequency,
+  });
 
   const tenant = await createManagerTenantRecord(adminSupabase, {
     organizationId: organization.id,
@@ -1476,6 +1424,10 @@ export async function approveManagerTenantOnboardingRequestForCurrentManager(
     rentAmount: roundMoney(confirmedRentAmount),
     currentBalance: roundMoney(input.openingBalance),
     moveInDate: input.confirmedMoveInDate,
+    paymentFrequency,
+    rentCycleAnchorDate: input.confirmedMoveInDate,
+    currentPeriodStart: currentPeriod.periodStart,
+    currentPeriodEnd: currentPeriod.periodEnd,
     nextRentDueDate,
     status: tenantStatus,
     notes: nullableText(input.reviewNotes),
