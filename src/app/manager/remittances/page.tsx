@@ -1,17 +1,15 @@
 import { redirect } from "next/navigation";
-import { ManagerPayoutProfileForm } from "@/components/manager/manager-payout-profile-form";
-import { ManagerPayoutProfileList } from "@/components/manager/manager-payout-profile-list";
-import { ManagerRemittanceForm } from "@/components/manager/manager-remittance-form";
-import { ManagerRemittanceList } from "@/components/manager/manager-remittance-list";
-import { PageHeader } from "@/components/ui/page-header";
+import { ManagerRemittancesWorkspace } from "@/components/manager/manager-remittances-workspace";
 import {
-  getManagerLandlordRemittanceSummaries,
   getManagerOrganizationForCurrentUser,
-  listLandlordPayoutProfiles,
   listManagerLandlordClients,
-  listManagerLandlordRemittances,
-  listManagerRentPayments,
+  listManagerProperties,
 } from "@/server/repositories/manager.repository";
+import {
+  listAllManagerLandlordRemittances,
+  listAllManagerMaintenanceRequests,
+  listAllManagerRentPayments,
+} from "@/server/services/manager-operational-data.service";
 import { requireManager } from "@/server/services/auth.service";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 
@@ -27,48 +25,22 @@ export default async function ManagerRemittancesPage() {
     redirect("/manager/onboarding");
   }
 
-  const [landlordClients, payoutProfiles, rentPayments, remittances] =
+  const [landlordClients, properties, payments, remittances, maintenance] =
     await Promise.all([
       listManagerLandlordClients(supabase, organization.id),
-      listLandlordPayoutProfiles(supabase, organization.id),
-      listManagerRentPayments(supabase, organization.id),
-      listManagerLandlordRemittances(supabase, organization.id),
+      listManagerProperties(supabase, organization.id),
+      listAllManagerRentPayments(supabase, organization.id),
+      listAllManagerLandlordRemittances(supabase, organization.id),
+      listAllManagerMaintenanceRequests(supabase, organization.id),
     ]);
 
-  const summaries = getManagerLandlordRemittanceSummaries({
-    landlordClients,
-    payments: rentPayments,
-    remittances,
-  });
-
   return (
-    <div className="space-y-8">
-      <PageHeader
-        title="Landlord remittances"
-        description="Track landlord payout details and record money remitted to landlords. This does not move money automatically."
-      />
-
-      <section className="grid gap-6 lg:grid-cols-[440px_1fr]">
-        <ManagerPayoutProfileForm landlordClients={landlordClients} />
-        <ManagerPayoutProfileList
-          landlordClients={landlordClients}
-          payoutProfiles={payoutProfiles}
-        />
-      </section>
-
-      <section className="grid gap-6 lg:grid-cols-[440px_1fr]">
-        <ManagerRemittanceForm
-          landlordClients={landlordClients}
-          payoutProfiles={payoutProfiles}
-          summaries={summaries}
-        />
-        <ManagerRemittanceList
-          landlordClients={landlordClients}
-          payoutProfiles={payoutProfiles}
-          remittances={remittances}
-          summaries={summaries}
-        />
-      </section>
-    </div>
+    <ManagerRemittancesWorkspace
+      landlordClients={landlordClients}
+      properties={properties}
+      payments={payments}
+      remittances={remittances}
+      maintenance={maintenance}
+    />
   );
 }

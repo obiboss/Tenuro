@@ -5,11 +5,11 @@ import {
   getManagerOrganizationForCurrentUser,
   listManagerLandlordClients,
   listManagerProperties,
-  listManagerRentPayments,
   listManagerTenants,
   listManagerUnits,
 } from "@/server/repositories/manager.repository";
 import { requireManagerWorkspaceOperator } from "@/server/services/auth.service";
+import { listAllManagerRentPayments } from "@/server/services/manager-operational-data.service";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 
 export default async function ManagerPaymentsPage() {
@@ -36,7 +36,7 @@ export default async function ManagerPaymentsPage() {
     listManagerProperties(supabase, organization.id),
     listManagerUnits(supabase, { organizationId: organization.id }),
     listManagerTenants(supabase, { organizationId: organization.id }),
-    listManagerRentPayments(supabase, organization.id),
+    listAllManagerRentPayments(supabase, organization.id),
     listManagerPaystackPaymentRequests(supabase, organization.id),
   ]);
 

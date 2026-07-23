@@ -1,11 +1,17 @@
 import { redirect } from "next/navigation";
-import { ManagerLandlordForm } from "@/components/manager/manager-landlord-form";
-import { ManagerLandlordList } from "@/components/manager/manager-landlord-list";
-import { PageHeader } from "@/components/ui/page-header";
+import { ManagerLandlordsWorkspace } from "@/components/manager/manager-landlords-workspace";
 import {
   getManagerOrganizationForCurrentUser,
   listManagerLandlordClients,
+  listManagerProperties,
+  listManagerTenants,
+  listManagerUnits,
 } from "@/server/repositories/manager.repository";
+import {
+  listAllManagerLandlordRemittances,
+  listAllManagerMaintenanceRequests,
+  listAllManagerRentPayments,
+} from "@/server/services/manager-operational-data.service";
 import { requireManager } from "@/server/services/auth.service";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 
@@ -21,25 +27,33 @@ export default async function ManagerLandlordsPage() {
     redirect("/manager/onboarding");
   }
 
-  const landlordClients = await listManagerLandlordClients(
-    supabase,
-    organization.id,
-  );
+  const [
+    landlordClients,
+    properties,
+    units,
+    tenants,
+    payments,
+    remittances,
+    maintenance,
+  ] = await Promise.all([
+      listManagerLandlordClients(supabase, organization.id),
+      listManagerProperties(supabase, organization.id),
+      listManagerUnits(supabase, { organizationId: organization.id }),
+      listManagerTenants(supabase, { organizationId: organization.id }),
+      listAllManagerRentPayments(supabase, organization.id),
+      listAllManagerLandlordRemittances(supabase, organization.id),
+      listAllManagerMaintenanceRequests(supabase, organization.id),
+    ]);
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Landlord clients"
-        description="Add and manage the landlords your company manages properties for."
-      />
-
-      <section
-        id="add-landlord"
-        className="grid gap-6 lg:grid-cols-[420px_1fr]"
-      >
-        <ManagerLandlordForm />
-        <ManagerLandlordList landlordClients={landlordClients} />
-      </section>
-    </div>
+    <ManagerLandlordsWorkspace
+      landlordClients={landlordClients}
+      properties={properties}
+      units={units}
+      tenants={tenants}
+      payments={payments}
+      remittances={remittances}
+      maintenance={maintenance}
+    />
   );
 }
