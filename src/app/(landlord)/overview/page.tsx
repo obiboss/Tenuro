@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { isSubmittedForLandlordReview } from "@/server/constants/onboarding-lifecycle";
 import { getCurrentLandlordProperties } from "@/server/services/properties.service";
 import { getCurrentLandlordRentControlOverview } from "@/server/services/rent-control-overview.service";
+import { getCurrentLandlordExistingTenantClaims } from "@/server/services/existing-tenant-claims.service";
 import { getCurrentLandlordTenantsWithPipeline } from "@/server/services/tenants.service";
 import { cn } from "@/lib/cn";
 
@@ -182,41 +183,41 @@ function NewLandlordSetup({
   );
 }
 
-type TenantWithPipeline = Awaited<
-  ReturnType<typeof getCurrentLandlordTenantsWithPipeline>
->[number];
+type TenantReviewItem = {
+  id: string;
+  tenantName: string;
+  reviewHref: string;
+};
 
-function TenantReviewItems({ items }: { items: TenantWithPipeline[] }) {
+function TenantReviewItems({ items }: { items: TenantReviewItem[] }) {
   if (items.length === 0) {
     return null;
   }
 
   return (
     <div className="space-y-3">
-      {items.map(({ tenant }) => (
+      {items.map((item) => (
         <article
-          key={tenant.id}
-          className="flex flex-col gap-4 rounded-card border border-primary/20 border-l-4 border-l-primary bg-white p-4 sm:flex-row sm:items-center sm:justify-between"
+          key={item.id}
+          className="flex flex-col gap-4 rounded-card border border-warning/20 border-l-4 border-l-warning bg-white p-4 sm:flex-row sm:items-center sm:justify-between"
         >
           <div className="flex min-w-0 items-start gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-primary">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-warning-soft text-warning">
               <FileCheck2 aria-hidden="true" size={20} strokeWidth={2.5} />
             </span>
             <div className="min-w-0">
               <p className="font-black text-text-strong">
-                Tenant details ready for review
+                {item.tenantName}
               </p>
               <p className="mt-1 text-sm font-semibold text-text-muted">
-                {tenant.full_name} ·{" "}
-                {tenant.units?.properties?.property_name ?? "Property"} ·{" "}
-                {tenant.units?.unit_identifier ?? "Unit"}
+                Submitted info for review
               </p>
             </div>
           </div>
 
-          <Link href={`/tenants/${tenant.id}`} className="shrink-0">
+          <Link href={item.reviewHref} className="shrink-0">
             <Button variant="secondary" fullWidth>
-              Review tenant
+              Review
             </Button>
           </Link>
         </article>
@@ -229,12 +230,13 @@ export default async function OverviewPage({
   searchParams,
 }: OverviewPageProps) {
   const resolvedSearchParams = await searchParams;
-  const [overview, properties, tenants] = await Promise.all([
+  const [overview, properties, tenants, existingTenantClaims] = await Promise.all([
     getCurrentLandlordRentControlOverview(
       resolvedSearchParams.property ?? null,
     ),
     getCurrentLandlordProperties(),
     getCurrentLandlordTenantsWithPipeline(),
+    getCurrentLandlordExistingTenantClaims(),
   ]);
 
   const totalUnits = properties.reduce(
@@ -245,9 +247,25 @@ export default async function OverviewPage({
     properties.length === 0 ? "property" : totalUnits === 0 ? "unit" : "tenant";
   const showSetup =
     properties.length === 0 || totalUnits === 0 || tenants.length === 0;
-  const tenantReviews = tenants.filter(({ tenant }) =>
-    isSubmittedForLandlordReview(tenant.onboarding_status),
-  );
+  const tenantReviews: TenantReviewItem[] = [
+    ...tenants
+      .filter(({ tenant }) =>
+        isSubmittedForLandlordReview(tenant.onboarding_status),
+      )
+      .map(({ tenant }) => ({
+        id: tenant.id,
+        tenantName: tenant.full_name,
+        reviewHref: `/tenants/${tenant.id}`,
+      })),
+    ...existingTenantClaims
+      .filter((claim) => claim.status === "submitted")
+      .map((claim) => ({
+        id: claim.id,
+        tenantName:
+          claim.tenant_full_name ?? claim.invited_tenant_full_name ?? "Tenant",
+        reviewHref: `/existing-tenant-claims/${claim.id}`,
+      })),
+  ];
   const attentionCount = tenantReviews.length + overview.needsAttention.length;
 
   return (

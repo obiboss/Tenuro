@@ -19,12 +19,12 @@ export default function RegisterPage() {
 
         <RegisterForm />
 
-        <p className="text-center text-sm text-text-muted">
+        {/* <p className="text-center text-sm text-text-muted">
           Already have an account?{" "}
           <Link href="/login" className="font-bold text-primary">
             Sign in
           </Link>
-        </p>
+        </p> */}
 
         <p className="text-center text-sm text-text-muted">
           Registering as an agent?{" "}

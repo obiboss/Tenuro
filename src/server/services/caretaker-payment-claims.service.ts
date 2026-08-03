@@ -39,6 +39,7 @@ const PAYMENT_PROOF_BUCKET = "tenant-payment-proofs";
 
 export type CaretakerPaymentClaimView = {
   id: string;
+  tenancyId: string;
   tenantName: string;
   tenantPhone: string | null;
   propertyName: string;
@@ -579,6 +580,7 @@ export async function getCurrentLandlordPendingPaymentClaims(): Promise<
   return Promise.all(
     claims.map(async (claim) => ({
       id: claim.id,
+      tenancyId: claim.tenancy_id,
       tenantName: claim.tenants?.full_name ?? "Tenant",
       tenantPhone: claim.tenants?.phone_number ?? null,
       propertyName:

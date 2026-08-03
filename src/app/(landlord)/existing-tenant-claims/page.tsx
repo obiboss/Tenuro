@@ -7,17 +7,36 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { getCurrentLandlordExistingTenantClaims } from "@/server/services/existing-tenant-claims.service";
 
-export default async function ExistingTenantClaimsPage() {
+type ExistingTenantClaimsPageProps = {
+  searchParams: Promise<{
+    filter?: string;
+  }>;
+};
+
+export default async function ExistingTenantClaimsPage({
+  searchParams,
+}: ExistingTenantClaimsPageProps) {
+  const { filter } = await searchParams;
   const claims = await getCurrentLandlordExistingTenantClaims();
   const submittedCount = claims.filter(
     (claim) => claim.status === "submitted",
   ).length;
+  const showingSubmittedClaims = filter === "submitted";
+  const visibleClaims = showingSubmittedClaims
+    ? claims.filter((claim) => claim.status === "submitted")
+    : claims;
 
   return (
     <main>
       <PageHeader
-        title="Existing Tenant Claims"
-        description="Review existing tenants who submitted their move-in date, rent amount, and rent due date."
+        title={
+          showingSubmittedClaims ? "Tenants awaiting review" : "Existing Tenant Claims"
+        }
+        description={
+          showingSubmittedClaims
+            ? "Review the submitted information before approving a tenant."
+            : "Review existing tenants who submitted their move-in date, rent amount, and rent due date."
+        }
         action={
           <Link href="/tenants/existing/new">
             <Button>Invite Existing Tenant</Button>
@@ -26,15 +45,23 @@ export default async function ExistingTenantClaimsPage() {
       />
 
       <SectionCard
-        title="Claim Review"
+        title={showingSubmittedClaims ? "Submitted information" : "Claim Review"}
         description={`${submittedCount} tenant${
           submittedCount === 1 ? "" : "s"
         } awaiting review`}
       >
-        {claims.length === 0 ? (
+        {visibleClaims.length === 0 ? (
           <EmptyState
-            title="No existing tenant claims yet"
-            description="Invite an existing tenant to confirm their tenancy details. Submitted claims will appear here for review."
+            title={
+              showingSubmittedClaims
+                ? "Nothing to review right now"
+                : "No existing tenant claims yet"
+            }
+            description={
+              showingSubmittedClaims
+                ? "Submitted tenant information will appear here."
+                : "Invite an existing tenant to confirm their tenancy details. Submitted claims will appear here for review."
+            }
             icon={<UserRoundCheck size={24} strokeWidth={2.6} />}
             action={
               <Link href="/tenants/existing/new">
@@ -43,7 +70,7 @@ export default async function ExistingTenantClaimsPage() {
             }
           />
         ) : (
-          <ExistingTenantClaimReviewList claims={claims} />
+          <ExistingTenantClaimReviewList claims={visibleClaims} />
         )}
       </SectionCard>
     </main>

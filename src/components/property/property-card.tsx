@@ -49,7 +49,9 @@ export function PropertyCard({ property }: PropertyCardProps) {
               </p>
             </div>
 
-            <Badge tone="primary">{propertyTypeLabel(property.property_type)}</Badge>
+            <Badge tone="primary">
+              {propertyTypeLabel(property.property_type)}
+            </Badge>
           </div>
 
           <div className="mt-3 flex flex-wrap gap-2">
@@ -72,7 +74,7 @@ export function PropertyCard({ property }: PropertyCardProps) {
           <div className="mt-3 flex flex-wrap gap-2">
             <Link
               href={`/properties/${property.id}`}
-              className="inline-flex min-h-9 items-center justify-center rounded-button bg-surface px-4 py-2 text-xs font-extrabold text-text-strong shadow-soft ring-1 ring-border-soft transition hover:bg-primary-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+              className="inline-flex min-h-9 items-center justify-center rounded-button bg-primary px-4 py-2 text-xs font-extrabold text-white shadow-soft transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
             >
               View Property
             </Link>

@@ -16,7 +16,8 @@ export function ArchivePropertyButton({
   return (
     <Button
       type="button"
-      variant="danger"
+      variant="ghost"
+      className="text-danger hover:bg-danger-soft focus-visible:ring-danger"
       isLoading={isPending}
       onClick={() => {
         const confirmed = window.confirm(

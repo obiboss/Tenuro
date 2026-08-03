@@ -79,7 +79,7 @@ export function ManualPaymentForm({ tenancies }: ManualPaymentFormProps) {
 
         <TrustNotice
           title="Send tenant payment link"
-          description="Use this when a tenant agrees to pay full rent or a negotiated part payment. BOPA will record the payment automatically after the tenant pays through Paystack."
+          description="Send a secure payment link for rent."
         />
 
         {negotiatedPaymentState.message ? (
@@ -165,9 +165,8 @@ export function ManualPaymentForm({ tenancies }: ManualPaymentFormProps) {
             <p className="font-extrabold text-text-strong">
               Record an offline payment instead
             </p>
-            <p className="mt-1 text-sm leading-6 text-text-muted">
-              Use this only when the tenant has already paid by cash, bank
-              transfer, or another method outside BOPA.
+            <p className="mt-1 text-sm font-semibold text-text-muted">
+              Record a payment already received outside BOPA.
             </p>
           </div>
 

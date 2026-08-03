@@ -1,14 +1,6 @@
-"use client";
-
-import { useActionState } from "react";
-import { CheckCircle2, ExternalLink, XCircle } from "lucide-react";
-import {
-  confirmCaretakerPaymentClaimAction,
-  rejectCaretakerPaymentClaimAction,
-} from "@/actions/caretaker.actions";
-import { initialCaretakerPaymentClaimDecisionActionState } from "@/actions/caretaker.state";
-import { Button } from "@/components/ui/button";
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { formatNaira } from "@/server/utils/money";
 import type { CaretakerPaymentClaimView } from "@/server/services/caretaker-payment-claims.service";
 
@@ -16,73 +8,32 @@ type PendingPaymentClaimsPanelProps = {
   claims: CaretakerPaymentClaimView[];
 };
 
-function ClaimDecisionForms({ claimId }: { claimId: string }) {
-  const [confirmState, confirmAction, isConfirming] = useActionState(
-    confirmCaretakerPaymentClaimAction,
-    initialCaretakerPaymentClaimDecisionActionState,
+function formatTimeAgo(value: string | null) {
+  if (!value) {
+    return "Recently";
+  }
+
+  const elapsedMinutes = Math.max(
+    0,
+    Math.floor((Date.now() - new Date(value).getTime()) / 60_000),
   );
 
-  const [rejectState, rejectAction, isRejecting] = useActionState(
-    rejectCaretakerPaymentClaimAction,
-    initialCaretakerPaymentClaimDecisionActionState,
-  );
+  if (elapsedMinutes < 1) {
+    return "Just now";
+  }
 
-  return (
-    <div className="mt-4 space-y-3">
-      <form action={confirmAction}>
-        <input type="hidden" name="claimId" value={claimId} />
-        <Button type="submit" fullWidth disabled={isConfirming}>
-          <CheckCircle2 aria-hidden="true" size={16} strokeWidth={2.6} />
-          {isConfirming ? "Confirming..." : "Confirm payment"}
-        </Button>
-      </form>
+  if (elapsedMinutes < 60) {
+    return `${elapsedMinutes} min ago`;
+  }
 
-      <form action={rejectAction} className="space-y-2">
-        <input type="hidden" name="claimId" value={claimId} />
-        <input
-          name="rejectionReason"
-          type="text"
-          required
-          minLength={3}
-          className="w-full rounded-2xl border border-border-soft bg-white px-4 py-3 text-sm font-bold outline-none focus:border-primary"
-          placeholder="Reason if rejecting"
-        />
-        <Button
-          type="submit"
-          variant="secondary"
-          fullWidth
-          disabled={isRejecting}
-        >
-          <XCircle aria-hidden="true" size={16} strokeWidth={2.6} />
-          {isRejecting ? "Rejecting..." : "Reject claim"}
-        </Button>
-      </form>
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
 
-      {confirmState.message ? (
-        <p
-          className={`rounded-2xl p-3 text-sm font-bold ${
-            confirmState.ok
-              ? "bg-success/10 text-success"
-              : "bg-danger/10 text-danger"
-          }`}
-        >
-          {confirmState.message}
-        </p>
-      ) : null}
+  if (elapsedHours < 24) {
+    return `${elapsedHours} hr${elapsedHours === 1 ? "" : "s"} ago`;
+  }
 
-      {rejectState.message ? (
-        <p
-          className={`rounded-2xl p-3 text-sm font-bold ${
-            rejectState.ok
-              ? "bg-success/10 text-success"
-              : "bg-danger/10 text-danger"
-          }`}
-        >
-          {rejectState.message}
-        </p>
-      ) : null}
-    </div>
-  );
+  const elapsedDays = Math.floor(elapsedHours / 24);
+  return `${elapsedDays} day${elapsedDays === 1 ? "" : "s"} ago`;
 }
 
 export function PendingPaymentClaimsPanel({
@@ -92,69 +43,41 @@ export function PendingPaymentClaimsPanel({
     return (
       <div className="rounded-card border border-border-soft bg-white p-5">
         <h2 className="text-lg font-black text-text-strong">
-          No payments are waiting for confirmation
+          Nothing to confirm right now
         </h2>
         <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
-          Payments reported by tenants or caretakers will appear here for you to
-          check.
+          Payments submitted by tenants will appear here for you to check.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {claims.map((claim) => (
         <article
           key={claim.id}
-          className="rounded-card border border-border-soft bg-white p-4"
+          className="flex flex-col gap-4 rounded-card border border-border-soft bg-white p-4 sm:flex-row sm:items-center sm:justify-between"
         >
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h2 className="truncate text-lg font-black text-text-strong">
-                {claim.tenantName}
-              </h2>
-              <p className="mt-1 text-sm font-semibold text-text-muted">
-                {claim.propertyUnitLabel}
-              </p>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="font-black text-text-strong">{claim.tenantName}</h2>
+              <Badge tone="warning">Waiting for confirmation</Badge>
             </div>
-
-            <Badge tone="warning">Waiting for your confirmation</Badge>
-          </div>
-
-          <div className="mt-4 grid gap-2 text-sm font-bold text-text-muted sm:grid-cols-2">
-            <p>Amount reported: {formatNaira(claim.amountPaid)}</p>
-            <p>Payment date: {claim.paymentDate}</p>
-            <p>Method: {claim.paymentMethod.replace("_", " ")}</p>
-            {claim.paymentReference ? (
-              <p>Ref: {claim.paymentReference}</p>
-            ) : null}
-            {claim.caretakerName ? (
-              <p>Caretaker: {claim.caretakerName}</p>
-            ) : null}
-          </div>
-
-          {claim.notes ? (
-            <p className="mt-3 rounded-2xl bg-background p-3 text-sm font-semibold leading-6 text-text-muted">
-              {claim.notes}
+            <p className="mt-1 text-sm font-semibold text-text-muted">
+              {claim.propertyUnitLabel}
             </p>
-          ) : null}
+            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm font-semibold text-text-muted">
+              <span>
+                Claimed: {formatNaira(claim.amountPaid)}
+              </span>
+              <span>{formatTimeAgo(claim.submittedAt)}</span>
+            </div>
+          </div>
 
-          {claim.proofUrl ? (
-            <a
-              href={claim.proofUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-4 block"
-            >
-              <Button type="button" variant="secondary" fullWidth>
-                <ExternalLink aria-hidden="true" size={16} strokeWidth={2.6} />
-                View bank receipt
-              </Button>
-            </a>
-          ) : null}
-
-          <ClaimDecisionForms claimId={claim.id} />
+          <Link href={`/payments/claims/${claim.id}`} className="shrink-0">
+            <Button fullWidth>Confirm payment</Button>
+          </Link>
         </article>
       ))}
     </div>

@@ -21,7 +21,7 @@ function TenantTypeChoice() {
           </span>
           <div>
             <h2 className="text-xl font-black text-text-strong">
-              A new tenant
+              Register a new tenant
             </h2>
             <p className="mt-2 text-base font-medium leading-7 text-text-muted">
               Someone new is about to move into your property. Enter their name
@@ -32,7 +32,7 @@ function TenantTypeChoice() {
 
         <Link href="/tenants/new?type=new" className="mt-auto pt-6">
           <Button size="lg" fullWidth>
-            Add a new tenant
+            Register new tenant
           </Button>
         </Link>
       </article>
@@ -44,17 +44,18 @@ function TenantTypeChoice() {
           </span>
           <div>
             <h2 className="text-xl font-black text-text-strong">
-              Already living there
+              Tenant already living in apartment
             </h2>
             <p className="mt-2 text-base font-medium leading-7 text-text-muted">
-              The tenant already lives in the apartment and pays rent to you.
+              Invite a tenant who already lives in the apartment to confirm
+              their tenancy details.
             </p>
           </div>
         </div>
 
         <Link href="/tenants/existing/new" className="mt-auto pt-6">
           <Button size="lg" variant="secondary" fullWidth>
-            Set up existing tenant
+            Invite existing tenant
           </Button>
         </Link>
       </article>
