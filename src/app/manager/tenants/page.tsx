@@ -3,16 +3,10 @@ import { ManagerTenantsOfflineView } from "@/components/manager/manager-tenants-
 import {
   getManagerOrganizationForCurrentUser,
   listManagerProperties,
-  listManagerRentPayments,
   listManagerTenants,
   listManagerUnits,
 } from "@/server/repositories/manager.repository";
-import {
-  listManagerTenantAgreementDocuments,
-  listManagerTenantOnboardingRequests,
-} from "@/server/repositories/manager-tenant-onboarding.repository";
 import { requireManager } from "@/server/services/auth.service";
-import { createExistingTenantPaymentEvidenceLink } from "@/server/services/storage.service";
 import { createSupabaseServerClient } from "@/server/supabase/server";
 
 type ManagerTenantsPageProps = {
@@ -39,54 +33,17 @@ export default async function ManagerTenantsPage({
     redirect("/manager/onboarding");
   }
 
-  const [
-    properties,
-    units,
-    tenants,
-    payments,
-    agreementDocuments,
-    onboardingRequests,
-  ] =
-    await Promise.all([
-      listManagerProperties(supabase, organization.id),
-      listManagerUnits(supabase, { organizationId: organization.id }),
-      listManagerTenants(supabase, { organizationId: organization.id }),
-      listManagerRentPayments(supabase, organization.id),
-      listManagerTenantAgreementDocuments(supabase, {
-        organizationId: organization.id,
-      }),
-      listManagerTenantOnboardingRequests(supabase, {
-        organizationId: organization.id,
-      }),
-    ]);
-  const existingTenantEvidence = await Promise.all(
-    onboardingRequests
-      .filter(
-        (request) =>
-          request.onboarding_type === "current_occupant" &&
-          Boolean(request.approved_tenant_id) &&
-          Boolean(request.existing_tenant_last_payment_receipt_path),
-      )
-      .map(async (request) => ({
-        tenantId: request.approved_tenant_id ?? "",
-        amount: request.existing_tenant_last_payment_amount,
-        paymentDate: request.existing_tenant_last_payment_date,
-        receipt: await createExistingTenantPaymentEvidenceLink({
-          path: request.existing_tenant_last_payment_receipt_path,
-          fileName: request.existing_tenant_last_payment_receipt_file_name,
-        }),
-      })),
-  );
-
+  const [properties, units, tenants] = await Promise.all([
+    listManagerProperties(supabase, organization.id),
+    listManagerUnits(supabase, { organizationId: organization.id }),
+    listManagerTenants(supabase, { organizationId: organization.id }),
+  ]);
 
   return (
     <ManagerTenantsOfflineView
       initialProperties={properties}
       initialUnits={units}
       initialTenants={tenants}
-      initialPayments={payments}
-      agreementDocuments={agreementDocuments}
-      existingTenantEvidence={existingTenantEvidence}
       searchQuery={resolvedSearchParams?.q ?? ""}
       rentFilter={resolvedSearchParams?.rent ?? "all"}
     />

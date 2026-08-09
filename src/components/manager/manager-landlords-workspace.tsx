@@ -374,7 +374,7 @@ export function ManagerLandlordsWorkspace({
                       <th className="px-4 py-3 text-center">Occupied units</th>
                       <th className="px-4 py-3">Pending remittance</th>
                       <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3 text-right">Actions</th>
+                      <th className="px-4 py-3 text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border-soft">
@@ -441,17 +441,8 @@ export function ManagerLandlordsWorkspace({
                                 onClick={() => setSelectedLandlordId(item.client.id)}
                                 className="inline-flex min-h-9 items-center justify-center rounded-button border border-border-soft px-3 text-xs font-extrabold text-text-strong transition hover:bg-surface"
                               >
-                                View
+                                View details →
                               </button>
-                              <Link
-                                href={`/manager/properties?q=${encodeURIComponent(
-                                  item.client.landlord_name,
-                                )}`}
-                                prefetch={false}
-                                className="inline-flex min-h-9 items-center justify-center rounded-button border border-primary/20 px-3 text-xs font-extrabold text-primary transition hover:bg-primary-soft"
-                              >
-                                Open properties
-                              </Link>
                             </div>
                           </td>
                         </tr>
@@ -495,15 +486,9 @@ export function ManagerLandlordsWorkspace({
                         </p>
                       </div>
                     </div>
-                    <Link
-                      href={`/manager/properties?q=${encodeURIComponent(
-                        item.client.landlord_name,
-                      )}`}
-                      prefetch={false}
-                      className="inline-flex min-h-10 w-full items-center justify-center rounded-button border border-border-soft text-sm font-extrabold text-text-strong"
-                    >
-                      Open properties
-                    </Link>
+                    <button type="button" onClick={() => setSelectedLandlordId(item.client.id)} className="inline-flex min-h-10 w-full items-center justify-center rounded-button border border-border-soft text-sm font-extrabold text-text-strong">
+                      View details →
+                    </button>
                   </article>
                 ))}
               </div>
@@ -580,40 +565,6 @@ export function ManagerLandlordsWorkspace({
                   {selectedPosition.client.landlord_email ?? "Email not added"}
                 </span>
               </p>
-            </div>
-
-            <div className="mt-5">
-              <h2 className="font-black text-text-strong">Current position</h2>
-              <dl className="mt-3 space-y-3 text-sm">
-                <div className="flex items-center justify-between gap-4">
-                  <dt className="flex items-center gap-2 font-semibold text-text-muted">
-                    <Building2 size={16} /> Properties
-                  </dt>
-                  <dd className="font-black text-text-strong">
-                    {selectedPosition.propertyCount}
-                  </dd>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <dt className="flex items-center gap-2 font-semibold text-text-muted">
-                    <UserRound size={16} /> Occupied units
-                  </dt>
-                  <dd className="font-black text-text-strong">
-                    {selectedPosition.occupiedUnits}
-                  </dd>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <dt className="font-semibold text-text-muted">Pending remittance</dt>
-                  <dd className="font-black text-text-strong">
-                    {formatNaira(selectedPosition.pendingRemittance)}
-                  </dd>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <dt className="font-semibold text-text-muted">Tenant balances</dt>
-                  <dd className="font-black text-text-strong">
-                    {formatNaira(selectedPosition.owingAmount)}
-                  </dd>
-                </div>
-              </dl>
             </div>
 
             <div className="mt-5 border-t border-border-soft pt-5">

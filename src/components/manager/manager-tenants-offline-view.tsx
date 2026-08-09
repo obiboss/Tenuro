@@ -10,29 +10,14 @@ import {
 } from "@/lib/offline/manager-data";
 import type {
   ManagerPropertyRow,
-  ManagerRentPaymentRow,
   ManagerTenantRow,
   ManagerUnitRow,
 } from "@/server/repositories/manager.repository";
-import type { ManagerTenantAgreementDocumentRow } from "@/server/repositories/manager-tenant-onboarding.repository";
-
-type ExistingTenantEvidence = Array<{
-  tenantId: string;
-  amount: number | null;
-  paymentDate: string | null;
-  receipt: {
-    label: string;
-    signedUrl: string | null;
-  };
-}>;
 
 type ManagerTenantsOfflineViewProps = {
   initialProperties: ManagerPropertyRow[];
   initialUnits: ManagerUnitRow[];
   initialTenants: ManagerTenantRow[];
-  initialPayments: ManagerRentPaymentRow[];
-  agreementDocuments: ManagerTenantAgreementDocumentRow[];
-  existingTenantEvidence: ExistingTenantEvidence;
   searchQuery: string;
   rentFilter: string;
 };
@@ -81,9 +66,6 @@ export function ManagerTenantsOfflineView({
   initialProperties,
   initialUnits,
   initialTenants,
-  initialPayments,
-  agreementDocuments,
-  existingTenantEvidence,
   searchQuery,
   rentFilter,
 }: ManagerTenantsOfflineViewProps) {
@@ -94,7 +76,6 @@ export function ManagerTenantsOfflineView({
     mergeManagerRows(initialUnits, offline.units),
     tenants,
   );
-  const payments = mergeManagerRows(initialPayments, offline.payments);
   const tenantSummary = getTenantSummary({ tenants, units });
 
   return (
@@ -143,9 +124,6 @@ export function ManagerTenantsOfflineView({
         properties={properties}
         units={units}
         tenants={tenants}
-        payments={payments}
-        agreementDocuments={agreementDocuments}
-        existingTenantEvidence={existingTenantEvidence}
         searchQuery={searchQuery}
         rentFilter={rentFilter}
       />

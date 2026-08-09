@@ -1777,7 +1777,7 @@ function getTenantOverviewAction(
 ): ManagerOverviewAction {
   return {
     label: "View tenant",
-    href: `/manager/tenants#tenant-${tenant.id}`,
+    href: `/manager/tenants/${tenant.id}`,
   };
 }
 
@@ -1954,7 +1954,7 @@ export function buildManagerOverviewAttentionItems(params: {
       title: isIncompleteExistingCapture
         ? "Existing tenant details incomplete"
         : isSubmittedKyc
-          ? "Tenant details ready for review"
+          ? "New application"
           : "First payment needs follow-up",
       subject: tenantName,
       detail: `${unit?.unit_label ?? "Unit"} - ${

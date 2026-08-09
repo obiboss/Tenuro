@@ -105,7 +105,6 @@ export function ManagerOperationalOverview({
   overview,
 }: ManagerOperationalOverviewProps) {
   const visibleAttentionItems = overview.attentionItems.slice(0, 5);
-  const primaryAction = overview.primaryAction;
   const attentionCount = overview.attentionItems.length;
   const canRecordFirstPayment =
     overview.totals.totalProperties > 0 && overview.totals.totalTenants > 0;
@@ -127,10 +126,6 @@ export function ManagerOperationalOverview({
       label: "Rent collected",
       value: formatCurrency(overview.rentPosition.rentCollected),
     },
-    {
-      label: "Vacant units",
-      value: numberFormatter.format(overview.rentPosition.vacantUnits),
-    },
   ];
 
   return (
@@ -145,136 +140,21 @@ export function ManagerOperationalOverview({
           </p>
         </div>
 
-        {primaryAction ? (
-          <Link
-            href={primaryAction.href}
-            prefetch={false}
-            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-          >
-            {primaryAction.label}
-            <ArrowRight className="size-4" aria-hidden="true" />
-          </Link>
-        ) : null}
-      </section>
-
-      <section
-        aria-labelledby="manager-attention-title"
-        className="rounded-lg border border-border-soft bg-white"
-      >
-        <div className="flex items-center justify-between gap-3 border-b border-border-soft px-4 py-2.5">
-          <div>
-            <h2
-              id="manager-attention-title"
-              className="text-base font-black text-text-strong"
-            >
-              Needs attention {numberFormatter.format(attentionCount)}
-            </h2>
-            <p className="text-xs font-semibold text-text-muted">
-              Highest-priority work first
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            {attentionCount > 5 ? (
-              <Link
-                href="/manager/attention"
-                prefetch={false}
-                className="text-sm font-extrabold text-primary underline-offset-4 hover:underline"
-              >
-                View all {numberFormatter.format(attentionCount)}
-              </Link>
-            ) : null}
-            <CircleAlert
-              className="size-5 text-text-muted"
-              aria-hidden="true"
-            />
-          </div>
-        </div>
-
-        {visibleAttentionItems.length > 0 ? (
-          <ul className="divide-y divide-border-soft">
-            {visibleAttentionItems.map((item) => {
-              const classes = getToneClasses(item.tone);
-
-              return (
-                <li
-                  key={item.id}
-                  className="flex flex-col gap-2.5 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={cn(
-                          "h-2 w-2 rounded-full",
-                          item.tone === "danger"
-                            ? "bg-danger"
-                            : item.tone === "warning"
-                              ? "bg-warning"
-                              : "bg-text-muted",
-                        )}
-                        aria-hidden="true"
-                      />
-                      <p className="text-sm font-extrabold text-text-strong">
-                        {item.title}
-                      </p>
-                    </div>
-                    <p className="mt-0.5 text-sm font-semibold text-text-normal">
-                      {item.subject}
-                    </p>
-                    <p className="mt-0.5 text-xs font-semibold text-text-muted">
-                      {item.detail}
-                    </p>
-                  </div>
-
-                  <Link
-                    href={item.action.href}
-                    prefetch={false}
-                    className={cn(
-                      "inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-md border px-3 text-sm font-extrabold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
-                      classes.border,
-                      classes.background,
-                      classes.text,
-                    )}
-                  >
-                    {item.action.label}
-                    <ArrowRight className="size-4" aria-hidden="true" />
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <div className="px-4 py-2.5">
-            <p className="text-sm font-semibold text-text-muted">
-              Nothing needs your attention right now.
-            </p>
-          </div>
-        )}
       </section>
 
       <section
         aria-labelledby="manager-rent-position-title"
-        className="rounded-lg border border-border-soft bg-white px-4 py-2.5"
+        className="rounded-lg border border-border-soft bg-white p-4"
       >
-        <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-          <h2
-            id="manager-rent-position-title"
-            className="shrink-0 text-base font-black text-text-strong"
-          >
-            Rent position
-          </h2>
+        <h2 id="manager-rent-position-title" className="text-base font-black text-text-strong">Rent position</h2>
+        <dl className="mt-3 grid grid-cols-2 overflow-hidden rounded-button border border-border-soft sm:grid-cols-4">
+          {rentPositionItems.map((item) => <div key={item.label} className="border-b border-r border-border-soft p-3 text-sm last:border-r-0 sm:border-b-0"><dt className="font-semibold text-text-muted">{item.label}</dt><dd className="mt-1 text-lg font-black text-text-strong">{item.value}</dd></div>)}
+        </dl>
+      </section>
 
-          <dl className="flex flex-wrap gap-x-6 gap-y-1.5">
-            {rentPositionItems.map((item) => (
-              <div
-                key={item.label}
-                className="flex items-baseline gap-1.5 text-sm"
-              >
-                <dt className="font-semibold text-text-muted">{item.label}</dt>
-                <dd className="font-black text-text-strong">{item.value}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
+      <section aria-labelledby="manager-attention-title" className="rounded-lg border border-border-soft bg-white">
+        <div className="flex items-center justify-between gap-3 border-b border-border-soft px-4 py-2.5"><div><h2 id="manager-attention-title" className="text-base font-black text-text-strong">Needs attention {numberFormatter.format(attentionCount)}</h2><p className="text-xs font-semibold text-text-muted">Highest-priority work first</p></div><div className="flex items-center gap-3">{attentionCount > 5 ? <Link href="/manager/attention" prefetch={false} className="text-sm font-extrabold text-primary hover:underline">View all {numberFormatter.format(attentionCount)}</Link> : null}<CircleAlert className="size-5 text-text-muted" aria-hidden="true" /></div></div>
+        {visibleAttentionItems.length ? <ul className="divide-y divide-border-soft">{visibleAttentionItems.map((item) => { const classes = getToneClasses(item.tone); return <li key={item.id} className="flex flex-col gap-2.5 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className={cn("text-sm font-extrabold", classes.text)}>{item.title}</p><p className="mt-0.5 text-sm font-semibold text-text-normal">{item.subject}</p><p className="mt-0.5 text-xs font-semibold text-text-muted">{item.detail}</p></div><Link href={item.action.href} prefetch={false} className={cn("inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-md border px-3 text-sm font-extrabold", classes.border, classes.background, classes.text)}>{item.action.label}<ArrowRight className="size-4" aria-hidden="true" /></Link></li>; })}</ul> : <div className="px-4 py-2.5"><p className="text-sm font-semibold text-text-muted">Nothing needs your attention right now.</p></div>}
       </section>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -501,7 +381,13 @@ export function ManagerOperationalOverview({
               </table>
             </div>
 
-            <div className="divide-y divide-border-soft md:hidden">
+            <div className="flex items-center justify-between gap-4 p-4 md:hidden">
+              <p className="text-sm font-semibold text-text-muted">
+                {numberFormatter.format(overview.propertySummaries.length)} properties · {numberFormatter.format(overview.propertySummaries.filter((property) => property.needsAttentionCount > 0).length)} need attention
+              </p>
+              <Link href="/manager/properties" prefetch={false} className="shrink-0 text-sm font-extrabold text-primary hover:underline">View properties →</Link>
+            </div>
+            <div className="hidden divide-y divide-border-soft md:hidden">
               {overview.propertySummaries.map((property) => (
                 <Link
                   key={property.id}

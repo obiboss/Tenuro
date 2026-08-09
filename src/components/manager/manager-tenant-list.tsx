@@ -10,27 +10,14 @@ import {
 } from "@/lib/offline/manager-data";
 import type {
   ManagerPropertyRow,
-  ManagerRentPaymentRow,
   ManagerTenantRow,
   ManagerUnitRow,
 } from "@/server/repositories/manager.repository";
-import type { ManagerTenantAgreementDocumentRow } from "@/server/repositories/manager-tenant-onboarding.repository";
 
 type ManagerTenantListProps = {
   properties: ManagerPropertyRow[];
   units: ManagerUnitRow[];
   tenants: ManagerTenantRow[];
-  payments: ManagerRentPaymentRow[];
-  agreementDocuments: ManagerTenantAgreementDocumentRow[];
-  existingTenantEvidence: Array<{
-    tenantId: string;
-    amount: number | null;
-    paymentDate: string | null;
-    receipt: {
-      label: string;
-      signedUrl: string | null;
-    };
-  }>;
   searchQuery: string;
   rentFilter: string;
 };
@@ -108,9 +95,6 @@ export function ManagerTenantList({
   properties,
   units,
   tenants,
-  payments,
-  agreementDocuments,
-  existingTenantEvidence,
   searchQuery,
   rentFilter,
 }: ManagerTenantListProps) {
@@ -124,36 +108,6 @@ export function ManagerTenantList({
   );
   const unitById = new Map(units.map((unit) => [unit.id, unit]));
   const lowerSearchQuery = safeSearchQuery.toLowerCase();
-  const agreementsByTenantId = new Map<
-    string,
-    ManagerTenantAgreementDocumentRow[]
-  >();
-  const paymentsByTenantId = new Map<string, ManagerRentPaymentRow[]>();
-  const evidenceByTenantId = new Map(
-    existingTenantEvidence.map((evidence) => [evidence.tenantId, evidence]),
-  );
-
-  for (const agreement of agreementDocuments) {
-    if (agreement.document_status !== "accepted") {
-      continue;
-    }
-
-    agreementsByTenantId.set(agreement.tenant_id, [
-      ...(agreementsByTenantId.get(agreement.tenant_id) ?? []),
-      agreement,
-    ]);
-  }
-
-  for (const payment of payments) {
-    if (payment.status !== "verified" && payment.status !== "recorded") {
-      continue;
-    }
-
-    paymentsByTenantId.set(payment.tenant_id, [
-      ...(paymentsByTenantId.get(payment.tenant_id) ?? []),
-      payment,
-    ]);
-  }
 
   const filteredTenants = tenants
     .filter(
@@ -214,7 +168,7 @@ export function ManagerTenantList({
             Tenant list
           </h2>
           <p className="text-sm font-semibold leading-6 text-text-muted">
-            Search tenants, check balances, and open the property they belong to.
+            Search tenants, check their rent position, and open a tenant record.
           </p>
         </div>
 
@@ -297,11 +251,6 @@ export function ManagerTenantList({
                 {filteredTenants.map((tenant) => {
                   const unit = unitById.get(tenant.unit_id);
                   const rentStatus = getManagerTenantRentStatus({ tenant, unit });
-                  const tenantAgreements =
-                    agreementsByTenantId.get(tenant.id) ?? [];
-                  const tenantPayments = paymentsByTenantId.get(tenant.id) ?? [];
-                  const tenantEvidence = evidenceByTenantId.get(tenant.id);
-                  const isPendingLocal = isManagerUnsyncedRow(tenant);
 
                   return (
                     <tr
@@ -360,60 +309,13 @@ export function ManagerTenantList({
                         </span>
                       </td>
                       <td className="px-4 py-4 text-right">
-                        <div className="flex flex-col items-end gap-2">
-                          <Link
-                            href={`/manager/properties/${tenant.property_id}`}
-                            prefetch={false}
-                            className="inline-flex min-h-10 items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
-                          >
-                            Open property
-                          </Link>
-
-                          {isPendingLocal ? (
-                            <p className="max-w-44 text-right text-xs font-semibold leading-5 text-text-muted">
-                              Documents become available after this record syncs.
-                            </p>
-                          ) : (
-                            <>
-                              <Link
-                                href={`/manager/tenants/${tenant.id}/download`}
-                                prefetch={false}
-                                className="text-xs font-black text-primary underline-offset-4 hover:underline"
-                              >
-                                Download tenant details (PDF)
-                              </Link>
-                              {tenantAgreements.slice(0, 1).map((agreement) => (
-                                <Link
-                                  key={agreement.id}
-                                  href={`/manager/agreements/${agreement.id}/download`}
-                                  prefetch={false}
-                                  className="text-xs font-black text-primary underline-offset-4 hover:underline"
-                                >
-                                  Download agreement
-                                </Link>
-                              ))}
-                              {tenantPayments.slice(0, 2).map((payment) => (
-                                <Link
-                                  key={payment.id}
-                                  href={`/manager/receipts/${payment.id}/download`}
-                                  prefetch={false}
-                                  className="text-xs font-black text-primary underline-offset-4 hover:underline"
-                                >
-                                  Receipt {formatDate(payment.payment_date)}
-                                </Link>
-                              ))}
-                              {tenantEvidence?.receipt.signedUrl ? (
-                                <Link
-                                  href={tenantEvidence.receipt.signedUrl}
-                                  target="_blank"
-                                  className="text-xs font-black text-primary underline-offset-4 hover:underline"
-                                >
-                                  Last payment evidence
-                                </Link>
-                              ) : null}
-                            </>
-                          )}
-                        </div>
+                        <Link
+                          href={`/manager/tenants/${tenant.id}`}
+                          prefetch={false}
+                          className="inline-flex min-h-10 items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
+                        >
+                          View details →
+                        </Link>
                       </td>
                     </tr>
                   );
@@ -426,10 +328,6 @@ export function ManagerTenantList({
             {filteredTenants.map((tenant) => {
               const unit = unitById.get(tenant.unit_id);
               const rentStatus = getManagerTenantRentStatus({ tenant, unit });
-              const tenantAgreements = agreementsByTenantId.get(tenant.id) ?? [];
-              const tenantPayments = paymentsByTenantId.get(tenant.id) ?? [];
-              const tenantEvidence = evidenceByTenantId.get(tenant.id);
-              const isPendingLocal = isManagerUnsyncedRow(tenant);
 
               return (
                 <article
@@ -456,6 +354,9 @@ export function ManagerTenantList({
                         {formatNaira(tenant.rent_amount)} · Due{" "}
                         {formatDate(tenant.next_rent_due_date)}
                       </p>
+                      <p className="mt-1 text-sm font-semibold text-text-muted">
+                        Balance {formatNaira(tenant.current_balance)}
+                      </p>
                       {tenant.last_payment_amount && tenant.last_payment_date ? (
                         <p className="mt-1 text-xs font-semibold text-text-muted">
                           Last paid {formatNaira(tenant.last_payment_amount)} on {formatDate(tenant.last_payment_date)}
@@ -472,69 +373,12 @@ export function ManagerTenantList({
                   </div>
 
                   <Link
-                    href={`/manager/properties/${tenant.property_id}`}
+                    href={`/manager/tenants/${tenant.id}`}
                     prefetch={false}
                     className="mt-4 inline-flex min-h-10 w-full items-center justify-center rounded-button bg-primary px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary/90"
                   >
-                    Open property
+                    View details →
                   </Link>
-
-                  {isPendingLocal ? (
-                    <p className="mt-3 rounded-button bg-primary-soft px-3 py-2 text-sm font-semibold leading-6 text-primary">
-                      Saved on this device. Documents will be available after sync.
-                    </p>
-                  ) : (
-                    <>
-                      <Link
-                        href={`/manager/tenants/${tenant.id}/download`}
-                        prefetch={false}
-                        className="mt-2 inline-flex min-h-10 w-full items-center justify-center rounded-button border border-border-soft bg-white px-4 text-sm font-extrabold text-text-strong transition hover:bg-surface"
-                      >
-                        Download tenant details (PDF)
-                      </Link>
-
-                      {tenantAgreements.length > 0 ||
-                      tenantPayments.length > 0 ||
-                      tenantEvidence?.receipt.signedUrl ? (
-                        <div className="mt-3 rounded-card bg-surface p-3">
-                          <p className="text-xs font-black uppercase tracking-wide text-text-muted">
-                            Documents
-                          </p>
-                          <div className="mt-2 flex flex-col gap-2">
-                            {tenantAgreements.slice(0, 1).map((agreement) => (
-                              <Link
-                                key={agreement.id}
-                                href={`/manager/agreements/${agreement.id}/download`}
-                                prefetch={false}
-                                className="text-sm font-black text-primary"
-                              >
-                                Download agreement
-                              </Link>
-                            ))}
-                            {tenantPayments.slice(0, 2).map((payment) => (
-                              <Link
-                                key={payment.id}
-                                href={`/manager/receipts/${payment.id}/download`}
-                                prefetch={false}
-                                className="text-sm font-black text-primary"
-                              >
-                                Receipt {formatDate(payment.payment_date)}
-                              </Link>
-                            ))}
-                            {tenantEvidence?.receipt.signedUrl ? (
-                              <Link
-                                href={tenantEvidence.receipt.signedUrl}
-                                target="_blank"
-                                className="text-sm font-black text-primary"
-                              >
-                                Last payment evidence
-                              </Link>
-                            ) : null}
-                          </div>
-                        </div>
-                      ) : null}
-                    </>
-                  )}
                 </article>
               );
             })}

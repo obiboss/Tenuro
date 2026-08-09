@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { managerSignOutAction } from "@/actions/manager-auth.actions";
 import { ToastProvider } from "@/components/ui/toast-provider";
+import { ManagerMobileMoreMenu } from "@/components/manager/manager-mobile-more-menu";
 import { cn } from "@/lib/cn";
 import {
   MANAGER_STAFF_ROLE_LABELS,
@@ -164,9 +165,17 @@ export function ManagerShell({
       ),
     }))
     .filter((section) => section.items.length > 0);
-  const visibleMobileNavItems = visibleNavSections.flatMap(
-    (section) => section.items,
+  const visibleNavItems = visibleNavSections.flatMap((section) => section.items);
+  const mobilePrimaryItems = visibleNavItems.filter((item) =>
+    ["/manager/overview", "/manager/tenants", "/manager/payments"].includes(item.href),
   );
+  const mobileMoreSections = [
+    { label: "Work", items: visibleNavItems.filter((item) => ["/manager/properties", "/manager/maintenance"].includes(item.href)) },
+    { label: "Money", items: visibleNavItems.filter((item) => ["/manager/payouts", "/manager/remittances", "/manager/reports"].includes(item.href)) },
+    { label: "Business", items: visibleNavItems.filter((item) => ["/manager/landlords", "/manager/staff"].includes(item.href)) },
+    { label: "Tools", items: visibleNavItems.filter((item) => item.href === "/manager/import") },
+    { label: "Account", items: visibleNavItems.filter((item) => item.href === "/manager/settings") },
+  ];
 
   return (
     <ToastProvider>
@@ -264,8 +273,8 @@ export function ManagerShell({
           aria-label="Mobile manager navigation"
           className="fixed inset-x-0 bottom-0 z-40 border-t border-border-soft bg-white px-2 py-2 shadow-2xl lg:hidden"
         >
-          <div className="flex gap-1 overflow-x-auto pb-1">
-            {visibleMobileNavItems.map((item) => {
+          <div className="grid grid-cols-4 gap-1">
+            {mobilePrimaryItems.map((item) => {
               const active =
                 pathname === item.href || pathname.startsWith(`${item.href}/`);
               const Icon = item.icon;
@@ -281,7 +290,7 @@ export function ManagerShell({
                   }
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "flex min-w-20 flex-col items-center justify-center gap-1 rounded-lg px-2 py-2.5 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+                    "flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg px-1 text-[11px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
                     active
                       ? "bg-primary-soft text-primary"
                       : "text-text-muted hover:bg-primary-soft hover:text-primary",
@@ -292,6 +301,7 @@ export function ManagerShell({
                 </Link>
               );
             })}
+            <ManagerMobileMoreMenu sections={mobileMoreSections} />
           </div>
         </nav>
       </div>
