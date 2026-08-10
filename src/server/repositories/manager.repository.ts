@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { buildRentReminderWhatsappMessage } from "@/lib/rent-reminder-message";
 import {
   MANAGER_CURRENT_TENANT_STATUSES,
   type ManagerCurrentTenantStatus,
@@ -309,6 +310,8 @@ export type ManagerOverviewAttentionItem = {
   action: ManagerOverviewAction;
   tone: ManagerOverviewAttentionTone;
   priority: number;
+  phoneNumber?: string | null;
+  whatsappMessage?: string;
 };
 
 export type ManagerOverviewRentPosition = {
@@ -1853,6 +1856,7 @@ export function buildManagerOverviewAttentionItems(params: {
   remittances: ManagerLandlordRemittanceRow[];
   onboardingRequests: ManagerTenantOnboardingRequestRow[];
   maintenanceRequests: ManagerMaintenanceRequestRow[];
+  organizationName?: string | null;
 }): ManagerOverviewAttentionItem[] {
   const propertyById = new Map(
     params.properties.map((property) => [property.id, property]),
@@ -1883,6 +1887,9 @@ export function buildManagerOverviewAttentionItems(params: {
     const unit = unitById.get(tenant.unit_id);
     const daysFromToday = rentStatus.daysFromToday ?? 0;
     const isOverdue = daysFromToday < 0;
+    const propertyUnitLabel = `${property?.property_name ?? "Property"}, ${
+      unit?.unit_label ?? "Unit"
+    }`;
 
     attentionItems.push({
       id: `tenant-rent-${tenant.id}`,
@@ -1900,6 +1907,16 @@ export function buildManagerOverviewAttentionItems(params: {
       action: getTenantOverviewAction(tenant),
       tone: isOverdue ? "danger" : "warning",
       priority: 700_000 + Math.max(0, Math.abs(daysFromToday)),
+      phoneNumber: tenant.phone_number ?? null,
+      whatsappMessage: buildRentReminderWhatsappMessage({
+        tenantName: tenant.full_name,
+        propertyUnitLabel,
+        amount: rentStatus.amountDue,
+        outstandingBalance: rentStatus.amountDue,
+        dueDate: tenant.next_rent_due_date,
+        daysUntilDue: daysFromToday,
+        landlordName: params.organizationName ?? "BOPA",
+      }),
     });
   }
 
@@ -2473,6 +2490,7 @@ export async function getManagerOverview(
     remittances,
     onboardingRequests,
     maintenanceRequests,
+    organizationName: organization.organization_name,
   });
 
   return {
