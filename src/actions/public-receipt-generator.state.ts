@@ -20,6 +20,7 @@ export type PublicReceiptGeneratorActionState = {
     watermarkText: string;
     downloadUrl: string;
     claimUrl: string;
+    remainingReceipts: number;
   };
 };
 

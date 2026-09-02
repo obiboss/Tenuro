@@ -17,6 +17,8 @@ type GeneratedReceiptResultProps = {
     whatsappMessage: string;
     watermarkText: string;
     downloadUrl: string;
+    receiptId: string;
+    remainingReceipts: number;
   };
 };
 
@@ -62,6 +64,18 @@ export function GeneratedReceiptResult({
 
           <a
             href={whatsappHref}
+            onClick={() => {
+              const downloadUrl = new URL(receipt.downloadUrl, window.location.origin);
+              void fetch(`/api/public-tools/receipt/${receipt.receiptId}/activity`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  token: downloadUrl.searchParams.get("token"),
+                  action: "whatsapp_shared",
+                }),
+                keepalive: true,
+              });
+            }}
             target="_blank"
             rel="noreferrer"
             className="inline-flex min-h-11 items-center justify-center rounded-button bg-success px-5 py-2.5 text-center text-sm font-extrabold text-white shadow-soft transition hover:opacity-90"
@@ -139,6 +153,9 @@ export function GeneratedReceiptResult({
 
       <p className="mt-5 border-t border-border-soft pt-4 text-xs font-semibold text-text-muted">
         {receipt.watermarkText}
+      </p>
+      <p className="mt-2 text-sm font-bold text-primary">
+        {receipt.remainingReceipts} receipt{receipt.remainingReceipts === 1 ? "" : "s"} remaining
       </p>
     </div>
   );

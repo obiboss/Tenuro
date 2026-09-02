@@ -15,6 +15,10 @@ import {
 } from "@/server/repositories/public-agreement-generator.repository";
 import { createPublicToolLead } from "@/server/repositories/public-tool-leads.repository";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
+import {
+  consumePublicDocumentCredit,
+  createPublicDocumentIdentityFingerprint,
+} from "@/server/services/public-document-entitlement.service";
 import type {
   PublicAgreementDuration,
   PublicAgreementGeneratorInput,
@@ -40,6 +44,7 @@ export type GeneratedPublicAgreementPreview = {
   downloadUrl: string;
   whatsappMessage: string;
   claimUrl: string;
+  remainingAgreements: number;
 };
 
 function getAppUrl() {
@@ -535,11 +540,21 @@ export async function generatePublicTenancyAgreementPreview(
     },
   );
 
+  const entitlement = await consumePublicDocumentCredit({
+    identityFingerprint: createPublicDocumentIdentityFingerprint({
+      landlordFullName: input.landlordFullName,
+      landlordPhoneNumber: input.landlordPhoneNumber,
+      propertyAddress: input.propertyAddress,
+    }),
+    product: "tenancy_agreement",
+  });
+
   await createAgreementUsageEvent(supabase, {
     leadId: lead.id,
     agreementId: updatedAgreement.id,
     eventType: "agreement_generated",
     sourcePath: input.sourcePath,
+    workflowKey: updatedAgreement.id,
     metadata: {
       tenancy_duration_months: tenancyDurationMonths,
       rent_amount: input.rentAmount,
@@ -569,6 +584,7 @@ export async function generatePublicTenancyAgreementPreview(
     downloadUrl,
     whatsappMessage,
     claimUrl,
+    remainingAgreements: entitlement.remaining,
   };
 }
 
@@ -616,10 +632,26 @@ export async function getPublicGeneratedAgreementForDownload(params: {
     agreementId: agreement.id,
     eventType: "agreement_downloaded",
     sourcePath: "/agreement-generator/download",
+    workflowKey: agreement.id,
     metadata: {
       agreement_title: agreement.agreement_title,
     },
   });
 
   return agreement;
+}
+
+export async function recordPublicAgreementWhatsappShare(params: {
+  agreementId: string;
+  token: string;
+}) {
+  const agreement = await getPublicGeneratedAgreementForDownload(params);
+  await createAgreementUsageEvent(createSupabaseAdminClient(), {
+    leadId: agreement.lead_id,
+    agreementId: agreement.id,
+    eventType: "agreement_whatsapp_shared",
+    sourcePath: "/api/public-tools/agreement/activity",
+    workflowKey: agreement.id,
+    metadata: { agreement_title: agreement.agreement_title },
+  });
 }

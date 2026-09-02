@@ -15,6 +15,10 @@ import {
   type PublicGeneratedReceiptRow,
 } from "@/server/repositories/public-tool-leads.repository";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
+import {
+  consumePublicDocumentCredit,
+  createPublicDocumentIdentityFingerprint,
+} from "@/server/services/public-document-entitlement.service";
 import type {
   PublicReceiptDuration,
   PublicReceiptGeneratorInput,
@@ -38,6 +42,7 @@ export type GeneratedPublicReceiptResult = {
   watermarkText: string;
   downloadUrl: string;
   claimUrl: string;
+  remainingReceipts: number;
 };
 
 function getAppUrl() {
@@ -363,11 +368,21 @@ export async function generatePublicRentReceipt(
     },
   );
 
+  const entitlement = await consumePublicDocumentCredit({
+    identityFingerprint: createPublicDocumentIdentityFingerprint({
+      landlordFullName: input.landlordFullName,
+      landlordPhoneNumber: input.landlordPhoneNumber,
+      propertyAddress: input.propertyAddress,
+    }),
+    product: "receipt",
+  });
+
   await createReceiptUsageEvent(supabase, {
     leadId: lead.id,
     receiptId: updatedReceipt.id,
     eventType: "receipt_generated",
     sourcePath: input.sourcePath,
+    workflowKey: updatedReceipt.id,
     metadata: {
       rent_amount: input.rentAmount,
       rent_duration_months: rentDurationMonths,
@@ -394,6 +409,7 @@ export async function generatePublicRentReceipt(
     watermarkText: "Generated with BOPA — boldverseproperty.com",
     downloadUrl,
     claimUrl,
+    remainingReceipts: entitlement.remaining,
   };
 }
 
@@ -441,10 +457,26 @@ export async function getPublicGeneratedReceiptForDownload(params: {
     receiptId: receipt.id,
     eventType: "receipt_downloaded",
     sourcePath: "/receipt-generator/download",
+    workflowKey: receipt.id,
     metadata: {
       receipt_number: receipt.receipt_number,
     },
   });
 
   return receipt;
+}
+
+export async function recordPublicReceiptWhatsappShare(params: {
+  receiptId: string;
+  token: string;
+}) {
+  const receipt = await getPublicGeneratedReceiptForDownload(params);
+  await createReceiptUsageEvent(createSupabaseAdminClient(), {
+    leadId: receipt.lead_id,
+    receiptId: receipt.id,
+    eventType: "receipt_whatsapp_shared",
+    sourcePath: "/api/public-tools/receipt/activity",
+    workflowKey: receipt.id,
+    metadata: { receipt_number: receipt.receipt_number },
+  });
 }

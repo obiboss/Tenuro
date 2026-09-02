@@ -328,17 +328,25 @@ export async function createReceiptUsageEvent(
       | "signup_completed"
       | "receipt_attached_to_account";
     sourcePath: string;
+    workflowKey?: string;
     metadata?: Record<string, unknown>;
   },
 ) {
-  const { error } = await supabase.from("receipt_usage_events").insert({
+  const payload = {
     lead_id: params.leadId,
     receipt_id: params.receiptId,
     profile_id: params.profileId ?? null,
     event_type: params.eventType,
     source_path: params.sourcePath,
+    workflow_key: params.workflowKey ?? null,
     metadata: params.metadata ?? {},
-  });
+  };
+  const query = params.workflowKey
+    ? supabase.from("receipt_usage_events").upsert(payload, {
+        onConflict: "workflow_key",
+      })
+    : supabase.from("receipt_usage_events").insert(payload);
+  const { error } = await query;
 
   if (error) {
     throw error;

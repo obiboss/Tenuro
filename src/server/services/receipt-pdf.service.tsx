@@ -374,7 +374,9 @@ function PublicReceiptPdfDocument({
     >
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
-          <Text style={styles.brand}>Boldverse Property</Text>
+          <Text style={styles.brand}>
+            {receipt.property_name ?? "Property"}
+          </Text>
           <Text style={styles.title}>Rent Receipt</Text>
           <Text style={styles.meta}>
             Receipt No: {receipt.receipt_number} | Generated:{" "}
@@ -409,7 +411,7 @@ function PublicReceiptPdfDocument({
         </View>
 
         <Text style={styles.footer}>
-          Generated with BOPA — boldverseproperty.com
+          Powered by Boldverse Property
         </Text>
       </Page>
     </Document>

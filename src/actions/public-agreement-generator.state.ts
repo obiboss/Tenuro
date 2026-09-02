@@ -20,6 +20,7 @@ export type PublicAgreementGeneratorActionState = {
     downloadUrl: string;
     whatsappMessage: string;
     claimUrl: string;
+    remainingAgreements: number;
   };
 };
 
