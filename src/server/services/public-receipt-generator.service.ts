@@ -17,7 +17,7 @@ import {
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import {
   consumePublicDocumentCredit,
-  createPublicDocumentIdentityFingerprint,
+  createPublicDocumentIdentityFingerprints,
 } from "@/server/services/public-document-entitlement.service";
 import type {
   PublicReceiptDuration,
@@ -368,12 +368,13 @@ export async function generatePublicRentReceipt(
     },
   );
 
-  const entitlement = await consumePublicDocumentCredit({
-    identityFingerprint: createPublicDocumentIdentityFingerprint({
+  const identity = createPublicDocumentIdentityFingerprints({
       landlordFullName: input.landlordFullName,
       landlordPhoneNumber: input.landlordPhoneNumber,
       propertyAddress: input.propertyAddress,
-    }),
+  });
+  const entitlement = await consumePublicDocumentCredit({
+    ...identity,
     product: "receipt",
   });
 

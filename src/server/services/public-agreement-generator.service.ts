@@ -17,7 +17,7 @@ import { createPublicToolLead } from "@/server/repositories/public-tool-leads.re
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import {
   consumePublicDocumentCredit,
-  createPublicDocumentIdentityFingerprint,
+  createPublicDocumentIdentityFingerprints,
 } from "@/server/services/public-document-entitlement.service";
 import type {
   PublicAgreementDuration,
@@ -540,12 +540,13 @@ export async function generatePublicTenancyAgreementPreview(
     },
   );
 
-  const entitlement = await consumePublicDocumentCredit({
-    identityFingerprint: createPublicDocumentIdentityFingerprint({
+  const identity = createPublicDocumentIdentityFingerprints({
       landlordFullName: input.landlordFullName,
       landlordPhoneNumber: input.landlordPhoneNumber,
       propertyAddress: input.propertyAddress,
-    }),
+  });
+  const entitlement = await consumePublicDocumentCredit({
+    ...identity,
     product: "tenancy_agreement",
   });
 

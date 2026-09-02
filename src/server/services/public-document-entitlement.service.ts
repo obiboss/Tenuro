@@ -18,6 +18,29 @@ function normalizeAddress(value: string) {
   return value.trim().toLocaleLowerCase().replace(/\s+/g, " ");
 }
 
+function getFingerprintSecret() {
+  const secret =
+    process.env.PUBLIC_DOCUMENT_FINGERPRINT_SECRET ??
+    process.env.PAYSTACK_SECRET_KEY;
+
+  if (!secret) {
+    throw new AppError(
+      "PUBLIC_DOCUMENT_FINGERPRINT_SECRET_MISSING",
+      "Document usage is not configured.",
+      500,
+    );
+  }
+
+  return secret;
+}
+
+function hashIdentityPart(value: string) {
+  return crypto
+    .createHmac("sha256", getFingerprintSecret())
+    .update(value)
+    .digest("hex");
+}
+
 export function createPublicDocumentIdentityFingerprint(params: {
   landlordFullName: string;
   landlordPhoneNumber: string;
@@ -32,15 +55,38 @@ export function createPublicDocumentIdentityFingerprint(params: {
   return crypto.createHash("sha256").update(canonicalIdentity).digest("hex");
 }
 
+export function createPublicDocumentIdentityFingerprints(params: {
+  landlordFullName: string;
+  landlordPhoneNumber: string;
+  propertyAddress: string;
+}) {
+  const landlordName = normalizeName(params.landlordFullName);
+  const landlordPhone = normalizePhone(params.landlordPhoneNumber);
+  const propertyAddress = normalizeAddress(params.propertyAddress);
+
+  return {
+    identityFingerprint: createPublicDocumentIdentityFingerprint(params),
+    landlordNameFingerprint: hashIdentityPart(landlordName),
+    landlordPhoneFingerprint: hashIdentityPart(landlordPhone),
+    propertyAddressFingerprint: hashIdentityPart(propertyAddress),
+  };
+}
+
 export async function consumePublicDocumentCredit(params: {
   identityFingerprint: string;
   product: PublicDocumentProduct;
+  landlordNameFingerprint: string;
+  landlordPhoneFingerprint: string;
+  propertyAddressFingerprint: string;
 }) {
   const { data, error } = await createSupabaseAdminClient().rpc(
-    "consume_public_document_credit",
+    "consume_public_document_credit_with_identity",
     {
       p_identity_fingerprint: params.identityFingerprint,
       p_product_type: params.product,
+      p_landlord_name_fingerprint: params.landlordNameFingerprint,
+      p_landlord_phone_fingerprint: params.landlordPhoneFingerprint,
+      p_property_address_fingerprint: params.propertyAddressFingerprint,
     },
   );
 
