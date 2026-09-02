@@ -17,7 +17,10 @@ function hasValidSignature(rawBody: string, signature: string | null) {
     return false;
   }
 
-  const expected = crypto.createHmac("sha512", secretKey).update(rawBody).digest("hex");
+  const expected = crypto
+    .createHmac("sha512", secretKey)
+    .update(rawBody)
+    .digest("hex");
   const expectedBuffer = Buffer.from(expected, "hex");
   const receivedBuffer = Buffer.from(signature, "hex");
 
@@ -57,7 +60,11 @@ export async function POST(request: Request) {
   const reference = event.data?.reference;
   const amount = event.data?.amount;
   const currency = event.data?.currency;
-  if (typeof reference !== "string" || typeof amount !== "number" || typeof currency !== "string") {
+  if (
+    typeof reference !== "string" ||
+    typeof amount !== "number" ||
+    typeof currency !== "string"
+  ) {
     return NextResponse.json({ ok: true });
   }
 

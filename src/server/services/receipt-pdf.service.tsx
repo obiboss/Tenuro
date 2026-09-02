@@ -410,9 +410,7 @@ function PublicReceiptPdfDocument({
           </Text>
         </View>
 
-        <Text style={styles.footer}>
-          Powered by Boldverse Property
-        </Text>
+        <Text style={styles.footer}>Powered by Boldverse Property</Text>
       </Page>
     </Document>
   );
@@ -422,13 +420,12 @@ export async function renderRentReceiptPdf(
   payment: RentPaymentRow,
   breakdown?: RentReceiptPaymentBreakdown,
 ) {
-  const paymentBreakdown: RentReceiptPaymentBreakdown =
-    breakdown ?? {
-      rentAmount: Number(payment.amount_paid),
-      bopaServiceFeeAmount: 0,
-      totalPaidAmount: Number(payment.amount_paid),
-      feePercentage: null,
-    };
+  const paymentBreakdown: RentReceiptPaymentBreakdown = breakdown ?? {
+    rentAmount: Number(payment.amount_paid),
+    bopaServiceFeeAmount: 0,
+    totalPaidAmount: Number(payment.amount_paid),
+    feePercentage: null,
+  };
 
   return renderToBuffer(
     <ReceiptPdfDocument payment={payment} breakdown={paymentBreakdown} />,

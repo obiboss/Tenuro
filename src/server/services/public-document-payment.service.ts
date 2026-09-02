@@ -9,13 +9,19 @@ import {
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import type { PublicDocumentProduct } from "@/server/services/public-document-entitlement.service";
 
-const PAYMENT_CONFIG: Record<PublicDocumentProduct, { amountKobo: number; credits: number }> = {
+const PAYMENT_CONFIG: Record<
+  PublicDocumentProduct,
+  { amountKobo: number; credits: number }
+> = {
   receipt: { amountKobo: 250000, credits: 24 },
   tenancy_agreement: { amountKobo: 1000000, credits: 3 },
 };
 
 function appUrl() {
-  return (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
+  return (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(
+    /\/$/,
+    "",
+  );
 }
 
 export async function initializePublicDocumentPayment(params: {
@@ -53,7 +59,11 @@ export async function verifyPublicDocumentPayment(params: {
     transaction.amount !== config.amountKobo ||
     transaction.currency !== "NGN"
   ) {
-    throw new AppError("PUBLIC_DOCUMENT_PAYMENT_INVALID", "Payment could not be verified.", 402);
+    throw new AppError(
+      "PUBLIC_DOCUMENT_PAYMENT_INVALID",
+      "Payment could not be verified.",
+      402,
+    );
   }
 
   const metadata = transaction.metadata as Record<string, unknown> | null;
@@ -63,7 +73,11 @@ export async function verifyPublicDocumentPayment(params: {
       ? metadata.identity_fingerprint
       : null);
   if (metadata?.product_type !== params.product || !identityFingerprint) {
-    throw new AppError("PUBLIC_DOCUMENT_PAYMENT_INVALID", "Payment could not be verified.", 402);
+    throw new AppError(
+      "PUBLIC_DOCUMENT_PAYMENT_INVALID",
+      "Payment could not be verified.",
+      402,
+    );
   }
 
   const { data, error } = await createSupabaseAdminClient().rpc(

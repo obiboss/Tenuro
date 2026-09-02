@@ -16,7 +16,10 @@ export async function GET(request: Request) {
     (product !== "receipt" && product !== "tenancy_agreement") ||
     !reference
   ) {
-    return NextResponse.json({ message: "Payment reference is required." }, { status: 400 });
+    return NextResponse.json(
+      { message: "Payment reference is required." },
+      { status: 400 },
+    );
   }
 
   const transaction = await verifyPaystackTransaction(reference);

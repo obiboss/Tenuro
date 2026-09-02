@@ -78,7 +78,11 @@ export function ReceiptGeneratorForm({
 
   return (
     <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
-      <form id="public-receipt-generator-form" action={formAction} className="space-y-6">
+      <form
+        id="public-receipt-generator-form"
+        action={formAction}
+        className="space-y-6"
+      >
         <input type="hidden" name="sourcePath" value={sourcePath} />
         <input
           type="hidden"

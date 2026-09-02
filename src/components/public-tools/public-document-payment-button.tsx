@@ -22,6 +22,8 @@ export function PublicDocumentPaymentButton(
 ) {
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  const isReceipt = props.product === "receipt";
 
   async function startPayment() {
     setPending(true);
@@ -79,7 +81,11 @@ export function PublicDocumentPaymentButton(
         },
       }).openIframe();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Payment could not be started.");
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Payment could not be started.",
+      );
     } finally {
       setPending(false);
     }
@@ -87,14 +93,88 @@ export function PublicDocumentPaymentButton(
 
   return (
     <div>
-      <button type="button" onClick={startPayment} disabled={pending}>
-        {pending
-          ? "Opening payment..."
-          : props.product === "receipt"
-            ? "Get 24 more receipts for ₦2,500"
-            : "Get 3 more agreements for ₦10,000"}
+      <button
+        type="button"
+        onClick={() => {
+          setMessage("");
+          setIsOpen(true);
+        }}
+        className="min-h-11 w-full rounded-button bg-primary px-5 py-3 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary-hover"
+      >
+        {isReceipt ? "Get 24 more receipts" : "Get 3 more agreements"}
       </button>
-      {message ? <p>{message}</p> : null}
+
+      {message ? (
+        <p className="mt-3 text-sm font-semibold leading-6 text-warning">
+          {message}
+        </p>
+      ) : null}
+
+      {isOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !pending) {
+              setIsOpen(false);
+            }
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-card bg-white p-6 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="public-document-payment-title"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-bold text-primary">BOPA public tool</p>
+                <h2
+                  id="public-document-payment-title"
+                  className="mt-1 text-2xl font-black tracking-tight text-text-strong"
+                >
+                  {isReceipt ? "Get 24 more receipts" : "Get 3 more tenancy agreements"}
+                </h2>
+              </div>
+              <button
+                type="button"
+                aria-label="Close payment details"
+                onClick={() => setIsOpen(false)}
+                disabled={pending}
+                className="text-2xl font-bold leading-none text-text-muted hover:text-text-strong"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="mt-6 rounded-button bg-primary-soft p-4">
+              <p className="text-sm font-bold text-primary">Package includes</p>
+              <p className="mt-2 text-base font-black text-text-strong">
+                {isReceipt
+                  ? "24 additional successful receipt generations"
+                  : "3 additional successful tenancy agreement generations"}
+              </p>
+              <p className="mt-3 text-2xl font-black text-text-strong">
+                {isReceipt ? "₦2,500" : "₦10,000"}
+              </p>
+            </div>
+
+            <p className="mt-4 text-sm leading-6 text-text-muted">
+              Payment is processed securely by Paystack. Your credits are added
+              after the payment is verified.
+            </p>
+
+            <button
+              type="button"
+              onClick={startPayment}
+              disabled={pending}
+              className="mt-6 min-h-12 w-full rounded-button bg-primary px-5 py-3 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {pending ? "Opening Paystack..." : "Buy now"}
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

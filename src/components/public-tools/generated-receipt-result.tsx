@@ -65,16 +65,22 @@ export function GeneratedReceiptResult({
           <a
             href={whatsappHref}
             onClick={() => {
-              const downloadUrl = new URL(receipt.downloadUrl, window.location.origin);
-              void fetch(`/api/public-tools/receipt/${receipt.receiptId}/activity`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  token: downloadUrl.searchParams.get("token"),
-                  action: "whatsapp_shared",
-                }),
-                keepalive: true,
-              });
+              const downloadUrl = new URL(
+                receipt.downloadUrl,
+                window.location.origin,
+              );
+              void fetch(
+                `/api/public-tools/receipt/${receipt.receiptId}/activity`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    token: downloadUrl.searchParams.get("token"),
+                    action: "whatsapp_shared",
+                  }),
+                  keepalive: true,
+                },
+              );
             }}
             target="_blank"
             rel="noreferrer"
@@ -155,7 +161,8 @@ export function GeneratedReceiptResult({
         {receipt.watermarkText}
       </p>
       <p className="mt-2 text-sm font-bold text-primary">
-        {receipt.remainingReceipts} receipt{receipt.remainingReceipts === 1 ? "" : "s"} remaining
+        {receipt.remainingReceipts} receipt
+        {receipt.remainingReceipts === 1 ? "" : "s"} remaining
       </p>
     </div>
   );

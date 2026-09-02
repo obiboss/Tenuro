@@ -125,7 +125,11 @@ export function AgreementGeneratorForm({
 
   return (
     <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
-      <form id="public-agreement-generator-form" action={formAction} className="space-y-6">
+      <form
+        id="public-agreement-generator-form"
+        action={formAction}
+        className="space-y-6"
+      >
         <input type="hidden" name="sourcePath" value={sourcePath} />
 
         <section className="rounded-card bg-surface p-5 shadow-card md:p-6">

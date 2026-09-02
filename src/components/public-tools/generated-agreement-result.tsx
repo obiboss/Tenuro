@@ -67,16 +67,22 @@ export function GeneratedAgreementResult({
           <a
             href={whatsappHref}
             onClick={() => {
-              const downloadUrl = new URL(agreement.downloadUrl, window.location.origin);
-              void fetch(`/api/public-tools/agreement/${agreement.agreementId}/activity`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  token: downloadUrl.searchParams.get("token"),
-                  action: "whatsapp_shared",
-                }),
-                keepalive: true,
-              });
+              const downloadUrl = new URL(
+                agreement.downloadUrl,
+                window.location.origin,
+              );
+              void fetch(
+                `/api/public-tools/agreement/${agreement.agreementId}/activity`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    token: downloadUrl.searchParams.get("token"),
+                    action: "whatsapp_shared",
+                  }),
+                  keepalive: true,
+                },
+              );
             }}
             target="_blank"
             rel="noreferrer"
@@ -163,7 +169,8 @@ export function GeneratedAgreementResult({
         {agreement.watermarkText}
       </p>
       <p className="mt-2 text-sm font-bold text-primary">
-        {agreement.remainingAgreements} agreement{agreement.remainingAgreements === 1 ? "" : "s"} remaining
+        {agreement.remainingAgreements} agreement
+        {agreement.remainingAgreements === 1 ? "" : "s"} remaining
       </p>
     </div>
   );

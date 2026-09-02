@@ -57,15 +57,17 @@ export async function trackPublicDocumentPaymentIntent(params: {
     );
   }
 
-  const { error } = await supabase.from("public_document_payment_intents").insert({
-    reference: params.reference,
-    identity_fingerprint: params.identityFingerprint,
-    package_identifier: params.product,
-    expected_amount_kobo: packageConfig.amountKobo,
-    expected_currency: packageConfig.currency,
-    credit_count: packageConfig.creditCount,
-    status: "pending",
-  });
+  const { error } = await supabase
+    .from("public_document_payment_intents")
+    .insert({
+      reference: params.reference,
+      identity_fingerprint: params.identityFingerprint,
+      package_identifier: params.product,
+      expected_amount_kobo: packageConfig.amountKobo,
+      expected_currency: packageConfig.currency,
+      credit_count: packageConfig.creditCount,
+      status: "pending",
+    });
 
   if (error) {
     throw error;
@@ -95,7 +97,11 @@ export function assertPendingPaymentIntent(params: {
   currency?: string;
 }) {
   if (!params.intent) {
-    throw new AppError("PUBLIC_DOCUMENT_PAYMENT_INVALID", "Payment could not be verified.", 402);
+    throw new AppError(
+      "PUBLIC_DOCUMENT_PAYMENT_INVALID",
+      "Payment could not be verified.",
+      402,
+    );
   }
 
   if (params.intent.status === "verified") {
@@ -110,13 +116,19 @@ export function assertPendingPaymentIntent(params: {
     (params.currency !== undefined &&
       params.intent.expected_currency !== params.currency)
   ) {
-    throw new AppError("PUBLIC_DOCUMENT_PAYMENT_INVALID", "Payment could not be verified.", 402);
+    throw new AppError(
+      "PUBLIC_DOCUMENT_PAYMENT_INVALID",
+      "Payment could not be verified.",
+      402,
+    );
   }
 
   return true;
 }
 
-export async function markPublicDocumentPaymentIntentVerified(reference: string) {
+export async function markPublicDocumentPaymentIntentVerified(
+  reference: string,
+) {
   const { error } = await createSupabaseAdminClient()
     .from("public_document_payment_intents")
     .update({ status: "verified", updated_at: new Date().toISOString() })

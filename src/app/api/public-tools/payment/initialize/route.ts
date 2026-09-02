@@ -7,12 +7,20 @@ import { initializePublicDocumentPayment } from "@/server/services/public-docume
 import { trackPublicDocumentPaymentIntent } from "@/server/services/public-document-payment-tracking.service";
 
 export async function POST(request: Request) {
-  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+  const body = (await request.json().catch(() => null)) as Record<
+    string,
+    unknown
+  > | null;
   const product = body?.product;
   const email = typeof body?.email === "string" ? body.email.trim() : "";
-  const landlordFullName = typeof body?.landlordFullName === "string" ? body.landlordFullName : "";
-  const landlordPhoneNumber = typeof body?.landlordPhoneNumber === "string" ? body.landlordPhoneNumber : "";
-  const propertyAddress = typeof body?.propertyAddress === "string" ? body.propertyAddress : "";
+  const landlordFullName =
+    typeof body?.landlordFullName === "string" ? body.landlordFullName : "";
+  const landlordPhoneNumber =
+    typeof body?.landlordPhoneNumber === "string"
+      ? body.landlordPhoneNumber
+      : "";
+  const propertyAddress =
+    typeof body?.propertyAddress === "string" ? body.propertyAddress : "";
 
   if (
     (product !== "receipt" && product !== "tenancy_agreement") ||
@@ -21,7 +29,10 @@ export async function POST(request: Request) {
     !landlordPhoneNumber ||
     !propertyAddress
   ) {
-    return NextResponse.json({ message: "Payment details are incomplete." }, { status: 400 });
+    return NextResponse.json(
+      { message: "Payment details are incomplete." },
+      { status: 400 },
+    );
   }
 
   const result = await initializePublicDocumentPayment({
