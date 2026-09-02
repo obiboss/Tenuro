@@ -23,6 +23,7 @@ export function PublicDocumentPaymentButton(
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [paymentEmail, setPaymentEmail] = useState("");
   const isReceipt = props.product === "receipt";
 
   async function startPayment() {
@@ -36,12 +37,16 @@ export function PublicDocumentPaymentButton(
       }
 
       const formData = new FormData(form);
+      if (!paymentEmail.trim()) {
+        throw new Error("Enter an email address to continue with payment.");
+      }
+
       const response = await fetch("/api/public-tools/payment/initialize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           product: props.product,
-          email: formData.get("landlordEmail"),
+          email: paymentEmail.trim(),
           landlordFullName: formData.get("landlordFullName"),
           landlordPhoneNumber: formData.get("landlordPhoneNumber"),
           propertyAddress: formData.get("propertyAddress"),
@@ -97,6 +102,13 @@ export function PublicDocumentPaymentButton(
         type="button"
         onClick={() => {
           setMessage("");
+          const form = document.getElementById(props.formId);
+          if (form instanceof HTMLFormElement) {
+            const formEmail = new FormData(form).get("landlordEmail");
+            if (typeof formEmail === "string") {
+              setPaymentEmail(formEmail.trim());
+            }
+          }
           setIsOpen(true);
         }}
         className="min-h-11 w-full rounded-button bg-primary px-5 py-3 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary-hover"
@@ -158,6 +170,19 @@ export function PublicDocumentPaymentButton(
                 {isReceipt ? "₦2,500" : "₦10,000"}
               </p>
             </div>
+
+            <label className="mt-5 block text-sm font-bold text-text-strong">
+              Email for payment receipt
+              <input
+                type="email"
+                value={paymentEmail}
+                onChange={(event) => setPaymentEmail(event.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email"
+                className="mt-2 min-h-12 w-full rounded-button border border-border-soft bg-white px-4 py-3 text-base font-normal text-text-strong outline-none focus:border-primary focus:ring-2 focus:ring-primary-soft"
+                required
+              />
+            </label>
 
             <p className="mt-4 text-sm leading-6 text-text-muted">
               Payment is processed securely by Paystack. Your credits are added
