@@ -2,6 +2,7 @@ export type PublicAgreementGeneratorActionState = {
   ok: boolean;
   message: string;
   fieldErrors?: Record<string, string[]>;
+  paymentRequired?: boolean;
   agreement?: {
     leadId: string;
     agreementId: string;

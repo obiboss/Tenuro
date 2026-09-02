@@ -35,12 +35,12 @@ where agreement_id is not null
   and event_type in ('agreement_generated', 'agreement_downloaded', 'agreement_whatsapp_shared')
   and workflow_key is null;
 
-create unique index if not exists receipt_usage_events_workflow_key_uidx
-  on public.receipt_usage_events (workflow_key)
-  where workflow_key is not null;
-create unique index if not exists agreement_usage_events_workflow_key_uidx
-  on public.agreement_usage_events (workflow_key)
-  where workflow_key is not null;
+drop index if exists public.receipt_usage_events_workflow_key_uidx;
+drop index if exists public.agreement_usage_events_workflow_key_uidx;
+create unique index receipt_usage_events_workflow_key_uidx
+  on public.receipt_usage_events (workflow_key);
+create unique index agreement_usage_events_workflow_key_uidx
+  on public.agreement_usage_events (workflow_key);
 
 create table if not exists public.public_document_entitlements (
   id uuid primary key default gen_random_uuid(),

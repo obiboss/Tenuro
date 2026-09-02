@@ -4,6 +4,7 @@ import {
   type PublicDocumentProduct,
 } from "@/server/services/public-document-entitlement.service";
 import { initializePublicDocumentPayment } from "@/server/services/public-document-payment.service";
+import { trackPublicDocumentPaymentIntent } from "@/server/services/public-document-payment-tracking.service";
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
@@ -31,6 +32,16 @@ export async function POST(request: Request) {
       landlordPhoneNumber,
       propertyAddress,
     }),
+  });
+
+  await trackPublicDocumentPaymentIntent({
+    reference: result.reference,
+    identityFingerprint: createPublicDocumentIdentityFingerprint({
+      landlordFullName,
+      landlordPhoneNumber,
+      propertyAddress,
+    }),
+    product: product as PublicDocumentProduct,
   });
 
   return NextResponse.json(result);

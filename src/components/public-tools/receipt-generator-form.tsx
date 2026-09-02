@@ -5,6 +5,7 @@ import { generatePublicReceiptAction } from "@/actions/public-receipt-generator.
 import { initialPublicReceiptGeneratorState } from "@/actions/public-receipt-generator.state";
 import { GeneratedReceiptResult } from "@/components/public-tools/generated-receipt-result";
 import { FreeToolAccountPrompt } from "@/components/public-tools/free-tool-account-prompt";
+import { PublicDocumentPaymentButton } from "@/components/public-tools/public-document-payment-button";
 import { Button } from "@/components/ui/button";
 import {
   addDaysToDateOnly,
@@ -77,7 +78,7 @@ export function ReceiptGeneratorForm({
 
   return (
     <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
-      <form action={formAction} className="space-y-6">
+      <form id="public-receipt-generator-form" action={formAction} className="space-y-6">
         <input type="hidden" name="sourcePath" value={sourcePath} />
         <input
           type="hidden"
@@ -346,6 +347,15 @@ export function ReceiptGeneratorForm({
               }`}
             >
               {state.message}
+            </div>
+          ) : null}
+
+          {state.paymentRequired ? (
+            <div className="mt-5 rounded-button bg-warning-soft p-4 text-sm font-semibold leading-6 text-warning">
+              <PublicDocumentPaymentButton
+                product="receipt"
+                formId="public-receipt-generator-form"
+              />
             </div>
           ) : null}
 

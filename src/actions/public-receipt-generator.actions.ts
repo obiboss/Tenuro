@@ -3,6 +3,7 @@
 import { generatePublicRentReceipt } from "@/server/services/public-receipt-generator.service";
 import { publicReceiptGeneratorSchema } from "@/server/validators/public-receipt-generator.schema";
 import type { PublicReceiptGeneratorActionState } from "@/actions/public-receipt-generator.state";
+import { isAppError } from "@/server/errors/app-error";
 
 function getFormString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -62,6 +63,8 @@ export async function generatePublicReceiptAction(
     return {
       ok: false,
       message: getActionErrorMessage(error),
+      paymentRequired:
+        isAppError(error) && error.code === "PUBLIC_DOCUMENT_PAYMENT_REQUIRED",
     };
   }
 }

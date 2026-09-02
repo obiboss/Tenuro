@@ -3,6 +3,7 @@
 import type { PublicAgreementGeneratorActionState } from "@/actions/public-agreement-generator.state";
 import { generatePublicTenancyAgreementPreview } from "@/server/services/public-agreement-generator.service";
 import { publicAgreementGeneratorSchema } from "@/server/validators/public-agreement-generator.schema";
+import { isAppError } from "@/server/errors/app-error";
 
 function getFormString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -71,6 +72,8 @@ export async function generatePublicAgreementAction(
     return {
       ok: false,
       message: getActionErrorMessage(error),
+      paymentRequired:
+        isAppError(error) && error.code === "PUBLIC_DOCUMENT_PAYMENT_REQUIRED",
     };
   }
 }

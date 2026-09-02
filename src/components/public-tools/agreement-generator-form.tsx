@@ -5,6 +5,7 @@ import { generatePublicAgreementAction } from "@/actions/public-agreement-genera
 import { initialPublicAgreementGeneratorState } from "@/actions/public-agreement-generator.state";
 import { FreeAgreementAccountPrompt } from "@/components/public-tools/free-agreement-account-prompt";
 import { GeneratedAgreementResult } from "@/components/public-tools/generated-agreement-result";
+import { PublicDocumentPaymentButton } from "@/components/public-tools/public-document-payment-button";
 import { Button } from "@/components/ui/button";
 import {
   addDaysToDateOnly,
@@ -124,7 +125,7 @@ export function AgreementGeneratorForm({
 
   return (
     <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
-      <form action={formAction} className="space-y-6">
+      <form id="public-agreement-generator-form" action={formAction} className="space-y-6">
         <input type="hidden" name="sourcePath" value={sourcePath} />
 
         <section className="rounded-card bg-surface p-5 shadow-card md:p-6">
@@ -511,6 +512,15 @@ export function AgreementGeneratorForm({
               }`}
             >
               {state.message}
+            </div>
+          ) : null}
+
+          {state.paymentRequired ? (
+            <div className="mt-5 rounded-button bg-warning-soft p-4 text-sm font-semibold leading-6 text-warning">
+              <PublicDocumentPaymentButton
+                product="tenancy_agreement"
+                formId="public-agreement-generator-form"
+              />
             </div>
           ) : null}
 
