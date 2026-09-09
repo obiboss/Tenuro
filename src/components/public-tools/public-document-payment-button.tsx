@@ -1,10 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 type PublicDocumentPaymentButtonProps = {
   product: "receipt" | "tenancy_agreement";
   formId: string;
+  identity?: {
+    landlordFullName: string;
+    landlordPhoneNumber: string;
+    propertyAddress: string;
+  };
 };
 
 type PaystackWindow = Window & {
@@ -24,9 +29,15 @@ export function PublicDocumentPaymentButton(
   const [pending, setPending] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [paymentEmail, setPaymentEmail] = useState("");
+  const initializationInFlight = useRef(false);
   const isReceipt = props.product === "receipt";
 
   async function startPayment() {
+    if (initializationInFlight.current) {
+      return;
+    }
+
+    initializationInFlight.current = true;
     setPending(true);
     setMessage("");
 
@@ -47,9 +58,13 @@ export function PublicDocumentPaymentButton(
         body: JSON.stringify({
           product: props.product,
           email: paymentEmail.trim(),
-          landlordFullName: formData.get("landlordFullName"),
-          landlordPhoneNumber: formData.get("landlordPhoneNumber"),
-          propertyAddress: formData.get("propertyAddress"),
+          landlordFullName:
+            props.identity?.landlordFullName ?? formData.get("landlordFullName"),
+          landlordPhoneNumber:
+            props.identity?.landlordPhoneNumber ??
+            formData.get("landlordPhoneNumber"),
+          propertyAddress:
+            props.identity?.propertyAddress ?? formData.get("propertyAddress"),
         }),
       });
       const initialized = (await response.json()) as {
@@ -92,6 +107,7 @@ export function PublicDocumentPaymentButton(
           : "Payment could not be started.",
       );
     } finally {
+      initializationInFlight.current = false;
       setPending(false);
     }
   }

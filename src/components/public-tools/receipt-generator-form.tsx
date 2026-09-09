@@ -70,6 +70,9 @@ export function ReceiptGeneratorForm({
   );
   const [rentStartDate, setRentStartDate] = useState("");
   const [rentDuration, setRentDuration] = useState("1_year");
+  const [landlordFullName, setLandlordFullName] = useState("");
+  const [landlordPhoneNumber, setLandlordPhoneNumber] = useState("");
+  const [propertyAddress, setPropertyAddress] = useState("");
 
   const calculatedEndDate = useMemo(
     () => calculateEndDate(rentStartDate, rentDuration),
@@ -102,6 +105,8 @@ export function ReceiptGeneratorForm({
               </label>
               <input
                 name="landlordFullName"
+                value={landlordFullName}
+                onChange={(event) => setLandlordFullName(event.target.value)}
                 className={fieldClassName(
                   Boolean(state.fieldErrors?.landlordFullName?.[0]),
                 )}
@@ -116,6 +121,8 @@ export function ReceiptGeneratorForm({
               </label>
               <input
                 name="landlordPhoneNumber"
+                value={landlordPhoneNumber}
+                onChange={(event) => setLandlordPhoneNumber(event.target.value)}
                 className={fieldClassName(
                   Boolean(state.fieldErrors?.landlordPhoneNumber?.[0]),
                 )}
@@ -219,6 +226,8 @@ export function ReceiptGeneratorForm({
               </label>
               <input
                 name="propertyAddress"
+                value={propertyAddress}
+                onChange={(event) => setPropertyAddress(event.target.value)}
                 className={fieldClassName(
                   Boolean(state.fieldErrors?.propertyAddress?.[0]),
                 )}
@@ -359,6 +368,11 @@ export function ReceiptGeneratorForm({
               <PublicDocumentPaymentButton
                 product="receipt"
                 formId="public-receipt-generator-form"
+                identity={{
+                  landlordFullName,
+                  landlordPhoneNumber,
+                  propertyAddress,
+                }}
               />
             </div>
           ) : null}

@@ -58,13 +58,17 @@ export async function generatePublicReceiptAction(
       receipt,
     };
   } catch (error) {
-    console.error("generatePublicReceiptAction failed:", error);
+    const paymentRequired =
+      isAppError(error) && error.code === "PUBLIC_DOCUMENT_PAYMENT_REQUIRED";
+
+    if (!paymentRequired) {
+      console.error("generatePublicReceiptAction failed:", error);
+    }
 
     return {
       ok: false,
       message: getActionErrorMessage(error),
-      paymentRequired:
-        isAppError(error) && error.code === "PUBLIC_DOCUMENT_PAYMENT_REQUIRED",
+      paymentRequired,
     };
   }
 }
