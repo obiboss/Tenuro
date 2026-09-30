@@ -41,7 +41,10 @@ const paystackTransactionResponseSchema = z.object({
       currency: z.string().length(3),
       paid_at: z.string().nullable().optional(),
       metadata: z.unknown(),
-      plan: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
+      plan: z
+        .union([z.string(), z.record(z.string(), z.unknown())])
+        .nullable()
+        .optional(),
       customer: z.record(z.string(), z.unknown()).optional(),
     })
     .passthrough(),
