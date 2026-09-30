@@ -1,11 +1,5 @@
 import { NextResponse } from "next/server";
-import { verifyPublicDocumentPayment } from "@/server/services/public-document-payment.service";
-import {
-  assertPendingPaymentIntent,
-  getPublicDocumentPaymentIntent,
-  markPublicDocumentPaymentIntentVerified,
-} from "@/server/services/public-document-payment-tracking.service";
-import { verifyPaystackTransaction } from "@/server/services/paystack.service";
+import { confirmPublicDocumentPayment } from "@/server/services/public-document-payment.service";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -22,23 +16,9 @@ export async function GET(request: Request) {
     );
   }
 
-  const transaction = await verifyPaystackTransaction(reference);
-  const intent = await getPublicDocumentPaymentIntent(reference);
-  const shouldGrant = assertPendingPaymentIntent({
-    intent,
-    product,
-    amountKobo: transaction.amount,
-    currency: transaction.currency,
-  });
-
-  if (!shouldGrant) {
-    return NextResponse.json({ granted: false, alreadyVerified: true });
-  }
-
-  const result = await verifyPublicDocumentPayment({
-    product,
+  const result = await confirmPublicDocumentPayment({
     reference,
+    expectedProduct: product,
   });
-  await markPublicDocumentPaymentIntentVerified(reference);
   return NextResponse.json(result);
 }

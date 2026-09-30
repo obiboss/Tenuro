@@ -59,7 +59,8 @@ export function PublicDocumentPaymentButton(
           product: props.product,
           email: paymentEmail.trim(),
           landlordFullName:
-            props.identity?.landlordFullName ?? formData.get("landlordFullName"),
+            props.identity?.landlordFullName ??
+            formData.get("landlordFullName"),
           landlordPhoneNumber:
             props.identity?.landlordPhoneNumber ??
             formData.get("landlordPhoneNumber"),
@@ -67,20 +68,35 @@ export function PublicDocumentPaymentButton(
             props.identity?.propertyAddress ?? formData.get("propertyAddress"),
         }),
       });
-      const initialized = (await response.json()) as {
+      const rawResponse = await response.text();
+      console.info("[PUBLIC_PAYMENT_RESPONSE]", {
+        status: response.status,
+        contentType: response.headers.get("content-type"),
+        requestId: response.headers.get("x-request-id"),
+        raw: rawResponse,
+      });
+      const initialized = (
+        rawResponse.trim() ? JSON.parse(rawResponse) : null
+      ) as {
         authorization_url?: string;
         access_code?: string;
         message?: string;
-      };
+        requestId?: string;
+      } | null;
 
-      if (!response.ok || !initialized.access_code) {
-        throw new Error(initialized.message ?? "Payment could not be started.");
+      if (!response.ok || !initialized?.access_code) {
+        throw new Error(
+          initialized?.message ?? "Payment could not be started.",
+        );
       }
 
       const paystack = window as PaystackWindow;
       const publicKey = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY;
       if (!publicKey || !paystack.PaystackPop) {
-        window.location.assign(initialized.authorization_url ?? "#");
+        if (!initialized.authorization_url) {
+          throw new Error("Paystack did not return an authorization URL.");
+        }
+        window.location.assign(initialized.authorization_url);
         return;
       }
 
@@ -156,12 +172,16 @@ export function PublicDocumentPaymentButton(
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm font-bold text-primary">BOPA public tool</p>
+                <p className="text-sm font-bold text-primary">
+                  BOPA public tool
+                </p>
                 <h2
                   id="public-document-payment-title"
                   className="mt-1 text-2xl font-black tracking-tight text-text-strong"
                 >
-                  {isReceipt ? "Get 24 more receipts" : "Get 3 more tenancy agreements"}
+                  {isReceipt
+                    ? "Get 24 more receipts"
+                    : "Get 3 more tenancy agreements"}
                 </h2>
               </div>
               <button

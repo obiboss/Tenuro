@@ -32,6 +32,7 @@ import {
 } from "@/server/services/manager-paystack.service";
 import { verifyTenantApplicationProcessingFeeReference } from "@/server/services/tenant-application-processing-fees.service";
 import { processBusinessSubscriptionPaystackWebhook } from "@/server/services/business-subscription-webhook.service";
+import { confirmPublicDocumentPayment } from "@/server/services/public-document-payment.service";
 import {
   auditGatewayPaymentReplayIgnored,
   buildPaystackRentPaymentIdempotencyKey,
@@ -739,11 +740,15 @@ export async function processGatewayPaystackWebhook(params: {
     signature: params.signature ?? "",
   });
 
-  const duplicateResult = await resolveDuplicateWebhookEvent({
-    supabase,
-    registeredEvent,
-    paymentReference: webhook.data.reference,
-  });
+  const isPublicDocumentPayment =
+    webhook.data.reference.startsWith("BOPA-DOC-");
+  const duplicateResult = isPublicDocumentPayment
+    ? null
+    : await resolveDuplicateWebhookEvent({
+        supabase,
+        registeredEvent,
+        paymentReference: webhook.data.reference,
+      });
 
   if (duplicateResult) {
     return duplicateResult;
@@ -785,6 +790,26 @@ export async function processGatewayPaystackWebhook(params: {
         status: "ignored",
         message: "Webhook ignored.",
         gatewayPaymentIntentId: ignoredIntent?.id ?? undefined,
+      };
+    }
+
+    if (isPublicDocumentPayment) {
+      const confirmation = await confirmPublicDocumentPayment({
+        reference: webhook.data.reference,
+      });
+
+      await markGatewayPaymentEventProcessed(supabase, {
+        eventId: registeredEvent.event.id,
+        verifiedPayload: rawPayload,
+      });
+
+      return {
+        status: confirmation.alreadyVerified ? "duplicate" : "processed",
+        message:
+          confirmation.alreadyVerified
+            ? "Public document payment webhook already processed."
+            : "Public document payment processed.",
+        verifiedPayload: rawPayload,
       };
     }
 

@@ -92,7 +92,50 @@ async function paystackRequest<T>(params: {
     cache: "no-store",
   });
 
-  const payload = (await response.json()) as PaystackResponse<T>;
+  const rawBody = await response.text();
+  const contentType = response.headers.get("content-type");
+  let payload: PaystackResponse<T> | null = null;
+
+  if (rawBody.trim()) {
+    try {
+      payload = JSON.parse(rawBody) as PaystackResponse<T>;
+    } catch {
+      if (params.path === "/transaction/initialize") {
+        console.error("[PAYSTACK_INITIALIZE_RESPONSE]", {
+          status: response.status,
+          ok: response.ok,
+          contentType,
+          bodyLength: rawBody.length,
+          parseable: false,
+        });
+      }
+
+      throw new AppError(
+        "PAYSTACK_INVALID_RESPONSE",
+        "Paystack returned an invalid response.",
+        response.ok ? 502 : response.status,
+      );
+    }
+  }
+
+  if (params.path === "/transaction/initialize") {
+    console.info("[PAYSTACK_INITIALIZE_RESPONSE]", {
+      status: response.status,
+      ok: response.ok,
+      contentType,
+      bodyLength: rawBody.length,
+      parseable: payload !== null,
+      message: payload?.message ?? null,
+    });
+  }
+
+  if (!payload) {
+    throw new AppError(
+      "PAYSTACK_EMPTY_RESPONSE",
+      "Paystack returned an empty response.",
+      response.ok ? 502 : response.status,
+    );
+  }
 
   if (!response.ok || !payload.status) {
     throw new AppError(
