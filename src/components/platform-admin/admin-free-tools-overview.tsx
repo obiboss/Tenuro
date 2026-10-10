@@ -1,8 +1,10 @@
 import { AdminFreeToolsUsersTable } from "@/components/platform-admin/admin-free-tools-users-table";
+import { AdminIdentityLinkingControl } from "@/components/platform-admin/admin-identity-linking-control";
 import type { PlatformAdminFreeToolsReport } from "@/server/services/platform-admin-free-tools.service";
 
 type AdminFreeToolsOverviewProps = {
   report: PlatformAdminFreeToolsReport;
+  identityLinkingEnabled: boolean;
 };
 
 const MINIMUM_CONVERSION_SAMPLE_SIZE = 10;
@@ -110,6 +112,7 @@ function ConversionTile({
 
 export function AdminFreeToolsOverview({
   report,
+  identityLinkingEnabled,
 }: AdminFreeToolsOverviewProps) {
   const { kpis, conversion, reconciliation } = report;
   const query = new URLSearchParams({
@@ -119,6 +122,8 @@ export function AdminFreeToolsOverview({
 
   return (
     <div className="space-y-6">
+      <AdminIdentityLinkingControl enabled={identityLinkingEnabled} />
+
       <section className="grid grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-4">
         <KpiCard
           label="Unique users"

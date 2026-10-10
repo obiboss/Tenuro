@@ -3,6 +3,7 @@ import { AdminFreeToolsOverview } from "@/components/platform-admin/admin-free-t
 import { PageHeader } from "@/components/ui/page-header";
 import {
   getPlatformAdminFreeToolsReport,
+  getPublicDocumentIdentityLinkingSetting,
   parsePlatformAdminFreeToolsPeriod,
   parsePlatformAdminFreeToolsProduct,
 } from "@/server/services/platform-admin-free-tools.service";
@@ -19,21 +20,29 @@ export default async function PlatformAdminFreeToolsPage({
   const params = await searchParams;
   const periodDays = parsePlatformAdminFreeToolsPeriod(params.period);
   const product = parsePlatformAdminFreeToolsProduct(params.product);
-  const report = await getPlatformAdminFreeToolsReport({
-    periodDays,
-    product,
-    page: 1,
-    pageSize: 10,
-  });
+  const [report, identityLinking] = await Promise.all([
+    getPlatformAdminFreeToolsReport({
+      periodDays,
+      product,
+      page: 1,
+      pageSize: 10,
+    }),
+    getPublicDocumentIdentityLinkingSetting(),
+  ]);
 
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader
         title="Free tools"
         description="See usage, payments and free-credit conversion for public document tools."
-        action={<AdminFreeToolsControls periodDays={periodDays} product={product} />}
+        action={
+          <AdminFreeToolsControls periodDays={periodDays} product={product} />
+        }
       />
-      <AdminFreeToolsOverview report={report} />
+      <AdminFreeToolsOverview
+        report={report}
+        identityLinkingEnabled={identityLinking.enabled}
+      />
     </div>
   );
 }

@@ -65,10 +65,6 @@ export function normalizePublicDocumentLinkAddress(value: string) {
   return normalized.length >= 15 ? normalized : null;
 }
 
-export function isPublicDocumentIdentityLinkingEnabled() {
-  return process.env.PUBLIC_DOCUMENT_IDENTITY_LINKING_ENABLED === "true";
-}
-
 export function createPublicDocumentIdentityFingerprint(params: {
   landlordFullName: string;
   landlordPhoneNumber: string;
@@ -119,30 +115,17 @@ export async function consumePublicDocumentCredit(params: {
   linkPhoneFingerprint: string | null;
   linkAddressFingerprint: string | null;
 }) {
-  const linkingEnabled = isPublicDocumentIdentityLinkingEnabled();
-  const rpcName = linkingEnabled
-    ? "consume_linked_public_document_credit"
-    : "consume_public_document_credit_with_identity";
-  const rpcParams = linkingEnabled
-    ? {
-        p_identity_fingerprint: params.identityFingerprint,
-        p_product_type: params.product,
-        p_landlord_name_fingerprint: params.landlordNameFingerprint,
-        p_landlord_phone_fingerprint: params.landlordPhoneFingerprint,
-        p_property_address_fingerprint: params.propertyAddressFingerprint,
-        p_link_phone_fingerprint: params.linkPhoneFingerprint,
-        p_link_address_fingerprint: params.linkAddressFingerprint,
-      }
-    : {
-        p_identity_fingerprint: params.identityFingerprint,
-        p_product_type: params.product,
-        p_landlord_name_fingerprint: params.landlordNameFingerprint,
-        p_landlord_phone_fingerprint: params.landlordPhoneFingerprint,
-        p_property_address_fingerprint: params.propertyAddressFingerprint,
-      };
   const { data, error } = await createSupabaseAdminClient().rpc(
-    rpcName,
-    rpcParams,
+    "consume_configured_public_document_credit",
+    {
+      p_identity_fingerprint: params.identityFingerprint,
+      p_product_type: params.product,
+      p_landlord_name_fingerprint: params.landlordNameFingerprint,
+      p_landlord_phone_fingerprint: params.landlordPhoneFingerprint,
+      p_property_address_fingerprint: params.propertyAddressFingerprint,
+      p_link_phone_fingerprint: params.linkPhoneFingerprint,
+      p_link_address_fingerprint: params.linkAddressFingerprint,
+    },
   );
 
   if (error) {

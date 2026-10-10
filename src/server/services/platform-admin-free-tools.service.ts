@@ -1,6 +1,7 @@
 import "server-only";
 
 import { AppError } from "@/server/errors/app-error";
+import { requirePlatformAdmin } from "@/server/services/platform-admin.service";
 import { createSupabaseAdminClient } from "@/server/supabase/admin";
 
 export type PlatformAdminFreeToolsProduct =
@@ -243,4 +244,35 @@ export async function getPlatformAdminFreeToolsReport(params: {
   }
 
   return mapReport(reportResult.data, reconciliationResult.data);
+}
+
+export async function getPublicDocumentIdentityLinkingSetting() {
+  const { data, error } = await createSupabaseAdminClient()
+    .from("public_document_feature_settings")
+    .select("enabled,updated_at")
+    .eq("feature_key", "identity_linking")
+    .single();
+
+  if (error) throw error;
+
+  return {
+    enabled: data.enabled === true,
+    updatedAt: String(data.updated_at),
+  };
+}
+
+export async function setPublicDocumentIdentityLinkingSetting(
+  enabled: boolean,
+) {
+  const admin = await requirePlatformAdmin();
+  const { error } = await createSupabaseAdminClient()
+    .from("public_document_feature_settings")
+    .update({
+      enabled,
+      updated_at: new Date().toISOString(),
+      updated_by: admin.id,
+    })
+    .eq("feature_key", "identity_linking");
+
+  if (error) throw error;
 }
