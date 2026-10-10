@@ -77,6 +77,7 @@ export type PlatformAdminFreeToolsReport = {
 // KPI, conversion count, revenue total, and user table.
 export const FREE_TOOLS_EXCLUDED_IDENTITY_FINGERPRINTS: readonly string[] = [
   "b29784c9e5a8aa3e09146351689bd170c5fd6c8250758c447095691714a9102b",
+  "8833bc5d226541e2ecb1e30fc0a4eeff0ec8cfd7f9615b7e74a16cd66c34ae12",
 ];
 
 export function parsePlatformAdminFreeToolsPeriod(
