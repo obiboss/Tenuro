@@ -3,6 +3,7 @@ import {
   CalendarCheck2,
   ClipboardList,
   CreditCard,
+  FileText,
   History,
   Home,
   LayoutDashboard,
@@ -76,6 +77,12 @@ export const PLATFORM_ADMIN_NAVIGATION: readonly PlatformAdminNavigationItem[] =
       label: "Dashboard",
       href: "/admin",
       icon: LayoutDashboard,
+      status: "available",
+    },
+    {
+      label: "Free tools",
+      href: "/admin/free-tools",
+      icon: FileText,
       status: "available",
     },
     {

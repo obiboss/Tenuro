@@ -18,6 +18,7 @@ import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import {
   consumePublicDocumentCredit,
   createPublicDocumentIdentityFingerprints,
+  releasePublicDocumentCredit,
 } from "@/server/services/public-document-entitlement.service";
 import type {
   PublicReceiptDuration,
@@ -369,28 +370,47 @@ export async function generatePublicRentReceipt(
   );
 
   const identity = createPublicDocumentIdentityFingerprints({
-      landlordFullName: input.landlordFullName,
-      landlordPhoneNumber: input.landlordPhoneNumber,
-      propertyAddress: input.propertyAddress,
+    landlordFullName: input.landlordFullName,
+    landlordPhoneNumber: input.landlordPhoneNumber,
+    propertyAddress: input.propertyAddress,
   });
   const entitlement = await consumePublicDocumentCredit({
     ...identity,
     product: "receipt",
   });
 
-  await createReceiptUsageEvent(supabase, {
-    leadId: lead.id,
-    receiptId: updatedReceipt.id,
-    eventType: "receipt_generated",
-    sourcePath: input.sourcePath,
-    workflowKey: updatedReceipt.id,
-    metadata: {
-      rent_amount: input.rentAmount,
-      rent_duration_months: rentDurationMonths,
-      has_pdf_download: true,
-      has_account_claim: true,
-    },
-  });
+  try {
+    await createReceiptUsageEvent(supabase, {
+      leadId: lead.id,
+      receiptId: updatedReceipt.id,
+      eventType: "receipt_generated",
+      sourcePath: input.sourcePath,
+      workflowKey: updatedReceipt.id,
+      metadata: {
+        rent_amount: input.rentAmount,
+        rent_duration_months: rentDurationMonths,
+        has_pdf_download: true,
+        has_account_claim: true,
+      },
+    });
+  } catch (error) {
+    try {
+      await releasePublicDocumentCredit({
+        supplyingEntitlementId: entitlement.supplyingEntitlementId,
+        product: "receipt",
+        creditType: entitlement.creditType!,
+      });
+    } catch (releaseError) {
+      console.error(
+        "Failed to restore receipt credit after generation failure.",
+        {
+          receiptId: updatedReceipt.id,
+          releaseError,
+        },
+      );
+    }
+    throw error;
+  }
 
   return {
     leadId: lead.id,

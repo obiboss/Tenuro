@@ -18,6 +18,7 @@ import { createSupabaseAdminClient } from "@/server/supabase/admin";
 import {
   consumePublicDocumentCredit,
   createPublicDocumentIdentityFingerprints,
+  releasePublicDocumentCredit,
 } from "@/server/services/public-document-entitlement.service";
 import type {
   PublicAgreementDuration,
@@ -541,31 +542,50 @@ export async function generatePublicTenancyAgreementPreview(
   );
 
   const identity = createPublicDocumentIdentityFingerprints({
-      landlordFullName: input.landlordFullName,
-      landlordPhoneNumber: input.landlordPhoneNumber,
-      propertyAddress: input.propertyAddress,
+    landlordFullName: input.landlordFullName,
+    landlordPhoneNumber: input.landlordPhoneNumber,
+    propertyAddress: input.propertyAddress,
   });
   const entitlement = await consumePublicDocumentCredit({
     ...identity,
     product: "tenancy_agreement",
   });
 
-  await createAgreementUsageEvent(supabase, {
-    leadId: lead.id,
-    agreementId: updatedAgreement.id,
-    eventType: "agreement_generated",
-    sourcePath: input.sourcePath,
-    workflowKey: updatedAgreement.id,
-    metadata: {
-      tenancy_duration_months: tenancyDurationMonths,
-      rent_amount: input.rentAmount,
-      rent_frequency: input.rentFrequency,
-      property_use: input.propertyUse,
-      has_pdf_download: true,
-      has_whatsapp_share: true,
-      has_account_claim: true,
-    },
-  });
+  try {
+    await createAgreementUsageEvent(supabase, {
+      leadId: lead.id,
+      agreementId: updatedAgreement.id,
+      eventType: "agreement_generated",
+      sourcePath: input.sourcePath,
+      workflowKey: updatedAgreement.id,
+      metadata: {
+        tenancy_duration_months: tenancyDurationMonths,
+        rent_amount: input.rentAmount,
+        rent_frequency: input.rentFrequency,
+        property_use: input.propertyUse,
+        has_pdf_download: true,
+        has_whatsapp_share: true,
+        has_account_claim: true,
+      },
+    });
+  } catch (error) {
+    try {
+      await releasePublicDocumentCredit({
+        supplyingEntitlementId: entitlement.supplyingEntitlementId,
+        product: "tenancy_agreement",
+        creditType: entitlement.creditType!,
+      });
+    } catch (releaseError) {
+      console.error(
+        "Failed to restore agreement credit after generation failure.",
+        {
+          agreementId: updatedAgreement.id,
+          releaseError,
+        },
+      );
+    }
+    throw error;
+  }
 
   return {
     leadId: lead.id,
