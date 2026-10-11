@@ -97,6 +97,7 @@ export async function createPublicGeneratedAgreement(
     tenancyDurationMonths: number;
     agreementTitle: string;
     agreementSnapshot: Record<string, unknown>;
+    watermarkStatus: "watermarked" | "removed";
     downloadTokenHash: string;
     downloadTokenExpiresAt: string;
     claimTokenHash: string;
@@ -124,7 +125,7 @@ export async function createPublicGeneratedAgreement(
       tenancy_duration_months: params.tenancyDurationMonths,
       agreement_title: params.agreementTitle,
       agreement_snapshot: params.agreementSnapshot,
-      watermark_status: "watermarked",
+      watermark_status: params.watermarkStatus,
       document_status: "generated",
       download_token_hash: params.downloadTokenHash,
       download_token_expires_at: params.downloadTokenExpiresAt,

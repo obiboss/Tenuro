@@ -22,6 +22,7 @@ export type PublicAgreementGeneratorActionState = {
     whatsappMessage: string;
     claimUrl: string;
     remainingAgreements: number;
+    agreementTier: "free" | "paid";
   };
 };
 

@@ -32,6 +32,17 @@ const dateSchema = z
   .trim()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid date.");
 
+const optionalImageDataUrl = z
+  .string()
+  .max(700_000, "The image is too large.")
+  .refine(
+    (value) =>
+      value === "" || /^data:image\/(png|jpeg|webp);base64,/i.test(value),
+    "Use a PNG, JPEG or WebP image.",
+  )
+  .optional()
+  .or(z.literal(""));
+
 export const publicReceiptDurationSchema = z.enum([
   "6_months",
   "1_year",
@@ -45,33 +56,48 @@ export const publicReceiptPaymentMethodSchema = z.enum([
   "other",
 ]);
 
-export const publicReceiptGeneratorSchema = z.object({
-  landlordFullName: requiredText("Landlord full name"),
-  landlordPhoneNumber: phoneSchema,
-  landlordEmail: z
-    .string()
-    .trim()
-    .email("Enter a valid email address.")
-    .optional()
-    .or(z.literal("")),
+export const publicReceiptGeneratorSchema = z
+  .object({
+    landlordFullName: requiredText("Landlord full name"),
+    landlordPhoneNumber: phoneSchema,
+    landlordEmail: z
+      .string()
+      .trim()
+      .email("Enter a valid email address.")
+      .optional()
+      .or(z.literal("")),
 
-  tenantFullName: requiredText("Tenant full name"),
-  tenantPhoneNumber: phoneSchema,
+    tenantFullName: requiredText("Tenant full name"),
+    tenantPhoneNumber: phoneSchema,
 
-  propertyAddress: requiredText("Property address", 5),
-  propertyName: optionalText,
-  unitIdentifier: optionalText,
-  cityState: requiredText("City/state"),
+    propertyAddress: requiredText("Property address", 5),
+    propertyName: optionalText,
+    unitIdentifier: optionalText,
+    cityState: requiredText("City/state"),
 
-  rentAmount: moneySchema,
-  paymentDate: dateSchema,
-  rentStartDate: dateSchema,
-  paymentMethod: publicReceiptPaymentMethodSchema,
-  rentDuration: publicReceiptDurationSchema,
+    totalRentDue: moneySchema,
+    rentAmount: moneySchema,
+    paymentDate: dateSchema,
+    rentStartDate: dateSchema,
+    paymentMethod: publicReceiptPaymentMethodSchema,
+    rentDuration: publicReceiptDurationSchema,
+    paymentReference: optionalText,
+    receiptTier: z.enum(["free", "paid"]).default("free"),
+    landlordSignature: optionalImageDataUrl,
+    stampImage: optionalImageDataUrl,
 
-  sourcePath: z.string().trim().default("/receipt-generator"),
-  sourceLocation: z.string().trim().optional().or(z.literal("")),
-});
+    sourcePath: z.string().trim().default("/receipt-generator"),
+    sourceLocation: z.string().trim().optional().or(z.literal("")),
+  })
+  .superRefine((value, context) => {
+    if (value.rentAmount > value.totalRentDue) {
+      context.addIssue({
+        code: "custom",
+        path: ["rentAmount"],
+        message: "Rent paid cannot be more than the total rent due.",
+      });
+    }
+  });
 
 export type PublicReceiptGeneratorInput = z.infer<
   typeof publicReceiptGeneratorSchema

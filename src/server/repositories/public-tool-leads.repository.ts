@@ -167,6 +167,7 @@ export async function createPublicGeneratedReceipt(
     rentPeriodEnd: string;
     rentDurationMonths: number;
     paymentMethod: "bank_transfer" | "cash" | "paystack_gateway" | "other";
+    paymentReference: string | null;
     receiptNumber: string;
     receiptSnapshot: Record<string, unknown>;
     whatsappMessage: string;
@@ -197,6 +198,7 @@ export async function createPublicGeneratedReceipt(
       rent_period_end: params.rentPeriodEnd,
       rent_duration_months: params.rentDurationMonths,
       payment_method: params.paymentMethod,
+      payment_reference: params.paymentReference,
       receipt_number: params.receiptNumber,
       receipt_snapshot: params.receiptSnapshot,
       watermark_status: "watermarked",
@@ -215,6 +217,28 @@ export async function createPublicGeneratedReceipt(
     throw error;
   }
 
+  return data;
+}
+
+export async function updatePublicGeneratedReceiptPresentation(
+  supabase: SupabaseClient,
+  params: {
+    receiptId: string;
+    tier: "free" | "paid";
+    metadata: Record<string, unknown>;
+  },
+) {
+  const { data, error } = await supabase
+    .from("public_generated_receipts")
+    .update({
+      watermark_status: params.tier === "paid" ? "removed" : "watermarked",
+      metadata: { ...params.metadata, receipt_tier: params.tier },
+    })
+    .eq("id", params.receiptId)
+    .select(publicGeneratedReceiptSelect)
+    .single<PublicGeneratedReceiptRow>();
+
+  if (error) throw error;
   return data;
 }
 

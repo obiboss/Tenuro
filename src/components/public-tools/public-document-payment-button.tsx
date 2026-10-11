@@ -10,6 +10,9 @@ type PublicDocumentPaymentButtonProps = {
     landlordPhoneNumber: string;
     propertyAddress: string;
   };
+  label?: string;
+  onOpen?: () => void;
+  onPaymentVerified?: () => void;
 };
 
 type PaystackWindow = Window & {
@@ -113,6 +116,8 @@ export function PublicDocumentPaymentButton(
             );
             return;
           }
+          props.onPaymentVerified?.();
+          setIsOpen(false);
           setMessage("Payment verified. Your document credits are ready.");
         },
       }).openIframe();
@@ -133,6 +138,7 @@ export function PublicDocumentPaymentButton(
       <button
         type="button"
         onClick={() => {
+          props.onOpen?.();
           setMessage("");
           const form = document.getElementById(props.formId);
           if (form instanceof HTMLFormElement) {
@@ -145,7 +151,8 @@ export function PublicDocumentPaymentButton(
         }}
         className="min-h-11 w-full rounded-button bg-primary px-5 py-3 text-sm font-extrabold text-white shadow-soft transition hover:bg-primary-hover"
       >
-        {isReceipt ? "Get 24 more receipts" : "Get 3 more agreements"}
+        {props.label ??
+          (isReceipt ? "Get 24 more receipts" : "Get 3 more agreements")}
       </button>
 
       {message ? (

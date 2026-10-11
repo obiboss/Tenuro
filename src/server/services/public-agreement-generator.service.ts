@@ -46,6 +46,7 @@ export type GeneratedPublicAgreementPreview = {
   whatsappMessage: string;
   claimUrl: string;
   remainingAgreements: number;
+  agreementTier: "free" | "paid";
 };
 
 function getAppUrl() {
@@ -227,6 +228,8 @@ function buildPublicAgreementBody(params: {
     cleanOptional(params.input.landlordEmail) ?? "____________________";
   const tenantEmail =
     cleanOptional(params.input.tenantEmail) ?? "____________________";
+  const landlordAddress = cleanOptional(params.input.landlordAddress);
+  const tenantAddress = cleanOptional(params.input.tenantAddress);
   const propertyName =
     cleanOptional(params.input.propertyName) ?? "____________________";
   const specialTerms =
@@ -239,7 +242,10 @@ function buildPublicAgreementBody(params: {
       ? `The Tenant shall pay a refundable caution/security deposit of ${formatMoney(
           params.input.cautionDepositAmount,
         )}.`
-      : "The Tenant shall pay a refundable caution/security deposit where applicable.";
+      : "No caution/security deposit is payable under this Agreement.";
+  const noticeText = params.input.terminationNoticeMonths
+    ? `The parties select ${params.input.terminationNoticeMonths} month${params.input.terminationNoticeMonths === "1" ? "" : "s"} written notice to end the tenancy, subject to any mandatory notice period under the law applicable to the premises.`
+    : "The legally required written notice applies, subject to the law applicable to the premises.";
 
   return `TENANCY AGREEMENT
 
@@ -251,6 +257,7 @@ LANDLORD:
 ${params.input.landlordFullName}
 Phone Number: ${params.input.landlordPhoneNumber}
 Email: ${landlordEmail}
+${landlordAddress ? `Address: ${landlordAddress}` : ""}
 
 AND
 
@@ -258,13 +265,14 @@ TENANT:
 ${params.input.tenantFullName}
 Phone Number: ${params.input.tenantPhoneNumber}
 Email: ${tenantEmail}
+${tenantAddress ? `Address: ${tenantAddress}` : ""}
 
 1. PREMISES
 
 The Landlord lets to the Tenant the premises known as:
 
 Property: ${propertyName}
-Unit: ${params.input.unitIdentifier}
+Unit: ${cleanOptional(params.input.unitIdentifier) ?? "Whole property"}
 Address: ${params.input.propertyAddress}
 Location: ${params.input.cityState}
 
@@ -272,6 +280,8 @@ Location: ${params.input.cityState}
 
 The tenancy shall commence on ${formatDate(params.input.tenancyStartDate)}
 and shall end on ${formatDate(params.tenancyEndDate)} unless renewed or terminated in accordance with this Agreement and applicable law.
+
+The Tenant should tell the Landlord whether they wish to renew at least ${params.input.renewalNoticeDays} days before the end date. Any renewal requires the parties' agreement.
 
 3. RENT
 
@@ -342,7 +352,7 @@ The Landlord or authorized agent may inspect the premises upon giving reasonable
 
 12. TERMINATION / NOTICE TO QUIT
 
-Either party may terminate this tenancy by giving the legally required notice in writing, subject to applicable Nigerian tenancy laws and any state-specific tenancy regulations.
+${noticeText}
 
 13. BREACH / DEFAULT
 
@@ -457,11 +467,13 @@ export async function generatePublicTenancyAgreementPreview(
       fullName: input.landlordFullName,
       phoneNumber: input.landlordPhoneNumber,
       email: landlordEmail,
+      address: cleanOptional(input.landlordAddress),
     },
     tenant_snapshot: {
       fullName: input.tenantFullName,
       phoneNumber: input.tenantPhoneNumber,
       email: tenantEmail,
+      address: cleanOptional(input.tenantAddress),
     },
     property_snapshot: {
       propertyName,
@@ -477,10 +489,14 @@ export async function generatePublicTenancyAgreementPreview(
       startDate: input.tenancyStartDate,
       endDate: tenancyEndDate,
       renewalNoticeDays: input.renewalNoticeDays,
+      terminationNoticeMonths: input.terminationNoticeMonths,
       cautionDepositAmount: input.cautionDepositAmount,
     },
     agreement_body: agreementBody,
-    watermark: "Generated with BOPA — boldverseproperty.com",
+    watermark:
+      input.agreementTier === "paid"
+        ? null
+        : "Generated with BOPA — boldverseproperty.com",
   };
 
   const agreement = await createPublicGeneratedAgreement(supabase, {
@@ -500,16 +516,19 @@ export async function generatePublicTenancyAgreementPreview(
     tenancyDurationMonths,
     agreementTitle,
     agreementSnapshot,
+    watermarkStatus: input.agreementTier === "paid" ? "removed" : "watermarked",
     downloadTokenHash,
     downloadTokenExpiresAt,
     claimTokenHash,
     claimTokenExpiresAt,
     metadata: {
       acquisition_channel: "public_agreement_generator",
+      agreement_tier: input.agreementTier,
       rent_frequency: input.rentFrequency,
       property_use: input.propertyUse,
       caution_deposit_amount: input.cautionDepositAmount,
       renewal_notice_days: input.renewalNoticeDays,
+      termination_notice_months: input.terminationNoticeMonths || null,
     },
   });
 
@@ -549,6 +568,7 @@ export async function generatePublicTenancyAgreementPreview(
   const entitlement = await consumePublicDocumentCredit({
     ...identity,
     product: "tenancy_agreement",
+    requirePaid: input.agreementTier === "paid",
   });
 
   try {
@@ -559,6 +579,7 @@ export async function generatePublicTenancyAgreementPreview(
       sourcePath: input.sourcePath,
       workflowKey: updatedAgreement.id,
       metadata: {
+        agreement_tier: input.agreementTier,
         tenancy_duration_months: tenancyDurationMonths,
         rent_amount: input.rentAmount,
         rent_frequency: input.rentFrequency,
@@ -601,11 +622,15 @@ export async function generatePublicTenancyAgreementPreview(
     tenancyEndDate: updatedAgreement.tenancy_end_date,
     tenancyDurationMonths: updatedAgreement.tenancy_duration_months,
     agreementBody,
-    watermarkText: "Generated with BOPA — boldverseproperty.com",
+    watermarkText:
+      input.agreementTier === "paid"
+        ? ""
+        : "Generated with BOPA — boldverseproperty.com",
     downloadUrl,
     whatsappMessage,
     claimUrl,
     remainingAgreements: entitlement.remaining,
+    agreementTier: input.agreementTier,
   };
 }
 

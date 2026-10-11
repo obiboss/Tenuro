@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { GoogleAnalytics } from "@next/third-parties/google";
 import { Plus_Jakarta_Sans } from "next/font/google";
+import { GlobalWhatsAppHelp } from "@/components/ui/global-whatsapp-help";
 import "./globals.css";
 
 const plusJakarta = Plus_Jakarta_Sans({
@@ -78,6 +79,7 @@ export default function RootLayout({
         className={`${plusJakarta.variable} bg-background font-sans text-text-normal antialiased`}
       >
         {children}
+        <GlobalWhatsAppHelp />
       </body>
 
       {gaId ? <GoogleAnalytics gaId={gaId} /> : null}

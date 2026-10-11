@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, FileText, ShieldCheck } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
 import { ReceiptGeneratorForm } from "@/components/public-tools/receipt-generator-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { TrustNotice } from "@/components/ui/trust-notice";
 import { getFeaturedReceiptGeneratorLocations } from "@/lib/receipt-generator-locations";
 
 export const metadata: Metadata = {
@@ -72,40 +71,31 @@ export default function ReceiptGeneratorPage() {
           </Link>
         </header>
 
-        <div className="py-12 lg:py-16">
+        <div className="py-10 lg:py-14">
           <Badge tone="primary" size="md">
             Free rent receipt generator Nigeria
           </Badge>
 
-          <div className="mt-6 grid gap-8 lg:grid-cols-[1fr_420px] lg:items-start">
-            <div>
-              <h1 className="max-w-4xl text-4xl font-extrabold tracking-tight text-text-strong md:text-5xl lg:text-6xl">
-                Generate a clean Nigerian rent receipt in minutes.
-              </h1>
+          <div className="mt-5 max-w-3xl">
+            <h1 className="text-4xl font-extrabold tracking-tight text-text-strong md:text-5xl lg:text-[3.25rem] lg:leading-[1.08]">
+              Make a rent receipt in 2 minutes.
+            </h1>
 
-              <p className="mt-6 max-w-2xl text-base leading-8 text-text-muted md:text-lg">
-                Create a professional rent payment receipt for tenants without
-                signing up first. Enter the landlord, tenant, property, and
-                payment details, then BOPA calculates the rent period for you.
-              </p>
-            </div>
+            <p className="mt-5 max-w-2xl text-base leading-7 text-text-normal md:text-lg">
+              Fill in four short sections. We work out the rent end date for
+              you. No account needed; you can save your records later with a
+              free BOPA account.
+            </p>
 
-            <div className="space-y-4">
-              <TrustNotice
-                title="Value first, signup later"
-                description="Generate your first receipt without creating an account. After that, you can save records by creating a free BOPA account."
-                icon={
-                  <FileText aria-hidden="true" size={22} strokeWidth={2.6} />
-                }
-              />
-
-              <TrustNotice
-                title="Built for annual rent"
-                description="Supports Nigerian rent patterns like 6 months, 1 year, and 2 years with automatic end-date calculation."
-                icon={
-                  <ShieldCheck aria-hidden="true" size={22} strokeWidth={2.6} />
-                }
-              />
+            <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm font-bold text-text-strong">
+              {["Free to use", "No sign-up", "6 months, 1 year or 2 years of rent"].map(
+                (item) => (
+                  <span key={item} className="inline-flex items-center gap-2">
+                    <Check aria-hidden="true" size={19} strokeWidth={3} className="text-success" />
+                    {item}
+                  </span>
+                ),
+              )}
             </div>
           </div>
         </div>
@@ -184,6 +174,7 @@ export default function ReceiptGeneratorPage() {
           </div>
         </section>
       </section>
+
     </main>
   );
 }

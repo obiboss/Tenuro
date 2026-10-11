@@ -106,6 +106,126 @@ export function createPublicDocumentIdentityFingerprints(params: {
   };
 }
 
+export async function getPublicDocumentCreditSummary(params: {
+  landlordFullName: string;
+  landlordPhoneNumber: string;
+  propertyAddress?: string;
+  product: PublicDocumentProduct;
+}) {
+  const landlordNameFingerprint = hashIdentityPart(
+    normalizeName(params.landlordFullName),
+  );
+  const landlordPhoneFingerprint = hashIdentityPart(
+    normalizePhone(params.landlordPhoneNumber),
+  );
+  const normalizedLinkPhone = normalizePublicDocumentLinkPhone(
+    params.landlordPhoneNumber,
+  );
+  const linkPhoneFingerprint = normalizedLinkPhone
+    ? hashLinkKey("phone", normalizedLinkPhone)
+    : null;
+  const hasAddress = Boolean(params.propertyAddress?.trim());
+  const identity = hasAddress
+    ? createPublicDocumentIdentityFingerprints({
+        landlordFullName: params.landlordFullName,
+        landlordPhoneNumber: params.landlordPhoneNumber,
+        propertyAddress: params.propertyAddress!,
+      })
+    : null;
+  const supabase = createSupabaseAdminClient();
+  const { data: claimedIdentity, error: claimError } = await supabase
+    .from("public_document_identity_claims")
+    .select("identity_fingerprint")
+    .eq("landlord_name_fingerprint", landlordNameFingerprint)
+    .eq("landlord_phone_fingerprint", landlordPhoneFingerprint)
+    .maybeSingle<{ identity_fingerprint: string }>();
+
+  if (claimError) throw claimError;
+
+  const exactIdentityFingerprint =
+    identity?.identityFingerprint ?? claimedIdentity?.identity_fingerprint;
+  let exactPaidRemaining = 0;
+
+  if (exactIdentityFingerprint) {
+    const { data: exactEntitlement, error: exactError } = await supabase
+    .from("public_document_entitlements")
+    .select("paid_remaining")
+      .eq("identity_fingerprint", exactIdentityFingerprint)
+    .eq("product_type", params.product)
+    .maybeSingle<{ paid_remaining: number }>();
+
+    if (exactError) throw exactError;
+    exactPaidRemaining = Number(exactEntitlement?.paid_remaining ?? 0);
+  }
+
+  const { data: setting, error: settingError } = await supabase
+    .from("public_document_feature_settings")
+    .select("enabled")
+    .eq("feature_key", "identity_linking")
+    .maybeSingle<{ enabled: boolean }>();
+
+  if (settingError) throw settingError;
+  if (!setting?.enabled) return { paidRemaining: exactPaidRemaining };
+
+  const linkFilters = [
+    linkPhoneFingerprint
+      ? `phone_key_fingerprint.eq.${linkPhoneFingerprint}`
+      : null,
+    identity?.linkAddressFingerprint
+      ? `address_key_fingerprint.eq.${identity.linkAddressFingerprint}`
+      : null,
+  ].filter((value): value is string => Boolean(value));
+
+  if (linkFilters.length === 0) return { paidRemaining: exactPaidRemaining };
+
+  const { data: matchingMemberships, error: membershipError } = await supabase
+    .from("public_document_identity_group_memberships")
+    .select("group_id")
+    .eq("status", "active")
+    .or(linkFilters.join(","));
+
+  if (membershipError) throw membershipError;
+
+  const groupIds = Array.from(
+    new Set((matchingMemberships ?? []).map((row) => String(row.group_id))),
+  );
+
+  // Mirror the no-auto-chain guard: an ambiguous match must not expose or use
+  // credits from more than one existing identity group.
+  if (groupIds.length !== 1) return { paidRemaining: exactPaidRemaining };
+
+  const { data: members, error: membersError } = await supabase
+    .from("public_document_identity_group_memberships")
+    .select("identity_fingerprint")
+    .eq("group_id", groupIds[0])
+    .eq("status", "active");
+
+  if (membersError) throw membersError;
+
+  const memberFingerprints = (members ?? []).map((row) =>
+    String(row.identity_fingerprint),
+  );
+  if (memberFingerprints.length === 0) {
+    return { paidRemaining: exactPaidRemaining };
+  }
+
+  const { data: linkedEntitlements, error: linkedError } = await supabase
+    .from("public_document_entitlements")
+    .select("paid_remaining")
+    .eq("product_type", params.product)
+    .in("identity_fingerprint", memberFingerprints);
+
+  if (linkedError) throw linkedError;
+
+  return {
+    paidRemaining: (linkedEntitlements ?? []).reduce(
+      (total, entitlement) =>
+        total + Number(entitlement.paid_remaining ?? 0),
+      0,
+    ),
+  };
+}
+
 export async function consumePublicDocumentCredit(params: {
   identityFingerprint: string;
   product: PublicDocumentProduct;
@@ -114,9 +234,12 @@ export async function consumePublicDocumentCredit(params: {
   propertyAddressFingerprint: string;
   linkPhoneFingerprint: string | null;
   linkAddressFingerprint: string | null;
+  requirePaid?: boolean;
 }) {
   const { data, error } = await createSupabaseAdminClient().rpc(
-    "consume_configured_public_document_credit",
+    params.requirePaid
+      ? "consume_configured_paid_public_document_credit"
+      : "consume_configured_public_document_credit",
     {
       p_identity_fingerprint: params.identityFingerprint,
       p_product_type: params.product,

@@ -11,6 +11,7 @@ import {
   createPublicToolLead,
   createReceiptUsageEvent,
   getPublicGeneratedReceiptById,
+  updatePublicGeneratedReceiptPresentation,
   updatePublicGeneratedReceiptWhatsappMessage,
   type PublicGeneratedReceiptRow,
 } from "@/server/repositories/public-tool-leads.repository";
@@ -210,6 +211,7 @@ function buildReceiptWhatsappMessage(params: {
   tenantFullName: string;
   propertyLabel: string;
   rentAmount: number;
+  balanceOutstanding: number;
   paymentDate: string;
   rentPeriodStart: string;
   rentPeriodEnd: string;
@@ -222,6 +224,7 @@ function buildReceiptWhatsappMessage(params: {
     `Tenant: ${params.tenantFullName}`,
     `Property: ${params.propertyLabel}`,
     `Amount: ${formatMoney(params.rentAmount)}`,
+    `Balance: ${formatMoney(params.balanceOutstanding)}`,
     `Payment date: ${formatDate(params.paymentDate)}`,
     `Rent period: ${formatDate(params.rentPeriodStart)} - ${formatDate(
       params.rentPeriodEnd,
@@ -257,6 +260,11 @@ export async function generatePublicRentReceipt(
   const landlordEmail = cleanOptional(input.landlordEmail);
   const propertyName = cleanOptional(input.propertyName);
   const unitIdentifier = cleanOptional(input.unitIdentifier);
+  const paymentReference = cleanOptional(input.paymentReference);
+  const balanceOutstanding = Math.max(
+    0,
+    input.totalRentDue - input.rentAmount,
+  );
   const receiptNumber = createReceiptNumber();
   const propertyLabel = buildPropertyLabel(input);
 
@@ -300,12 +308,19 @@ export async function generatePublicRentReceipt(
     },
     payment: {
       rent_amount: input.rentAmount,
+      total_rent_due: input.totalRentDue,
+      balance_outstanding: balanceOutstanding,
       currency_code: "NGN",
       payment_date: input.paymentDate,
       payment_method: input.paymentMethod,
+      payment_reference: paymentReference,
       rent_period_start: input.rentStartDate,
       rent_period_end: rentPeriodEnd,
       rent_duration_months: rentDurationMonths,
+    },
+    signatures: {
+      landlord: cleanOptional(input.landlordSignature),
+      stamp: cleanOptional(input.stampImage),
     },
     watermark: "Generated with BOPA — boldverseproperty.com",
   };
@@ -327,6 +342,7 @@ export async function generatePublicRentReceipt(
     rentPeriodEnd,
     rentDurationMonths,
     paymentMethod: input.paymentMethod,
+    paymentReference,
     receiptNumber,
     receiptSnapshot,
     whatsappMessage: "",
@@ -355,13 +371,14 @@ export async function generatePublicRentReceipt(
     tenantFullName: input.tenantFullName,
     propertyLabel,
     rentAmount: input.rentAmount,
+    balanceOutstanding,
     paymentDate: input.paymentDate,
     rentPeriodStart: input.rentStartDate,
     rentPeriodEnd,
     downloadUrl,
   });
 
-  const updatedReceipt = await updatePublicGeneratedReceiptWhatsappMessage(
+  const receiptWithMessage = await updatePublicGeneratedReceiptWhatsappMessage(
     supabase,
     {
       receiptId: receipt.id,
@@ -377,9 +394,19 @@ export async function generatePublicRentReceipt(
   const entitlement = await consumePublicDocumentCredit({
     ...identity,
     product: "receipt",
+    requirePaid: input.receiptTier === "paid",
   });
 
   try {
+    const updatedReceipt = await updatePublicGeneratedReceiptPresentation(
+      supabase,
+      {
+        receiptId: receiptWithMessage.id,
+        tier: entitlement.creditType === "paid" ? "paid" : "free",
+        metadata: receiptWithMessage.metadata,
+      },
+    );
+
     await createReceiptUsageEvent(supabase, {
       leadId: lead.id,
       receiptId: updatedReceipt.id,
@@ -388,11 +415,37 @@ export async function generatePublicRentReceipt(
       workflowKey: updatedReceipt.id,
       metadata: {
         rent_amount: input.rentAmount,
+        total_rent_due: input.totalRentDue,
+        balance_outstanding: balanceOutstanding,
         rent_duration_months: rentDurationMonths,
         has_pdf_download: true,
         has_account_claim: true,
       },
     });
+
+    return {
+      leadId: lead.id,
+      receiptId: updatedReceipt.id,
+      receiptNumber: updatedReceipt.receipt_number,
+      landlordFullName: updatedReceipt.landlord_full_name,
+      tenantFullName: updatedReceipt.tenant_full_name,
+      tenantPhoneNumber: input.tenantPhoneNumber,
+      propertyLabel,
+      rentAmount: Number(updatedReceipt.rent_amount),
+      paymentDate: updatedReceipt.payment_date,
+      rentPeriodStart: updatedReceipt.rent_period_start,
+      rentPeriodEnd: updatedReceipt.rent_period_end,
+      rentDurationMonths: updatedReceipt.rent_duration_months,
+      paymentMethod: paymentMethodLabel(updatedReceipt.payment_method),
+      whatsappMessage,
+      watermarkText:
+        entitlement.creditType === "paid"
+          ? "Receipts Pro"
+          : "Generated with BOPA — boldverseproperty.com",
+      downloadUrl,
+      claimUrl,
+      remainingReceipts: entitlement.remaining,
+    };
   } catch (error) {
     try {
       await releasePublicDocumentCredit({
@@ -404,34 +457,13 @@ export async function generatePublicRentReceipt(
       console.error(
         "Failed to restore receipt credit after generation failure.",
         {
-          receiptId: updatedReceipt.id,
+          receiptId: receiptWithMessage.id,
           releaseError,
         },
       );
     }
     throw error;
   }
-
-  return {
-    leadId: lead.id,
-    receiptId: updatedReceipt.id,
-    receiptNumber: updatedReceipt.receipt_number,
-    landlordFullName: updatedReceipt.landlord_full_name,
-    tenantFullName: updatedReceipt.tenant_full_name,
-    tenantPhoneNumber: input.tenantPhoneNumber,
-    propertyLabel,
-    rentAmount: Number(updatedReceipt.rent_amount),
-    paymentDate: updatedReceipt.payment_date,
-    rentPeriodStart: updatedReceipt.rent_period_start,
-    rentPeriodEnd: updatedReceipt.rent_period_end,
-    rentDurationMonths: updatedReceipt.rent_duration_months,
-    paymentMethod: paymentMethodLabel(updatedReceipt.payment_method),
-    whatsappMessage,
-    watermarkText: "Generated with BOPA — boldverseproperty.com",
-    downloadUrl,
-    claimUrl,
-    remainingReceipts: entitlement.remaining,
-  };
 }
 
 export async function getPublicGeneratedReceiptForDownload(params: {

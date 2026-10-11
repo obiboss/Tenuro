@@ -1,10 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, FileText, MapPin, ShieldCheck } from "lucide-react";
 import { AgreementGeneratorForm } from "@/components/public-tools/agreement-generator-form";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { TrustNotice } from "@/components/ui/trust-notice";
 import {
   getFeaturedAgreementGeneratorLocations,
   getFeaturedAgreementGeneratorTemplates,
@@ -68,146 +65,71 @@ export default function AgreementGeneratorPage() {
             </div>
           </Link>
 
-          <Link href="/receipt-generator" className="hidden sm:block">
-            <Button variant="secondary">
-              Generate Receipt
-              <ArrowRight aria-hidden="true" size={18} strokeWidth={2.6} />
-            </Button>
+          <Link href="/receipt-generator" className="text-sm font-bold text-primary hover:underline">
+            Need a rent receipt instead? →
           </Link>
         </header>
 
-        <div className="py-12 lg:py-16">
+        <div className="py-9 lg:py-12">
           <Badge tone="primary" size="md">
             Free tenancy agreement generator Nigeria
           </Badge>
 
-          <div className="mt-6 grid gap-8 lg:grid-cols-[1fr_420px] lg:items-start">
+          <div className="mt-6 max-w-3xl">
             <div>
-              <h1 className="max-w-4xl text-4xl font-extrabold tracking-tight text-text-strong md:text-5xl lg:text-6xl">
-                Generate a Nigerian tenancy agreement preview in minutes.
+              <h1 className="max-w-4xl text-4xl font-extrabold tracking-tight text-text-strong md:text-5xl">
+                Make a tenancy agreement in minutes.
               </h1>
 
               <p className="mt-6 max-w-2xl text-base leading-8 text-text-muted md:text-lg">
-                Enter the landlord, tenant, property, rent, deposit, tenancy
-                term, property requirements, and special terms. BOPA prepares a
-                structured tenancy agreement preview you can download, share, or
-                save to a landlord account.
+                Fill in four short sections, preview your agreement, then
+                download it. It takes about 3 minutes and needs no account.
               </p>
             </div>
-
-            <div className="space-y-4">
-              <TrustNotice
-                title="Value first, signup later"
-                description="Generate an agreement preview without creating an account. Download the watermarked PDF, share it, then create an account only when you want to save it."
-                icon={
-                  <FileText aria-hidden="true" size={22} strokeWidth={2.6} />
-                }
-              />
-
-              <TrustNotice
-                title="Built for Nigerian rent terms"
-                description="Supports annual, six-month, and two-year tenancy periods with automatic end-date calculation."
-                icon={
-                  <ShieldCheck aria-hidden="true" size={22} strokeWidth={2.6} />
-                }
-              />
-            </div>
+          </div>
+          <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm font-bold text-text-strong">
+            <span>✓ First 3 agreements free</span>
+            <span>✓ No sign-up</span>
+            <span>✓ Review details before creating</span>
           </div>
         </div>
 
         <AgreementGeneratorForm sourcePath="/agreement-generator" />
 
-        <section className="mt-12 rounded-card bg-surface p-5 shadow-card md:p-8">
-          <h2 className="text-2xl font-black tracking-tight text-text-strong">
-            Popular tenancy agreement locations
-          </h2>
-
-          <p className="mt-3 max-w-2xl text-sm leading-7 text-text-muted md:text-base">
-            Choose a location page for more specific agreement guidance, or use
-            the main generator above for any Nigerian city.
-          </p>
-
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <section className="mt-8 border-t border-border-soft pt-6">
+          <h2 className="text-sm font-bold text-text-strong">Tenancy agreements by city</h2>
+          <div className="mt-3 flex flex-wrap gap-2">
             {featuredLocations.map((location) => (
               <Link
                 key={location.slug}
                 href={`/agreement-generator/${location.slug}`}
-                className="rounded-button border border-border-soft bg-background p-4 transition hover:border-primary/40 hover:bg-primary-soft"
+                className="rounded-full border border-border-soft bg-white px-4 py-2 text-sm font-semibold transition hover:border-primary/40 hover:bg-primary-soft"
               >
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-primary-soft text-primary">
-                    <MapPin aria-hidden="true" size={18} strokeWidth={2.6} />
-                  </div>
-
-                  <div>
-                    <p className="font-black text-text-strong">
-                      {location.label}
-                    </p>
-                    <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-                      {location.seoKeyword}
-                    </p>
-                  </div>
-                </div>
+                {location.label}
               </Link>
             ))}
           </div>
         </section>
 
-        <section className="mt-8 rounded-card bg-surface p-5 shadow-card md:p-8">
-          <h2 className="text-2xl font-black tracking-tight text-text-strong">
-            Tenancy agreement templates
-          </h2>
-
-          <p className="mt-3 max-w-2xl text-sm leading-7 text-text-muted md:text-base">
-            These template pages help landlords find the agreement generator by
-            common rental document needs.
-          </p>
-
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <section className="mt-6">
+          <h2 className="text-sm font-bold text-text-strong">Agreement types</h2>
+          <div className="mt-3 flex flex-wrap gap-2">
             {featuredTemplates.map((template) => (
               <Link
                 key={template.slug}
                 href={`/agreement-generator/templates/${template.slug}`}
-                className="rounded-button border border-border-soft bg-background p-4 transition hover:border-primary/40 hover:bg-primary-soft"
+                className="rounded-full border border-border-soft bg-white px-4 py-2 text-sm font-semibold transition hover:border-primary/40 hover:bg-primary-soft"
               >
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-primary-soft text-primary">
-                    <FileText aria-hidden="true" size={18} strokeWidth={2.6} />
-                  </div>
-
-                  <div>
-                    <p className="font-black text-text-strong">
-                      {template.label}
-                    </p>
-                    <p className="mt-1 text-sm font-semibold leading-6 text-text-muted">
-                      {template.seoKeyword}
-                    </p>
-                  </div>
-                </div>
+                {template.label}
               </Link>
             ))}
           </div>
         </section>
 
-        <section className="mt-12 rounded-card bg-surface p-5 shadow-card md:p-8">
-          <h2 className="text-2xl font-black tracking-tight text-text-strong">
-            Tenancy agreement generator for Nigerian landlords
-          </h2>
-
-          <div className="mt-4 space-y-4 text-sm leading-7 text-text-muted md:text-base">
-            <p>
-              BOPA helps landlords prepare tenancy agreement previews for flats,
-              rooms, apartments, shops, offices, and mixed-use rental spaces.
-            </p>
-
-            <p>
-              Use this public agreement generator to structure rent amount,
-              caution deposit, tenancy start date, renewal notice, landlord
-              details, tenant details, property details, property rules, and
-              special agreement clauses before saving the agreement formally.
-            </p>
-          </div>
-        </section>
+        <p className="mt-8 text-sm text-text-muted">
+          BOPA helps landlords prepare tenancy agreements for flats, rooms,
+          apartments, shops and offices in Nigeria.
+        </p>
       </section>
     </main>
   );

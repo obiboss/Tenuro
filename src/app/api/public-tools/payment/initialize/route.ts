@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { isAppError } from "@/server/errors/app-error";
 import {
   createPublicDocumentIdentityFingerprint,
+  getPublicDocumentCreditSummary,
   type PublicDocumentProduct,
 } from "@/server/services/public-document-entitlement.service";
 import { initializePublicDocumentPayment } from "@/server/services/public-document-payment.service";
@@ -120,6 +121,51 @@ export async function POST(request: Request) {
         requestId,
       },
       { status: 500, headers: { "x-request-id": requestId } },
+    );
+  }
+}
+
+export async function PUT(request: Request) {
+  try {
+    const body = (await request.json().catch(() => null)) as Record<
+      string,
+      unknown
+    > | null;
+    const landlordFullName =
+      typeof body?.landlordFullName === "string"
+        ? body.landlordFullName.trim()
+        : "";
+    const landlordPhoneNumber =
+      typeof body?.landlordPhoneNumber === "string"
+        ? body.landlordPhoneNumber.trim()
+        : "";
+    const propertyAddress =
+      typeof body?.propertyAddress === "string"
+        ? body.propertyAddress.trim()
+        : "";
+
+    if (
+      landlordFullName.length < 2 ||
+      landlordPhoneNumber.replace(/\D/g, "").length < 10
+    ) {
+      return NextResponse.json({ paidRemaining: 0 });
+    }
+
+    const summary = await getPublicDocumentCreditSummary({
+      landlordFullName,
+      landlordPhoneNumber,
+      propertyAddress: propertyAddress || undefined,
+      product: "receipt",
+    });
+
+    return NextResponse.json(summary, {
+      headers: { "Cache-Control": "no-store" },
+    });
+  } catch (error) {
+    console.error("Public receipt entitlement lookup failed:", error);
+    return NextResponse.json(
+      { message: "Credit balance could not be checked." },
+      { status: 500 },
     );
   }
 }

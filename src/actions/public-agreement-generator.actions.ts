@@ -25,13 +25,16 @@ export async function generatePublicAgreementAction(
 ): Promise<PublicAgreementGeneratorActionState> {
   try {
     const parsed = publicAgreementGeneratorSchema.safeParse({
+      agreementTier: getFormString(formData, "agreementTier"),
       landlordFullName: getFormString(formData, "landlordFullName"),
       landlordPhoneNumber: getFormString(formData, "landlordPhoneNumber"),
       landlordEmail: getFormString(formData, "landlordEmail"),
+      landlordAddress: getFormString(formData, "landlordAddress"),
 
       tenantFullName: getFormString(formData, "tenantFullName"),
       tenantPhoneNumber: getFormString(formData, "tenantPhoneNumber"),
       tenantEmail: getFormString(formData, "tenantEmail"),
+      tenantAddress: getFormString(formData, "tenantAddress"),
 
       propertyName: getFormString(formData, "propertyName"),
       propertyAddress: getFormString(formData, "propertyAddress"),
@@ -45,6 +48,7 @@ export async function generatePublicAgreementAction(
       rentFrequency: getFormString(formData, "rentFrequency"),
       cautionDepositAmount: getFormString(formData, "cautionDepositAmount"),
       renewalNoticeDays: getFormString(formData, "renewalNoticeDays"),
+      terminationNoticeMonths: getFormString(formData, "terminationNoticeMonths"),
 
       propertyRules: getFormString(formData, "propertyRules"),
       specialTerms: getFormString(formData, "specialTerms"),

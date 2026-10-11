@@ -59,6 +59,7 @@ export const publicAgreementUseSchema = z.enum([
 ]);
 
 export const publicAgreementGeneratorSchema = z.object({
+  agreementTier: z.enum(["free", "paid"]).default("free"),
   landlordFullName: requiredText("Landlord full name"),
   landlordPhoneNumber: phoneSchema,
   landlordEmail: z
@@ -67,6 +68,7 @@ export const publicAgreementGeneratorSchema = z.object({
     .email("Enter a valid email address.")
     .optional()
     .or(z.literal("")),
+  landlordAddress: optionalText,
 
   tenantFullName: requiredText("Tenant full name"),
   tenantPhoneNumber: phoneSchema,
@@ -76,10 +78,11 @@ export const publicAgreementGeneratorSchema = z.object({
     .email("Enter a valid tenant email address.")
     .optional()
     .or(z.literal("")),
+  tenantAddress: optionalText,
 
   propertyName: optionalText,
   propertyAddress: requiredText("Property address", 5),
-  unitIdentifier: requiredText("Unit / flat / shop", 1),
+  unitIdentifier: optionalText,
   cityState: requiredText("City/state"),
   propertyUse: publicAgreementUseSchema,
 
@@ -93,6 +96,7 @@ export const publicAgreementGeneratorSchema = z.object({
     .int("Renewal notice must be a whole number.")
     .min(0, "Renewal notice cannot be negative.")
     .max(365, "Renewal notice is too long."),
+  terminationNoticeMonths: z.union([z.enum(["1", "3", "6"]), z.literal("")]).default(""),
 
   propertyRules: z
     .string()
