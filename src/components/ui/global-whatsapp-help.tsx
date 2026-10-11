@@ -1,19 +1,97 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
 import { BOPA_WHATSAPP_NUMBER } from "@/constants/bopa-contact";
 import { buildWaMeUrl } from "@/lib/whatsapp";
 
+type Position = { x: number; y: number };
+const STORAGE_KEY = "bopa-whatsapp-help-position";
+
+function clampPosition(position: Position, element: HTMLElement): Position {
+  return {
+    x: Math.max(0, Math.min(position.x, window.innerWidth - element.offsetWidth)),
+    y: Math.max(0, Math.min(position.y, window.innerHeight - element.offsetHeight)),
+  };
+}
+
 export function GlobalWhatsAppHelp() {
+  const linkRef = useRef<HTMLAnchorElement>(null);
+  const dragRef = useRef<{ pointerId: number; x: number; y: number; left: number; top: number } | null>(null);
+  const draggedRef = useRef(false);
+  const [position, setPosition] = useState<Position | null>(null);
   const whatsappHelpUrl = buildWaMeUrl({
     phoneNumber: BOPA_WHATSAPP_NUMBER,
     message: "Hello BOPA, I need help.",
   });
 
+  useEffect(() => {
+    const element = linkRef.current;
+    if (!element) return;
+    try {
+      const saved = window.localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved) as Position;
+        if (Number.isFinite(parsed.x) && Number.isFinite(parsed.y)) {
+          setPosition(clampPosition(parsed, element));
+        }
+      }
+    } catch {
+      // Storage may be disabled; dragging still works for this visit.
+    }
+
+    const keepInView = () => setPosition((current) => current ? clampPosition(current, element) : null);
+    window.addEventListener("resize", keepInView);
+    return () => window.removeEventListener("resize", keepInView);
+  }, []);
+
+  function finishDrag(pointerId: number) {
+    if (dragRef.current?.pointerId !== pointerId) return;
+    dragRef.current = null;
+    const element = linkRef.current;
+    if (!element) return;
+    const next = clampPosition({ x: element.getBoundingClientRect().left, y: element.getBoundingClientRect().top }, element);
+    if (draggedRef.current) {
+      setPosition(next);
+      try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* Storage is optional. */ }
+    }
+    if (element.hasPointerCapture(pointerId)) element.releasePointerCapture(pointerId);
+  }
+
   return (
     <a
+      ref={linkRef}
       href={whatsappHelpUrl}
+      draggable={false}
       target="_blank"
       rel="noopener noreferrer"
       aria-label="Need help? Chat with us on WhatsApp"
-      className="fixed bottom-5 right-4 z-50 flex size-[60px] items-center justify-center rounded-full bg-[#0F7A3D] text-white shadow-[0_8px_24px_rgba(20,33,61,0.28)] transition hover:bg-[#0c6834] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#0F7A3D]/30 sm:bottom-6 sm:right-6 sm:h-14 sm:w-auto sm:gap-3 sm:px-[18px] sm:pr-[22px]"
+      title="Drag to move, or tap to chat"
+      style={position ? { left: position.x, top: position.y } : undefined}
+      className={`fixed z-50 flex size-[60px] touch-none select-none items-center justify-center rounded-full bg-[#0F7A3D] text-white shadow-[0_8px_24px_rgba(20,33,61,0.28)] hover:bg-[#0c6834] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#0F7A3D]/30 sm:h-14 sm:w-auto sm:gap-3 sm:px-[18px] sm:pr-[22px] ${position ? "cursor-grab active:cursor-grabbing" : "bottom-5 right-4 cursor-grab active:cursor-grabbing sm:bottom-6 sm:right-6"}`}
+      onPointerDown={(event) => {
+        if (event.pointerType === "mouse" && event.button !== 0) return;
+        const rect = event.currentTarget.getBoundingClientRect();
+        dragRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, left: rect.left, top: rect.top };
+        draggedRef.current = false;
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }}
+      onPointerMove={(event) => {
+        const drag = dragRef.current;
+        if (!drag || drag.pointerId !== event.pointerId) return;
+        if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) > 5) draggedRef.current = true;
+        if (draggedRef.current) {
+          setPosition(clampPosition({ x: drag.left + event.clientX - drag.x, y: drag.top + event.clientY - drag.y }, event.currentTarget));
+        }
+      }}
+      onPointerUp={(event) => finishDrag(event.pointerId)}
+      onPointerCancel={(event) => finishDrag(event.pointerId)}
+      onDragStart={(event) => event.preventDefault()}
+      onClick={(event) => {
+        if (draggedRef.current) {
+          event.preventDefault();
+          draggedRef.current = false;
+        }
+      }}
     >
       <svg
         viewBox="0 0 24 24"
