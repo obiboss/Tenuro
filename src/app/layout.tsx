@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { GoogleAnalytics } from "@next/third-parties/google";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { GlobalWhatsAppHelp } from "@/components/ui/global-whatsapp-help";
+import { GlobalSocialFooter } from "@/components/ui/global-social-footer";
+import { MetaPixelBridge } from "@/components/ui/meta-pixel-bridge";
 import "./globals.css";
 
 const plusJakarta = Plus_Jakarta_Sans({
@@ -79,7 +82,11 @@ export default function RootLayout({
         className={`${plusJakarta.variable} bg-background font-sans text-text-normal antialiased`}
       >
         {children}
+        <GlobalSocialFooter />
         <GlobalWhatsAppHelp />
+        <Suspense fallback={null}>
+          <MetaPixelBridge />
+        </Suspense>
       </body>
 
       {gaId ? <GoogleAnalytics gaId={gaId} /> : null}

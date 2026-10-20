@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { downloadPublicDocumentPdf } from "@/lib/public-document-download";
 import { buildWaMeUrl } from "@/lib/whatsapp";
 
 type GeneratedReceiptResultProps = {
@@ -39,6 +41,7 @@ function formatDate(value: string) {
 export function GeneratedReceiptResult({
   receipt,
 }: GeneratedReceiptResultProps) {
+  const [isDownloading, setIsDownloading] = useState(false);
   const whatsappHref = buildWaMeUrl({
     phoneNumber: receipt.tenantPhoneNumber,
     message: receipt.whatsappMessage,
@@ -57,9 +60,21 @@ export function GeneratedReceiptResult({
         <div className="flex flex-col gap-2 sm:flex-row md:flex-col lg:flex-row">
           <a
             href={receipt.downloadUrl}
+            aria-disabled={isDownloading}
+            onClick={(event) => {
+              if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+              event.preventDefault();
+              if (isDownloading) return;
+              setIsDownloading(true);
+              void downloadPublicDocumentPdf({
+                url: receipt.downloadUrl,
+                fallbackFilename: `${receipt.receiptNumber}.pdf`,
+                event: "ReceiptDownload",
+              }).finally(() => setIsDownloading(false));
+            }}
             className="inline-flex min-h-11 items-center justify-center rounded-button bg-primary px-5 py-2.5 text-center text-sm font-extrabold text-white shadow-soft transition hover:bg-primary-hover"
           >
-            Download PDF
+            {isDownloading ? "Preparing PDF…" : "Download PDF"}
           </a>
 
           <a

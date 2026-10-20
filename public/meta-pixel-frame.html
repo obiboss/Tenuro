@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="robots" content="noindex,nofollow" />
+    <meta name="referrer" content="no-referrer" />
+    <title>BOPA analytics</title>
+  </head>
+  <body>
+    <script>
+      if (window.location.hostname === 'boldverseproperty.com' || window.location.hostname === 'www.boldverseproperty.com') {
+      !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+      n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
+      n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
+      t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}
+      (window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
+
+      fbq.disablePushState = true;
+      fbq('set', 'autoConfig', false, '964121986311691');
+      fbq('init', '964121986311691');
+
+      window.addEventListener('message', function (event) {
+        if (event.source !== window.parent) return;
+        if (event.origin !== new URL(document.URL).origin) return;
+        var message = event.data;
+        if (!message || message.source !== 'bopa-meta-pixel') return;
+        if (message.event === 'ping') {
+          window.parent.postMessage({ source: 'bopa-meta-pixel', event: 'ready' }, '*');
+          return;
+        }
+        var pageType = ['home', 'receipt-generator', 'agreement-generator', 'other'].includes(message.pageType)
+          ? message.pageType : 'other';
+        if (message.event === 'PageView') {
+          fbq('trackSingle', '964121986311691', 'PageView', { page_type: pageType });
+        } else if (message.event === 'ReceiptDownload' || message.event === 'TenancyAgreementDownload') {
+          fbq('trackSingleCustom', '964121986311691', message.event, { page_type: pageType });
+        }
+      });
+      window.parent.postMessage({ source: 'bopa-meta-pixel', event: 'ready' }, '*');
+      }
+    </script>
+  </body>
+</html>
